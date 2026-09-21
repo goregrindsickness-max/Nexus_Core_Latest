@@ -9,7 +9,7 @@ export const AnimatedCount: React.FC<{ value: number; prefix?: string; suffix?: 
     if (start === end) return;
     
     const duration = 600; // ms
-    const startTime = performance.now();
+    const startTime = (typeof performance !== 'undefined' && typeof performance.now === 'function') ? performance.now() : Date.now();
     let animationFrame: number;
     
     const updateCount = (now: number) => {
