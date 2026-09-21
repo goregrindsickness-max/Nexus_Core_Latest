@@ -3552,222 +3552,21 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       })()}
                     </div>
                   ) : (
-                    selectedUserProfile.musicCatalog && selectedUserProfile.musicCatalog.length > 0 ? (
-                      <div className="space-y-6">
-                        {selectedUserProfile.musicCatalog.map((release: any, rIdx: number) => {
-                          const commList = communityArchiveMatch?.discography || [];
-                          const matchedDbRel = dbReleases.find((d: any) => d.id === release.id || (d.title && release.title && d.title.toLowerCase().trim() === release.title.toLowerCase().trim()));
-                          const matchedCommRel = commList.find((c: any) => c.id === release.id || (c.title && release.title && c.title.toLowerCase().trim() === release.title.toLowerCase().trim()));
-                          const fullRel = matchedDbRel || matchedCommRel || release;
-                          const coverSrc = getReleaseCoverUrl(release) || getReleaseCoverUrl(fullRel);
-
-                          const relUniqueId = String(release.id || fullRel?.id || `rel-${rIdx}-${(release.title || fullRel?.title || 'album').replace(/[^a-zA-Z0-9]/g, '_')}`);
-
-                          const rawTracks = (Array.isArray(release.tracks) && release.tracks.length > 0)
-                            ? release.tracks
-                            : (Array.isArray(fullRel?.tracks) && fullRel.tracks.length > 0 ? fullRel.tracks : []);
-
-                          const releaseTracks = (rawTracks.length > 0
-                            ? rawTracks
-                            : (release.title || fullRel?.title ? [{ title: `${release.title || fullRel?.title} (Full Audio)`, duration: '3:45' }] : [])
-                          ).map((t: any, tIdx: number) => {
-                            const tTitle = typeof t === 'string' ? t : (t.title || t.name || `Track ${tIdx + 1}`);
-                            const tDuration = (typeof t === 'object' && (t.duration || t.length)) ? (t.duration || t.length) : '3:30';
-                            const rawId = typeof t === 'object' && t.id ? t.id : `trk-${tIdx + 1}`;
-                            const uId = `${relUniqueId}_${rawId}`;
-                            return {
-                              ...(typeof t === 'object' ? t : {}),
-                              id: uId,
-                              originalId: rawId,
-                              title: tTitle,
-                              duration: tDuration,
-                              trackNumber: (typeof t === 'object' && t.number) ? t.number : tIdx + 1
-                            };
-                          });
-
-                          const isPlayingRelease = Boolean(
-                            profileActivePlaybackTrackId &&
-                            releaseTracks.some((t: any) => t.id === profileActivePlaybackTrackId)
-                          );
-                          const activeTrackObj = isPlayingRelease
-                            ? (releaseTracks.find((t: any) => t.id === profileActivePlaybackTrackId) || releaseTracks[0])
-                            : releaseTracks[0];
-                          
-                          return (
-                            <div key={release.id ? `rel-${release.id}-${rIdx}` : `rel-${rIdx}`} className="bg-[#0c0e12] border border-zinc-800/80 rounded-2xl overflow-hidden shadow-2xl relative flex flex-col">
-                              <div className="flex items-center justify-between p-3 border-b border-zinc-800/80 bg-black/40">
-                                <div 
-                                  className="flex items-center gap-2 cursor-pointer group/title"
-                                  onClick={() => setSelectedRelease(fullRel)}
-                                  title="View Release Details & Full Tracklist"
-                                >
-                                  <span className="px-1.5 py-0.5 rounded bg-[#FF9900]/10 text-[#FF9900] border border-[#FF9900]/20 text-[8px] font-mono font-black uppercase tracking-widest">{release.format || release.type || fullRel.type || 'Release'}</span>
-                                  <h4 className="text-xs font-bold text-white uppercase tracking-wider group-hover/title:text-[#FF9900] transition-colors">{release.title || fullRel.title}</h4>
-                                </div>
-                                <button className="flex items-center gap-1.5 px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-wider transition-colors shadow-lg">
-                                  <ShoppingCart className="w-3 h-3" />
-                                  <span>Buy • $9.99</span>
-                                </button>
-                              </div>
-
-                              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 items-center bg-zinc-950">
-                                <div className="md:col-span-4 flex justify-center">
-                                  <div 
-                                    onClick={() => setSelectedRelease(fullRel)}
-                                    title="View Release Details & Tracklist"
-                                    className="relative w-36 h-36 rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 shadow-2xl flex items-center justify-center group cursor-pointer hover:border-[#FF9900]/50 transition-colors shrink-0"
-                                  >
-                                    {coverSrc ? (
-                                      <img 
-                                        src={coverSrc} 
-                                        alt={release.title || fullRel.title || 'Album Cover'} 
-                                        className="w-full h-full object-cover transition-all duration-500 group-hover:scale-105" 
-                                        referrerPolicy="no-referrer"
-                                        onError={(e) => {
-                                          (e.target as HTMLElement).style.display = 'none';
-                                        }}
-                                      />
-                                    ) : (
-                                      <div className="flex flex-col items-center justify-center p-3 text-center">
-                                        <Disc className="w-10 h-10 text-zinc-600 mb-1" />
-                                        <span className="text-[9px] font-mono text-zinc-500 uppercase">No Cover</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-
-                                <div className="md:col-span-8 flex flex-col items-center space-y-3 w-full">
-                                  <div className="w-full flex flex-col items-center">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <span className="text-[7.5px] font-mono text-zinc-500 uppercase tracking-widest font-black">ACTIVE STEREO STREAM</span>
-                                      <span className={`px-1.5 py-0.5 rounded-[2px] text-[7.5px] font-mono uppercase font-black tracking-widest flex items-center gap-1 ${isPlayingRelease && profileIsPlaying ? 'bg-[#FF9900]/10 text-[#FF9900] border border-[#FF9900]/30 animate-pulse' : 'bg-zinc-900 text-zinc-500 border border-zinc-800'}`}>
-                                        <span className={`w-1 h-1 rounded-full ${isPlayingRelease && profileIsPlaying ? 'bg-[#FF9900] animate-ping' : 'bg-zinc-700'}`} />
-                                        {isPlayingRelease && profileIsPlaying ? 'PLAYING' : 'PAUSED'}
-                                      </span>
-                                    </div>
-
-                                    <div className="w-full h-8 flex items-center justify-center bg-black/40 px-3 rounded-lg border border-zinc-900 max-w-md mx-auto mb-2">
-                                      <span className="font-mono font-black text-xs uppercase tracking-wider text-[#FF9900] text-center truncate">
-                                        {activeTrackObj ? (
-                                          isPlayingRelease && profileIsPlaying 
-                                            ? `▶ ${activeTrackObj.trackNumber ? `${activeTrackObj.trackNumber}. ` : ''}${activeTrackObj.title}` 
-                                            : `${activeTrackObj.trackNumber ? `${activeTrackObj.trackNumber}. ` : ''}${activeTrackObj.title}`
-                                        ) : 'NO DISC LOADED'}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-center justify-center gap-3">
-                                    <button 
-                                      className="p-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 rounded-lg transition-colors active:scale-95 cursor-pointer"
-                                      onClick={() => {
-                                        if (releaseTracks.length > 0) {
-                                          const currentIdx = releaseTracks.findIndex((t: any) => t.id === profileActivePlaybackTrackId);
-                                          const prevIdx = currentIdx > 0 ? currentIdx - 1 : releaseTracks.length - 1;
-                                          setProfileActivePlaybackTrackId(releaseTracks[prevIdx]?.id || null);
-                                          setProfileIsPlaying(true);
-                                        }
-                                      }}
-                                    >
-                                      <SkipBack className="w-4 h-4" />
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        if (isPlayingRelease) {
-                                          setProfileIsPlaying(!profileIsPlaying);
-                                        } else if (releaseTracks.length > 0) {
-                                          setProfileActivePlaybackTrackId(releaseTracks[0].id);
-                                          setProfileIsPlaying(true);
-                                        }
-                                      }} 
-                                      className="p-3.5 bg-[#FF9900]/10 hover:bg-[#FF9900]/20 border border-[#FF9900]/30 text-[#FF9900] rounded-full transition-colors active:scale-95 shadow-md flex items-center justify-center cursor-pointer"
-                                    >
-                                      {isPlayingRelease && profileIsPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-                                    </button>
-                                    <button 
-                                      onClick={() => { 
-                                        if (isPlayingRelease) {
-                                          setProfileIsPlaying(false); 
-                                          setProfilePlaybackProgress(0); 
-                                          setProfileActivePlaybackTrackId(null); 
-                                        }
-                                      }} 
-                                      className="p-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 rounded-lg transition-colors active:scale-95 cursor-pointer"
-                                    >
-                                      <Square className="w-4 h-4" />
-                                    </button>
-                                    <button 
-                                      className="p-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 rounded-lg transition-colors active:scale-95 cursor-pointer"
-                                      onClick={() => {
-                                        if (releaseTracks.length > 0) {
-                                          const currentIdx = releaseTracks.findIndex((t: any) => t.id === profileActivePlaybackTrackId);
-                                          const nextIdx = (currentIdx >= 0 && currentIdx < releaseTracks.length - 1) ? currentIdx + 1 : 0;
-                                          setProfileActivePlaybackTrackId(releaseTracks[nextIdx]?.id || null);
-                                          setProfileIsPlaying(true);
-                                        }
-                                      }}
-                                    >
-                                      <SkipForward className="w-4 h-4" />
-                                    </button>
-                                  </div>
-
-                                  {releaseTracks.length > 0 && (
-                                    <div className="w-full mt-2 pt-2 border-t border-zinc-900/80">
-                                      <div className="text-[8px] font-mono font-black uppercase text-zinc-500 tracking-wider mb-1.5 flex items-center justify-between px-1">
-                                        <span>TRACKLIST ({releaseTracks.length})</span>
-                                        <span className="text-[7.5px] text-zinc-600">CLICK TO PLAY</span>
-                                      </div>
-                                      <div className="space-y-1 max-h-32 overflow-y-auto no-scrollbar pr-0.5">
-                                        {releaseTracks.map((trk: any, tIdx: number) => {
-                                          const isCurrentTrack = profileActivePlaybackTrackId === trk.id;
-                                          const isCurrentPlaying = isCurrentTrack && profileIsPlaying;
-                                          return (
-                                            <div
-                                              key={trk.id || `track-${tIdx}`}
-                                              onClick={() => {
-                                                if (isCurrentPlaying) {
-                                                  setProfileIsPlaying(false);
-                                                } else {
-                                                  setProfileActivePlaybackTrackId(trk.id);
-                                                  setProfileIsPlaying(true);
-                                                }
-                                              }}
-                                              className={`flex items-center justify-between py-1 px-2 rounded-md cursor-pointer transition-all text-[11px] font-mono ${
-                                                isCurrentTrack
-                                                  ? 'bg-[#FF9900]/15 text-[#FF9900] border border-[#FF9900]/30 font-bold'
-                                                  : 'bg-black/30 hover:bg-zinc-900 text-zinc-300 hover:text-white border border-transparent'
-                                              }`}
-                                            >
-                                              <div className="flex items-center gap-2 min-w-0">
-                                                <span className="text-[9px] text-zinc-500 w-4 shrink-0 text-right">
-                                                  {String(trk.trackNumber || tIdx + 1).padStart(2, '0')}
-                                                </span>
-                                                {isCurrentPlaying ? (
-                                                  <Pause className="w-3 h-3 text-[#FF9900] shrink-0 animate-pulse" />
-                                                ) : (
-                                                  <Play className="w-3 h-3 text-zinc-500 group-hover:text-[#FF9900] shrink-0" />
-                                                )}
-                                                <span className="truncate">{trk.title}</span>
-                                              </div>
-                                              {trk.duration && (
-                                                <span className="text-[9px] text-zinc-500 shrink-0 ml-2">{trk.duration}</span>
-                                              )}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
                     (() => {
-                      const rawCommunityDiscography = dbReleases.length > 0 ? dbReleases : (communityArchiveMatch?.discography || []);
-                      const communityDiscography = [...rawCommunityDiscography].sort((a: any, b: any) => {
+                      const commList = communityArchiveMatch?.discography || [];
+                      const rawCommunityDiscography = dbReleases.length > 0 ? dbReleases : (commList || []);
+                      const userCatalog = selectedUserProfile.musicCatalog || [];
+                      
+                      // Combine userCatalog and rawCommunityDiscography, prioritizing unique releases
+                      const combinedReleases: any[] = [...userCatalog];
+                      rawCommunityDiscography.forEach((cr: any) => {
+                        const exists = combinedReleases.some((ur: any) => ur.id === cr.id || (ur.title && cr.title && ur.title.toLowerCase().trim() === cr.title.toLowerCase().trim()));
+                        if (!exists) {
+                          combinedReleases.push(cr);
+                        }
+                      });
+
+                      const sortedReleases = [...combinedReleases].sort((a: any, b: any) => {
                         const parseY = (r: any) => {
                           const raw = r.year || r.release_year || r.release_date || r.date || '0';
                           const num = parseInt(String(raw).replace(/\D/g, ''), 10);
@@ -3776,191 +3575,370 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         return parseY(b) - parseY(a);
                       });
 
-                      if ((communityDiscography && communityDiscography.length > 0) || hasLineup) {
-                        return (
-                          <div className="space-y-6">
-                            {/* Band Lineup Section */}
-                            {hasLineup && (
-                              <div className="space-y-3">
-                                <div className="flex items-center justify-between px-1">
-                                  <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                                    <Users className="w-3.5 h-3.5 text-amber-400" />
-                                    Band Lineup & Musician Roster ({displayLineup.length})
-                                  </span>
-                                  <button
-                                    onClick={() => setShowCuratorModal(true)}
-                                    className="text-[9px] font-mono font-bold text-zinc-400 hover:text-amber-300 flex items-center gap-1 transition-colors cursor-pointer"
-                                  >
-                                    <Edit2 className="w-2.5 h-2.5" /> Edit Lineup
-                                  </button>
-                                </div>
+                      // When no official releases are in the catalog, provide a default release with pending audio state
+                      // so the music player and tracklist always render on the band public profile card.
+                      const displayReleases = sortedReleases.length > 0
+                        ? sortedReleases
+                        : [
+                            {
+                              id: `fallback-rel-${selectedUserProfile.id || 'band'}`,
+                              title: `${selectedUserProfile.name || selectedUserProfile.username || 'Official'} Catalog`,
+                              format: 'DIGITAL STREAM',
+                              type: 'Album',
+                              isPendingCatalog: true,
+                              tracks: [
+                                { id: 'fallback-trk-1', title: 'Featured Track 01', duration: '3:30', hasAudio: false },
+                                { id: 'fallback-trk-2', title: 'Live Performance Cut', duration: '4:15', hasAudio: false },
+                                { id: 'fallback-trk-3', title: 'Studio Rehearsal Take', duration: '3:45', hasAudio: false }
+                              ]
+                            }
+                          ];
 
-                                <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
-                                  {displayLineup.map((mem: any, mIdx: number) => {
-                                    const matchedProf = allProfiles.find((p: any) => {
-                                      if (!p) return false;
-                                      if (mem.id && p.id === mem.id) return true;
-                                      const mName = (mem.name || '').toLowerCase().trim();
-                                      const pName = (p.full_name || p.name || '').toLowerCase().trim();
-                                      const pUser = (p.username || '').toLowerCase().trim();
-                                      const pEmail = (p.email || '').toLowerCase().trim();
-                                      if (isMiguelNameOrProfile(mem)) {
-                                        return pEmail.includes('goregrindsickness') || pUser.includes('goregrinder') || pName.includes('miguel');
-                                      }
-                                      if (mName && pName && (pName === mName || pName.includes(mName) || mName.includes(pName))) {
-                                        return true;
-                                      }
-                                      return false;
-                                    });
+                      return (
+                        <div className="space-y-6">
+                          {/* Band Lineup Section */}
+                          {hasLineup && (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between px-1">
+                                <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                                  <Users className="w-3.5 h-3.5 text-amber-400" />
+                                  Band Lineup & Musician Roster ({displayLineup.length})
+                                </span>
+                                <button
+                                  onClick={() => setShowCuratorModal(true)}
+                                  className="text-[9px] font-mono font-bold text-zinc-400 hover:text-amber-300 flex items-center gap-1 transition-colors cursor-pointer"
+                                >
+                                  <Edit2 className="w-2.5 h-2.5" /> Edit Lineup
+                                </button>
+                              </div>
 
-                                    const isActive = !!matchedProf;
-                                    const avatarUrl = matchedProf?.avatar_url || matchedProf?.avatar;
+                              <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+                                {displayLineup.map((mem: any, mIdx: number) => {
+                                  const matchedProf = allProfiles.find((p: any) => {
+                                    if (!p) return false;
+                                    if (mem.id && p.id === mem.id) return true;
+                                    const mName = (mem.name || '').toLowerCase().trim();
+                                    const pName = (p.full_name || p.name || '').toLowerCase().trim();
+                                    const pUser = (p.username || '').toLowerCase().trim();
+                                    const pEmail = (p.email || '').toLowerCase().trim();
+                                    if (isMiguelNameOrProfile(mem)) {
+                                      return pEmail.includes('goregrindsickness') || pUser.includes('goregrinder') || pName.includes('miguel');
+                                    }
+                                    if (mName && pName && (pName === mName || pName.includes(mName) || mName.includes(pName))) {
+                                      return true;
+                                    }
+                                    return false;
+                                  });
 
-                                    const initials = mem.name
-                                      ? mem.name
-                                          .split(' ')
-                                          .map((n: string) => n[0])
-                                          .join('')
-                                          .slice(0, 2)
-                                          .toUpperCase()
-                                      : '?';
-                                    return (
-                                      <div
-                                        key={mem.id ? `roster-tab-${mem.id}-${mIdx}` : `roster-tab-${mIdx}-${mem.name || 'member'}`}
-                                        onClick={() => isActive && handleLineupMemberClick(mem)}
-                                        className={`p-1.5 sm:p-2 bg-gradient-to-r from-zinc-900/90 to-zinc-950 border transition-all relative overflow-hidden flex items-center gap-1.5 sm:gap-2.5 shadow-md ${
-                                          isActive
-                                            ? 'border-emerald-500/30 hover:border-emerald-500/70 hover:shadow-emerald-950/20 hover:scale-[1.01] cursor-pointer group'
-                                            : 'border-zinc-900/40 opacity-50 cursor-not-allowed select-none grayscale'
-                                        } rounded-lg sm:rounded-xl`}
-                                      >
-                                        {/* Avatar initials or image */}
-                                        <div className={`w-7 h-7 sm:w-9 sm:h-9 rounded-md sm:rounded-lg bg-zinc-950 border overflow-hidden shrink-0 transition-colors shadow-inner flex items-center justify-center font-mono text-[10px] sm:text-xs font-black ${
-                                          isActive ? 'border-emerald-500/40 text-emerald-400 group-hover:border-emerald-400' : 'border-zinc-800 text-zinc-600'
-                                        }`}>
-                                          {avatarUrl && (avatarUrl.startsWith('http') || avatarUrl.startsWith('data:') || avatarUrl.startsWith('/')) ? (
-                                            <img src={avatarUrl} alt={mem.name} className="w-full h-full object-cover rounded-md sm:rounded-lg" referrerPolicy="no-referrer" />
-                                          ) : (
-                                            initials
-                                          )}
-                                        </div>
+                                  const isActive = !!matchedProf;
+                                  const avatarUrl = matchedProf?.avatar_url || matchedProf?.avatar;
 
-                                        {/* Info */}
-                                        <div className="min-w-0 flex-1">
-                                          <div className="flex items-center gap-1">
-                                            <span className={`text-[7px] sm:text-[8px] font-mono font-black uppercase px-1 sm:px-1.5 py-0.2 rounded border ${
-                                              isActive
-                                                ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300'
-                                                : 'bg-zinc-900 border-zinc-800 text-zinc-500'
-                                            }`}>
-                                              {isActive ? '⚡ Active' : '💤 Inactive'}
-                                            </span>
-                                          </div>
-                                          <h5 className={`text-[10px] sm:text-xs font-black truncate tracking-tight mt-0.5 font-display ${
-                                            isActive ? 'text-white group-hover:text-emerald-300' : 'text-zinc-400'
-                                          }`}>
-                                            {mem.name}
-                                          </h5>
-                                          <p className="text-[7.5px] sm:text-[9px] font-mono text-zinc-400 truncate leading-tight">
-                                            {mem.role || 'Member'}
-                                          </p>
-                                        </div>
-
-                                        {/* Arrow */}
-                                        {isActive && (
-                                          <div className="shrink-0 pr-0.5 sm:pr-1 text-zinc-500 group-hover:text-emerald-300 transition-colors text-[10px] sm:text-xs font-bold hidden xs:block sm:block">
-                                            →
-                                          </div>
+                                  const initials = mem.name
+                                    ? mem.name
+                                        .split(' ')
+                                        .map((n: string) => n[0])
+                                        .join('')
+                                        .slice(0, 2)
+                                        .toUpperCase()
+                                    : '?';
+                                  return (
+                                    <div
+                                      key={mem.id ? `roster-tab-${mem.id}-${mIdx}` : `roster-tab-${mIdx}-${mem.name || 'member'}`}
+                                      onClick={() => isActive && handleLineupMemberClick(mem)}
+                                      className={`p-1.5 sm:p-2 bg-gradient-to-r from-zinc-900/90 to-zinc-950 border transition-all relative overflow-hidden flex items-center gap-1.5 sm:gap-2.5 shadow-md ${
+                                        isActive
+                                          ? 'border-emerald-500/30 hover:border-emerald-500/70 hover:shadow-emerald-950/20 hover:scale-[1.01] cursor-pointer group'
+                                          : 'border-zinc-900/40 opacity-50 cursor-not-allowed select-none grayscale'
+                                      } rounded-lg sm:rounded-xl`}
+                                    >
+                                      {/* Avatar initials or image */}
+                                      <div className={`w-7 h-7 sm:w-9 sm:h-9 rounded-md sm:rounded-lg bg-zinc-950 border overflow-hidden shrink-0 transition-colors shadow-inner flex items-center justify-center font-mono text-[10px] sm:text-xs font-black ${
+                                        isActive ? 'border-emerald-500/40 text-emerald-400 group-hover:border-emerald-400' : 'border-zinc-800 text-zinc-600'
+                                      }`}>
+                                        {avatarUrl && (avatarUrl.startsWith('http') || avatarUrl.startsWith('data:') || avatarUrl.startsWith('/')) ? (
+                                          <img src={avatarUrl} alt={mem.name} className="w-full h-full object-cover rounded-md sm:rounded-lg" referrerPolicy="no-referrer" />
+                                        ) : (
+                                          initials
                                         )}
                                       </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
 
-                            {/* Discography Releases */}
-                            {communityDiscography && communityDiscography.length > 0 && (
-                              <div className="space-y-3">
-                                <div className="flex items-center justify-between px-1">
-                                  <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                                    <Disc className="w-3.5 h-3.5 text-amber-400" />
-                                    Official Discography ({communityDiscography.length})
-                                  </span>
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  {communityDiscography.map((release: any, rIdx: number) => {
-                                    const coverSrc = getReleaseCoverUrl(release);
-                                    return (
-                                      <div
-                                        key={release.id ? `rel-${release.id}-${rIdx}` : `rel-${rIdx}`}
-                                        onClick={() => setSelectedRelease(release)}
-                                        className="p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-850 hover:border-amber-500/50 hover:scale-[1.01] flex flex-col gap-2.5 shadow-lg group transition-all duration-200 cursor-pointer"
-                                      >
-                                        <div className="flex items-center gap-3">
-                                          <div className="w-14 h-14 rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 shadow-inner relative">
-                                            {coverSrc ? (
-                                              <img
-                                                src={coverSrc}
-                                                alt={release.title}
-                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                                referrerPolicy="no-referrer"
-                                                onError={(e) => {
-                                                  (e.target as HTMLElement).style.display = 'none';
-                                                }}
-                                              />
-                                            ) : (
-                                              <Disc className="w-6 h-6 text-zinc-600 group-hover:text-amber-400 transition-colors" />
-                                            )}
-                                          </div>
-
-                                        <div className="min-w-0 flex-1">
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[8px] font-mono font-bold uppercase tracking-widest">
-                                              {release.type || 'Release'}
-                                            </span>
-                                            <span className="text-[9px] font-mono text-zinc-400">{release.year}</span>
-                                          </div>
-                                          <h4 className="text-xs font-bold text-white uppercase tracking-wider truncate mt-1 group-hover:text-amber-300 transition-colors font-display">
-                                            {release.title}
-                                          </h4>
-                                          {release.label && (
-                                            <p className="text-[9px] text-zinc-400 font-mono truncate mt-0.5">
-                                              {release.label} {release.catalog_id ? `• Cat #${release.catalog_id}` : ''}
-                                            </p>
-                                          )}
+                                      {/* Info */}
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-1">
+                                          <span className={`text-[7px] sm:text-[8px] font-mono font-black uppercase px-1 sm:px-1.5 py-0.2 rounded border ${
+                                            isActive
+                                              ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300'
+                                              : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                                          }`}>
+                                            {isActive ? '⚡ Active' : '💤 Inactive'}
+                                          </span>
                                         </div>
+                                        <h5 className={`text-[10px] sm:text-xs font-black truncate tracking-tight mt-0.5 font-display ${
+                                          isActive ? 'text-white group-hover:text-emerald-300' : 'text-zinc-400'
+                                        }`}>
+                                          {mem.name}
+                                        </h5>
+                                        <p className="text-[7.5px] sm:text-[9px] font-mono text-zinc-400 truncate leading-tight">
+                                          {mem.role || 'Member'}
+                                        </p>
                                       </div>
 
-                                      {/* Tracklist Preview if available */}
-                                      {Array.isArray(release.tracks) && release.tracks.length > 0 && (
-                                        <div className="p-2 rounded-lg bg-black/50 border border-zinc-900 space-y-1">
-                                          <div className="text-[8px] font-mono font-bold uppercase text-zinc-500 tracking-wider">
-                                            Tracklist ({release.tracks.length})
-                                          </div>
-                                          <div className="space-y-0.5 max-h-24 overflow-y-auto pr-1">
-                                            {release.tracks.map((trk: any, tIdx: number) => (
-                                              <div key={trk.id ? `trk-${trk.id}-${tIdx}` : `trk-${tIdx}`} className="flex items-center justify-between text-[10px] font-mono text-zinc-300">
-                                                <span className="truncate flex items-center gap-1.5">
-                                                  <span className="text-zinc-500 text-[8px]">{tIdx + 1}.</span>
-                                                  <span>{trk.title}</span>
-                                                </span>
-                                                {trk.duration && <span className="text-zinc-500 text-[9px] shrink-0">{trk.duration}</span>}
-                                              </div>
-                                            ))}
-                                          </div>
+                                      {/* Arrow */}
+                                      {isActive && (
+                                        <div className="shrink-0 pr-0.5 sm:pr-1 text-zinc-500 group-hover:text-emerald-300 transition-colors text-[10px] sm:text-xs font-bold hidden xs:block sm:block">
+                                          →
                                         </div>
                                       )}
                                     </div>
                                   );
                                 })}
-                                </div>
                               </div>
-                            )}
+                            </div>
+                          )}
+
+                          {/* Discography Releases - Fully Featured Stereo Player */}
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between px-1">
+                              <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                                <Disc className="w-3.5 h-3.5 text-amber-400" />
+                                Official Discography & Audio Player ({displayReleases.length})
+                              </span>
+                              {sortedReleases.length === 0 && (
+                                <span className="text-[9px] font-mono text-amber-500/90 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                                  <span>*</span> audio files not loaded yet
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="space-y-6">
+                              {displayReleases.map((release: any, rIdx: number) => {
+                                const matchedDbRel = dbReleases.find((d: any) => d.id === release.id || (d.title && release.title && d.title.toLowerCase().trim() === release.title.toLowerCase().trim()));
+                                const matchedCommRel = commList.find((c: any) => c.id === release.id || (c.title && release.title && c.title.toLowerCase().trim() === release.title.toLowerCase().trim()));
+                                const fullRel = matchedDbRel || matchedCommRel || release;
+                                const coverSrc = getReleaseCoverUrl(release) || getReleaseCoverUrl(fullRel);
+
+                                const relUniqueId = String(release.id || fullRel?.id || `rel-${rIdx}-${(release.title || fullRel?.title || 'album').replace(/[^a-zA-Z0-9]/g, '_')}`);
+
+                                const rawTracks = (Array.isArray(release.tracks) && release.tracks.length > 0)
+                                  ? release.tracks
+                                  : (Array.isArray(fullRel?.tracks) && fullRel.tracks.length > 0 ? fullRel.tracks : []);
+
+                                const releaseTracks = (rawTracks.length > 0
+                                  ? rawTracks
+                                  : (release.title || fullRel?.title ? [{ title: `${release.title || fullRel?.title} (Full Audio)`, duration: '3:45' }] : [])
+                                ).map((t: any, tIdx: number) => {
+                                  const tTitle = typeof t === 'string' ? t : (t.title || t.name || `Track ${tIdx + 1}`);
+                                  const tDuration = (typeof t === 'object' && (t.duration || t.length)) ? (t.duration || t.length) : '3:30';
+                                  const rawId = typeof t === 'object' && t.id ? t.id : `trk-${tIdx + 1}`;
+                                  const uId = `${relUniqueId}_${rawId}`;
+                                  const hasRealAudio = Boolean(t?.audio_url || t?.stream_url || t?.file_url || t?.url);
+                                  return {
+                                    ...(typeof t === 'object' ? t : {}),
+                                    id: uId,
+                                    originalId: rawId,
+                                    title: tTitle,
+                                    duration: tDuration,
+                                    hasAudio: hasRealAudio,
+                                    trackNumber: (typeof t === 'object' && t.number) ? t.number : tIdx + 1
+                                  };
+                                });
+
+                                const hasAnyAudio = releaseTracks.some((t: any) => t.hasAudio || t.audio_url || t.stream_url || t.url);
+
+                                const isPlayingRelease = Boolean(
+                                  profileActivePlaybackTrackId &&
+                                  releaseTracks.some((t: any) => t.id === profileActivePlaybackTrackId)
+                                );
+                                const activeTrackObj = isPlayingRelease
+                                  ? (releaseTracks.find((t: any) => t.id === profileActivePlaybackTrackId) || releaseTracks[0])
+                                  : releaseTracks[0];
+                                
+                                return (
+                                  <div key={release.id ? `rel-${release.id}-${rIdx}` : `rel-${rIdx}`} className="bg-[#0c0e12] border border-zinc-800/80 rounded-2xl overflow-hidden shadow-2xl relative flex flex-col">
+                                    <div className="flex items-center justify-between p-3 border-b border-zinc-800/80 bg-black/40">
+                                      <div 
+                                        className="flex items-center gap-2 cursor-pointer group/title"
+                                        onClick={() => setSelectedRelease(fullRel)}
+                                        title="View Release Details & Full Tracklist"
+                                      >
+                                        <span className="px-1.5 py-0.5 rounded bg-[#FF9900]/10 text-[#FF9900] border border-[#FF9900]/20 text-[8px] font-mono font-black uppercase tracking-widest">{release.format || release.type || fullRel.type || 'Release'}</span>
+                                        <h4 className="text-xs font-bold text-white uppercase tracking-wider group-hover/title:text-[#FF9900] transition-colors">{release.title || fullRel.title}</h4>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        {!hasAnyAudio && (
+                                          <span className="text-[9px] font-mono text-amber-500/90 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                                            <span>*</span> audio files not loaded yet
+                                          </span>
+                                        )}
+                                        <button className="flex items-center gap-1.5 px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-wider transition-colors shadow-lg">
+                                          <ShoppingCart className="w-3 h-3" />
+                                          <span>Buy • $9.99</span>
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 items-center bg-zinc-950">
+                                      <div className="md:col-span-4 flex justify-center">
+                                        <div 
+                                          onClick={() => setSelectedRelease(fullRel)}
+                                          title="View Release Details & Tracklist"
+                                          className="relative w-36 h-36 rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 shadow-2xl flex items-center justify-center group cursor-pointer hover:border-[#FF9900]/50 transition-colors shrink-0"
+                                        >
+                                          {coverSrc ? (
+                                            <img 
+                                              src={coverSrc} 
+                                              alt={release.title || fullRel.title || 'Album Cover'} 
+                                              className="w-full h-full object-cover transition-all duration-500 group-hover:scale-105" 
+                                              referrerPolicy="no-referrer"
+                                              onError={(e) => {
+                                                (e.target as HTMLElement).style.display = 'none';
+                                              }}
+                                            />
+                                          ) : (
+                                            <div className="flex flex-col items-center justify-center p-3 text-center">
+                                              <Disc className="w-10 h-10 text-zinc-600 mb-1" />
+                                              <span className="text-[9px] font-mono text-zinc-500 uppercase">No Cover</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <div className="md:col-span-8 flex flex-col items-center space-y-3 w-full">
+                                        <div className="w-full flex flex-col items-center">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-[7.5px] font-mono text-zinc-500 uppercase tracking-widest font-black">ACTIVE STEREO STREAM</span>
+                                            <span className={`px-1.5 py-0.5 rounded-[2px] text-[7.5px] font-mono uppercase font-black tracking-widest flex items-center gap-1 ${isPlayingRelease && profileIsPlaying ? 'bg-[#FF9900]/10 text-[#FF9900] border border-[#FF9900]/30 animate-pulse' : 'bg-zinc-900 text-zinc-500 border border-zinc-800'}`}>
+                                              <span className={`w-1 h-1 rounded-full ${isPlayingRelease && profileIsPlaying ? 'bg-[#FF9900] animate-ping' : 'bg-zinc-700'}`} />
+                                              {isPlayingRelease && profileIsPlaying ? 'PLAYING' : 'PAUSED'}
+                                            </span>
+                                          </div>
+
+                                          <div className="w-full h-8 flex items-center justify-center bg-black/40 px-3 rounded-lg border border-zinc-900 max-w-md mx-auto mb-2">
+                                            <span className="font-mono font-black text-xs uppercase tracking-wider text-[#FF9900] text-center truncate">
+                                              {activeTrackObj ? (
+                                                isPlayingRelease && profileIsPlaying 
+                                                  ? `▶ ${activeTrackObj.trackNumber ? `${activeTrackObj.trackNumber}. ` : ''}${activeTrackObj.title}` 
+                                                  : `${activeTrackObj.trackNumber ? `${activeTrackObj.trackNumber}. ` : ''}${activeTrackObj.title}`
+                                              ) : 'NO DISC LOADED'}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-center gap-3">
+                                          <button 
+                                            className="p-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 rounded-lg transition-colors active:scale-95 cursor-pointer"
+                                            onClick={() => {
+                                              if (releaseTracks.length > 0) {
+                                                const currentIdx = releaseTracks.findIndex((t: any) => t.id === profileActivePlaybackTrackId);
+                                                const prevIdx = currentIdx > 0 ? currentIdx - 1 : releaseTracks.length - 1;
+                                                setProfileActivePlaybackTrackId(releaseTracks[prevIdx]?.id || null);
+                                                setProfileIsPlaying(true);
+                                              }
+                                            }}
+                                          >
+                                            <SkipBack className="w-4 h-4" />
+                                          </button>
+                                          <button 
+                                            onClick={() => {
+                                              if (isPlayingRelease) {
+                                                setProfileIsPlaying(!profileIsPlaying);
+                                              } else if (releaseTracks.length > 0) {
+                                                setProfileActivePlaybackTrackId(releaseTracks[0].id);
+                                                setProfileIsPlaying(true);
+                                              }
+                                            }} 
+                                            className="p-3.5 bg-[#FF9900]/10 hover:bg-[#FF9900]/20 border border-[#FF9900]/30 text-[#FF9900] rounded-full transition-colors active:scale-95 shadow-md flex items-center justify-center cursor-pointer"
+                                          >
+                                            {isPlayingRelease && profileIsPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                                          </button>
+                                          <button 
+                                            onClick={() => { 
+                                              if (isPlayingRelease) {
+                                                setProfileIsPlaying(false); 
+                                                setProfilePlaybackProgress(0); 
+                                                setProfileActivePlaybackTrackId(null); 
+                                              }
+                                            }} 
+                                            className="p-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 rounded-lg transition-colors active:scale-95 cursor-pointer"
+                                          >
+                                            <Square className="w-4 h-4" />
+                                          </button>
+                                          <button 
+                                            className="p-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 rounded-lg transition-colors active:scale-95 cursor-pointer"
+                                            onClick={() => {
+                                              if (releaseTracks.length > 0) {
+                                                const currentIdx = releaseTracks.findIndex((t: any) => t.id === profileActivePlaybackTrackId);
+                                                const nextIdx = (currentIdx >= 0 && currentIdx < releaseTracks.length - 1) ? currentIdx + 1 : 0;
+                                                setProfileActivePlaybackTrackId(releaseTracks[nextIdx]?.id || null);
+                                                setProfileIsPlaying(true);
+                                              }
+                                            }}
+                                          >
+                                            <SkipForward className="w-4 h-4" />
+                                          </button>
+                                        </div>
+
+                                        {releaseTracks.length > 0 && (
+                                          <div className="w-full mt-2 pt-2 border-t border-zinc-900/80">
+                                            <div className="text-[8px] font-mono font-black uppercase text-zinc-500 tracking-wider mb-1.5 flex items-center justify-between px-1">
+                                              <span>TRACKLIST ({releaseTracks.length})</span>
+                                              <span className="text-[7.5px] text-zinc-600">CLICK TO PLAY</span>
+                                            </div>
+                                            <div className="space-y-1 max-h-32 overflow-y-auto no-scrollbar pr-0.5">
+                                              {releaseTracks.map((trk: any, tIdx: number) => {
+                                                const isCurrentTrack = profileActivePlaybackTrackId === trk.id;
+                                                const isCurrentPlaying = isCurrentTrack && profileIsPlaying;
+                                                return (
+                                                  <div
+                                                    key={trk.id || `track-${tIdx}`}
+                                                    onClick={() => {
+                                                      if (isCurrentPlaying) {
+                                                        setProfileIsPlaying(false);
+                                                      } else {
+                                                        setProfileActivePlaybackTrackId(trk.id);
+                                                        setProfileIsPlaying(true);
+                                                      }
+                                                    }}
+                                                    className={`flex items-center justify-between py-1 px-2 rounded-md cursor-pointer transition-all text-[11px] font-mono ${
+                                                      isCurrentTrack
+                                                        ? 'bg-[#FF9900]/15 text-[#FF9900] border border-[#FF9900]/30 font-bold'
+                                                        : 'bg-black/30 hover:bg-zinc-900 text-zinc-300 hover:text-white border border-transparent'
+                                                    }`}
+                                                  >
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                      <span className="text-[9px] text-zinc-500 w-4 shrink-0 text-right">
+                                                        {String(trk.trackNumber || tIdx + 1).padStart(2, '0')}
+                                                      </span>
+                                                      {isCurrentPlaying ? (
+                                                        <Pause className="w-3 h-3 text-[#FF9900] shrink-0 animate-pulse" />
+                                                      ) : (
+                                                        <Play className="w-3 h-3 text-zinc-500 group-hover:text-[#FF9900] shrink-0" />
+                                                      )}
+                                                      <span className="truncate">{trk.title}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                                                      {!trk.hasAudio && (
+                                                        <span className="text-[8px] text-zinc-600 font-mono">* pending file</span>
+                                                      )}
+                                                      {trk.duration && (
+                                                        <span className="text-[9px] text-zinc-500">{trk.duration}</span>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                        );
-                      }
+                        </div>
+                      );
 
                       return (
                         <div className="bg-[#0c0e12] border border-orange-500/20 rounded-2xl p-8 text-center space-y-3">
@@ -3980,7 +3958,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         </div>
                       );
                     })()
-                  )
                   )
                 )}
               </div>

@@ -318,20 +318,44 @@ async function startServer() {
         const email = session.customer_email || (session.metadata && session.metadata.email);
         const tier = session.metadata && session.metadata.tierId;
         const cycle = session.metadata && session.metadata.billingCycle;
-        
-        console.log(`[STRIPE WEBHOOK SUCCESS] Handled subscription checkout completed for ${email} -> ${tier} (${cycle})`);
-        
-        // If supabase is available, we can sync the database profile status!
-        const supabase = getSupabaseService();
-        if (supabase && email) {
-          const { data: profile } = await supabase.from('profiles').select('*').eq('email', email).maybeSingle();
-          if (profile) {
-            await supabase.from('profiles').update({
-              sub_tier: tier,
-              subscription_status: 'active',
-              stripe_customer_id: session.customer || profile.stripe_customer_id
-            }).eq('id', profile.id);
-            console.log(`[STRIPE WEBHOOK DB SYNC] Successfully updated profile ${profile.id} with tier: ${tier}`);
+        const orderType = session.metadata && session.metadata.orderType;
+
+        if (orderType === 'cart' || orderType === 'merch' || orderType === 'ticket') {
+          console.log(`[STRIPE WEBHOOK SUCCESS] Handled ${orderType} order checkout completed for ${email} ($${((session.amount_total || 0) / 100).toFixed(2)})`);
+          const supabase = getSupabaseService();
+          if (supabase) {
+            try {
+              const saleId = `sale_stripe_${session.id.slice(-10)}`;
+              await supabase.from('sales').insert([{
+                id: saleId,
+                total_amount: (session.amount_total || 0) / 100,
+                item_name: orderType === 'ticket' ? 'Official Gate Ticket' : 'Merch / Cart Order',
+                item_type: orderType.toUpperCase(),
+                payment_method: 'STRIPE_HOSTED',
+                payment_status: 'COMPLETED',
+                customer_email: email,
+                created_at: new Date().toISOString()
+              }]);
+              console.log(`[STRIPE WEBHOOK DB SYNC] Committed sale record ${saleId} to Supabase sales table.`);
+            } catch (saleErr: any) {
+              console.warn('[STRIPE WEBHOOK DB SYNC] Notice writing sale record:', saleErr.message);
+            }
+          }
+        } else if (tier) {
+          console.log(`[STRIPE WEBHOOK SUCCESS] Handled subscription checkout completed for ${email} -> ${tier} (${cycle})`);
+          
+          // If supabase is available, we can sync the database profile status!
+          const supabase = getSupabaseService();
+          if (supabase && email) {
+            const { data: profile } = await supabase.from('profiles').select('*').eq('email', email).maybeSingle();
+            if (profile) {
+              await supabase.from('profiles').update({
+                sub_tier: tier,
+                subscription_status: 'active',
+                stripe_customer_id: session.customer || profile.stripe_customer_id
+              }).eq('id', profile.id);
+              console.log(`[STRIPE WEBHOOK DB SYNC] Successfully updated profile ${profile.id} with tier: ${tier}`);
+            }
           }
         }
       }
@@ -2279,6 +2303,128 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     } catch (e: any) {
       console.error("Escrow Release Error:", e);
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  // API ROUTE: Create Payment Intent (For custom in-modal Card & Digital Wallet payments)
+  app.post("/api/payments/create-payment-intent", async (req, res) => {
+    try {
+      const { amount, currency = "usd", metadata = {} } = req.body;
+      const stripe = await getStripeAsync();
+      if (!stripe) {
+        return res.status(503).json({ error: "Stripe is not configured on the server." });
+      }
+
+      const amountInCents = Math.max(50, Math.round(Number(amount) * 100));
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountInCents,
+        currency: currency.toLowerCase(),
+        automatic_payment_methods: { enabled: true },
+        metadata: {
+          ...metadata,
+          app: "Nexus-Core",
+        }
+      });
+
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+      });
+    } catch (e: any) {
+      console.error("[STRIPE PAYMENT INTENT ERROR]:", e);
+      res.status(500).json({ error: e.message || "Failed to create payment intent." });
+    }
+  });
+
+  // API ROUTE: Create Cart & Tickets Checkout Session (Hosted Stripe Checkout)
+  app.post("/api/payments/create-cart-checkout", async (req, res) => {
+    try {
+      const {
+        cartItems = [],
+        shippingAddress,
+        customerEmail,
+        stripeCustomerId,
+        orderType = 'cart', // 'cart' | 'merch' | 'ticket'
+        successUrl,
+        cancelUrl,
+        metadata = {}
+      } = req.body;
+
+      const stripe = await getStripeAsync();
+
+      const host = req.get("host") || "localhost:3000";
+      const protocol = req.protocol || "http";
+      const defaultRedirectUrl = `${protocol}://${host}`;
+
+      const resolvedSuccessUrl = successUrl || `${defaultRedirectUrl}/?checkout_success=1&order_type=${orderType}&session_id={CHECKOUT_SESSION_ID}`;
+      const resolvedCancelUrl = cancelUrl || `${defaultRedirectUrl}/?checkout_cancel=1`;
+
+      if (!stripe) {
+        // Fallback simulated checkout url if Stripe keys are not configured in environment
+        const mockOrderId = `SLM-${Math.floor(100000 + Math.random() * 900000)}`;
+        return res.json({
+          url: `${defaultRedirectUrl}/?checkout_success=1&order_type=${orderType}&mock=1&order_id=${mockOrderId}`,
+          sessionId: `cs_mock_${Date.now()}`,
+          simulated: true
+        });
+      }
+
+      // Build valid Stripe line items
+      const lineItems = (cartItems || []).map((item: any) => {
+        const rawPrice = typeof item.price === 'number' ? item.price : parseFloat(String(item.price || '25').replace(/[^0-9.]/g, '')) || 25;
+        const unitAmount = Math.max(50, Math.round(rawPrice * 100)); // Minimum 50 cents in Stripe
+        const name = item.name || item.title || item.headliner || 'Tour Item';
+        const description = item.description || (item.size ? `Size: ${item.size}` : undefined) || (item.venue ? `Venue: ${item.venue}` : undefined);
+        
+        let images: string[] | undefined = undefined;
+        const rawImg = item.image || item.thumbnail || item.flyer || item.coverUrl;
+        if (typeof rawImg === 'string' && rawImg.startsWith('http')) {
+          images = [rawImg];
+        }
+
+        return {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: String(name).slice(0, 250),
+              description: description ? String(description).slice(0, 500) : undefined,
+              images,
+            },
+            unit_amount: unitAmount,
+          },
+          quantity: Math.max(1, Number(item.quantity) || 1),
+        };
+      });
+
+      if (lineItems.length === 0) {
+        return res.status(400).json({ error: "Cart contains no valid items." });
+      }
+
+      const sessionPayload: Stripe.Checkout.SessionCreateParams = {
+        payment_method_types: ['card'],
+        line_items: lineItems,
+        mode: 'payment',
+        success_url: resolvedSuccessUrl,
+        cancel_url: resolvedCancelUrl,
+        metadata: {
+          ...metadata,
+          orderType,
+          customerEmail: customerEmail || '',
+          itemCount: String(cartItems.length),
+        }
+      };
+
+      if (stripeCustomerId && stripeCustomerId.startsWith('cus_') && !stripeCustomerId.includes('mock')) {
+        sessionPayload.customer = stripeCustomerId;
+      } else if (customerEmail && typeof customerEmail === 'string' && customerEmail.includes('@')) {
+        sessionPayload.customer_email = customerEmail;
+      }
+
+      const session = await stripe.checkout.sessions.create(sessionPayload);
+      res.json({ url: session.url, sessionId: session.id, simulated: false });
+    } catch (e: any) {
+      console.error("[STRIPE CART CHECKOUT ERROR]:", e);
+      res.status(500).json({ error: e.message || "Failed to initiate Stripe Checkout." });
     }
   });
 

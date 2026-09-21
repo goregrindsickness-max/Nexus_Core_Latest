@@ -28,7 +28,7 @@ import { getStoredWallets, processWalletPayment, selectWalletCard, UserWalletsSt
 import { WalletOAuthModal } from './modals/WalletOAuthModal';
 import { supabase } from '../../lib/supabaseClient';
 
-const stripePublicKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY || 'pk_test_51TfwzZA5e7qgTyokirZWVa11YM5Rvu1Ed0X4wPF0oMIch7dK99IP7Fqi5ETt1WgSs69y2P27Djo5tHim9ZWlWpn200HjmhACTR';
+const stripePublicKey = (import.meta.env.VITE_STRIPE_PUBLIC_KEY || '').trim();
 const isRealStripeKey = typeof stripePublicKey === 'string' && stripePublicKey.startsWith('pk_') && !stripePublicKey.includes('placeholder');
 const stripePromise = isRealStripeKey ? loadStripe(stripePublicKey) : null;
 
@@ -256,6 +256,77 @@ export function StripeCheckoutModal({
     setProcessingMethod(method);
 
     try {
+      // If paying via Stripe / Direct Card, attempt real hosted Stripe Checkout Session first
+      if (method === 'STRIPE') {
+        try {
+          const lineItem = {
+            name: isTicket
+              ? `${rawItem?.headliner || rawItem?.name || 'Concert'} - ${activeTierConfig.name}`
+              : (rawItem?.name || rawItem?.title || post?.title || 'Tour Merch'),
+            description: isTicket
+              ? `${rawItem?.venue || 'Venue'} • ${rawItem?.date || 'Tour Date'}`
+              : (selectedMerchSize ? `Size: ${selectedMerchSize}` : undefined),
+            price: unitPrice,
+            quantity: quantity,
+            image: rawItem?.thumbnail || rawItem?.image || post?.merchData?.thumbnail || post?.image_url,
+          };
+
+          const response = await fetch('/api/payments/create-cart-checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              cartItems: [lineItem],
+              shippingAddress: requiresShipping ? {
+                name: shippingName,
+                street: shippingStreet,
+                city: shippingCity,
+                state: shippingState,
+                zip: shippingZip,
+                phone: shippingPhone,
+              } : undefined,
+              customerEmail: userProfile?.email,
+              orderType: isTicket ? 'ticket' : 'merch',
+              metadata: {
+                customerName: shippingName || userProfile?.full_name || 'Customer',
+                customerEmail: userProfile?.email || '',
+                tier: selectedTier,
+                isTicket: String(isTicket),
+                quantity: String(quantity),
+              }
+            })
+          });
+
+          if (response.ok) {
+            const checkoutData = await response.json();
+            if (checkoutData.url && !checkoutData.simulated) {
+              localStorage.setItem('nexus_pending_single_order', JSON.stringify({
+                type: isTicket ? 'ticket' : 'merch',
+                isTicket,
+                rawItem,
+                post,
+                activeTierConfig,
+                selectedTier,
+                unitPrice,
+                quantity,
+                grandTotal,
+                selectedMerchSize,
+                attendeeDetails,
+                shippingName,
+                shippingStreet,
+                shippingCity,
+                shippingState,
+                shippingZip,
+                shippingPhone,
+              }));
+              window.location.href = checkoutData.url;
+              return;
+            }
+          }
+        } catch (stripeErr) {
+          console.warn('[STRIPE MODAL NOTICE] Real checkout session unavailable, continuing with local handler:', stripeErr);
+        }
+      }
+
       // Execute through the real digital wallet service
       const paymentResult = await processWalletPayment(method, grandTotal, userProfile);
       

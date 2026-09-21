@@ -21,7 +21,14 @@ import {
   AlignRight,
   Move,
   Image as ImageIcon,
-  Check
+  Check,
+  Tag,
+  Smile,
+  HelpCircle,
+  Clock,
+  Link,
+  Sliders,
+  Maximize2
 } from 'lucide-react';
 
 interface UploadStoryModalProps {
@@ -108,10 +115,21 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatusMsg, setUploadStatusMsg] = useState('');
   const [selectedMediaFile, setSelectedMediaFile] = useState<File | null>(null);
-  const [storySubTab, setStorySubTab] = useState<'text' | 'music' | 'stickers' | 'border' | 'preset'>('text');
+  const [storySubTab, setStorySubTab] = useState<'text' | 'music' | 'stickers' | 'interactive' | 'effects' | 'border' | 'preset'>('text');
   const [presetBg, setPresetBg] = useState<string>('from-rose-950/60 via-zinc-950 to-purple-950/60');
   const [isPlayingAudioPreview, setIsPlayingAudioPreview] = useState<boolean>(false);
   const [textAlign, setTextAlign] = useState<'left' | 'center' | 'right'>('center');
+
+  // Facebook Story Creator enhancements: Interactive features & effects
+  const [storyFilter, setStoryFilter] = useState<'normal' | 'vhs' | 'grunge' | 'noir' | 'toxic' | 'hyper'>('normal');
+  const [tagBandPerson, setTagBandPerson] = useState<string>('');
+  const [feelingMood, setFeelingMood] = useState<string>('');
+  const [pollQuestion, setPollQuestion] = useState<string>('');
+  const [pollOption1, setPollOption1] = useState<string>('🔥 Hell Yeah');
+  const [pollOption2, setPollOption2] = useState<string>('💀 Hard Pass');
+  const [externalLink, setExternalLink] = useState<string>('');
+  const [showTimestampBadge, setShowTimestampBadge] = useState<boolean>(true);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!showUploadStoryModal) return null;
@@ -150,8 +168,8 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
   };
 
   const handlePostStory = async () => {
-    if (!newStoryImage && !newStoryVideo && !newStoryTextOverlay) {
-      triggerNotification?.("Please add an image, video, or text overlay to post your story.");
+    if (!newStoryImage && !newStoryVideo && !newStoryTextOverlay && !pollQuestion && !feelingMood) {
+      triggerNotification?.("Please add media, text overlay, mood, or interactive poll to post your story.");
       return;
     }
 
@@ -197,6 +215,19 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
         profile_id: userProfile?.id || undefined,
+        // Enhanced Facebook-style interactive metadata
+        interactiveData: {
+          tag: tagBandPerson || undefined,
+          feeling: feelingMood || undefined,
+          filter: storyFilter !== 'normal' ? storyFilter : undefined,
+          link: externalLink || undefined,
+          showTimestamp: showTimestampBadge,
+          poll: pollQuestion ? {
+            question: pollQuestion,
+            option1: pollOption1 || 'Yes',
+            option2: pollOption2 || 'No'
+          } : undefined
+        } as any
       };
 
       // Publish to cloud storage, backend API, Supabase table, and local store
@@ -221,6 +252,11 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
       setNewStoryStickerScale(1.0);
       setNewStoryStickerX(50);
       setNewStoryStickerY(30);
+      setTagBandPerson('');
+      setFeelingMood('');
+      setPollQuestion('');
+      setExternalLink('');
+      setStoryFilter('normal');
       setShowUploadStoryModal(false);
       triggerNotification?.("Story published app-wide to the Scene Pit!");
     } catch (err) {
@@ -235,17 +271,23 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
   return (
     <AnimatePresence>
       {showUploadStoryModal && (
-        <motion.div key="modal-backdrop-uploadstorymodal-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-2 sm:p-4 overflow-y-auto  custom-scrollbar">
+        <motion.div
+          key="modal-backdrop-uploadstorymodal-1"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/95 backdrop-blur-md z-[100005] flex items-center justify-center p-2 sm:p-4 pb-16 sm:pb-6 overflow-y-auto custom-scrollbar"
+        >
         <motion.div
           initial={{ scale: 0.95, opacity: 0, y: 15 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 15 }}
-          className="bg-[#0e0e11] border border-zinc-800 rounded-2xl w-full max-w-4xl overflow-hidden shadow-[0_0_60px_rgba(244,63,94,0.12)] my-auto flex flex-col"
+          className="bg-[#0e0e11] border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[88vh] sm:max-h-[90vh] shadow-[0_0_60px_rgba(244,63,94,0.18)] flex flex-col overflow-hidden my-auto"
         >
-          {/* Top Title Bar */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-900 bg-zinc-950/80">
+          {/* Top Title Bar (Fixed header, never scrolls away) */}
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-zinc-900 bg-zinc-950 flex-shrink-0 z-20">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
+              <div className="w-8 h-8 rounded-full bg-rose-500/10 flex items-center justify-center border border-rose-500/20 flex-shrink-0">
                 <Sparkles className="w-4 h-4 text-rose-400" />
               </div>
               <div>
@@ -266,37 +308,81 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
                 setNewStoryMusic('');
                 setNewStoryTextOverlay('');
                 setNewStoryStickers([]);
+                setTagBandPerson('');
+                setFeelingMood('');
+                setPollQuestion('');
+                setExternalLink('');
+                setStoryFilter('normal');
               }}
-              className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors cursor-pointer flex-shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Canvas & Studio Options Split */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-0 flex-1 min-h-[460px]">
+          {/* Canvas & Studio Options Split (Scrollable Content Area) */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-0 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             {/* Visual Canvas Preview (5 cols) */}
-            <div className="md:col-span-5 bg-black p-6 border-b md:border-b-0 md:border-r border-zinc-900 flex flex-col items-center justify-center relative overflow-hidden group">
-              <p className="text-[9px] font-mono text-zinc-500 uppercase mb-2 flex items-center gap-1">
+            <div className="md:col-span-5 bg-black/90 p-4 sm:p-5 border-b md:border-b-0 md:border-r border-zinc-900 flex flex-col items-center justify-center relative flex-shrink-0 md:sticky md:top-0">
+              <p className="text-[9px] font-mono text-zinc-400 uppercase mb-2 flex items-center gap-1">
                 <Move className="w-3 h-3 text-rose-500" /> Click canvas to set {storySubTab === 'stickers' ? 'Sticker' : 'Text'} position
               </p>
               <div
                 onClick={handleCanvasClick}
-                className={`relative w-full max-w-[260px] aspect-[9/16] rounded-2xl overflow-hidden border-2 shadow-2xl flex flex-col justify-between p-4 cursor-crosshair transition-all ${newStoryBorder}`}
+                className={`relative w-full max-w-[210px] sm:max-w-[240px] aspect-[9/16] rounded-2xl overflow-hidden border-2 shadow-2xl flex flex-col justify-between p-3 sm:p-4 cursor-crosshair transition-all ${newStoryBorder}`}
               >
-                {/* Background Image / Video / Gradient Preset */}
-                {newStoryImage ? (
-                  <img src={newStoryImage} alt="" className="absolute inset-0 w-full h-full object-cover z-0" />
-                ) : newStoryVideo ? (
-                  <video src={newStoryVideo} autoPlay loop muted className="absolute inset-0 w-full h-full object-cover z-0" />
-                ) : (
-                  <div className={`absolute inset-0 bg-gradient-to-b ${presetBg} z-0 flex items-center justify-center p-4 text-center`}>
-                    <p className="text-[9px] text-zinc-600 font-mono uppercase tracking-widest pointer-events-none">CANVAS PREVIEW</p>
-                  </div>
-                )}
+                {/* Visual Camera / Aesthetic FX Filter Container */}
+                <div className={`absolute inset-0 z-0 pointer-events-none ${
+                  storyFilter === 'vhs'
+                    ? 'contrast-125 saturate-150 hue-rotate-15'
+                    : storyFilter === 'grunge'
+                    ? 'sepia contrast-150 brightness-90'
+                    : storyFilter === 'noir'
+                    ? 'grayscale contrast-150 brightness-95'
+                    : storyFilter === 'toxic'
+                    ? 'hue-rotate-90 saturate-200 contrast-125'
+                    : storyFilter === 'hyper'
+                    ? 'saturate-200 contrast-150 brightness-110'
+                    : ''
+                }`}>
+                  {/* Background Image / Video / Gradient Preset */}
+                  {newStoryImage ? (
+                    <img src={newStoryImage} alt="" className="w-full h-full object-cover" />
+                  ) : newStoryVideo ? (
+                    <video src={newStoryVideo} autoPlay loop muted className="w-full h-full object-cover" />
+                  ) : (
+                    <div className={`w-full h-full bg-gradient-to-b ${presetBg} flex items-center justify-center p-4 text-center`}>
+                      <p className="text-[9px] text-zinc-600 font-mono uppercase tracking-widest pointer-events-none">CANVAS PREVIEW</p>
+                    </div>
+                  )}
+                </div>
 
                 {/* Dark Vignette Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 z-1 pointer-events-none" />
+
+                {/* Top Interactive Badges (Tag, Mood, Timestamp) */}
+                <div className="relative z-10 flex flex-col gap-1.5 w-full pointer-events-none">
+                  <div className="flex items-center justify-between gap-1">
+                    {showTimestampBadge && (
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur border border-white/10 text-[8px] font-mono text-zinc-300 font-bold">
+                        <Clock className="w-2.5 h-2.5 text-rose-400" />
+                        <span>NOW</span>
+                      </div>
+                    )}
+                    {feelingMood && (
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-950/80 backdrop-blur border border-rose-500/40 text-[8px] font-mono text-rose-300 font-bold ml-auto">
+                        <Smile className="w-2.5 h-2.5 text-rose-400" />
+                        <span className="truncate max-w-[100px]">{feelingMood}</span>
+                      </div>
+                    )}
+                  </div>
+                  {tagBandPerson && (
+                    <div className="self-start flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-950/80 backdrop-blur border border-blue-500/40 text-[8px] font-mono text-blue-300 font-bold">
+                      <Tag className="w-2.5 h-2.5 text-blue-400" />
+                      <span>{tagBandPerson.startsWith('@') ? tagBandPerson : `@${tagBandPerson}`}</span>
+                    </div>
+                  )}
+                </div>
 
                 {/* Draggable/Positionable Text Overlay */}
                 {newStoryTextOverlay && (
@@ -327,6 +413,24 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
                   </div>
                 )}
 
+                {/* Interactive Poll Card (Facebook Story Style) */}
+                {pollQuestion && (
+                  <div className="relative z-10 my-auto p-2.5 rounded-xl bg-black/85 backdrop-blur-md border border-rose-500/40 shadow-xl pointer-events-none">
+                    <div className="flex items-center gap-1.5 mb-1.5 text-rose-400 text-[9px] font-mono font-bold uppercase tracking-wider">
+                      <HelpCircle className="w-3 h-3" /> PIT POLL
+                    </div>
+                    <p className="text-[11px] font-bold text-white mb-2 leading-tight">{pollQuestion}</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div className="py-1 px-2 rounded-lg bg-zinc-900/90 border border-zinc-700 text-[9px] font-mono font-bold text-center text-zinc-200">
+                        {pollOption1 || 'Yes'}
+                      </div>
+                      <div className="py-1 px-2 rounded-lg bg-zinc-900/90 border border-zinc-700 text-[9px] font-mono font-bold text-center text-zinc-200">
+                        {pollOption2 || 'No'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Stickers Overlay */}
                 {newStoryStickers.map((stk, idx) => (
                   <div
@@ -342,20 +446,30 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
                   </div>
                 ))}
 
-                {/* Sound Track Badge & Simulated Waveform */}
-                {newStoryMusic && (
-                  <div className="relative z-10 self-start flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/80 backdrop-blur border border-rose-500/40 text-[9px] font-mono text-rose-400 font-bold tracking-wider uppercase shadow">
-                    <Music2 className="w-3 h-3 text-rose-500 animate-pulse" />
-                    <span className="truncate max-w-[130px]">{newStoryMusic}</span>
-                    {isPlayingAudioPreview && (
-                      <div className="flex items-center gap-0.5 h-3 ml-1">
-                        <span className="w-0.5 h-full bg-rose-500 animate-pulse" />
-                        <span className="w-0.5 h-2/3 bg-rose-400 animate-pulse delay-75" />
-                        <span className="w-0.5 h-4/5 bg-rose-500 animate-pulse delay-150" />
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* Bottom Badges: Music & External Link */}
+                <div className="relative z-10 flex flex-col gap-1 w-full pointer-events-none">
+                  {externalLink && (
+                    <div className="self-center flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 text-black text-[9px] font-mono font-black uppercase tracking-wider shadow-lg">
+                      <Link className="w-3 h-3 text-rose-600" />
+                      <span className="truncate max-w-[150px]">{externalLink.replace(/^https?:\/\//, '')}</span>
+                    </div>
+                  )}
+
+                  {/* Sound Track Badge & Simulated Waveform */}
+                  {newStoryMusic && (
+                    <div className="self-start flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/80 backdrop-blur border border-rose-500/40 text-[9px] font-mono text-rose-400 font-bold tracking-wider uppercase shadow">
+                      <Music2 className="w-3 h-3 text-rose-500 animate-pulse" />
+                      <span className="truncate max-w-[130px]">{newStoryMusic}</span>
+                      {isPlayingAudioPreview && (
+                        <div className="flex items-center gap-0.5 h-3 ml-1">
+                          <span className="w-0.5 h-full bg-rose-500 animate-pulse" />
+                          <span className="w-0.5 h-2/3 bg-rose-400 animate-pulse delay-75" />
+                          <span className="w-0.5 h-4/5 bg-rose-500 animate-pulse delay-150" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -409,10 +523,12 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
                 {/* Studio Control Sub-Tabs */}
                 <div className="flex border-b border-zinc-900 gap-1 pb-1 overflow-x-auto custom-scrollbar">
                   {[
-                    { id: 'text', label: 'TEXT OVERLAY', icon: Type },
-                    { id: 'music', label: 'SOUNDTRACK', icon: Music },
+                    { id: 'text', label: 'TEXT', icon: Type },
+                    { id: 'interactive', label: 'INTERACTIVE', icon: HelpCircle },
+                    { id: 'effects', label: 'FILTERS', icon: Sliders },
+                    { id: 'music', label: 'AUDIO', icon: Music },
                     { id: 'stickers', label: 'STICKERS', icon: Sticker },
-                    { id: 'border', label: 'AURA BORDER', icon: Palette },
+                    { id: 'border', label: 'AURA', icon: Palette },
                     { id: 'preset', label: 'BG PRESETS', icon: Sparkles }
                   ].map((tab, tabIdx) => {
                     const Icon = tab.icon;
@@ -529,6 +645,184 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
                           className="w-full accent-rose-500"
                         />
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub Tab Panel: INTERACTIVE (Facebook Story Creator Style) */}
+                {storySubTab === 'interactive' && (
+                  <div className="space-y-3.5 animate-in fade-in duration-200">
+                    {/* Tag Band or Person */}
+                    <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-mono uppercase font-bold text-zinc-300 flex items-center gap-1.5">
+                          <Tag className="w-3.5 h-3.5 text-blue-400" /> Tag Band / Person
+                        </label>
+                        {tagBandPerson && (
+                          <button
+                            onClick={() => setTagBandPerson('')}
+                            className="text-[9px] font-mono text-zinc-500 hover:text-rose-400"
+                          >
+                            CLEAR
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="e.g. @devourment or band username..."
+                        value={tagBandPerson}
+                        onChange={(e) => setTagBandPerson(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 transition-colors"
+                      />
+                    </div>
+
+                    {/* Feeling / Activity Mood */}
+                    <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-mono uppercase font-bold text-zinc-300 flex items-center gap-1.5">
+                          <Smile className="w-3.5 h-3.5 text-rose-400" /> Feeling / Activity
+                        </label>
+                        {feelingMood && (
+                          <button
+                            onClick={() => setFeelingMood('')}
+                            className="text-[9px] font-mono text-zinc-500 hover:text-rose-400"
+                          >
+                            CLEAR
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          '🤘 Headbanging',
+                          '🔥 In the Pit',
+                          '🍻 Backstage',
+                          '💀 Hyped',
+                          '⚡ Live Onstage',
+                          '🎧 Soundcheck',
+                          '🩸 Brutalizing'
+                        ].map((mood, mIdx) => (
+                          <button
+                            key={`mood-${mIdx}`}
+                            onClick={() => setFeelingMood(feelingMood === mood ? '' : mood)}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all ${
+                              feelingMood === mood
+                                ? 'bg-rose-500 text-white shadow-[0_0_10px_rgba(244,63,94,0.4)]'
+                                : 'bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white'
+                            }`}
+                          >
+                            {mood}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Interactive Poll */}
+                    <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-mono uppercase font-bold text-zinc-300 flex items-center gap-1.5">
+                          <HelpCircle className="w-3.5 h-3.5 text-yellow-400" /> Interactive Pit Poll
+                        </label>
+                        {pollQuestion && (
+                          <button
+                            onClick={() => {
+                              setPollQuestion('');
+                              setPollOption1('🔥 Hell Yeah');
+                              setPollOption2('💀 Hard Pass');
+                            }}
+                            className="text-[9px] font-mono text-zinc-500 hover:text-rose-400"
+                          >
+                            CLEAR
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Ask a question (e.g. Which riff goes harder?)..."
+                        value={pollQuestion}
+                        onChange={(e) => setPollQuestion(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-500 transition-colors"
+                      />
+                      {pollQuestion && (
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <input
+                            type="text"
+                            placeholder="Option 1"
+                            value={pollOption1}
+                            onChange={(e) => setPollOption1(e.target.value)}
+                            className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-zinc-200"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Option 2"
+                            value={pollOption2}
+                            onChange={(e) => setPollOption2(e.target.value)}
+                            className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-zinc-200"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Link Sticker & Timestamp Toggle */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 space-y-1">
+                        <label className="text-[9px] font-mono uppercase font-bold text-zinc-400 flex items-center gap-1">
+                          <Link className="w-3 h-3 text-cyan-400" /> Web / Bandcamp Link
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="https://..."
+                          value={externalLink}
+                          onChange={(e) => setExternalLink(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-white placeholder-zinc-700 focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                      <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-[9px] font-mono uppercase font-bold text-zinc-400">
+                          <Clock className="w-3 h-3 text-rose-400" /> Timestamp Badge
+                        </div>
+                        <button
+                          onClick={() => setShowTimestampBadge(!showTimestampBadge)}
+                          className={`px-3 py-1 rounded-lg text-[9px] font-mono font-bold transition-all ${
+                            showTimestampBadge
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                              : 'bg-zinc-950 text-zinc-500 border border-zinc-800'
+                          }`}
+                        >
+                          {showTimestampBadge ? 'VISIBLE' : 'HIDDEN'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub Tab Panel: CAMERA / AESTHETIC FILTERS (Facebook Story Filters) */}
+                {storySubTab === 'effects' && (
+                  <div className="space-y-3 animate-in fade-in duration-200">
+                    <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold block">
+                      CAMERA & MEDIA FILTER OVERLAYS
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { id: 'normal', label: 'NORMAL', desc: 'Raw feed' },
+                        { id: 'vhs', label: '90s VHS', desc: 'CRT tape glow' },
+                        { id: 'grunge', label: 'GRUNGE', desc: 'Sepia slam grit' },
+                        { id: 'noir', label: 'NOIR MONO', desc: 'High-contrast bw' },
+                        { id: 'toxic', label: 'TOXIC SLIME', desc: 'Acid hue shift' },
+                        { id: 'hyper', label: 'HYPER BEAST', desc: 'Ultra saturation' }
+                      ].map((f) => (
+                        <button
+                          key={`filter-${f.id}`}
+                          onClick={() => setStoryFilter(f.id as any)}
+                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            storyFilter === f.id
+                              ? 'bg-zinc-800 border-rose-500 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
+                              : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-white'
+                          }`}
+                        >
+                          <div className="text-[10px] font-mono font-bold uppercase">{f.label}</div>
+                          <div className="text-[9px] text-zinc-500">{f.desc}</div>
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -691,8 +985,8 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
                 )}
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-4 border-t border-zinc-900 mt-4">
+              {/* Action Buttons (Sticky at bottom of controls panel) */}
+              <div className="sticky bottom-0 bg-[#0b0c0f]/95 backdrop-blur-md flex items-center justify-between pt-4 pb-2 border-t border-zinc-900 mt-4 z-20">
                 <button
                   onClick={() => setShowUploadStoryModal(false)}
                   className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"

@@ -3924,7 +3924,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
     };
   }, [userProfile?.id, userProfile?.band_id]);
 
-  const findCurrentStoryIndex = (target: any) => {
+  const findCurrentStoryIndex = useCallback((target: any) => {
     if (!target || !Array.isArray(stories) || stories.length === 0) return -1;
     const targetId = String(target.id ?? '');
     const idIdx = stories.findIndex(s => targetId && String(s.id ?? '') === targetId);
@@ -3934,9 +3934,9 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
       (s.image && s.image === target.image) ||
       (s.video && s.video === target.video)
     );
-  };
+  }, [stories]);
 
-  const handleNextStory = () => {
+  const handleNextStory = useCallback(() => {
     if (!activeStory) return;
     const currentIndex = findCurrentStoryIndex(activeStory);
     if (currentIndex !== -1 && currentIndex < stories.length - 1) {
@@ -3944,15 +3944,15 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
     } else {
       setActiveStory(null);
     }
-  };
+  }, [activeStory, findCurrentStoryIndex, stories]);
 
-  const handlePrevStory = () => {
+  const handlePrevStory = useCallback(() => {
     if (!activeStory) return;
     const currentIndex = findCurrentStoryIndex(activeStory);
     if (currentIndex > 0) {
       setActiveStory(stories[currentIndex - 1]);
     }
-  };
+  }, [activeStory, findCurrentStoryIndex, stories]);
 
   const [shopItemsList, setShopItemsList] = useState<any[]>(mockShopItems);
   const [inAppSongsList, setInAppSongsList] = useState<any[]>(mockInAppSongs);

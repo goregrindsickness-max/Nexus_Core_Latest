@@ -87,6 +87,15 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const [activeReactionBurst, setActiveReactionBurst] = useState<string | null>(null);
   const [isHolding, setIsHolding] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const onNextRef = useRef(onNext);
+  const onPrevRef = useRef(onPrev);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onNextRef.current = onNext;
+    onPrevRef.current = onPrev;
+    onCloseRef.current = onClose;
+  });
 
   // Determine current active story index safely
   const currentIndex = useMemo(() => {
@@ -184,17 +193,21 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
     const interval = setInterval(() => {
       setLocalProgress((prev) => {
-        if (prev >= 100) {
+        const nextVal = prev + increment;
+        if (nextVal >= 100) {
           clearInterval(interval);
-          onNext();
+          // Defer onNext call outside of React state update cycle
+          setTimeout(() => {
+            onNextRef.current();
+          }, 0);
           return 100;
         }
-        return Math.min(100, prev + increment);
+        return nextVal;
       });
     }, tickInterval);
 
     return () => clearInterval(interval);
-  }, [activeStory, isVideo, isPaused, isHolding, onNext]);
+  }, [activeStory?.id, isVideo, isPaused, isHolding]);
 
   // Video playback & timeupdate synchronization
   useEffect(() => {
@@ -216,7 +229,9 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   };
 
   const handleVideoEnded = () => {
-    onNext();
+    setTimeout(() => {
+      onNextRef.current();
+    }, 0);
   };
 
   // Keyboard navigation
@@ -224,11 +239,11 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     if (!activeStory) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
       } else if (e.key === 'ArrowRight') {
-        onNext();
+        onNextRef.current();
       } else if (e.key === 'ArrowLeft') {
-        onPrev();
+        onPrevRef.current();
       } else if (e.key === ' ') {
         e.preventDefault();
         setIsPaused(!isPaused);
@@ -237,7 +252,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeStory, isPaused, onClose, onNext, onPrev]);
+  }, [activeStory, isPaused]);
 
   // Touch / Pointer hold to pause
   const handlePointerDown = () => {

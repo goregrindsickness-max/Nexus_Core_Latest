@@ -20,7 +20,7 @@ import { getStoredWallets, processWalletPayment, selectWalletCard, UserWalletsSt
 import { WalletOAuthModal } from './WalletOAuthModal';
 import { supabase } from '../../../lib/supabaseClient';
 
-const stripePublicKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY || 'pk_test_51TfwzZA5e7qgTyokirZWVa11YM5Rvu1Ed0X4wPF0oMIch7dK99IP7Fqi5ETt1WgSs69y2P27Djo5tHim9ZWlWpn200HjmhACTR';
+const stripePublicKey = (import.meta.env.VITE_STRIPE_PUBLIC_KEY || '').trim();
 const isRealStripeKey = typeof stripePublicKey === 'string' && stripePublicKey.startsWith('pk_') && !stripePublicKey.includes('placeholder');
 const stripePromise = isRealStripeKey ? loadStripe(stripePublicKey) : null;
 
@@ -75,21 +75,29 @@ export function StripeCartCheckoutModal({
   );
 
   useEffect(() => {
-    if (isRealStripeKey && totalAmount > 0) {
+    if (totalAmount > 0) {
       setIsLoading(true);
       
-      // Call the Supabase Edge Function directly
-      supabase.functions.invoke('create-payment-intent', {
-        body: { amount: totalAmount, currency: 'usd' }
+      // Call backend payment intent endpoint with fallback to Supabase Edge Function
+      fetch('/api/payments/create-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: totalAmount, currency: 'usd' })
       })
-        .then(({ data, error }) => {
-          if (error) throw error;
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
           if (data && data.clientSecret) {
             setClientSecret(data.clientSecret);
+          } else {
+            return supabase.functions.invoke('create-payment-intent', {
+              body: { amount: totalAmount, currency: 'usd' }
+            }).then(({ data: sbData }) => {
+              if (sbData?.clientSecret) setClientSecret(sbData.clientSecret);
+            });
           }
         })
         .catch((err) => {
-          console.error("Failed to create payment intent:", err);
+          console.warn("Payment intent initialization notice:", err);
         })
         .finally(() => {
           setIsLoading(false);
@@ -130,6 +138,57 @@ export function StripeCartCheckoutModal({
     setProcessingMethod(method);
 
     try {
+      // If paying via Stripe / Direct Card, attempt real hosted Stripe Checkout Session first
+      if (method === 'STRIPE') {
+        try {
+          const response = await fetch('/api/payments/create-cart-checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              cartItems,
+              shippingAddress: {
+                name: shippingName,
+                street: shippingStreet,
+                city: shippingCity,
+                state: shippingState,
+                zip: shippingZip,
+                phone: shippingPhone
+              },
+              customerEmail: userProfile?.email,
+              orderType: 'cart',
+              metadata: {
+                customerName: shippingName || userProfile?.name || 'Customer',
+                customerEmail: userProfile?.email || '',
+                totalAmount: String(totalAmount)
+              }
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.url && !data.simulated) {
+              // Store pending cart order in localStorage so it can be restored & fulfilled upon return
+              localStorage.setItem('nexus_pending_cart_order', JSON.stringify({
+                cartItems,
+                totalAmount,
+                shippingAddress: {
+                  name: shippingName,
+                  street: shippingStreet,
+                  city: shippingCity,
+                  state: shippingState,
+                  zip: shippingZip,
+                  phone: shippingPhone
+                }
+              }));
+              window.location.href = data.url;
+              return;
+            }
+          }
+        } catch (stripeErr) {
+          console.warn('[STRIPE CART NOTICE] Real checkout session unavailable, continuing with local handler:', stripeErr);
+        }
+      }
+
       const paymentResult = await processWalletPayment(method, totalAmount, userProfile);
       const generatedOrderId = paymentResult.orderId;
       setConfirmedOrderId(generatedOrderId);

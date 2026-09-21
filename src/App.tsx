@@ -746,6 +746,92 @@ export default function App() {
       setShowSplash(false);
       triggerNotification?.("📋 Invite accepted: Welcome to the team registration gate.");
     }
+
+    // Handle Stripe Checkout Return Handshake
+    if (params.get('checkout_success') === '1') {
+      const sessionId = params.get('session_id') || `cs_${Date.now()}`;
+
+      // 1. Check for pending cart order
+      const pendingCartRaw = localStorage.getItem('nexus_pending_cart_order');
+      if (pendingCartRaw) {
+        try {
+          const pending = JSON.parse(pendingCartRaw);
+          const orderId = `STRP-${sessionId.slice(-6).toUpperCase()}`;
+          const newPurchases = (pending.cartItems || []).map((item: any, idx: number) => ({
+            id: `col_${Date.now()}_${idx}`,
+            orderId,
+            transactionId: sessionId,
+            type: 'merch' as const,
+            data: {
+              id: item.productId || item.id,
+              name: item.name,
+              thumbnail: item.image || item.thumbnail,
+              price: item.price,
+              band: item.bandName,
+              sizes: item.size ? [item.size] : [],
+              shippingAddress: pending.shippingAddress
+            },
+            quantity: item.quantity || 1,
+            paymentMethod: 'STRIPE_LIVE',
+            date: new Date()
+          }));
+
+          const existing = JSON.parse(localStorage.getItem('nexus_my_collections_v1') || '[]');
+          localStorage.setItem('nexus_my_collections_v1', JSON.stringify([...newPurchases, ...existing]));
+          localStorage.removeItem('nexus_pending_cart_order');
+          triggerNotification?.(`⚡ Order Confirmed! Stripe verified your payment for ${newPurchases.length} items. Added to Collections.`);
+        } catch (e) {
+          console.warn('Failed parsing pending cart order:', e);
+        }
+      }
+
+      // 2. Check for pending single ticket/merch order
+      const pendingSingleRaw = localStorage.getItem('nexus_pending_single_order');
+      if (pendingSingleRaw) {
+        try {
+          const pending = JSON.parse(pendingSingleRaw);
+          const orderId = `STRP-${sessionId.slice(-6).toUpperCase()}`;
+          const newRecord = {
+            id: `col_${Date.now()}`,
+            orderId,
+            transactionId: sessionId,
+            type: pending.type || (pending.isTicket ? 'ticket' : 'merch'),
+            data: {
+              ...pending.rawItem,
+              name: pending.isTicket ? `${pending.rawItem?.headliner || 'Concert'} Pass` : (pending.rawItem?.name || 'Tour Item'),
+              ticketType: pending.activeTierConfig?.name,
+              tierCode: pending.selectedTier,
+              pricePerUnit: pending.unitPrice,
+              attendees: pending.attendeeDetails || [],
+              ticketCode: `TKT-${orderId.slice(-4)}-1`,
+              thumbnail: pending.rawItem?.thumbnail || pending.rawItem?.image || pending.post?.image_url,
+              shippingAddress: {
+                name: pending.shippingName,
+                street: pending.shippingStreet,
+                city: pending.shippingCity,
+                state: pending.shippingState,
+                zip: pending.shippingZip,
+                phone: pending.shippingPhone
+              }
+            },
+            quantity: pending.quantity || 1,
+            totalAmount: pending.grandTotal || 25,
+            paymentMethod: 'STRIPE_LIVE',
+            date: new Date()
+          };
+
+          const existing = JSON.parse(localStorage.getItem('nexus_my_collections_v1') || '[]');
+          localStorage.setItem('nexus_my_collections_v1', JSON.stringify([newRecord, ...existing]));
+          localStorage.removeItem('nexus_pending_single_order');
+          triggerNotification?.(`⚡ Ticket Confirmed! Stripe verified your booking. Digital pass added to My Collections.`);
+        } catch (e) {
+          console.warn('Failed parsing pending single order:', e);
+        }
+      }
+
+      // Clean query parameter from URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, []);
 
   // Sync pathname /pay with activeTab

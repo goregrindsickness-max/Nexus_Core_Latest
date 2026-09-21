@@ -38,6 +38,19 @@ export interface StoryItem {
   created_at?: string;
   profile_id?: string;
   user_id?: string;
+  interactiveData?: {
+    tag?: string;
+    feeling?: string;
+    filter?: string;
+    link?: string;
+    showTimestamp?: boolean;
+    poll?: {
+      question: string;
+      option1: string;
+      option2: string;
+    };
+  };
+  [key: string]: any;
 }
 
 const MANIFEST_URL = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/photo-pit/stories/stories_manifest.json';
