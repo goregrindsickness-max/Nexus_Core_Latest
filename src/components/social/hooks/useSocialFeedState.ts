@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { FeedItem } from '../../../data/socialFeedMockData';
 import { mockFeed } from '../../../data/socialFeedMockData';
 import { getSupabase, uploadBase64ToStorage, createShopMerchItem } from '../../../supabase';
-import { isAudioUrl, extractUUID } from '../../../utils/socialFeedUtils';
+import { isAudioUrl, extractUUID, isBandcampUrl, resolveBandcampMetadata, formatBandcampEmbedDarkUrl } from '../../../utils/socialFeedUtils';
 import { registerCommunityEvent } from '../../../utils/communityEventUtils';
 import { syncPostToSupabase } from '../utils/postSyncUtils';
 import { resolveActivePersona } from '../utils/personaResolution';
@@ -645,8 +645,13 @@ export function useSocialFeedState({
         }
       }
 
-      const finalImage = uploadedUrls.length > 0 ? uploadedUrls[0] : mediaUrl || undefined;
-      const finalImages = uploadedUrls.length > 0 ? uploadedUrls : mediaUrl ? [mediaUrl] : undefined;
+      const isBandcampMedia = Boolean(mediaUrl && isBandcampUrl(mediaUrl));
+      const finalImage = uploadedUrls.length > 0 
+        ? uploadedUrls.find((u) => !isAudioUrl(u) && !u.startsWith('data:audio/')) 
+        : (!isBandcampMedia && mediaUrl && !isAudioUrl(mediaUrl) ? mediaUrl : undefined);
+      const finalImages = uploadedUrls.length > 0 
+        ? uploadedUrls.filter((u) => !isAudioUrl(u) && !u.startsWith('data:audio/')) 
+        : (mediaUrl && !isBandcampMedia && !isAudioUrl(mediaUrl) ? [mediaUrl] : undefined);
 
       // Deterministically resolve the active publishing persona
       const resolvedPersona = resolveActivePersona({
@@ -691,16 +696,18 @@ export function useSocialFeedState({
             }
           : undefined;
 
-      const tapeDataValue =
-        tapeTitle.trim() && tapeBand.trim()
-          ? {
-              title: tapeTitle.trim(),
-              band: tapeBand.trim().toUpperCase(),
-              date: tapeDate.trim() || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-              duration: tapeDuration.trim() || '03:45',
-              audioUrl: tapeAudioUrl || mediaUrl || (finalImage && isAudioUrl(finalImage) ? finalImage : undefined),
-            }
-          : undefined;
+      const resolvedTapeAudio = tapeAudioUrl || (mediaUrl && isAudioUrl(mediaUrl) ? mediaUrl : undefined) || (finalImage && isAudioUrl(finalImage) ? finalImage : undefined);
+      const hasTapeData = Boolean(tapeTitle.trim() || tapeBand.trim() || resolvedTapeAudio || tapeAudioFileName.trim());
+
+      const tapeDataValue = hasTapeData
+        ? {
+            title: tapeTitle.trim() || (tapeAudioFileName ? tapeAudioFileName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ") : 'LIVE DEMO / SOUNDBOARD REEL'),
+            band: (tapeBand.trim() || authorName || 'UNDERGROUND DEMO').toUpperCase(),
+            date: tapeDate.trim() || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            duration: tapeDuration.trim() || '03:45',
+            audioUrl: resolvedTapeAudio || tapeAudioUrl || mediaUrl || (finalImage && isAudioUrl(finalImage) ? finalImage : undefined),
+          }
+        : undefined;
 
       const timerHoursNum = Math.max(0, parseInt(merchDropTimerHours) || 0);
       const timerMinsNum = Math.max(0, Math.min(59, parseInt(merchDropTimerMinutes) || 0));
@@ -803,7 +810,37 @@ export function useSocialFeedState({
 
       const ytId = youtubeUrl ? getYouTubeId(youtubeUrl) : undefined;
       const ytUrl = youtubeUrl || (ytId ? `https://www.youtube.com/watch?v=${ytId}` : undefined);
-      const mediaUrlToUse = mediaUrl || ytUrl || tapeAudioUrl || finalImage || undefined;
+      const mediaUrlToUse = mediaUrl || ytUrl || tapeDataValue?.audioUrl || tapeAudioUrl || finalImage || undefined;
+
+      let resolvedBandcampData: any = undefined;
+      if (isBandcampMedia && mediaUrlToUse) {
+        try {
+          const res = await resolveBandcampMetadata(mediaUrlToUse);
+          if (res && res.success && res.embedUrl) {
+            resolvedBandcampData = {
+              embedUrl: formatBandcampEmbedDarkUrl(res.embedUrl),
+              pageUrl: res.pageUrl || mediaUrlToUse,
+              itemType: res.itemType || (mediaUrlToUse.includes('album=') ? 'album' : 'track'),
+              title: res.title,
+              artist: res.artist,
+              artwork: res.artwork,
+              trackId: res.trackId,
+              albumId: res.albumId,
+            };
+          }
+        } catch (e) {
+          console.warn('Bandcamp resolve in handleCreatePost error:', e);
+        }
+
+        if (!resolvedBandcampData) {
+          const darkEmbed = mediaUrlToUse.includes('EmbeddedPlayer') ? formatBandcampEmbedDarkUrl(mediaUrlToUse) : null;
+          resolvedBandcampData = {
+            embedUrl: darkEmbed,
+            pageUrl: mediaUrlToUse,
+            itemType: mediaUrlToUse.includes('album=') ? 'album' : 'track'
+          };
+        }
+      }
 
       const newPost: any = {
         id: postUuid,
@@ -833,10 +870,14 @@ export function useSocialFeedState({
         created_at: new Date().toISOString(),
         content: newPostText,
         tag: newPostTag,
-        image: finalImage || mediaUrlToUse || undefined,
+        image: finalImage,
         mediaUrl: mediaUrlToUse,
         media_url: mediaUrlToUse,
-        images: finalImages && finalImages.length > 0 ? finalImages : mediaUrlToUse ? [mediaUrlToUse] : [],
+        images: finalImages && finalImages.length > 0 ? finalImages : [],
+        bandcampUrl: isBandcampMedia ? mediaUrlToUse : undefined,
+        bandcamp_url: isBandcampMedia ? mediaUrlToUse : undefined,
+        bandcampData: resolvedBandcampData,
+        bandcamp_data: resolvedBandcampData,
         youtubeId: ytId,
         youtube_id: ytId,
         youtubeUrl: ytUrl,

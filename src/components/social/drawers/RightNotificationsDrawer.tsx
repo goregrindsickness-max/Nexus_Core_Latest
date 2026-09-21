@@ -56,10 +56,13 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
 }) => {
   const [permissionStatus, setPermissionStatus] = useState<PushPermissionStatus>('default');
   const [isRequesting, setIsRequesting] = useState(false);
+  const [isTestingPush, setIsTestingPush] = useState(false);
+  const [testPushSuccess, setTestPushSuccess] = useState(false);
   const inIframe = isIframeEnvironment();
 
   useEffect(() => {
-    setPermissionStatus(pushManager.getPermissionStatus());
+    // Check and refresh permission asynchronously
+    pushManager.refreshPermissionStatus().then(setPermissionStatus);
 
     const handleInAppNotice = (e: any) => {
       const notice = e.detail;
@@ -69,7 +72,7 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
     };
 
     const handleSyncStatus = () => {
-      setPermissionStatus(pushManager.getPermissionStatus());
+      pushManager.refreshPermissionStatus().then(setPermissionStatus);
     };
 
     window.addEventListener('nexus_in_app_notice', handleInAppNotice);
@@ -83,6 +86,13 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
     };
   }, []);
 
+  // Also refresh permission status whenever drawer is opened
+  useEffect(() => {
+    if (rightDrawerOpen) {
+      pushManager.refreshPermissionStatus().then(setPermissionStatus);
+    }
+  }, [rightDrawerOpen]);
+
   const handleAllowNotifications = async () => {
     setIsRequesting(true);
     try {
@@ -92,9 +102,9 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
       });
       setPermissionStatus(status);
       if (status === 'granted') {
-        pushManager.notify({
-          title: 'Device Notifications Allowed',
-          body: 'You will receive real-time alerts on this device.',
+        await pushManager.notify({
+          title: '🔔 Device Notifications Active',
+          body: 'Real-time tour alerts, routing beacons, and booking offers enabled on this device.',
           category: 'general'
         });
       } else if (inIframe) {
@@ -107,6 +117,21 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
       }
     } finally {
       setIsRequesting(false);
+    }
+  };
+
+  const handleTestNotification = async () => {
+    setIsTestingPush(true);
+    try {
+      await pushManager.sendTestAlert('routing_beacon');
+      const updated = await pushManager.refreshPermissionStatus();
+      setPermissionStatus(updated);
+      setTestPushSuccess(true);
+      setTimeout(() => setTestPushSuccess(false), 2500);
+    } catch (err) {
+      console.warn('Test push notification failed:', err);
+    } finally {
+      setIsTestingPush(false);
     }
   };
 
@@ -180,26 +205,55 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
         <div className="p-3 border-b border-zinc-900/60 bg-[#06070a]/80 backdrop-blur z-10 flex flex-col gap-2.5">
           {/* Allow Device Notifications Button */}
           {permissionStatus !== 'granted' ? (
-            <button
-              id="allow-device-notifications-btn"
-              onClick={handleAllowNotifications}
-              disabled={isRequesting}
-              className="w-full py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 active:scale-[0.99] text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer border border-rose-500/30 disabled:opacity-60"
-            >
-              <Bell className="w-3.5 h-3.5 fill-current" />
-              {isRequesting ? 'Authorizing...' : 'Allow Device Notifications'}
-            </button>
+            <div className="flex flex-col gap-1.5">
+              <button
+                id="allow-device-notifications-btn"
+                onClick={handleAllowNotifications}
+                disabled={isRequesting}
+                className="w-full py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 active:scale-[0.99] text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer border border-rose-500/30 disabled:opacity-60"
+              >
+                <Bell className="w-3.5 h-3.5 fill-current" />
+                {isRequesting ? 'Authorizing...' : 'Allow Device Notifications'}
+              </button>
+              <div className="flex items-center justify-between px-1 text-[11px] font-mono text-zinc-400">
+                <span>Preview notification engine:</span>
+                <button
+                  id="test-device-notification-btn"
+                  onClick={handleTestNotification}
+                  disabled={isTestingPush}
+                  className="text-[10px] text-zinc-400 hover:text-rose-400 underline cursor-pointer"
+                >
+                  {testPushSuccess ? '✓ Alert Sent' : isTestingPush ? 'Sending...' : 'Test Alert Now'}
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="w-full py-1.5 px-3 rounded-lg bg-zinc-900/80 border border-emerald-500/30 flex items-center justify-between text-xs font-mono text-zinc-300">
               <span className="flex items-center gap-1.5 text-emerald-400 font-bold text-[11px]">
-                <Check className="w-3.5 h-3.5" /> Device Notifications Allowed
+                <Check className="w-3.5 h-3.5" /> Device Notifications Active
               </span>
               <button
-                onClick={() => pushManager.simulatePush('routing_beacon')}
-                className="text-[10px] text-zinc-400 hover:text-white underline cursor-pointer"
-                title="Send test alert"
+                id="test-device-notification-btn"
+                onClick={handleTestNotification}
+                disabled={isTestingPush}
+                className={`text-[10px] px-2.5 py-0.5 rounded transition-all font-mono font-bold cursor-pointer flex items-center gap-1 ${
+                  testPushSuccess
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm'
+                    : isTestingPush
+                    ? 'bg-zinc-800 text-zinc-400 cursor-wait'
+                    : 'text-zinc-300 hover:text-white bg-zinc-800/90 hover:bg-zinc-700/90 border border-zinc-700/70'
+                }`}
+                title="Send test alert to device status bar"
               >
-                Test
+                {testPushSuccess ? (
+                  <>
+                    <Check className="w-2.5 h-2.5" /> Sent!
+                  </>
+                ) : isTestingPush ? (
+                  'Sending...'
+                ) : (
+                  'Test Alert'
+                )}
               </button>
             </div>
           )}

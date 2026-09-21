@@ -2,6 +2,10 @@
 // Tailored for Industry Pro and Fan Workspaces
 
 import { getSupabase } from '../supabase';
+import { Capacitor } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { PushNotifications } from '@capacitor/push-notifications';
+import { triggerNativeNotification, initAndroidNotificationChannel } from '../services/pushNotificationService';
 
 export type WorkspaceType = 'industry_pro' | 'fan_only' | 'band' | 'promoter' | 'label' | 'creative' | 'fan';
 
@@ -253,12 +257,27 @@ class DevicePushManager {
   private preferences: PushNotificationPreferences = getDefaultPushPreferences();
   private registration: ServiceWorkerRegistration | null = null;
   private recentNotificationHashes = new Set<string>();
+  private nativePermission: PushPermissionStatus = 'default';
 
   constructor() {
     if (typeof window !== 'undefined') {
       this.loadPreferences();
+      this.initNativeEnvironment();
       this.initServiceWorker();
       this.setupWindowListener();
+    }
+  }
+
+  private async initNativeEnvironment() {
+    if (typeof window === 'undefined') return;
+    const isNative = Capacitor.isNativePlatform() || Capacitor.isPluginAvailable('LocalNotifications');
+    if (isNative) {
+      const saved = localStorage.getItem('nexus_native_permission');
+      if (saved) {
+        this.nativePermission = saved as PushPermissionStatus;
+      }
+      await initAndroidNotificationChannel();
+      await this.refreshPermissionStatus();
     }
   }
 
@@ -311,10 +330,41 @@ class DevicePushManager {
   }
 
   public getPermissionStatus(): PushPermissionStatus {
+    const isNative = typeof window !== 'undefined' && (Capacitor.isNativePlatform() || Capacitor.isPluginAvailable('LocalNotifications'));
+    if (isNative) {
+      return this.nativePermission;
+    }
     if (typeof window === 'undefined' || !('Notification' in window)) {
       return 'unsupported';
     }
     return Notification.permission as PushPermissionStatus;
+  }
+
+  public async refreshPermissionStatus(): Promise<PushPermissionStatus> {
+    if (typeof window === 'undefined') return 'unsupported';
+
+    const isNative = Capacitor.isNativePlatform() || Capacitor.isPluginAvailable('LocalNotifications');
+    if (isNative && Capacitor.isPluginAvailable('LocalNotifications')) {
+      try {
+        const localStatus = await LocalNotifications.checkPermissions();
+        if (localStatus.display === 'granted') {
+          this.nativePermission = 'granted';
+        } else if (localStatus.display === 'denied') {
+          this.nativePermission = 'denied';
+        } else {
+          this.nativePermission = 'default';
+        }
+        localStorage.setItem('nexus_native_permission', this.nativePermission);
+        return this.nativePermission;
+      } catch (err) {
+        console.warn('[PushManager] refreshPermissionStatus notice:', err);
+      }
+    }
+
+    if ('Notification' in window) {
+      return Notification.permission as PushPermissionStatus;
+    }
+    return 'unsupported';
   }
 
   public async registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
@@ -447,6 +497,46 @@ class DevicePushManager {
   }
 
   public async requestPermission(userInfo?: { id?: string; email?: string }): Promise<PushPermissionStatus> {
+    const isNative = typeof window !== 'undefined' && (Capacitor.isNativePlatform() || Capacitor.isPluginAvailable('LocalNotifications'));
+
+    // 1. Android APK / Native Capacitor environment
+    if (isNative) {
+      try {
+        await initAndroidNotificationChannel();
+
+        let granted = false;
+        if (Capacitor.isPluginAvailable('LocalNotifications')) {
+          const localPerm = await LocalNotifications.requestPermissions();
+          if (localPerm.display === 'granted') granted = true;
+        }
+
+        if (Capacitor.isPluginAvailable('PushNotifications')) {
+          try {
+            const pushPerm = await PushNotifications.requestPermissions();
+            if (pushPerm.receive === 'granted') {
+              granted = true;
+              await PushNotifications.register();
+            }
+          } catch (e) {
+            console.warn('[PushManager] PushNotifications request notice:', e);
+          }
+        }
+
+        this.nativePermission = granted ? 'granted' : 'denied';
+        localStorage.setItem('nexus_native_permission', this.nativePermission);
+
+        if (granted) {
+          await this.updatePreferences({ enabled: true }, userInfo?.id);
+        }
+
+        return this.nativePermission;
+      } catch (err) {
+        console.error('[PushManager] Native permission request error:', err);
+        return 'denied';
+      }
+    }
+
+    // 2. Web Browser environment
     if (typeof window === 'undefined' || !('Notification' in window)) {
       return 'unsupported';
     }
@@ -552,7 +642,28 @@ class DevicePushManager {
       })
     );
 
-    // Device system notification via Service Worker or Web Notification
+    // 1. Android APK / Native Device Notification (via Capacitor LocalNotifications)
+    const isNative = typeof window !== 'undefined' && (Capacitor.isNativePlatform() || Capacitor.isPluginAvailable('LocalNotifications'));
+    if (isNative) {
+      try {
+        const scheduled = await triggerNativeNotification({
+          title: payload.title,
+          body: payload.body,
+          targetTab: payload.targetTab,
+          category: payload.category,
+          data: {
+            workspace: payload.workspace,
+            priority: payload.priority,
+            ...payload.data,
+          },
+        });
+        if (scheduled) return true;
+      } catch (nativeErr) {
+        console.warn('[PushManager] Native notification trigger error:', nativeErr);
+      }
+    }
+
+    // 2. Web Browser Notification via Service Worker or Web Notification
     const permission = this.getPermissionStatus();
     if (permission === 'granted') {
       try {
@@ -736,6 +847,58 @@ class DevicePushManager {
       targetTab: sim.targetTab,
       priority: sim.priority,
     });
+  }
+
+  public async sendTestAlert(category: string = 'routing_beacon'): Promise<boolean> {
+    const isNative = typeof window !== 'undefined' && (Capacitor.isNativePlatform() || Capacitor.isPluginAvailable('LocalNotifications'));
+    if (isNative) {
+      if (this.nativePermission !== 'granted') {
+        await this.requestPermission();
+      }
+      try {
+        const scheduled = await triggerNativeNotification({
+          title: '🚨 Nexus Device Test Alert',
+          body: 'Native Android notification channel operational. In-pit beacons and routing alerts active.',
+          targetTab: 'social',
+          category: category,
+          data: { test: true, timestamp: Date.now() },
+        });
+        if (scheduled) {
+          playPushChime('critical');
+          window.dispatchEvent(
+            new CustomEvent('nexus_in_app_notice', {
+              detail: {
+                id: 'test-' + Date.now(),
+                title: '🚨 Nexus Device Test Alert',
+                message: 'Native Android notification channel operational. In-pit beacons and routing alerts active.',
+                time: 'Just now',
+                type: 'system',
+                targetTab: 'social',
+                read: false,
+                avatar: '/icon-192.png',
+              },
+            })
+          );
+          return true;
+        }
+      } catch (err) {
+        console.warn('[PushManager] Native test alert exception:', err);
+      }
+    } else {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted') {
+        try {
+          await this.requestPermission();
+        } catch (e) {}
+      }
+    }
+
+    // Ensure preferences are enabled for the test so it is never suppressed
+    this.preferences.enabled = true;
+    if (this.preferences.categories) {
+      this.preferences.categories[category] = true;
+    }
+
+    return this.simulatePush(category as any);
   }
 }
 

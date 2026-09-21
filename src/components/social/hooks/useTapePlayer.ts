@@ -59,24 +59,46 @@ export function useTapePlayer({
       const publicUrl = await uploadFeedMedia(file);
       if (publicUrl) {
         setTapeAudioUrl(publicUrl);
+        const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
         if (!tapeTitle.trim()) {
-          const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
           setTapeTitle(cleanName);
         }
         if (!tapeBand.trim() && userProfile?.name) {
           setTapeBand(userProfile.name);
         }
         if (typeof triggerNotification === 'function') {
-          triggerNotification("Audio tape file attached successfully!");
+          triggerNotification("Audio tape attached: " + cleanName);
         }
       } else {
-        alert("Failed to upload audio file.");
-        setTapeAudioFileName('');
+        // Data URL fallback if storage bucket is unreachable
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const dataUrl = event.target?.result as string;
+          if (dataUrl) {
+            setTapeAudioUrl(dataUrl);
+            const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+            if (!tapeTitle.trim()) setTapeTitle(cleanName);
+            if (!tapeBand.trim() && userProfile?.name) setTapeBand(userProfile.name);
+            if (typeof triggerNotification === 'function') triggerNotification("Audio tape attached locally!");
+          }
+        };
+        reader.readAsDataURL(file);
       }
     } catch (err) {
       console.error("[TapeAudioUpload Error]:", err);
-      alert("Error uploading audio tape.");
-      setTapeAudioFileName('');
+      // Fallback on catch
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        if (dataUrl) {
+          setTapeAudioUrl(dataUrl);
+          const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+          if (!tapeTitle.trim()) setTapeTitle(cleanName);
+          if (!tapeBand.trim() && userProfile?.name) setTapeBand(userProfile.name);
+          if (typeof triggerNotification === 'function') triggerNotification("Audio tape attached locally!");
+        }
+      };
+      reader.readAsDataURL(file);
     } finally {
       setIsUploadingTapeAudio(false);
       if (tapeFileInputRef?.current) tapeFileInputRef.current.value = '';
@@ -93,7 +115,10 @@ export function useTapePlayer({
     }
 
     const post = feed.find(p => p.id === playingTapeId);
-    const audioUrl = post?.tapeData?.audioUrl || ((post as any)?.media_url && isAudioUrl((post as any).media_url) ? (post as any).media_url : (post?.image && isAudioUrl(post.image) ? post.image : undefined));
+    const audioUrl = post?.tapeData?.audioUrl || 
+      post?.tapeData?.audio_url || 
+      post?.tapeData?.audio || 
+      ((post as any)?.media_url && isAudioUrl((post as any).media_url) ? (post as any).media_url : (post?.image && isAudioUrl(post.image) ? post.image : undefined));
 
     if (audioUrl) {
       if (activeAudioRef.current) {
@@ -102,17 +127,22 @@ export function useTapePlayer({
       const audio = new Audio(audioUrl);
       activeAudioRef.current = audio;
 
-      const currentSec = tapeProgress[playingTapeId] || 0;
-      audio.currentTime = currentSec;
+      const currentPct = tapeProgress[playingTapeId] || 0;
 
-      requestPauseSceneRadio('tape_audio_playback');
-      audio.play().catch(e => console.warn('[TapePlayer] Audio playback warning:', e));
+      const onLoadedMetadata = () => {
+        if (audio.duration && currentPct > 0) {
+          audio.currentTime = (currentPct / 100) * audio.duration;
+        }
+      };
 
       const onTimeUpdate = () => {
-        setTapeProgress(prev => ({
-          ...prev,
-          [playingTapeId]: Math.floor(audio.currentTime)
-        }));
+        if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+          const pct = (audio.currentTime / audio.duration) * 100;
+          setTapeProgress(prev => ({
+            ...prev,
+            [playingTapeId]: Math.min(100, Math.max(0, pct))
+          }));
+        }
       };
 
       const onEnded = () => {
@@ -120,10 +150,15 @@ export function useTapePlayer({
         setTapeProgress(prev => ({ ...prev, [playingTapeId]: 0 }));
       };
 
+      audio.addEventListener('loadedmetadata', onLoadedMetadata);
       audio.addEventListener('timeupdate', onTimeUpdate);
       audio.addEventListener('ended', onEnded);
 
+      requestPauseSceneRadio('tape_audio_playback');
+      audio.play().catch(e => console.warn('[TapePlayer] Audio playback warning:', e));
+
       return () => {
+        audio.removeEventListener('loadedmetadata', onLoadedMetadata);
         audio.removeEventListener('timeupdate', onTimeUpdate);
         audio.removeEventListener('ended', onEnded);
         audio.pause();
@@ -135,22 +170,33 @@ export function useTapePlayer({
       const interval = setInterval(() => {
         setTapeProgress(prev => {
           const current = prev[playingTapeId] || 0;
-          const p = feed.find(item => item.id === playingTapeId);
-          if (!p || !p.tapeData) return prev;
-          
-          const parts = p.tapeData.duration.split(':');
-          const totalSeconds = parts.length === 2 ? parseInt(parts[0]) * 60 + parseInt(parts[1]) : 42 * 60 + 15;
-          
-          if (current >= totalSeconds) {
+          if (current >= 100) {
             setPlayingTapeId(null);
             return { ...prev, [playingTapeId]: 0 };
           }
-          return { ...prev, [playingTapeId]: current + 1 };
+          return { ...prev, [playingTapeId]: current + 0.5 };
         });
-      }, 1000);
+      }, 100);
       return () => clearInterval(interval);
     }
   }, [playingTapeId, feed]);
+
+  const handleSeekTape = (tapeId: string, progressPct: number) => {
+    setTapeProgress(prev => ({ ...prev, [tapeId]: progressPct }));
+    if (activeAudioRef.current && playingTapeId === tapeId && activeAudioRef.current.duration) {
+      activeAudioRef.current.currentTime = (progressPct / 100) * activeAudioRef.current.duration;
+    }
+  };
+
+  const handleStopTape = (tapeId: string) => {
+    if (activeAudioRef.current && playingTapeId === tapeId) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current.currentTime = 0;
+      activeAudioRef.current = null;
+    }
+    setPlayingTapeId(null);
+    setTapeProgress(prev => ({ ...prev, [tapeId]: 0 }));
+  };
 
   const formatProgress = (seconds: number) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -164,6 +210,8 @@ export function useTapePlayer({
     tapeProgress,
     setTapeProgress,
     handleTapeAudioUpload,
+    handleSeekTape,
+    handleStopTape,
     formatProgress
   };
 }

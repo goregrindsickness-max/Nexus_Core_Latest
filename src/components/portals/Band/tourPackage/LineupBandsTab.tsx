@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, Plus, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
+import { Crown, Plus, ArrowUp, ArrowDown, Trash2, Save, CheckCircle2, RefreshCw } from 'lucide-react';
 import { TourPackageBand } from '../TourManagerPackageModule';
 
 interface LineupBandsTabProps {
@@ -10,6 +10,10 @@ interface LineupBandsTabProps {
   onMoveBand: (fromIdx: number, toIdx: number) => void;
   onRemoveBand: (id: string, name: string) => void;
   onPromoteToHeadliner: (id: string) => void;
+  onSaveProgress?: () => void;
+  isSaving?: boolean;
+  hasUnsavedChanges?: boolean;
+  lastSavedAt?: Date | null;
 }
 
 export const LineupBandsTab: React.FC<LineupBandsTabProps> = ({
@@ -19,7 +23,11 @@ export const LineupBandsTab: React.FC<LineupBandsTabProps> = ({
   onOpenAddBandModal,
   onMoveBand,
   onRemoveBand,
-  onPromoteToHeadliner
+  onPromoteToHeadliner,
+  onSaveProgress,
+  isSaving,
+  hasUnsavedChanges,
+  lastSavedAt
 }) => {
   return (
     <div className="space-y-3">
@@ -30,9 +38,43 @@ export const LineupBandsTab: React.FC<LineupBandsTabProps> = ({
           </p>
           <div className="text-[9.5px] font-mono text-amber-400/90 pt-0.5">
             Current Client / Headliner: <strong className="text-amber-300 font-bold">{clientBandName}</strong>
+            {lastSavedAt && (
+              <span className="text-zinc-500 ml-2">
+                • Saved: {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {onSaveProgress && (
+            <button
+              type="button"
+              onClick={onSaveProgress}
+              disabled={isSaving}
+              className={`px-3 py-1 rounded font-mono font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-sm ${
+                isSaving
+                  ? 'bg-amber-600/50 text-white cursor-wait'
+                  : hasUnsavedChanges
+                  ? 'bg-amber-500 hover:bg-amber-400 text-black font-black ring-2 ring-amber-400/50 animate-pulse'
+                  : 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40'
+              }`}
+              title="Save tour lineup progress (Ctrl+S / Cmd+S)"
+            >
+              {isSaving ? (
+                <>
+                  <RefreshCw className="w-3 h-3 animate-spin" /> Saving...
+                </>
+              ) : hasUnsavedChanges ? (
+                <>
+                  <Save className="w-3 h-3" /> Save Lineup *
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Lineup Saved
+                </>
+              )}
+            </button>
+          )}
           <button
             type="button"
             onClick={onOpenSelectClientModal}

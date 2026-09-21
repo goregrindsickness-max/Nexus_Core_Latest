@@ -94,7 +94,7 @@ export const uploadAudioVault = async (
     const simpleFileName = `${timestamp}_${uniqueSalt}_${cleanBaseName}`;
 
     const pathOptions = [flatFileName, simpleFileName];
-    const targetBuckets = ['audio-vault', 'feed_media', 'public-assets'];
+    const targetBuckets = ['audio-vault', 'audio', 'feed_media', 'music', 'public-assets', 'posts'];
 
     // Try upload with up to 3 attempts with exponential backoff
     for (let attempt = 1; attempt <= 3; attempt++) {

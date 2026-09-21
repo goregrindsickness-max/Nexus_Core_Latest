@@ -1,5 +1,6 @@
 import React from 'react';
 import { Maximize2, MapPin, Ticket, Calendar } from 'lucide-react';
+import { isAudioUrl } from '../../../utils/socialFeedUtils';
 
 interface MediaGalleryGridProps {
   images?: string[];
@@ -24,6 +25,19 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
   onOpenTicketModal,
   onSelectTicketShow,
 }) => {
+  // Filter out any audio files or invalid strings
+  const validImages = (images || []).filter(
+    (img) => Boolean(img && typeof img === 'string' && !isAudioUrl(img) && !img.startsWith('data:audio/'))
+  );
+
+  const validImageUrl = Boolean(imageUrl && typeof imageUrl === 'string' && !isAudioUrl(imageUrl) && !imageUrl.startsWith('data:audio/'))
+    ? imageUrl
+    : undefined;
+
+  if (validImages.length === 0 && !validImageUrl) {
+    return null;
+  }
+
   const isTourFlyer = Boolean(
     (ticketData && (ticketData.ticketUrl || (ticketData.date && ticketData.date !== 'Upcoming Tour Date'))) ||
     (eventData && (eventData.category?.toLowerCase().includes('tour') || eventData.title?.toLowerCase().includes('tour'))) ||
@@ -54,7 +68,7 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
         referrerPolicy="no-referrer"
         onError={(e) => {
           e.currentTarget.onerror = null;
-          e.currentTarget.src = 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&q=80&w=800';
+          e.currentTarget.style.display = 'none';
         }}
         className="w-full max-h-[520px] object-contain relative z-10 group-hover:scale-[1.01] transition-transform duration-500" 
       />
@@ -121,24 +135,24 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
     </div>
   );
 
-  if (images && images.length > 0) {
-    if (images.length === 1) {
-      return renderSingleImage(images[0]);
+  if (validImages.length > 0) {
+    if (validImages.length === 1) {
+      return renderSingleImage(validImages[0]);
     }
 
-    if (images.length === 2) {
+    if (validImages.length === 2) {
       return (
         <div className="-mx-4 sm:-mx-5 my-2.5 relative border-y border-zinc-800/80 bg-black">
           <div className="grid grid-cols-2 gap-[2px] bg-zinc-900 aspect-[3/2] cursor-pointer">
-            {images.map((img, i) => (
-              <div key={`mg-2-${i}-${img.slice(0, 15)}`} className="relative h-full group overflow-hidden bg-black" onClick={() => onOpenLightbox(images, i)}>
+            {validImages.map((img, i) => (
+              <div key={`mg-2-${i}-${img.slice(0, 15)}`} className="relative h-full group overflow-hidden bg-black" onClick={() => onOpenLightbox(validImages, i)}>
                 <img 
                   src={img} 
                   alt={`Media ${i}`} 
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     e.currentTarget.onerror = null;
-                    e.currentTarget.src = 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&q=80&w=800';
+                    e.currentTarget.style.display = 'none';
                   }}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                 />
@@ -161,18 +175,18 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
       );
     }
 
-    if (images.length === 3) {
+    if (validImages.length === 3) {
       return (
         <div className="-mx-4 sm:-mx-5 my-2.5 relative border-y border-zinc-800/80 bg-black">
           <div className="grid grid-cols-2 gap-[2px] bg-zinc-900 aspect-square cursor-pointer">
-            <div className="relative h-full group overflow-hidden bg-black" onClick={() => onOpenLightbox(images, 0)}>
+            <div className="relative h-full group overflow-hidden bg-black" onClick={() => onOpenLightbox(validImages, 0)}>
               <img 
-                src={images[0]} 
+                src={validImages[0]} 
                 alt="Media 0" 
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   e.currentTarget.onerror = null;
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&q=80&w=800';
+                  e.currentTarget.style.display = 'none';
                 }}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
               />
@@ -181,15 +195,15 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
               </div>
             </div>
             <div className="grid grid-rows-2 gap-[2px] h-full bg-zinc-900">
-              {images.slice(1, 3).map((img, i) => (
-                <div key={`mg-3-${i + 1}-${img.slice(0, 15)}`} className="relative h-full group overflow-hidden bg-black" onClick={() => onOpenLightbox(images, i + 1)}>
+              {validImages.slice(1, 3).map((img, i) => (
+                <div key={`mg-3-${i + 1}-${img.slice(0, 15)}`} className="relative h-full group overflow-hidden bg-black" onClick={() => onOpenLightbox(validImages, i + 1)}>
                   <img 
                     src={img} 
                     alt={`Media ${i + 1}`} 
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       e.currentTarget.onerror = null;
-                      e.currentTarget.src = 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&q=80&w=800';
+                      e.currentTarget.style.display = 'none';
                     }}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                   />
@@ -215,24 +229,24 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
     return (
       <div className="-mx-4 sm:-mx-5 my-2.5 relative border-y border-zinc-800/80 bg-black">
         <div className="grid grid-cols-2 grid-rows-2 gap-[2px] bg-zinc-900 aspect-square cursor-pointer">
-          {images.slice(0, 4).map((img, i) => (
-            <div key={`mg-4-${i}-${img.slice(0, 15)}`} className="relative h-full group overflow-hidden bg-black" onClick={() => onOpenLightbox(images, i)}>
+          {validImages.slice(0, 4).map((img, i) => (
+            <div key={`mg-4-${i}-${img.slice(0, 15)}`} className="relative h-full group overflow-hidden bg-black" onClick={() => onOpenLightbox(validImages, i)}>
               <img 
                 src={img} 
                 alt={`Media ${i}`} 
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   e.currentTarget.onerror = null;
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&q=80&w=800';
+                  e.currentTarget.style.display = 'none';
                 }}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
               />
               <div className="absolute top-2 left-2 bg-black/75 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px] font-mono text-zinc-300 border border-white/10">
                 #{i + 1}
               </div>
-              {i === 3 && images.length > 4 && (
+              {i === 3 && validImages.length > 4 && (
                 <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center hover:bg-black/65 transition-colors">
-                  <span className="text-white font-mono font-black text-2xl">+{images.length - 4}</span>
+                  <span className="text-white font-mono font-black text-2xl">+{validImages.length - 4}</span>
                   <span className="text-[10px] font-mono text-rose-400 uppercase tracking-widest mt-0.5 font-bold">More Shots</span>
                 </div>
               )}
@@ -251,8 +265,8 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
     );
   }
 
-  if (imageUrl) {
-    return renderSingleImage(imageUrl);
+  if (validImageUrl) {
+    return renderSingleImage(validImageUrl);
   }
 
   return null;

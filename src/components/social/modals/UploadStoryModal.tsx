@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { getSupabase as getGlobalSupabase } from '../../../supabase';
 import { base64ToBlob, uploadStoryMediaToStorage } from '../../../services/storageService';
 import { publishStoryAuthoritative, StoryItem } from '../utils/storiesPersistenceService';
+import { StickerPlayer } from '../../stories/StickerPlayer';
+import { resolveBandcampMetadata } from '../../../utils/socialFeedUtils';
 import {
   Sparkles,
   X,
@@ -28,7 +30,11 @@ import {
   Clock,
   Link,
   Sliders,
-  Maximize2
+  Maximize2,
+  Disc,
+  Radio,
+  ExternalLink,
+  Loader2
 } from 'lucide-react';
 
 interface UploadStoryModalProps {
@@ -130,7 +136,58 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
   const [externalLink, setExternalLink] = useState<string>('');
   const [showTimestampBadge, setShowTimestampBadge] = useState<boolean>(true);
 
+  // Bandcamp Sticker Creator state in Story Builder
+  const [stickerCategory, setStickerCategory] = useState<'scene_stickers' | 'bandcamp_badge'>('bandcamp_badge');
+  const [bandcampLinkInput, setBandcampLinkInput] = useState<string>('');
+  const [isFetchingBandcamp, setIsFetchingBandcamp] = useState<boolean>(false);
+  const [bcTrackTitle, setBcTrackTitle] = useState<string>('Babykiller');
+  const [bcArtistName, setBcArtistName] = useState<string>('DEVOURMENT');
+  const [bcCoverArtUrl, setBcCoverArtUrl] = useState<string>('https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80');
+  const [bcAudioUrl, setBcAudioUrl] = useState<string>('https://actions.google.com/sounds/v1/ambiences/metal_scraping.ogg');
+  const [bcBandcampUrl, setBcBandcampUrl] = useState<string>('https://devourment.bandcamp.com');
+  const [bcVariant, setBcVariant] = useState<'merch_badge' | 'vinyl_sleeve' | 'cassette_jcard'>('merch_badge');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAutoFetchBandcamp = async () => {
+    if (!bandcampLinkInput.trim()) return;
+    setIsFetchingBandcamp(true);
+    try {
+      const meta = await resolveBandcampMetadata(bandcampLinkInput);
+      if (meta) {
+        if (meta.title) setBcTrackTitle(meta.title);
+        if (meta.artist) setBcArtistName(meta.artist);
+        if (meta.artwork) setBcCoverArtUrl(meta.artwork);
+        if (meta.streamUrl) setBcAudioUrl(meta.streamUrl);
+        setBcBandcampUrl(meta.pageUrl || bandcampLinkInput);
+        triggerNotification?.(`Connected: ${meta.artist ? `${meta.artist} - ` : ''}${meta.title || 'Bandcamp'}`);
+      }
+    } catch (err) {
+      console.warn('[UploadStoryModal] Bandcamp auto-fetch error:', err);
+      setBcBandcampUrl(bandcampLinkInput);
+      triggerNotification?.('Connected Bandcamp link');
+    } finally {
+      setIsFetchingBandcamp(false);
+    }
+  };
+
+  const handleAddBandcampSticker = () => {
+    const newSticker = {
+      id: `bc_sticker_${Date.now()}`,
+      type: 'bandcamp',
+      trackTitle: bcTrackTitle || 'Bandcamp Track',
+      artistName: bcArtistName || 'Bandcamp Artist',
+      coverArtUrl: bcCoverArtUrl,
+      audioUrl: bcAudioUrl || undefined,
+      bandcampUrl: bcBandcampUrl || 'https://bandcamp.com',
+      variant: bcVariant,
+      scale: newStoryStickerScale || 1.0,
+      x: newStoryStickerX || 50,
+      y: newStoryStickerY || 50
+    };
+    setNewStoryStickers((prev) => [...prev, newSticker]);
+    triggerNotification?.('Attached Bandcamp Player badge to story canvas!');
+  };
 
   if (!showUploadStoryModal) return null;
 
@@ -432,19 +489,51 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
                 )}
 
                 {/* Stickers Overlay */}
-                {newStoryStickers.map((stk, idx) => (
-                  <div
-                    key={`story-sticker-${stk}-${idx}`}
-                    style={{
-                      top: `${newStoryStickerY}%`,
-                      left: `${newStoryStickerX}%`,
-                      transform: `translate(-50%, -50%) scale(${newStoryStickerScale})`
-                    }}
-                    className="absolute z-10 text-xl drop-shadow-[0_0_10px_rgba(0,0,0,0.8)] pointer-events-none font-bold"
-                  >
-                    {stk}
-                  </div>
-                ))}
+                {newStoryStickers.map((stk, idx) => {
+                  const isBandcampStk = typeof stk === 'object' && (stk?.type === 'bandcamp' || stk?.trackTitle);
+                  if (isBandcampStk) {
+                    return (
+                      <div
+                        key={`story-bc-stk-${stk.id || idx}`}
+                        style={{
+                          top: `${stk.y ?? newStoryStickerY}%`,
+                          left: `${stk.x ?? newStoryStickerX}%`,
+                          transform: 'translate(-50%, -50%)',
+                        }}
+                        className="absolute z-20"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <StickerPlayer
+                          trackTitle={stk.trackTitle}
+                          artistName={stk.artistName}
+                          coverArtUrl={stk.coverArtUrl}
+                          audioUrl={stk.audioUrl}
+                          bandcampUrl={stk.bandcampUrl}
+                          variant={stk.variant || 'merch_badge'}
+                          scale={newStoryStickerScale}
+                          interactive={true}
+                          onRemove={() => {
+                            setNewStoryStickers((prev) => prev.filter((_, i) => i !== idx));
+                          }}
+                        />
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={`story-sticker-${typeof stk === 'string' ? stk : stk?.id || idx}-${idx}`}
+                      style={{
+                        top: `${newStoryStickerY}%`,
+                        left: `${newStoryStickerX}%`,
+                        transform: `translate(-50%, -50%) scale(${newStoryStickerScale})`
+                      }}
+                      className="absolute z-10 text-xl drop-shadow-[0_0_10px_rgba(0,0,0,0.8)] pointer-events-none font-bold"
+                    >
+                      {typeof stk === 'string' ? stk : stk?.emoji || '🔥'}
+                    </div>
+                  );
+                })}
 
                 {/* Bottom Badges: Music & External Link */}
                 <div className="relative z-10 flex flex-col gap-1 w-full pointer-events-none">
@@ -875,36 +964,257 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
 
                 {/* Sub Tab Panel: STICKERS */}
                 {storySubTab === 'stickers' && (
-                  <div className="space-y-3 animate-in fade-in duration-200">
-                    <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold block">ATTACH SCENE STICKERS</label>
-                    <div className="flex flex-wrap gap-2">
-                      {['🔥 PIT LORD', '⚡ LIVE AT THE PIT', '🤘 SLAM SQUAD', '💀 GORE GRIND', '🎸 HEAVY RIFFS', '🎧 100% LOUD', '🏆 SCENE APPROVED', '🎟️ FRONT ROW', '📹 VHS BOOTLEG'].map((stk, stkIdx) => {
-                        const isAttached = newStoryStickers.includes(stk);
-                        return (
-                          <button
-                            key={`story-stk-${stk}-${stkIdx}`}
-                            onClick={() => {
-                              if (!isAttached) {
-                                setNewStoryStickers((prev) => [...prev, stk]);
-                              } else {
-                                setNewStoryStickers((prev) => prev.filter(s => s !== stk));
-                              }
-                            }}
-                            className={`px-3 py-1.5 rounded-xl border text-xs font-bold font-mono transition-all cursor-pointer ${
-                              isAttached
-                                ? 'bg-rose-600 text-white border-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.4)]'
-                                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700'
-                            }`}
-                          >
-                            {stk} {isAttached && '✓'}
-                          </button>
-                        );
-                      })}
+                  <div className="space-y-3.5 animate-in fade-in duration-200">
+                    {/* Sticker Category Selector */}
+                    <div className="flex rounded-xl bg-zinc-950 p-1 border border-zinc-800/80 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setStickerCategory('bandcamp_badge')}
+                        className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          stickerCategory === 'bandcamp_badge'
+                            ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/50 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        <Disc className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>BANDCAMP PLAYER</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStickerCategory('scene_stickers')}
+                        className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          stickerCategory === 'scene_stickers'
+                            ? 'bg-rose-950 text-rose-300 border border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        <Sticker className="w-3.5 h-3.5 text-rose-400" />
+                        <span>SCENE STICKERS</span>
+                      </button>
                     </div>
-                    {newStoryStickers.length > 0 && (
-                      <div className="grid grid-cols-2 gap-3 pt-2">
+
+                    {/* BANDCAMP STICKER CREATOR */}
+                    {stickerCategory === 'bandcamp_badge' && (
+                      <div className="space-y-3 bg-zinc-950/70 p-3 rounded-xl border border-cyan-500/30">
+                        {/* Auto-Fetch Bar */}
                         <div>
-                          <span className="text-[9px] font-mono text-zinc-500 uppercase block mb-1">STICKER SCALE ({newStoryStickerScale}x)</span>
+                          <label className="text-[9px] font-mono text-cyan-400 uppercase font-bold block mb-1 flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5" /> AUTO-RESOLVE BANDCAMP LINK
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Paste https://artist.bandcamp.com/track/..."
+                              value={bandcampLinkInput}
+                              onChange={(e) => setBandcampLinkInput(e.target.value)}
+                              className="flex-1 bg-zinc-900/90 border border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 font-mono focus:outline-none focus:border-cyan-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAutoFetchBandcamp}
+                              disabled={isFetchingBandcamp || !bandcampLinkInput.trim()}
+                              className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-black font-mono font-black text-xs flex items-center gap-1 shrink-0 cursor-pointer transition-all shadow-[0_0_10px_rgba(6,182,212,0.3)]"
+                            >
+                              {isFetchingBandcamp ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> FETCHING...
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="w-3.5 h-3.5" /> FETCH
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Quick Presets */}
+                        <div>
+                          <label className="text-[9px] font-mono text-zinc-500 uppercase block mb-1">QUICK SCENE PRESETS</label>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {[
+                              {
+                                title: 'Babykiller',
+                                artist: 'DEVOURMENT',
+                                cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80',
+                                audio: 'https://actions.google.com/sounds/v1/ambiences/metal_scraping.ogg',
+                                link: 'https://devourment.bandcamp.com'
+                              },
+                              {
+                                title: 'Uncontrollable Demise',
+                                artist: 'INTERNAL BLEEDING',
+                                cover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&auto=format&fit=crop&q=80',
+                                audio: 'https://actions.google.com/sounds/v1/foley/heavy_door_slam.ogg',
+                                link: 'https://internalbleeding.bandcamp.com'
+                              },
+                              {
+                                title: 'Chainsaw Dismemberment',
+                                artist: 'MORTICIAN',
+                                cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80',
+                                audio: 'https://actions.google.com/sounds/v1/ambiences/metal_scraping.ogg',
+                                link: 'https://mortician.bandcamp.com'
+                              },
+                              {
+                                title: 'In A Gadda Da Vida',
+                                artist: 'GOREPOT',
+                                cover: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=300&auto=format&fit=crop&q=80',
+                                audio: 'https://actions.google.com/sounds/v1/foley/heavy_door_slam.ogg',
+                                link: 'https://gorepot.bandcamp.com'
+                              }
+                            ].map((preset, pIdx) => (
+                              <button
+                                key={`bc-preset-${pIdx}`}
+                                type="button"
+                                onClick={() => {
+                                  setBcTrackTitle(preset.title);
+                                  setBcArtistName(preset.artist);
+                                  setBcCoverArtUrl(preset.cover);
+                                  setBcAudioUrl(preset.audio);
+                                  setBcBandcampUrl(preset.link);
+                                  triggerNotification?.(`Loaded preset: ${preset.artist}`);
+                                }}
+                                className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-left hover:border-cyan-500/50 hover:bg-zinc-800/80 transition-all cursor-pointer"
+                              >
+                                <p className="text-[10px] font-bold text-white truncate">{preset.title}</p>
+                                <p className="text-[8px] font-mono text-cyan-400 truncate">{preset.artist}</p>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Badge Style Variant */}
+                        <div>
+                          <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">BADGE PHYSICAL STYLE</label>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {[
+                              { id: 'merch_badge', label: '🏷️ MERCH BADGE', desc: 'Enamel Pin' },
+                              { id: 'vinyl_sleeve', label: '💿 VINYL SLEEVE', desc: 'Spinning 7"' },
+                              { id: 'cassette_jcard', label: '📼 CASSETTE J-CARD', desc: 'Side A Tape' }
+                            ].map((v) => (
+                              <button
+                                key={`var-${v.id}`}
+                                type="button"
+                                onClick={() => setBcVariant(v.id as any)}
+                                className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                                  bcVariant === v.id
+                                    ? 'bg-cyan-950/80 border-cyan-400 text-cyan-200 shadow-[0_0_10px_rgba(6,182,212,0.2)]'
+                                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
+                                }`}
+                              >
+                                <div className="text-[10px] font-mono font-black">{v.label}</div>
+                                <div className="text-[8px] text-zinc-500 font-sans">{v.desc}</div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Detailed Fields */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[8px] font-mono text-zinc-500 uppercase block mb-0.5">TRACK TITLE</label>
+                            <input
+                              type="text"
+                              value={bcTrackTitle}
+                              onChange={(e) => setBcTrackTitle(e.target.value)}
+                              placeholder="Track title"
+                              className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[8px] font-mono text-zinc-500 uppercase block mb-0.5">ARTIST NAME</label>
+                            <input
+                              type="text"
+                              value={bcArtistName}
+                              onChange={(e) => setBcArtistName(e.target.value)}
+                              placeholder="Artist name"
+                              className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[8px] font-mono text-zinc-500 uppercase block mb-0.5">COVER ART URL</label>
+                            <input
+                              type="text"
+                              value={bcCoverArtUrl}
+                              onChange={(e) => setBcCoverArtUrl(e.target.value)}
+                              placeholder="https://..."
+                              className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[8px] font-mono text-zinc-500 uppercase block mb-0.5">BANDCAMP LINK</label>
+                            <input
+                              type="text"
+                              value={bcBandcampUrl}
+                              onChange={(e) => setBcBandcampUrl(e.target.value)}
+                              placeholder="https://artist.bandcamp.com"
+                              className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Audio Preview URL */}
+                        <div>
+                          <label className="text-[8px] font-mono text-zinc-500 uppercase block mb-0.5">HTML5 AUDIO PREVIEW STREAM (OPTIONAL)</label>
+                          <input
+                            type="text"
+                            value={bcAudioUrl}
+                            onChange={(e) => setBcAudioUrl(e.target.value)}
+                            placeholder="https://...mp3 or audio preview url"
+                            className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+
+                        {/* Attach Button */}
+                        <button
+                          type="button"
+                          onClick={handleAddBandcampSticker}
+                          className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-black font-black font-mono text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-[0_0_15px_rgba(6,182,212,0.4)]"
+                        >
+                          <Disc className="w-4 h-4 text-black" />
+                          <span>ATTACH BANDCAMP BADGE TO CANVAS</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* SCENE EMOJI STICKERS */}
+                    {stickerCategory === 'scene_stickers' && (
+                      <div className="space-y-3">
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold block">ATTACH SCENE STICKERS</label>
+                        <div className="flex flex-wrap gap-2">
+                          {['🔥 PIT LORD', '⚡ LIVE AT THE PIT', '🤘 SLAM SQUAD', '💀 GORE GRIND', '🎸 HEAVY RIFFS', '🎧 100% LOUD', '🏆 SCENE APPROVED', '🎟️ FRONT ROW', '📹 VHS BOOTLEG'].map((stk, stkIdx) => {
+                            const isAttached = newStoryStickers.includes(stk);
+                            return (
+                              <button
+                                key={`story-stk-${stk}-${stkIdx}`}
+                                onClick={() => {
+                                  if (!isAttached) {
+                                    setNewStoryStickers((prev) => [...prev, stk]);
+                                  } else {
+                                    setNewStoryStickers((prev) => prev.filter(s => s !== stk));
+                                  }
+                                }}
+                                className={`px-3 py-1.5 rounded-xl border text-xs font-bold font-mono transition-all cursor-pointer ${
+                                  isAttached
+                                    ? 'bg-rose-600 text-white border-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.4)]'
+                                    : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700'
+                                }`}
+                              >
+                                {stk} {isAttached && '✓'}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Scaling & Clear Controls */}
+                    {newStoryStickers.length > 0 && (
+                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-900">
+                        <div>
+                          <span className="text-[9px] font-mono text-zinc-400 uppercase block mb-1">STICKER SCALE ({newStoryStickerScale}x)</span>
                           <input
                             type="range"
                             min="0.5"
@@ -912,14 +1222,14 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
                             step="0.1"
                             value={newStoryStickerScale}
                             onChange={(e) => setNewStoryStickerScale(Number(e.target.value))}
-                            className="w-full accent-rose-500"
+                            className="w-full accent-cyan-500"
                           />
                         </div>
                         <button
                           onClick={() => setNewStoryStickers([])}
-                          className="self-end py-1 px-3 bg-red-950/40 border border-red-800 text-red-400 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1 cursor-pointer hover:bg-red-900/60"
+                          className="self-end py-1.5 px-3 bg-red-950/40 border border-red-800 text-red-400 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1 cursor-pointer hover:bg-red-900/60"
                         >
-                          <Trash2 className="w-3 h-3" /> Clear Stickers
+                          <Trash2 className="w-3 h-3" /> Clear Stickers ({newStoryStickers.length})
                         </button>
                       </div>
                     )}

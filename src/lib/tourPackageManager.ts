@@ -10,6 +10,11 @@ export interface TourPackageRecord {
   embargoUntilDate: string;
   bands: TourPackageBand[];
   stops: TourPackageStop[];
+  backlineNotes?: {
+    drumKitNotes?: string;
+    bassRigNotes?: string;
+    trailerNotes?: string;
+  };
   createdAt: string;
   updatedAt: string;
 }

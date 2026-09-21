@@ -232,6 +232,9 @@ export interface FeedItem {
     date: string;
     duration: string;
     audioUrl?: string;
+    audio_url?: string;
+    audio?: string;
+    coverUrl?: string;
   };
   tourData?: {
     tourName: string;
@@ -331,8 +334,53 @@ export const bandSetlists: Record<string, string[]> = {
 };
 
 export const mockStories = [
-  { id: 's1', name: 'AUTOPSY', avatar: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=150', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=600', border: 'border-rose-500/80', textColor: 'text-rose-400' },
-  { id: 's2', name: 'Nexus Promoters', avatar: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&q=80&w=150', image: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&q=80&w=600', border: 'border-purple-500', textColor: 'text-purple-400' },
+  {
+    id: 's1',
+    name: 'AUTOPSY',
+    avatar: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=150',
+    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=600',
+    border: 'border-rose-500/80',
+    textColor: 'text-rose-400',
+    caption: 'New live tapes recorded straight from the soundboard!',
+    stickers: [
+      {
+        id: 'bc_sticker_autopsy',
+        type: 'bandcamp',
+        trackTitle: 'Severed Survival',
+        artistName: 'AUTOPSY',
+        coverArtUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=300',
+        audioUrl: 'https://actions.google.com/sounds/v1/ambiences/metal_scraping.ogg',
+        bandcampUrl: 'https://peaceville.bandcamp.com/album/severed-survival',
+        variant: 'merch_badge',
+        scale: 1.0,
+        x: 50,
+        y: 40
+      }
+    ]
+  },
+  {
+    id: 's2',
+    name: 'Nexus Promoters',
+    avatar: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&q=80&w=150',
+    image: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&q=80&w=600',
+    border: 'border-purple-500',
+    textColor: 'text-purple-400',
+    stickers: [
+      {
+        id: 'bc_sticker_vinyl',
+        type: 'bandcamp',
+        trackTitle: 'Babykiller (Live)',
+        artistName: 'DEVOURMENT',
+        coverArtUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&auto=format&fit=crop&q=80',
+        audioUrl: 'https://actions.google.com/sounds/v1/foley/heavy_door_slam.ogg',
+        bandcampUrl: 'https://devourment.bandcamp.com',
+        variant: 'vinyl_sleeve',
+        scale: 1.0,
+        x: 50,
+        y: 42
+      }
+    ]
+  },
   { id: 's3', name: 'CRYPTOPSY', avatar: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=150', image: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&q=80&w=600', border: 'border-rose-500/80', textColor: 'text-rose-400' },
   { id: 's4', name: 'INCANTATION', avatar: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&q=80&w=150', image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=600', border: 'border-rose-500/80', textColor: 'text-rose-400' },
   { id: 's5', name: 'SKINLESS', avatar: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?auto=format&fit=crop&q=80&w=150', image: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&q=80&w=600', border: 'border-rose-500/80', textColor: 'text-rose-400' },

@@ -47,7 +47,7 @@ export const TapeEmbedCard: React.FC<TapeEmbedCardProps> = ({
 
       <div className="flex flex-col gap-5 relative z-10">
         {/* Realistic Cassette Tape UI */}
-        <div className="relative mx-auto w-full max-w-[340px] aspect-[1.58] bg-[#1a1a1a] rounded-lg shadow-2xl border border-[#0a0a0a] overflow-hidden flex flex-col p-1.5 ring-1 ring-white/10">
+        <div className="relative mx-auto w-full max-w-[340px] aspect-[1.46] bg-[#1a1a1a] rounded-lg shadow-2xl border border-[#0a0a0a] overflow-hidden flex flex-col p-1.5 ring-1 ring-white/10">
           {/* Texture overlay for the plastic shell */}
           <div className="absolute inset-0 opacity-40 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#444 1px, transparent 1px)', backgroundSize: '3px 3px' }}></div>
 
@@ -66,92 +66,107 @@ export const TapeEmbedCard: React.FC<TapeEmbedCardProps> = ({
           </div>
 
           {/* Main Label / Sticker Area */}
-          <div className="relative z-10 mx-2 mt-2 h-[68%] bg-[#1c1c1c] rounded-sm shadow-[0_0_2px_rgba(0,0,0,1)] border border-white/5 flex flex-col items-center justify-between p-1.5">
+          <div className="relative z-10 mx-1.5 mt-1.5 flex-1 bg-[#181818] rounded-sm shadow-[0_0_2px_rgba(0,0,0,1)] border border-white/5 flex flex-col items-center justify-between p-1.5 pb-1">
 
-            {/* Label Text Top Header */}
-            <div className="w-full px-1 z-20">
-              <div className="w-full bg-[#050505] border border-white/10 px-2.5 py-1 flex justify-between items-center shadow-sm rounded-sm gap-2">
-                {/* Band Name with Marquee if long */}
-                <div className="max-w-[130px] overflow-hidden flex items-center">
-                  {post.tapeData.band.length > 12 ? (
-                    <div className="animate-marquee-smooth gap-3 shrink-0 flex items-center">
-                      <span className="text-xs font-mono font-extrabold text-zinc-200 uppercase tracking-wide whitespace-nowrap">{post.tapeData.band}</span>
-                      <span className="text-xs font-mono font-extrabold text-zinc-400 uppercase tracking-wide">•</span>
-                      <span className="text-xs font-mono font-extrabold text-zinc-200 uppercase tracking-wide whitespace-nowrap">{post.tapeData.band}</span>
-                      <span className="text-xs font-mono font-extrabold text-zinc-400 uppercase tracking-wide">•</span>
+            {/* Label Text Top Header - Compact 2-line layout without 'artist:' / 'track:' prefixes */}
+            <div className="w-full px-0.5 z-20">
+              <div className="w-full bg-[#09090b] border border-zinc-800/80 px-2 py-1 flex flex-col gap-0.5 shadow-sm rounded-xs">
+                {/* Line 1: Band / Artist Name */}
+                <div className="flex items-center justify-between gap-1.5 overflow-hidden border-b border-zinc-800/60 pb-0.5">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 shadow-[0_0_4px_rgba(251,191,36,0.6)]" />
+                    <div className="overflow-hidden flex-1 flex items-center">
+                      {post.tapeData.band.length > 22 ? (
+                        <div className="animate-marquee-smooth gap-3 shrink-0 flex items-center">
+                          <span className="text-[10px] font-mono font-bold text-zinc-100 uppercase tracking-wider whitespace-nowrap">{post.tapeData.band}</span>
+                          <span className="text-[10px] font-mono text-zinc-600">•</span>
+                          <span className="text-[10px] font-mono font-bold text-zinc-100 uppercase tracking-wider whitespace-nowrap">{post.tapeData.band}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] font-mono font-bold text-zinc-100 uppercase truncate tracking-wider">{post.tapeData.band}</span>
+                      )}
                     </div>
-                  ) : (
-                    <span className="text-xs font-mono font-extrabold text-zinc-200 uppercase truncate tracking-wide">{post.tapeData.band}</span>
+                  </div>
+                  {post.tapeData.date && (
+                    <span className="text-[7.5px] font-mono font-medium text-zinc-400 uppercase shrink-0 px-1 py-0.2 bg-zinc-900/90 rounded border border-zinc-800/80">{post.tapeData.date}</span>
                   )}
                 </div>
 
-                {/* Title with Marquee if long */}
-                <div className="max-w-[130px] overflow-hidden flex items-center">
-                  {post.tapeData.title.length > 12 ? (
-                    <div className="animate-marquee-smooth gap-3 shrink-0 flex items-center">
-                      <span className="text-xs font-mono font-black text-red-500 uppercase tracking-wide whitespace-nowrap">{post.tapeData.title}</span>
-                      <span className="text-xs font-mono font-black text-red-400 uppercase tracking-wide">•</span>
-                      <span className="text-xs font-mono font-black text-red-500 uppercase tracking-wide whitespace-nowrap">{post.tapeData.title}</span>
-                      <span className="text-xs font-mono font-black text-red-400 uppercase tracking-wide">•</span>
-                    </div>
-                  ) : (
-                    <span className="text-xs font-mono font-black text-red-500 uppercase truncate tracking-wide">{post.tapeData.title}</span>
-                  )}
+                {/* Line 2: Track / Tape Title */}
+                <div className="flex items-center gap-1.5 min-w-0 overflow-hidden pt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_4px_rgba(244,63,94,0.6)]" />
+                  <div className="overflow-hidden flex-1 flex items-center">
+                    {post.tapeData.title.length > 22 ? (
+                      <div className="animate-marquee-smooth gap-3 shrink-0 flex items-center">
+                        <span className="text-[10px] font-mono font-bold text-rose-400 uppercase tracking-wider whitespace-nowrap">{post.tapeData.title}</span>
+                        <span className="text-[10px] font-mono text-rose-500/60">•</span>
+                        <span className="text-[10px] font-mono font-bold text-rose-400 uppercase tracking-wider whitespace-nowrap">{post.tapeData.title}</span>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] font-mono font-bold text-rose-400 uppercase truncate tracking-wider">{post.tapeData.title}</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Enlarged Clear Acrylic Window Area (Expanded to show full reels) */}
-            <div className="w-[88%] bg-[#080808] rounded-sm flex items-center justify-between px-2 relative overflow-hidden border-2 border-[#18181b] shadow-[inset_0_0_12px_rgba(0,0,0,0.9)] my-0.5" style={{ height: '125.87px', marginTop: '18px' }}>
+            {/* Wide Clear Acrylic Window Area (Matching Screenshot) */}
+            <div className="w-[88%] h-16 bg-[#09090b] rounded-xs flex items-center justify-between px-3 relative overflow-hidden border border-zinc-700/60 shadow-[inset_0_0_12px_rgba(0,0,0,0.95)] my-1">
 
               {/* Tape gauge ruler markings in center window */}
-              <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center justify-between h-[85%] z-10 opacity-70 pointer-events-none">
-                <span className="text-[7px] font-mono font-bold text-zinc-500">100</span>
-                <div className="w-5 h-px bg-zinc-600"></div>
-                <div className="w-3 h-px bg-zinc-700"></div>
-                <div className="w-5 h-px bg-zinc-600"></div>
-                <div className="w-3 h-px bg-zinc-700"></div>
-                <div className="w-5 h-px bg-zinc-600"></div>
-                <span className="text-[7px] font-mono font-bold text-zinc-500">0</span>
+              <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center justify-center gap-0.5 h-[80%] z-10 opacity-80 pointer-events-none">
+                <span className="text-[6.5px] font-mono font-bold text-zinc-400 leading-none">100</span>
+                <div className="flex flex-col items-center gap-[2px] my-0.5">
+                  <div className="w-5 h-[1.5px] bg-zinc-500 rounded-full"></div>
+                  <div className="w-3 h-[1px] bg-zinc-600"></div>
+                  <div className="w-5 h-[1.5px] bg-zinc-500 rounded-full"></div>
+                  <div className="w-3 h-[1px] bg-zinc-600"></div>
+                  <div className="w-5 h-[1.5px] bg-zinc-500 rounded-full"></div>
+                </div>
+                <span className="text-[6.5px] font-mono font-bold text-zinc-400 leading-none">0</span>
               </div>
 
               {/* Left Reel (Expands & winds down as played) */}
-              <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-full bg-[#111] flex items-center justify-center relative -ml-3 shrink-0 z-0 border border-zinc-800/80 shadow-md">
+              <div className="w-14 h-14 rounded-full bg-[#141414] flex items-center justify-center relative shrink-0 z-0 border border-zinc-800 shadow-md">
                 {/* Dark brown magnetic tape pack */}
                 <div 
-                  className="absolute rounded-full bg-gradient-to-br from-[#3b2113] to-[#1e1008] border border-[#522d1b]" 
+                  className="absolute rounded-full bg-gradient-to-br from-[#4d2c19] via-[#3d2011] to-[#1c0e07] border border-[#5a321c]" 
                   style={{ 
-                    inset: `${2 + (progress / 100) * 12}px`, 
-                    borderWidth: `${12 - (progress / 100) * 11}px` 
+                    inset: `${2 + (progress / 100) * 8}px`, 
+                    borderWidth: `${8 - (progress / 100) * 7}px` 
                   }}
                 />
+                {/* Ribbed notches on spool perimeter */}
+                <div className="absolute inset-0 rounded-full border border-zinc-700/30 pointer-events-none" />
                 {/* White Reel Hub & Sprocket */}
-                <div className={`w-8 h-8 bg-[#e4e4e7] rounded-full flex items-center justify-center z-10 shadow-md ${isPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '2.5s', animationTimingFunction: 'linear' }}>
-                  <div className="w-2 h-2 bg-[#111] absolute top-0.5 rounded-xs" />
-                  <div className="w-2 h-2 bg-[#111] absolute bottom-0.5 rounded-xs" />
-                  <div className="w-2 h-2 bg-[#111] absolute left-0.5 rounded-xs" />
-                  <div className="w-2 h-2 bg-[#111] absolute right-0.5 rounded-xs" />
-                  <div className="w-3 h-3 rounded-full bg-[#111] border border-zinc-700" />
+                <div className={`w-8 h-8 bg-[#f4f4f5] rounded-full flex items-center justify-center z-10 shadow-[0_1px_3px_rgba(0,0,0,0.8)] ${isPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '2.5s', animationTimingFunction: 'linear' }}>
+                  <div className="w-1.5 h-1.5 bg-[#141414] absolute top-0.5 rounded-xs" />
+                  <div className="w-1.5 h-1.5 bg-[#141414] absolute bottom-0.5 rounded-xs" />
+                  <div className="w-1.5 h-1.5 bg-[#141414] absolute left-0.5 rounded-xs" />
+                  <div className="w-1.5 h-1.5 bg-[#141414] absolute right-0.5 rounded-xs" />
+                  <div className="w-3.5 h-3.5 rounded-full bg-[#0d0d0d] border border-zinc-700 shadow-inner" />
                 </div>
               </div>
 
               {/* Right Reel (Expands & winds up as played) */}
-              <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-full bg-[#111] flex items-center justify-center relative -mr-3 shrink-0 z-0 border border-zinc-800/80 shadow-md">
+              <div className="w-14 h-14 rounded-full bg-[#141414] flex items-center justify-center relative shrink-0 z-0 border border-zinc-800 shadow-md">
                 {/* Dark brown magnetic tape pack */}
                 <div 
-                  className="absolute rounded-full bg-gradient-to-br from-[#3b2113] to-[#1e1008] border border-[#522d1b]"
+                  className="absolute rounded-full bg-gradient-to-br from-[#4d2c19] via-[#3d2011] to-[#1c0e07] border border-[#5a321c]"
                   style={{ 
-                    inset: `${14 - (progress / 100) * 12}px`, 
-                    borderWidth: `${1 + (progress / 100) * 11}px` 
+                    inset: `${10 - (progress / 100) * 8}px`, 
+                    borderWidth: `${1 + (progress / 100) * 7}px` 
                   }}
                 />
+                {/* Ribbed notches on spool perimeter */}
+                <div className="absolute inset-0 rounded-full border border-zinc-700/30 pointer-events-none" />
                 {/* White Reel Hub & Sprocket */}
-                <div className={`w-8 h-8 bg-[#e4e4e7] rounded-full flex items-center justify-center z-10 shadow-md ${isPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '2.5s', animationTimingFunction: 'linear' }}>
-                  <div className="w-2 h-2 bg-[#111] absolute top-0.5 rounded-xs" />
-                  <div className="w-2 h-2 bg-[#111] absolute bottom-0.5 rounded-xs" />
-                  <div className="w-2 h-2 bg-[#111] absolute left-0.5 rounded-xs" />
-                  <div className="w-2 h-2 bg-[#111] absolute right-0.5 rounded-xs" />
-                  <div className="w-3 h-3 rounded-full bg-[#111] border border-zinc-700" />
+                <div className={`w-8 h-8 bg-[#f4f4f5] rounded-full flex items-center justify-center z-10 shadow-[0_1px_3px_rgba(0,0,0,0.8)] ${isPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '2.5s', animationTimingFunction: 'linear' }}>
+                  <div className="w-1.5 h-1.5 bg-[#141414] absolute top-0.5 rounded-xs" />
+                  <div className="w-1.5 h-1.5 bg-[#141414] absolute bottom-0.5 rounded-xs" />
+                  <div className="w-1.5 h-1.5 bg-[#141414] absolute left-0.5 rounded-xs" />
+                  <div className="w-1.5 h-1.5 bg-[#141414] absolute right-0.5 rounded-xs" />
+                  <div className="w-3.5 h-3.5 rounded-full bg-[#0d0d0d] border border-zinc-700 shadow-inner" />
                 </div>
               </div>
 
@@ -161,8 +176,8 @@ export const TapeEmbedCard: React.FC<TapeEmbedCardProps> = ({
 
             {/* Label Text Bottom Footer */}
             <div className="w-full px-2 flex justify-between items-center z-20">
-              <span className="text-[8px] font-bold font-mono text-zinc-400 uppercase tracking-widest">NEXUS CHROMIUM HIGH-BIAS</span>
-              <span className="text-[8px] font-bold font-mono text-zinc-500 uppercase">90 MIN</span>
+              <span className="text-[7.5px] font-bold font-mono text-zinc-500 uppercase tracking-widest">NEXUS CHROMIUM HIGH-BIAS</span>
+              <span className="text-[7.5px] font-bold font-mono text-zinc-600 uppercase">90 MIN</span>
             </div>
           </div>
 

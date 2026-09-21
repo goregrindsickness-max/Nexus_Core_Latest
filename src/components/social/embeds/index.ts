@@ -8,3 +8,4 @@ export * from './TourEmbedCard';
 export * from './EventEmbedCard';
 export * from './MerchEmbedCard';
 export * from './MediaGalleryGrid';
+export * from './BandcampEmbedCard';

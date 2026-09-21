@@ -170,6 +170,7 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                   profileHandle={props.profileHandle}
                   profileAvatarUrl={props.profileAvatarUrl}
                   userProfile={userProfile}
+                  setUserProfile={setUserProfile}
                   postIdentity={postIdentity}
                   setPostIdentity={setPostIdentity}
                   newPostText={newPostText}

@@ -53,6 +53,10 @@ export interface TapeEmbedData {
   band: string;
   duration: string;
   date?: string;
+  audioUrl?: string;
+  audio_url?: string;
+  audio?: string;
+  coverUrl?: string;
 }
 
 export interface TourEmbedData {
@@ -85,8 +89,16 @@ export interface FeedPost {
   isVerified?: boolean;
   message: string;
   image_url?: string;
+  image?: string;
+  mediaUrl?: string;
+  media_url?: string;
   images?: string[];
   youtubeId?: string;
+  youtube_id?: string;
+  bandcampUrl?: string;
+  bandcamp_url?: string;
+  bandcampData?: any;
+  bandcamp_data?: any;
   tagged_item?: string;
   tag?: string;
   category?: string;

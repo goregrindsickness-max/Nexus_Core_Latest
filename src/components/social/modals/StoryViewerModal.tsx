@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { requestPauseSceneRadio } from '../utils/mediaPlaybackCoordinator';
+import { StickerPlayer } from '../../stories/StickerPlayer';
 import {
   X,
   ChevronLeft,
@@ -508,20 +509,57 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               {/* Stickers (if configured) */}
               {Array.isArray(activeStory.stickers) &&
                 activeStory.stickers.length > 0 &&
-                activeStory.stickers.map((stk, sIndex) => (
-                  <div
-                    key={`stk-${sIndex}`}
-                    className="absolute z-20 pointer-events-none drop-shadow-[0_4px_15px_rgba(0,0,0,0.8)] select-none"
-                    style={{
-                      top: `${activeStory.stickerY ?? 35}%`,
-                      left: `${activeStory.stickerX ?? 50}%`,
-                      transform: `translate(-50%, -50%) scale(${activeStory.stickerScale ?? 1.2})`,
-                      fontSize: '48px',
-                    }}
-                  >
-                    {typeof stk === 'string' ? stk : stk?.emoji || '🔥'}
-                  </div>
-                ))}
+                activeStory.stickers.map((stk, sIndex) => {
+                  const isBandcampSticker = typeof stk === 'object' && (stk?.type === 'bandcamp' || stk?.trackTitle);
+                  if (isBandcampSticker) {
+                    return (
+                      <div
+                        key={`stk-bc-${sIndex}`}
+                        className="absolute z-30 pointer-events-auto select-none"
+                        style={{
+                          top: `${activeStory.stickerY ?? stk.y ?? 45}%`,
+                          left: `${activeStory.stickerX ?? stk.x ?? 50}%`,
+                          transform: 'translate(-50%, -50%)',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <StickerPlayer
+                          trackTitle={stk.trackTitle}
+                          artistName={stk.artistName}
+                          coverArtUrl={stk.coverArtUrl}
+                          audioUrl={stk.audioUrl}
+                          bandcampUrl={stk.bandcampUrl}
+                          variant={stk.variant || 'merch_badge'}
+                          scale={activeStory.stickerScale ?? stk.scale ?? 1.0}
+                          interactive={true}
+                          onPlayStateChange={(playing) => {
+                            if (playing) {
+                              setIsPaused(true);
+                              if (videoRef.current) {
+                                videoRef.current.pause();
+                              }
+                            }
+                          }}
+                        />
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={`stk-${sIndex}`}
+                      className="absolute z-20 pointer-events-none drop-shadow-[0_4px_15px_rgba(0,0,0,0.8)] select-none"
+                      style={{
+                        top: `${activeStory.stickerY ?? 35}%`,
+                        left: `${activeStory.stickerX ?? 50}%`,
+                        transform: `translate(-50%, -50%) scale(${activeStory.stickerScale ?? 1.2})`,
+                        fontSize: '48px',
+                      }}
+                    >
+                      {typeof stk === 'string' ? stk : stk?.emoji || '🔥'}
+                    </div>
+                  );
+                })}
 
               {/* Reaction Burst Visual Animation */}
               <AnimatePresence>

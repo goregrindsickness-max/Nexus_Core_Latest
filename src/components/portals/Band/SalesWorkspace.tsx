@@ -177,7 +177,7 @@ export default function SalesWorkspace(props: any) {
       {/* Spot 1: POS Checkout System */}
       <V2ExpandableCard title="POS Checkout System" defaultExpanded={true}>
         <div className="w-full">
-          <SalesDashboardView onSubmitSale={handleDataSubmit} inventory={inventory} setInventory={setInventory} shows={shows} setShows={setShows} onBack={() => {}} triggerNotification={triggerNotification} addLog={addLog} activeBandId={activeBand?.id || ''} activeBandName={activeBand?.name || 'Artist'} loyaltyMembers={loyaltyMembers} setLoyaltyMembers={setLoyaltyMembers} />
+          <SalesDashboardView hideBackButton={true} onSubmitSale={handleDataSubmit} inventory={inventory} setInventory={setInventory} shows={shows} setShows={setShows} triggerNotification={triggerNotification} addLog={addLog} activeBandId={activeBand?.id || ''} activeBandName={activeBand?.name || 'Artist'} loyaltyMembers={loyaltyMembers} setLoyaltyMembers={setLoyaltyMembers} />
         </div>
       </V2ExpandableCard>
 

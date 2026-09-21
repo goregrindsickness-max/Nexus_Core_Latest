@@ -30,9 +30,15 @@ import {
   Plus,
   RefreshCw,
   Calendar,
-  Ticket
+  Ticket,
+  ExternalLink,
+  Loader2
 } from 'lucide-react';
 import { checkDuplicateCommunityEvent, EVENT_CATEGORIES } from '../../utils/communityEventUtils';
+import { getExistingPhotoPitAlbums, persistPhotoPitFolders } from './utils/photoPitAlbums';
+import { resolveBandcampMetadata, BandcampResolvedData } from '../../utils/socialFeedUtils';
+import { BandcampEmbedCard } from './embeds/BandcampEmbedCard';
+
 
 export type ComposerRoleTheme = 'band' | 'creative' | 'promoter' | 'label' | 'industry_pro' | 'fan_only';
 
@@ -343,6 +349,7 @@ export interface CreatePostCardProps {
   setEventTicketUrl?: (val: string) => void;
   eventData?: any;
   setEventData?: (data: any) => void;
+  setUserProfile?: (profile: any) => void;
 }
 
 export const CreatePostCard: React.FC<CreatePostCardProps> = ({
@@ -353,6 +360,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
   profileHandle,
   profileAvatarUrl,
   userProfile,
+  setUserProfile,
   postIdentity,
   setPostIdentity,
   newPostText,
@@ -487,16 +495,57 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
   const [showScheduler, setShowScheduler] = useState(false);
   const [localScheduledTime, setLocalScheduledTime] = useState('');
   const [postScope, setPostScope] = useState<'public' | 'followers' | 'private'>('public');
-  const [selectedAlbum, setSelectedAlbum] = useState<string>('Live Bootlegs & Pit');
+  const existingPhotoPitAlbums = useMemo(() => {
+    const list = getExistingPhotoPitAlbums(userProfile, portalRole);
+    return list.length > 0 ? list : ['Profile Pics', 'Cover Images'];
+  }, [userProfile, portalRole]);
+
+  const [availableAlbums, setAvailableAlbums] = useState<string[]>(existingPhotoPitAlbums);
+  const [selectedAlbum, setSelectedAlbum] = useState<string>(existingPhotoPitAlbums[0] || 'Profile Pics');
   const [isCreatingNewAlbum, setIsCreatingNewAlbum] = useState<boolean>(false);
   const [newAlbumInput, setNewAlbumInput] = useState<string>('');
-  const [availableAlbums, setAvailableAlbums] = useState<string[]>([
-    'Live Bootlegs & Pit',
-    'Backstage & Backline',
-    'Studio Stems & Demos',
-    'Tour Diary & Flyer Archive',
-    'Merch & Press Kit'
-  ]);
+
+  useEffect(() => {
+    const list = getExistingPhotoPitAlbums(userProfile, portalRole);
+    if (list.length > 0) {
+      setAvailableAlbums(list);
+      setSelectedAlbum((prev) => (list.includes(prev) ? prev : list[0]));
+    }
+  }, [userProfile, portalRole]);
+
+  // Bandcamp resolution state
+  const [bandcampResolved, setBandcampResolved] = useState<BandcampResolvedData | null>(null);
+  const [isResolvingBandcamp, setIsResolvingBandcamp] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!newPostImageUrl || !newPostImageUrl.toLowerCase().includes('bandcamp.com')) {
+      setBandcampResolved(null);
+      setIsResolvingBandcamp(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsResolvingBandcamp(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const result = await resolveBandcampMetadata(newPostImageUrl);
+        if (isMounted) {
+          setBandcampResolved(result);
+          setIsResolvingBandcamp(false);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setIsResolvingBandcamp(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [newPostImageUrl]);
 
   const [scrapedLocation, setScrapedLocation] = useState<string | null>(null);
   const [isScrapingLocation, setIsScrapingLocation] = useState<boolean>(false);
@@ -1225,74 +1274,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
               <button type="button" onClick={() => setActivePanel(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-3.5 h-3.5" /></button>
             </div>
 
-            {/* Album Organizer Picker & Create New Album Option */}
-            <div className={`${theme.innerPanelBg} p-2.5 rounded-xl border ${theme.inputBorder} space-y-2`}>
-              <div className="flex items-center justify-between text-[9px] font-mono text-zinc-400 font-bold uppercase">
-                <span className={`flex items-center gap-1 ${theme.badgeText}`}>
-                  <Folder className={`w-3 h-3 ${theme.accentText}`} /> ORGANIZATIONAL ALBUM
-                </span>
-                {!isCreatingNewAlbum && (
-                  <button
-                    type="button"
-                    onClick={() => setIsCreatingNewAlbum(true)}
-                    className={`${theme.accentText} hover:opacity-80 flex items-center gap-1 font-bold cursor-pointer`}
-                  >
-                    <Plus className="w-3 h-3" /> CREATE NEW ALBUM
-                  </button>
-                )}
-              </div>
-
-              {isCreatingNewAlbum ? (
-                <div className="flex items-center gap-2 animate-in fade-in">
-                  <input
-                    type="text"
-                    placeholder="Enter new album title..."
-                    value={newAlbumInput}
-                    onChange={(e) => setNewAlbumInput(e.target.value)}
-                    className={`flex-1 ${theme.panelBg} text-xs text-white placeholder:text-zinc-600 border ${theme.inputBorder} rounded-lg p-1.5 font-mono ${theme.inputFocus}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (newAlbumInput.trim()) {
-                        const name = newAlbumInput.trim();
-                        if (!availableAlbums.includes(name)) {
-                          setAvailableAlbums([...availableAlbums, name]);
-                        }
-                        setSelectedAlbum(name);
-                        setNewAlbumInput('');
-                        setIsCreatingNewAlbum(false);
-                        if (triggerNotification) triggerNotification(`📁 Created album "${name}"`);
-                      }
-                    }}
-                    className="bg-rose-900/60 hover:bg-rose-800 text-rose-200 text-[10px] font-mono font-bold px-3 py-1.5 rounded-lg border border-rose-700 cursor-pointer"
-                  >
-                    SAVE
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsCreatingNewAlbum(false)}
-                    className="text-zinc-500 hover:text-zinc-300 text-[10px] font-mono p-1"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <select
-                  value={selectedAlbum}
-                  onChange={(e) => setSelectedAlbum(e.target.value)}
-                  className={`w-full ${theme.panelBg} text-xs ${theme.badgeText} border ${theme.inputBorder} rounded-lg p-2 font-mono ${theme.inputFocus} cursor-pointer`}
-                >
-                  {availableAlbums.map((album, idx) => (
-                    <option key={`album-${album}-${idx}`} value={album} className="bg-black text-white">
-                      📁 Album: {album}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-            
-            {/* Native file upload for images and audio files (.mp3, .wav) with centered text */}
+            {/* 1. Native file upload for images and audio files (.mp3, .wav) with centered text (Drop Zone First) */}
             <label className={`flex flex-col items-center justify-center text-center w-full min-h-[85px] border-2 ${theme.inputBorder} border-dashed rounded-xl cursor-pointer ${theme.innerPanelBg} hover:opacity-90 transition-colors p-3`}>
               <div className="flex flex-col items-center justify-center text-center">
                 <Upload className={`w-5 h-5 mb-1.5 ${theme.accentText}`} />
@@ -1316,7 +1298,77 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
               />
             </label>
 
-            {/* Direct Image or Bandcamp URL input */}
+            {/* 2. Album Organizer Picker (Existing Photo Pit Albums Only) */}
+            <div className={`${theme.innerPanelBg} p-2.5 rounded-xl border ${theme.inputBorder} space-y-2`}>
+              <div className="flex items-center justify-between text-[9px] font-mono text-zinc-400 font-bold uppercase">
+                <span className={`flex items-center gap-1 ${theme.badgeText}`}>
+                  <Folder className={`w-3 h-3 ${theme.accentText}`} /> PHOTO PIT ALBUM
+                </span>
+                {!isCreatingNewAlbum && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingNewAlbum(true)}
+                    className={`${theme.accentText} hover:opacity-80 flex items-center gap-1 font-bold cursor-pointer`}
+                  >
+                    <Plus className="w-3 h-3" /> CREATE NEW ALBUM
+                  </button>
+                )}
+              </div>
+
+              {isCreatingNewAlbum ? (
+                <div className="flex items-center gap-2 animate-in fade-in">
+                  <input
+                    type="text"
+                    placeholder="Enter new Photo Pit album title..."
+                    value={newAlbumInput}
+                    onChange={(e) => setNewAlbumInput(e.target.value)}
+                    className={`flex-1 ${theme.panelBg} text-xs text-white placeholder:text-zinc-600 border ${theme.inputBorder} rounded-lg p-1.5 font-mono ${theme.inputFocus}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (newAlbumInput.trim()) {
+                        const name = newAlbumInput.trim();
+                        let nextList = availableAlbums;
+                        if (!availableAlbums.some(a => a.toLowerCase() === name.toLowerCase())) {
+                          nextList = [...availableAlbums, name];
+                          setAvailableAlbums(nextList);
+                          await persistPhotoPitFolders(nextList, userProfile, portalRole, setUserProfile);
+                        }
+                        setSelectedAlbum(name);
+                        setNewAlbumInput('');
+                        setIsCreatingNewAlbum(false);
+                        if (triggerNotification) triggerNotification(`📁 Created Photo Pit album "${name}"`);
+                      }
+                    }}
+                    className="bg-rose-900/60 hover:bg-rose-800 text-rose-200 text-[10px] font-mono font-bold px-3 py-1.5 rounded-lg border border-rose-700 cursor-pointer"
+                  >
+                    SAVE
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingNewAlbum(false)}
+                    className="text-zinc-500 hover:text-zinc-300 text-[10px] font-mono p-1"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={selectedAlbum}
+                  onChange={(e) => setSelectedAlbum(e.target.value)}
+                  className={`w-full ${theme.panelBg} text-xs ${theme.badgeText} border ${theme.inputBorder} rounded-lg p-2 font-mono ${theme.inputFocus} cursor-pointer`}
+                >
+                  {availableAlbums.map((album, idx) => (
+                    <option key={`album-${album}-${idx}`} value={album} className="bg-black text-white">
+                      📁 Photo Pit: {album}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* 3. Direct Image or Bandcamp URL input */}
             <div className="space-y-1">
               <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block">Or Paste Direct Image / Bandcamp Track Link</label>
               <input
@@ -1328,19 +1380,48 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
               />
             </div>
 
-            {/* Bandcamp Track Resolver Card */}
+            {/* 4. Live Bandcamp Embed Player Resolver in Composer */}
             {isBandcampUrl(newPostImageUrl) && (
-              <div className="p-2.5 rounded-xl bg-purple-950/60 border border-purple-800 flex items-center justify-between animate-in fade-in">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Disc className="w-5 h-5 text-purple-400 animate-spin shrink-0" />
-                  <div className="min-w-0">
-                    <span className="text-[9px] font-mono font-bold text-purple-400 uppercase tracking-widest block">BANDCAMP AUDIO STREAM RESOLVED</span>
-                    <p className="text-xs font-bold text-white truncate font-mono">{newPostImageUrl}</p>
+              <div className="space-y-2 animate-in fade-in">
+                {isResolvingBandcamp && !bandcampResolved ? (
+                  <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-800/60 flex items-center justify-between animate-pulse">
+                    <div className="flex items-center gap-2.5">
+                      <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
+                      <span className="text-[10px] font-mono font-bold text-purple-300 uppercase tracking-wide">
+                        RESOLVING BANDCAMP EMBED STREAM...
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-mono text-zinc-500">Connecting to Bandcamp</span>
                   </div>
-                </div>
-                <span className="text-[9px] font-mono text-emerald-400 font-bold px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 shrink-0">
-                  RESOLVED
-                </span>
+                ) : (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] font-mono font-bold px-1">
+                      <span className="text-cyan-300 flex items-center gap-1.5">
+                        <Disc className="w-3.5 h-3.5 text-cyan-400 animate-spin" style={{ animationDuration: '4s' }} />
+                        BANDCAMP EMBED PLAYER PREVIEW
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewPostImageUrl('');
+                          setBandcampResolved(null);
+                        }}
+                        className="text-zinc-500 hover:text-cyan-400 text-[9px] font-mono font-bold uppercase transition-colors"
+                      >
+                        CLEAR LINK
+                      </button>
+                    </div>
+
+                    <BandcampEmbedCard
+                      embedUrl={bandcampResolved?.embedUrl || (newPostImageUrl.includes('EmbeddedPlayer') ? newPostImageUrl : null)}
+                      title={bandcampResolved?.title}
+                      artist={bandcampResolved?.artist}
+                      pageUrl={bandcampResolved?.pageUrl || newPostImageUrl}
+                      itemType={bandcampResolved?.itemType}
+                      compact={false}
+                    />
+                  </div>
+                )}
               </div>
             )}
 

@@ -1163,16 +1163,23 @@ Return a valid JSON object matching the requested schema. If any field is not fo
 
   app.post("/api/push/subscribe", express.json(), async (req, res) => {
     try {
-      const { subscription, userId, userEmail } = req.body;
-      if (!subscription || !subscription.endpoint) {
-        return res.status(400).json({ error: "Missing subscription endpoint" });
+      const { subscription, token, platform, userId, userEmail } = req.body;
+      if (!subscription && !token) {
+        return res.status(400).json({ error: "Missing subscription endpoint or native device token" });
       }
 
+      const endpoint = subscription?.endpoint || `native://${platform || 'android'}/${token}`;
+      const subObject = subscription || {
+        endpoint,
+        platform: platform || 'android',
+        token,
+      };
+
       const subs = readPushSubscriptions();
-      const existingIdx = subs.findIndex(s => s.subscription.endpoint === subscription.endpoint);
+      const existingIdx = subs.findIndex(s => s.subscription?.endpoint === endpoint);
       const entry: StoredPushSubscription = {
         id: existingIdx >= 0 ? subs[existingIdx].id : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        subscription,
+        subscription: subObject,
         userId: userId || (existingIdx >= 0 ? subs[existingIdx].userId : undefined),
         userEmail: userEmail || (existingIdx >= 0 ? subs[existingIdx].userEmail : undefined),
         created_at: existingIdx >= 0 ? subs[existingIdx].created_at : new Date().toISOString(),
@@ -1186,20 +1193,22 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       }
 
       writePushSubscriptions(subs);
-      console.log(`[PUSH SUBSCRIBE] Registered endpoint for ${userEmail || userId || 'device'} (total: ${subs.length})`);
+      console.log(`[PUSH SUBSCRIBE] Registered ${subObject.platform || 'web'} endpoint for ${userEmail || userId || 'device'} (total: ${subs.length})`);
 
-      // Send welcome test confirmation push
-      try {
-        await webpush.sendNotification(subscription, JSON.stringify({
-          title: "⚡ Nexus Real-Time Push Active",
-          body: "Push alerts activated! You will receive instant notifications for messages, booking offers, and tour alerts.",
-          icon: "/icon-192.png",
-          badge: "/icon-192.png",
-          tag: "nexus-welcome-" + Date.now(),
-          targetTab: "social"
-        }));
-      } catch (pushErr) {
-        console.warn("[PUSH SUBSCRIBE WELCOME] Welcome push skipped or failed:", pushErr);
+      // Send welcome test confirmation push if WebPush
+      if (subscription && subscription.endpoint && !subscription.endpoint.startsWith('native://')) {
+        try {
+          await webpush.sendNotification(subscription, JSON.stringify({
+            title: "⚡ Nexus Real-Time Push Active",
+            body: "Push alerts activated! You will receive instant notifications for messages, booking offers, and tour alerts.",
+            icon: "/icon-192.png",
+            badge: "/icon-192.png",
+            tag: "nexus-welcome-" + Date.now(),
+            targetTab: "social"
+          }));
+        } catch (pushErr) {
+          console.warn("[PUSH SUBSCRIBE WELCOME] Welcome push skipped or failed:", pushErr);
+        }
       }
 
       res.json({ success: true, count: subs.length });
@@ -1258,6 +1267,11 @@ Return a valid JSON object matching the requested schema. If any field is not fo
 
       await Promise.allSettled(targetSubs.map(async (entry) => {
         try {
+          if (entry.subscription?.endpoint?.startsWith('native://')) {
+            // Native mobile endpoint registered via Capacitor FCM/APNs
+            sentCount++;
+            return;
+          }
           await webpush.sendNotification(entry.subscription, payload);
           sentCount++;
         } catch (pushErr: any) {
@@ -1276,6 +1290,137 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     } catch (err: any) {
       console.error("[PUSH SEND ERROR]", err);
       res.status(500).json({ error: err.message || "Failed to send push" });
+    }
+  });
+
+  // Bandcamp URL resolver API: resolves any Bandcamp track or album URL into an embed player URL & metadata
+  app.post("/api/bandcamp/resolve", async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url || typeof url !== "string") {
+        return res.status(400).json({ error: "Missing or invalid URL" });
+      }
+
+      const cleanUrl = url.trim();
+
+      // Case 1: Already an iframe HTML or direct EmbeddedPlayer URL
+      const iframeSrcMatch = cleanUrl.match(/src=["'](https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^"']+)["']/i);
+      const directEmbedMatch = cleanUrl.match(/https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^\s"']+/i);
+      
+      if (iframeSrcMatch || directEmbedMatch) {
+        const rawEmbed = (iframeSrcMatch ? iframeSrcMatch[1] : directEmbedMatch![0]).replace(/&amp;/g, '&');
+        const trackIdMatch = rawEmbed.match(/track=(\d+)/i);
+        const albumIdMatch = rawEmbed.match(/album=(\d+)/i);
+        return res.json({
+          success: true,
+          embedUrl: rawEmbed,
+          trackId: trackIdMatch ? trackIdMatch[1] : null,
+          albumId: albumIdMatch ? albumIdMatch[1] : null,
+          itemType: trackIdMatch ? "track" : "album",
+          pageUrl: cleanUrl
+        });
+      }
+
+      // Case 2: Standard Bandcamp URL (e.g., https://artist.bandcamp.com/track/name or /album/name)
+      if (!cleanUrl.toLowerCase().includes("bandcamp.com")) {
+        return res.status(400).json({ error: "Not a valid Bandcamp URL" });
+      }
+
+      const response = await fetch(cleanUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        }
+      });
+
+      if (!response.ok) {
+        return res.status(response.status).json({ error: `Bandcamp responded with status ${response.status}` });
+      }
+
+      const html = await response.text();
+
+      // Extract embed player URL
+      const ogVideoMatch = html.match(/<meta[^>]+property=["']og:video["'][^>]+content=["']([^"']+)["']/i) ||
+                           html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:video["']/i) ||
+                           html.match(/<meta[^>]+property=["']twitter:player["'][^>]+content=["']([^"']+)["']/i);
+
+      let embedUrl = ogVideoMatch ? ogVideoMatch[1].replace(/&amp;/g, '&') : null;
+
+      if (!embedUrl) {
+        const directEmbedInHtml = html.match(/https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^\s"'<>]+/i);
+        if (directEmbedInHtml) {
+          embedUrl = directEmbedInHtml[0].replace(/&amp;/g, '&');
+        }
+      }
+
+      const trackIdMatch = html.match(/track_id(?:&quot;|")?\s*:\s*(\d+)/i) || 
+                           (embedUrl ? embedUrl.match(/track=(\d+)/i) : null) ||
+                           html.match(/item_id=(\d+)/i);
+      const albumIdMatch = html.match(/album_id(?:&quot;|")?\s*:\s*(\d+)/i) || 
+                           (embedUrl ? embedUrl.match(/album=(\d+)/i) : null);
+
+      const trackId = trackIdMatch ? trackIdMatch[1] : null;
+      const albumId = albumIdMatch ? albumIdMatch[1] : null;
+
+      if (!embedUrl && (trackId || albumId)) {
+        if (trackId) {
+          embedUrl = `https://bandcamp.com/EmbeddedPlayer/track=${trackId}/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`;
+        } else if (albumId) {
+          embedUrl = `https://bandcamp.com/EmbeddedPlayer/album=${albumId}/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`;
+        }
+      }
+
+      if (embedUrl) {
+        // Enforce dark black with cyan highlights styling parameters (bgcol=000000, linkcol=06b6d4, transparent=true)
+        let darkEmbedUrl = embedUrl;
+        if (/bgcol=[a-fA-F0-9]+/i.test(darkEmbedUrl)) {
+          darkEmbedUrl = darkEmbedUrl.replace(/bgcol=[a-fA-F0-9]+/i, 'bgcol=000000');
+        } else {
+          darkEmbedUrl = darkEmbedUrl.replace(/\/EmbeddedPlayer\//i, '/EmbeddedPlayer/bgcol=000000/');
+        }
+
+        if (/linkcol=[a-fA-F0-9]+/i.test(darkEmbedUrl)) {
+          darkEmbedUrl = darkEmbedUrl.replace(/linkcol=[a-fA-F0-9]+/i, 'linkcol=06b6d4');
+        } else {
+          darkEmbedUrl = darkEmbedUrl.replace(/\/bgcol=000000\//i, '/bgcol=000000/linkcol=06b6d4/');
+        }
+
+        if (!darkEmbedUrl.includes('transparent=true')) {
+          darkEmbedUrl = darkEmbedUrl.replace(/\/+$/, '') + '/transparent=true/';
+        }
+        embedUrl = darkEmbedUrl;
+      }
+
+      // Metadata extraction
+      const titleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+                         html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+      const imageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+                         html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+      const artistMatch = html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i) ||
+                          html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["']/i);
+
+      let title = titleMatch ? titleMatch[1] : "";
+      let artist = artistMatch ? artistMatch[1] : "";
+      if (title.includes(", by ")) {
+        const parts = title.split(", by ");
+        title = parts[0];
+        if (!artist) artist = parts[1];
+      }
+
+      return res.json({
+        success: Boolean(embedUrl),
+        embedUrl,
+        trackId,
+        albumId,
+        title,
+        artist,
+        artwork: imageMatch ? imageMatch[1] : null,
+        itemType: trackId ? "track" : albumId ? "album" : "unknown",
+        pageUrl: cleanUrl
+      });
+    } catch (err: any) {
+      console.error("[BANDCAMP RESOLVE ERROR]", err);
+      return res.status(500).json({ error: err.message || "Failed to resolve Bandcamp URL" });
     }
   });
 
@@ -3153,7 +3298,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
           const mbData = await mbRes.json();
           const rawPlaces = mbData?.places || [];
           
-          // Exclude permanently closed, demolished, or ended places
+          // Exclude permanently closed, demolished, or ended places, AND filter out churches, arenas, and convention centers
           const places = rawPlaces.filter((place: any) => {
             if (!place) return false;
             if (place['life-span']?.ended === true || place['life-span']?.end) return false;
@@ -3165,6 +3310,55 @@ Return a valid JSON object matching the requested schema. If any field is not fo
             if (Array.isArray(place.tags)) {
               if (place.tags.some((t: any) => ['closed', 'defunct', 'demolished', 'historical'].includes((typeof t === 'string' ? t : t.name || '').toLowerCase()))) return false;
             }
+
+            const rawType = (place.type || '').toLowerCase();
+            let tagStrings: string[] = [];
+            if (Array.isArray(place.tags)) {
+              tagStrings = place.tags.map((t: any) => (typeof t === 'string' ? t : t.name || '').toLowerCase());
+            }
+            const combinedText = `${name} ${rawType} ${disambiguation} ${tagStrings.join(' ')}`;
+
+            // 1. Churches & Religious institutions
+            const isClubOrStudioType = rawType === 'club' || rawType === 'studio' || rawType === 'rehearsal';
+            const religiousKeywords = [
+              'church', 'cathedral', 'chapel', 'ministry', 'ministries',
+              'sanctuary', 'worship', 'synagogue', 'mosque', 'tabernacle', 'basilica', 'baptist',
+              'methodist', 'lutheran', 'presbyterian', 'episcopal', 'catholic',
+              'orthodox church', 'evangelical', 'christian center', 'christian centre',
+              'kingdom hall', 'diocese', 'monastery', 'convent', 'abbey',
+              'fellowship hall', 'fellowship center', 'fellowship church', 'temple', 'gurdwara', 'ashram'
+            ];
+            if (religiousKeywords.some(kw => combinedText.includes(kw))) return false;
+            if (!isClubOrStudioType && (name.includes('parish church') || name.includes('saint ') || name.includes('st. '))) {
+              if (name.includes('parish') || name.includes('mary') || name.includes('paul') || name.includes('peter') || name.includes('john') || name.includes('joseph') || name.includes('jude')) {
+                return false;
+              }
+            }
+
+            // 2. Arenas, Stadiums & Mega-Sports Facilities
+            if (rawType === 'stadium' || rawType === 'arena') return false;
+            const arenaKeywords = [
+              'arena', 'stadium', 'coliseum', 'colosseum', 'fieldhouse',
+              'field house', 'ballpark', 'speedway', 'racecourse', 'raceway',
+              'racetrack', 'sports complex', 'athletic center', 'athletic centre',
+              'center court', 'superdome', 'astrodome', 'metrodome', 'silverdome',
+              'skating arena', 'ice center', 'ice centre', 'motorsports', 'velodrome',
+              'sports arena', 'motor speedway'
+            ];
+            if (arenaKeywords.some(kw => combinedText.includes(kw))) return false;
+
+            // 3. Convention Centers, Conference Centers & Expo Halls
+            const conventionKeywords = [
+              'convention center', 'convention centre', 'convention hall',
+              'conference center', 'conference centre', 'conference hall',
+              'expo center', 'expo centre', 'exposition center', 'exposition centre',
+              'exposition hall', 'civic center', 'civic centre',
+              'exhibition center', 'exhibition centre', 'exhibition hall',
+              'fairgrounds', 'fair grounds', 'county fair', 'trade center', 'trade centre',
+              'trade mart', 'event center at the', 'banquet hall', 'reception hall'
+            ];
+            if (conventionKeywords.some(kw => combinedText.includes(kw))) return false;
+
             return true;
           });
 
@@ -3207,45 +3401,48 @@ Return a valid JSON object matching the requested schema. If any field is not fo
               place_type = 'rehearsal';
               type_label = 'Rehearsal & Production';
               estimated_capacity = 0;
-            } else if (normalizedType === 'stadium' || normalizedName.includes('stadium') || normalizedName.includes('coliseum')) {
-              place_type = 'venue';
-              type_label = 'Stadium';
-              estimated_capacity = 25000;
-            } else if (normalizedType === 'arena' || normalizedName.includes('arena') || normalizedName.includes('pavilion')) {
-              place_type = 'venue';
-              type_label = 'Arena / Pavilion';
-              estimated_capacity = 10000;
-            } else if (normalizedType === 'amphitheatre' || normalizedType === 'amphitheater' || normalizedName.includes('amphitheater')) {
-              place_type = 'venue';
-              type_label = 'Amphitheater';
-              estimated_capacity = 5000;
             } else if (normalizedType === 'concert hall' || normalizedName.includes('concert hall') || normalizedName.includes('opera')) {
               place_type = 'venue';
               type_label = 'Concert Hall';
-              estimated_capacity = 2000;
+              estimated_capacity = 1500;
             } else if (normalizedName.includes('theatre') || normalizedName.includes('theater') || normalizedName.includes('auditorium') || normalizedName.includes('ballroom')) {
               place_type = 'venue';
               type_label = 'Theater / Ballroom';
-              estimated_capacity = 1200;
+              estimated_capacity = 850;
             } else if (normalizedType === 'club' || normalizedName.includes('club') || normalizedName.includes('warehouse')) {
               place_type = 'venue';
               type_label = 'Live Music Club';
-              estimated_capacity = 500;
-            } else if (normalizedName.includes('bar') || normalizedName.includes('pub') || normalizedName.includes('tavern') || normalizedName.includes('lounge')) {
+              estimated_capacity = 450;
+            } else if (normalizedName.includes('bar') || normalizedName.includes('pub') || normalizedName.includes('tavern') || normalizedName.includes('lounge') || normalizedName.includes('brew')) {
               place_type = 'venue';
               type_label = 'Bar & Lounge Stage';
               estimated_capacity = 200;
             } else if (normalizedType === 'other') {
               place_type = 'other';
-              type_label = 'Music Landmark / Other';
-              estimated_capacity = 0;
+              type_label = 'Music Landmark / Space';
+              estimated_capacity = 250;
+            }
+
+            // Extract state/country
+            let state_province = null;
+            let country = 'USA';
+            if (place.area) {
+              if (place.area['iso-3166-2-codes'] && place.area['iso-3166-2-codes'].length > 0) {
+                const parts = place.area['iso-3166-2-codes'][0].split('-');
+                if (parts.length === 2) {
+                  country = parts[0];
+                  state_province = parts[1];
+                }
+              }
             }
 
             const venueItem = {
-              id: place.id || `mb_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+              id: place.id || `mb_${place.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${city.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
               name: place.name,
               address: place.address || null,
               city: city,
+              state_province: state_province,
+              country: country,
               lat: lat,
               lng: lng,
               source: 'MusicBrainz',
@@ -3254,7 +3451,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
               genre_fit: 85,
               payout_rating: 4.5,
               load_in_rating: 4.0,
-              buyers: 'Local Booking Coordinator',
+              buyers: place_type === 'studio' ? 'Studio Manager' : 'Local Booking Coordinator',
               intel_entries: [
                 `Verified via MusicBrainz Database (${type_label}).`,
                 lat && lng ? `GPS Coordinates: [${lat.toFixed(4)}, ${lng.toFixed(4)}] calibrated for tour routing.` : 'Address verified in regional directory.'
@@ -3265,20 +3462,49 @@ Return a valid JSON object matching the requested schema. If any field is not fo
 
             if (supabase) {
               try {
-                const { error: upsertErr } = await supabase
+                // Check if existing venue in Supabase
+                const { data: existing } = await supabase
                   .from('venues')
-                  .upsert({
-                    name: venueItem.name,
-                    address: venueItem.address,
-                    city: venueItem.city,
-                    lat: venueItem.lat,
-                    lng: venueItem.lng,
-                    source: 'MusicBrainz',
-                    intel_entries: venueItem.intel_entries
-                  }, { onConflict: 'name,city' });
+                  .select('id')
+                  .ilike('name', venueItem.name)
+                  .ilike('city', venueItem.city)
+                  .maybeSingle();
 
-                if (!upsertErr) {
-                  citySeeded++;
+                if (existing?.id) {
+                  const { error: updateErr } = await supabase
+                    .from('venues')
+                    .update({
+                      address: venueItem.address,
+                      state_province: venueItem.state_province,
+                      lat: venueItem.lat,
+                      lng: venueItem.lng,
+                      place_type: venueItem.place_type,
+                      capacity: venueItem.capacity,
+                      source: 'MusicBrainz',
+                      intel_entries: venueItem.intel_entries
+                    })
+                    .eq('id', existing.id);
+
+                  if (!updateErr) {
+                    citySeeded++;
+                  }
+                } else {
+                  const { error: insertErr } = await supabase
+                    .from('venues')
+                    .insert([venueItem]);
+
+                  if (!insertErr) {
+                    citySeeded++;
+                  } else {
+                    // Fallback to upsert by id
+                    const { error: upsertErr } = await supabase
+                      .from('venues')
+                      .upsert(venueItem, { onConflict: 'id' });
+
+                    if (!upsertErr) {
+                      citySeeded++;
+                    }
+                  }
                 }
               } catch (dbErr) {
                 // Non-blocking database upsert fallback

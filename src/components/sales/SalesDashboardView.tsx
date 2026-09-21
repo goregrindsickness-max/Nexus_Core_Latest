@@ -38,7 +38,8 @@ interface SalesDashboardViewProps {
   shows: Show[];
   setShows: React.Dispatch<React.SetStateAction<Show[]>>;
   onSubmitSale: (type: 'sale' | 'show' | 'note', payload: any) => Promise<void>;
-  onBack: () => void;
+  onBack?: () => void;
+  hideBackButton?: boolean;
   triggerNotification: (msg: string) => void;
   addLog: (msg: string) => void;
   activeBandId: string;
@@ -65,6 +66,7 @@ export default function SalesDashboardView({
   setShows,
   onSubmitSale,
   onBack,
+  hideBackButton = false,
   triggerNotification,
   addLog,
   activeBandId,
@@ -940,16 +942,18 @@ export default function SalesDashboardView({
     <div className={`min-h-[100dvh] bg-[#0c0e12] overflow-y-auto ${cart.length > 0 ? "pb-[380px]" : "pb-24"} flex flex-col font-sans select-none text-white relative`}>
       
       {/* Floating Back Button */}
-      <div className="fixed top-4 left-4 md:top-6 md:left-6 z-[100]">
-        <button 
-          onClick={onBack}
-          className="w-10 h-10 rounded-full border border-red-500/20 hover:border-red-500/50 bg-black/85 flex items-center justify-center transition-all hover:bg-zinc-900 text-red-500 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] cursor-pointer group"
-          title="Go Back"
-          aria-label="Go Back"
-        >
-          <ChevronLeft className="w-6 h-6 text-red-500 group-hover:scale-110 transition-transform stroke-[2.5]" />
-        </button>
-      </div>
+      {!hideBackButton && onBack && (
+        <div className="fixed top-4 left-4 md:top-6 md:left-6 z-[100]">
+          <button 
+            onClick={onBack}
+            className="w-10 h-10 rounded-full border border-red-500/20 hover:border-red-500/50 bg-black/85 flex items-center justify-center transition-all hover:bg-zinc-900 text-red-500 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] cursor-pointer group"
+            title="Go Back"
+            aria-label="Go Back"
+          >
+            <ChevronLeft className="w-6 h-6 text-red-500 group-hover:scale-110 transition-transform stroke-[2.5]" />
+          </button>
+        </div>
+      )}
 
       {/* HEADER SECTION (New Style) */}
       <div className="relative border-b border-[#1b1e25] pb-4 pt-4 flex flex-col items-center justify-center text-center bg-[#0c0e12]/92 backdrop-blur-md sticky top-0 z-30 gap-3 overflow-hidden">

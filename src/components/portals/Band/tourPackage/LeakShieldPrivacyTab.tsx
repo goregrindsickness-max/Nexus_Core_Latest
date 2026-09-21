@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock, KeyRound, Megaphone, Edit3, ShieldCheck, Clock, Users } from 'lucide-react';
+import { Lock, KeyRound, Megaphone, Edit3, ShieldCheck, Clock, Users, Save, CheckCircle2, RefreshCw } from 'lucide-react';
 
 interface LeakShieldPrivacyTabProps {
   publicationStatus: 'embargoed_private' | 'confirmed_routing' | 'public_announced';
@@ -8,6 +8,10 @@ interface LeakShieldPrivacyTabProps {
   onOpenPrivacyModal: () => void;
   onPublish: () => void;
   onLock: () => void;
+  onSaveProgress?: () => void;
+  isSaving?: boolean;
+  hasUnsavedChanges?: boolean;
+  lastSavedAt?: Date | null;
 }
 
 export const LeakShieldPrivacyTab: React.FC<LeakShieldPrivacyTabProps> = ({
@@ -16,7 +20,11 @@ export const LeakShieldPrivacyTab: React.FC<LeakShieldPrivacyTabProps> = ({
   tourTitle,
   onOpenPrivacyModal,
   onPublish,
-  onLock
+  onLock,
+  onSaveProgress,
+  isSaving,
+  hasUnsavedChanges,
+  lastSavedAt
 }) => {
   return (
     <div className="space-y-4">
@@ -66,7 +74,41 @@ export const LeakShieldPrivacyTab: React.FC<LeakShieldPrivacyTabProps> = ({
           </div>
 
           {/* Status Switcher Action */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
+            {lastSavedAt && (
+              <span className="text-[9.5px] font-mono text-zinc-400">
+                Saved: {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            {onSaveProgress && (
+              <button
+                type="button"
+                onClick={onSaveProgress}
+                disabled={isSaving}
+                className={`px-3 py-1.5 rounded-lg font-mono font-bold text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                  isSaving
+                    ? 'bg-amber-600/50 text-white cursor-wait'
+                    : hasUnsavedChanges
+                    ? 'bg-amber-500 hover:bg-amber-400 text-black font-black ring-2 ring-amber-400/50 animate-pulse'
+                    : 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40'
+                }`}
+                title="Save tour privacy settings (Ctrl+S / Cmd+S)"
+              >
+                {isSaving ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin" /> Saving...
+                  </>
+                ) : hasUnsavedChanges ? (
+                  <>
+                    <Save className="w-3.5 h-3.5" /> Save Privacy Safeguards *
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Safeguards Saved
+                  </>
+                )}
+              </button>
+            )}
             <button
               type="button"
               onClick={onOpenPrivacyModal}

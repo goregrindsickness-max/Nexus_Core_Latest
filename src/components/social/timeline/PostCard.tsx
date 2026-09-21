@@ -35,6 +35,7 @@ import {
   TourEmbedCard,
   EventEmbedCard,
   MerchEmbedCard,
+  BandcampEmbedCard,
 } from '../embeds';
 import { GigProximityPill } from './GigProximityPill';
 
@@ -952,8 +953,13 @@ export const PostCard: React.FC<PostCardProps> = ({
         <YouTubeEmbedCard youtubeId={post.youtubeId} />
       )}
 
+      {/* Bandcamp Embed Player */}
+      {(post.bandcampUrl || post.bandcamp_url || post.bandcampData || post.bandcamp_data || (post.mediaUrl && post.mediaUrl.includes('bandcamp.com')) || (post.media_url && post.media_url.includes('bandcamp.com')) || (post.image_url && post.image_url.includes('bandcamp.com')) || (post.image && post.image.includes('bandcamp.com'))) && (
+        <BandcampEmbedCard post={post} />
+      )}
+
       {/* Media Attachment Image(s) - Edge-to-Edge Showcase */}
-      {!post.songData && !post.albumData && !post.merchData && !post.youtubeId && (
+      {!post.tapeData && !(post as any).tape_data && !post.songData && !post.albumData && !post.merchData && !post.youtubeId && !post.bandcampUrl && !post.bandcamp_url && !post.bandcampData && !post.bandcamp_data && !(post.mediaUrl && post.mediaUrl.includes('bandcamp.com')) && !(post.media_url && post.media_url.includes('bandcamp.com')) && !(post.image_url && post.image_url.includes('bandcamp.com')) && !(post.image && post.image.includes('bandcamp.com')) && (
         <MediaGalleryGrid
           images={post.images}
           imageUrl={post.image_url}

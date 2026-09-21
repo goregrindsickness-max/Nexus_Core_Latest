@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign } from 'lucide-react';
+import { DollarSign, Save, CheckCircle2, RefreshCw } from 'lucide-react';
 import { TourPackageBand, TourPackageStop } from '../TourManagerPackageModule';
 
 interface SettlementTabProps {
@@ -7,27 +7,71 @@ interface SettlementTabProps {
   stops: TourPackageStop[];
   totalPackageGuarantees: number;
   totalGrossPotential: number;
+  onSaveProgress?: () => void;
+  isSaving?: boolean;
+  hasUnsavedChanges?: boolean;
+  lastSavedAt?: Date | null;
 }
 
 export const SettlementTab: React.FC<SettlementTabProps> = ({
   bands,
   stops,
   totalPackageGuarantees,
-  totalGrossPotential
+  totalGrossPotential,
+  onSaveProgress,
+  isSaving,
+  hasUnsavedChanges,
+  lastSavedAt
 }) => {
   return (
     <div className="space-y-3">
       <div className="bg-[#0b0e14] border border-zinc-800 rounded-xl p-3.5 space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-zinc-850">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2 border-b border-zinc-850">
           <div className="flex items-center gap-2">
             <DollarSign className="w-4 h-4 text-emerald-400" />
             <h4 className="text-xs font-bold text-white uppercase font-mono">
               Nightly Settlement &amp; Deal Split Projections
             </h4>
           </div>
-          <span className="text-[10px] font-mono text-emerald-400 font-bold">
-            Total Potential: ${totalGrossPotential.toLocaleString()}
-          </span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900">
+              Total Potential: ${totalGrossPotential.toLocaleString()}
+            </span>
+            {lastSavedAt && (
+              <span className="text-[9.5px] font-mono text-zinc-500">
+                Saved: {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            {onSaveProgress && (
+              <button
+                type="button"
+                onClick={onSaveProgress}
+                disabled={isSaving}
+                className={`px-3 py-1 rounded font-mono font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-sm ${
+                  isSaving
+                    ? 'bg-amber-600/50 text-white cursor-wait'
+                    : hasUnsavedChanges
+                    ? 'bg-amber-500 hover:bg-amber-400 text-black font-black ring-2 ring-amber-400/50 animate-pulse'
+                    : 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40'
+                }`}
+                title="Save tour financial progress (Ctrl+S / Cmd+S)"
+              >
+                {isSaving ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin" /> Saving...
+                  </>
+                ) : hasUnsavedChanges ? (
+                  <>
+                    <Save className="w-3 h-3" /> Save Financials *
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Financials Saved
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Guarantees Summary */}

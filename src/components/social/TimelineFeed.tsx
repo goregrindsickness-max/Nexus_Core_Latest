@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ShoppingBag } from 'lucide-react';
 import { StripeCheckoutModal } from './StripeCheckoutModal';
 import { requestPauseSceneRadio } from './utils/mediaPlaybackCoordinator';
+import { tapeAudioEngine } from './utils/tapeAudioEngine';
+import { isAudioUrl } from '../../utils/socialFeedUtils';
 import {
   FeedComment,
   SongEmbedData,
@@ -87,24 +89,22 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
   const [selectedTicketShow, setSelectedTicketShow] = useState<{ post: FeedPost; date: any } | null>(null);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
 
-  // Tape playback state
-  const [playingTapeId, setPlayingTapeId] = useState<string | null>(null);
+  // Tape playback state powered by tapeAudioEngine
+  const [playingTapeId, setPlayingTapeId] = useState<string | null>(tapeAudioEngine.getState().playingTapeId);
   const [tapeProgress, setTapeProgress] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    if (!playingTapeId) return;
-    const interval = setInterval(() => {
-      setTapeProgress(prev => {
-        const current = prev[playingTapeId] || 0;
-        if (current >= 100) {
-          setPlayingTapeId(null);
-          return { ...prev, [playingTapeId]: 100 };
-        }
-        return { ...prev, [playingTapeId]: current + 0.5 };
-      });
-    }, 100);
-    return () => clearInterval(interval);
-  }, [playingTapeId]);
+    const unsubscribe = tapeAudioEngine.subscribe((state) => {
+      setPlayingTapeId(state.isPlaying ? state.playingTapeId : null);
+      if (state.playingTapeId) {
+        setTapeProgress((prev) => ({
+          ...prev,
+          [state.playingTapeId!]: state.progress,
+        }));
+      }
+    });
+    return unsubscribe;
+  }, []);
   
   // Inline post edit state
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
@@ -459,14 +459,21 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
                     onBuyFormat={handleBuyFormat}
                     onVotePoll={(optId, poll) => handleVotePoll(post.id, optId, poll)}
                     onTogglePlayTape={() => {
-                      if (playingTapeId !== post.id) {
-                        requestPauseSceneRadio('tape_deck_play');
-                      }
-                      setPlayingTapeId(playingTapeId === post.id ? null : post.id);
+                      const audioUrl = post.tapeData?.audioUrl || 
+                        post.tapeData?.audio_url || 
+                        post.tapeData?.audio ||
+                        ((post as any)?.media_url && isAudioUrl((post as any).media_url) ? (post as any).media_url : undefined) ||
+                        (post.mediaUrl && isAudioUrl(post.mediaUrl) ? post.mediaUrl : undefined);
+                      tapeAudioEngine.togglePlay(post.id, audioUrl);
                     }}
-                    onSeekTape={(progress) => setTapeProgress(prev => ({ ...prev, [post.id]: progress }))}
+                    onSeekTape={(progress) => {
+                      setTapeProgress(prev => ({ ...prev, [post.id]: progress }));
+                      if (playingTapeId === post.id) {
+                        tapeAudioEngine.seek(progress);
+                      }
+                    }}
                     onStopTape={() => {
-                      setPlayingTapeId(null);
+                      tapeAudioEngine.stop(post.id);
                       setTapeProgress(prev => ({ ...prev, [post.id]: 0 }));
                     }}
                     onOpenLightbox={(images, index) => setLightbox({ images, index })}

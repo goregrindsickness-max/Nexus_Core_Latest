@@ -317,6 +317,14 @@ export default function NotificationCenterView({
 
     playBeep(980, 'sine', 0.12);
 
+    // Trigger real system notification (native Capacitor on mobile or WebPush)
+    pushManager.notify({
+      title: `⚡ ${category} Alert`,
+      body: message,
+      category: 'general',
+      targetTab: 'social'
+    }).catch(err => console.warn('[Sim] Push trigger notice:', err));
+
     if (requires_push) {
       setLiveBanner(mockNotif);
     } else {

@@ -1,27 +1,72 @@
 import React from 'react';
-import { Layers } from 'lucide-react';
+import { Layers, Save, CheckCircle2, RefreshCw } from 'lucide-react';
 import { TourPackageBand } from '../TourManagerPackageModule';
 
 interface SharedBacklineTabProps {
   bands: TourPackageBand[];
   clientBandName: string;
+  onSaveProgress?: () => void;
+  isSaving?: boolean;
+  hasUnsavedChanges?: boolean;
+  lastSavedAt?: Date | null;
 }
 
 export const SharedBacklineTab: React.FC<SharedBacklineTabProps> = ({
   bands,
-  clientBandName
+  clientBandName,
+  onSaveProgress,
+  isSaving,
+  hasUnsavedChanges,
+  lastSavedAt
 }) => {
   const headliner = bands.find(b => b.role === 'headliner' || b.name.toLowerCase() === clientBandName.toLowerCase()) || bands[0];
-  const supportBands = bands.filter(b => b.id !== headliner?.id);
 
   return (
     <div className="space-y-3">
       <div className="bg-[#0b0e14] border border-zinc-800 rounded-xl p-3.5 space-y-3">
-        <div className="flex items-center gap-2 pb-2 border-b border-zinc-850">
-          <Layers className="w-4 h-4 text-amber-400" />
-          <h4 className="text-xs font-bold text-white uppercase font-mono">
-            Tour Package Backline &amp; Trailer Sharing Matrix
-          </h4>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2 border-b border-zinc-850">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-amber-400" />
+            <h4 className="text-xs font-bold text-white uppercase font-mono">
+              Tour Package Backline &amp; Trailer Sharing Matrix
+            </h4>
+          </div>
+          <div className="flex items-center gap-2">
+            {lastSavedAt && (
+              <span className="text-[9.5px] font-mono text-zinc-500">
+                Saved: {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            {onSaveProgress && (
+              <button
+                type="button"
+                onClick={onSaveProgress}
+                disabled={isSaving}
+                className={`px-3 py-1 rounded font-mono font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-sm ${
+                  isSaving
+                    ? 'bg-amber-600/50 text-white cursor-wait'
+                    : hasUnsavedChanges
+                    ? 'bg-amber-500 hover:bg-amber-400 text-black font-black ring-2 ring-amber-400/50 animate-pulse'
+                    : 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40'
+                }`}
+                title="Save tour backline matrix progress (Ctrl+S / Cmd+S)"
+              >
+                {isSaving ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin" /> Saving...
+                  </>
+                ) : hasUnsavedChanges ? (
+                  <>
+                    <Save className="w-3 h-3" /> Save Backline *
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Backline Saved
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

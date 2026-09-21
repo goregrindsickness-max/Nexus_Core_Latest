@@ -3,7 +3,9 @@ import { supabase } from '../../lib/supabaseClient';
 import { Activity, MessageSquare, Flame, Image as ImageIcon, Sparkles, Share2, Volume2, Video, Calendar, MapPin, Users, Lock, Check } from 'lucide-react';
 import { YouTubeEmbedCard } from '../social/embeds/YouTubeEmbedCard';
 import { PollWidget } from '../social/embeds/PollWidget';
+import { TapeEmbedCard } from '../social/embeds/TapeEmbedCard';
 import { PollEmbedData } from '../social/timeline/types';
+import { tapeAudioEngine } from '../social/utils/tapeAudioEngine';
 
 export interface TimelinePost {
   id: string;
@@ -263,6 +265,23 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     }
     return {};
   });
+
+  // Tape playback state powered by tapeAudioEngine
+  const [playingTapeId, setPlayingTapeId] = useState<string | null>(tapeAudioEngine.getState().playingTapeId);
+  const [tapeProgress, setTapeProgress] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const unsubscribe = tapeAudioEngine.subscribe((state) => {
+      setPlayingTapeId(state.isPlaying ? state.playingTapeId : null);
+      if (state.playingTapeId) {
+        setTapeProgress((prev) => ({
+          ...prev,
+          [state.playingTapeId!]: state.progress,
+        }));
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   const feedRef = useRef(feed);
   useEffect(() => {
@@ -768,8 +787,35 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                   </div>
                 )}
 
+                {/* Tape / Bootleg Embed Card */}
+                {post.tapeData && (
+                  <TapeEmbedCard
+                    post={post as any}
+                    isPlaying={playingTapeId === post.id}
+                    progress={tapeProgress[post.id] || 0}
+                    onTogglePlay={() => {
+                      const audioUrl = post.tapeData?.audioUrl || 
+                        post.tapeData?.audio_url || 
+                        post.tapeData?.audio ||
+                        ((post as any)?.media_url && isAudioUrl((post as any).media_url) ? (post as any).media_url : undefined) ||
+                        (post.mediaUrl && isAudioUrl(post.mediaUrl) ? post.mediaUrl : undefined);
+                      tapeAudioEngine.togglePlay(post.id, audioUrl);
+                    }}
+                    onSeek={(progress) => {
+                      setTapeProgress((prev) => ({ ...prev, [post.id]: progress }));
+                      if (playingTapeId === post.id) {
+                        tapeAudioEngine.seek(progress);
+                      }
+                    }}
+                    onStop={() => {
+                      tapeAudioEngine.stop(post.id);
+                      setTapeProgress((prev) => ({ ...prev, [post.id]: 0 }));
+                    }}
+                  />
+                )}
+
                 {/* Audio File Player */}
-                {isAudio && post.media_url && (
+                {isAudio && post.media_url && !post.tapeData && (
                   <div className="my-3 p-3 bg-zinc-900/90 rounded-xl border border-zinc-800/80 flex flex-col gap-2">
                     <div className="flex items-center gap-2 text-rose-400 text-[10px] font-mono font-bold tracking-wider uppercase">
                       <Volume2 className="w-3.5 h-3.5 animate-pulse" />

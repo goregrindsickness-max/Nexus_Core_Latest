@@ -221,6 +221,12 @@ export function compressImageInSocialFeed(base64Str: string, maxWidth = 1920, ma
   });
 }
 
+export function isBandcampUrl(url?: string | null): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const lower = url.toLowerCase();
+  return lower.includes('bandcamp.com');
+}
+
 export function getEmbedUrl(url: string | undefined | null): string | null {
   if (!url) return null;
   const cleanedUrl = url.trim();
@@ -247,13 +253,164 @@ export function getEmbedUrl(url: string | undefined | null): string | null {
 
   // Bandcamp
   if (cleanedUrl.includes('bandcamp.com')) {
-    if (cleanedUrl.includes('EmbeddedPlayer')) {
-      return cleanedUrl;
+    const iframeSrc = cleanedUrl.match(/src=["'](https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^"']+)["']/i);
+    if (iframeSrc) {
+      return iframeSrc[1].replace(/&amp;/g, '&');
     }
-    return null;
+    const directEmbed = cleanedUrl.match(/https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^\s"']+/i);
+    if (directEmbed) {
+      return directEmbed[0].replace(/&amp;/g, '&');
+    }
+    return cleanedUrl;
   }
 
   return null;
+}
+
+export function formatBandcampEmbedDarkUrl(url: string | null | undefined): string | null {
+  if (!url || typeof url !== 'string') return null;
+  let clean = url.trim().replace(/&amp;/g, '&');
+  if (clean.startsWith('http://')) {
+    clean = clean.replace('http://', 'https://');
+  }
+
+  // Extract iframe src if passed an iframe HTML string
+  const iframeMatch = clean.match(/src=["'](https?:\/\/[^"']+)["']/i);
+  if (iframeMatch) {
+    clean = iframeMatch[1];
+  }
+
+  if (!clean.includes('bandcamp.com/EmbeddedPlayer')) {
+    // If it's a raw track/album URL with track= or album= query
+    const trackMatch = clean.match(/track[=_](\d+)/i) || clean.match(/track\/[^/?#]+\?.*item_id=(\d+)/i);
+    const albumMatch = clean.match(/album[=_](\d+)/i);
+    if (trackMatch) {
+      return `https://bandcamp.com/EmbeddedPlayer/track=${trackMatch[1]}/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`;
+    } else if (albumMatch) {
+      return `https://bandcamp.com/EmbeddedPlayer/album=${albumMatch[1]}/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`;
+    }
+    return clean;
+  }
+
+  // Check if query parameter style
+  if (clean.includes('?')) {
+    const [baseUrl, queryStr] = clean.split('?');
+    const params = new URLSearchParams(queryStr);
+    params.set('bgcol', '000000');
+    params.set('linkcol', '06b6d4');
+    params.set('tracklist', 'false');
+    if (!params.has('artwork')) params.set('artwork', 'small');
+    params.set('transparent', 'true');
+    return `${baseUrl}?${params.toString()}`;
+  }
+
+  // Path parameter style: https://bandcamp.com/EmbeddedPlayer/track=123/size=large/bgcol=000000/linkcol=06b6d4/...
+  if (/bgcol=[a-fA-F0-9]+/i.test(clean)) {
+    clean = clean.replace(/bgcol=[a-fA-F0-9]+/gi, 'bgcol=000000');
+  } else {
+    clean = clean.replace(/\/EmbeddedPlayer\//i, '/EmbeddedPlayer/bgcol=000000/');
+  }
+
+  if (/linkcol=[a-fA-F0-9]+/i.test(clean)) {
+    clean = clean.replace(/linkcol=[a-fA-F0-9]+/gi, 'linkcol=06b6d4');
+  } else {
+    clean = clean.replace(/\/bgcol=000000\//i, '/bgcol=000000/linkcol=06b6d4/');
+  }
+
+  if (!clean.includes('transparent=true')) {
+    clean = clean.replace(/\/+$/, '') + '/transparent=true/';
+  }
+
+  if (!clean.includes('artwork=')) {
+    clean = clean.replace(/\/+$/, '') + '/artwork=small/';
+  }
+
+  if (!clean.includes('tracklist=')) {
+    clean = clean.replace(/\/+$/, '') + '/tracklist=false/';
+  }
+
+  return clean;
+}
+
+export interface BandcampResolvedData {
+  success: boolean;
+  embedUrl: string | null;
+  trackId?: string | null;
+  albumId?: string | null;
+  title?: string;
+  artist?: string;
+  artwork?: string | null;
+  itemType?: 'track' | 'album' | 'unknown';
+  pageUrl?: string;
+  streamUrl?: string | null;
+  audioUrl?: string | null;
+}
+
+export async function resolveBandcampMetadata(url: string): Promise<BandcampResolvedData | null> {
+  if (!url || typeof url !== 'string') return null;
+  const cleanUrl = url.trim();
+
+  // If already an iframe embed or EmbeddedPlayer url:
+  const iframeMatch = cleanUrl.match(/src=["'](https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^"']+)["']/i);
+  const directEmbedMatch = cleanUrl.match(/https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^\s"']+/i);
+  if (iframeMatch || directEmbedMatch) {
+    const raw = (iframeMatch ? iframeMatch[1] : directEmbedMatch![0]).replace(/&amp;/g, '&');
+    const trackId = raw.match(/track=(\d+)/i)?.[1] || null;
+    const albumId = raw.match(/album=(\d+)/i)?.[1] || null;
+    return {
+      success: true,
+      embedUrl: formatBandcampEmbedDarkUrl(raw),
+      trackId,
+      albumId,
+      itemType: trackId ? 'track' : 'album',
+      pageUrl: cleanUrl
+    };
+  }
+
+  try {
+    const response = await fetch('/api/bandcamp/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: cleanUrl })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.embedUrl) {
+        data.embedUrl = formatBandcampEmbedDarkUrl(data.embedUrl);
+      }
+      return data;
+    }
+  } catch (err) {
+    console.warn('[Bandcamp Resolve] Failed to query backend resolver:', err);
+  }
+
+  // Graceful client-side fallback
+  const trackIdMatch = cleanUrl.match(/track=(\d+)/i);
+  const albumIdMatch = cleanUrl.match(/album=(\d+)/i);
+  if (trackIdMatch) {
+    return {
+      success: true,
+      embedUrl: `https://bandcamp.com/EmbeddedPlayer/track=${trackIdMatch[1]}/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`,
+      trackId: trackIdMatch[1],
+      itemType: 'track',
+      pageUrl: cleanUrl
+    };
+  } else if (albumIdMatch) {
+    return {
+      success: true,
+      embedUrl: `https://bandcamp.com/EmbeddedPlayer/album=${albumIdMatch[1]}/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`,
+      albumId: albumIdMatch[1],
+      itemType: 'album',
+      pageUrl: cleanUrl
+    };
+  }
+
+  return {
+    success: false,
+    embedUrl: null,
+    pageUrl: cleanUrl
+  };
 }
 
 export const extractUUID = (str: string | null | undefined): string | null => {

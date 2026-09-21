@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Compass,
   Calendar,
@@ -42,7 +42,9 @@ import {
   Megaphone,
   KeyRound,
   FolderKanban,
-  FolderPlus
+  FolderPlus,
+  Save,
+  CloudUpload
 } from 'lucide-react';
 import { communityBandManager, CommunityBandRecord } from '../../../lib/communityBands';
 import { tourPackageManager, TourPackageRecord } from '../../../lib/tourPackageManager';
@@ -277,6 +279,26 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
   const [embargoUntilDate, setEmbargoUntilDate] = useState<string>(currentTour.embargoUntilDate || '2026-10-01T10:00');
 
+  // Save & Persistence State
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(() => new Date());
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [saveSuccessAnimation, setSaveSuccessAnimation] = useState(false);
+  const lastSavedSnapshotRef = useRef<string>('');
+
+  // Current tour state snapshot for tracking dirty/unsaved state
+  const currentSnapshot = useMemo(() => {
+    return JSON.stringify({
+      activeTourId,
+      tourTitle,
+      clientBandName,
+      publicationStatus,
+      embargoUntilDate,
+      bands,
+      stops
+    });
+  }, [activeTourId, tourTitle, clientBandName, publicationStatus, embargoUntilDate, bands, stops]);
+
   // Sync state whenever activeTour changes
   useEffect(() => {
     const tour = allTours.find(t => t.id === activeTourId);
@@ -287,8 +309,28 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       setClientBandName(tour.headlinerClientName);
       setPublicationStatus(tour.publicationStatus);
       setEmbargoUntilDate(tour.embargoUntilDate || '2026-10-01T10:00');
+      lastSavedSnapshotRef.current = JSON.stringify({
+        activeTourId: tour.id,
+        tourTitle: tour.title,
+        clientBandName: tour.headlinerClientName,
+        publicationStatus: tour.publicationStatus,
+        embargoUntilDate: tour.embargoUntilDate || '2026-10-01T10:00',
+        bands: tour.bands,
+        stops: tour.stops
+      });
+      setHasUnsavedChanges(false);
+      setLastSavedAt(new Date(tour.updatedAt || Date.now()));
     }
   }, [activeTourId]);
+
+  // Check for unsaved changes against last saved snapshot
+  useEffect(() => {
+    if (!lastSavedSnapshotRef.current) {
+      lastSavedSnapshotRef.current = currentSnapshot;
+    } else if (lastSavedSnapshotRef.current !== currentSnapshot) {
+      setHasUnsavedChanges(true);
+    }
+  }, [currentSnapshot]);
 
   // Listen to external/cloud updates
   useEffect(() => {
@@ -309,7 +351,7 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
     };
   }, []);
 
-  // Save changes to current tour in manager
+  // Background auto-save to in-memory/debounced store
   useEffect(() => {
     if (!currentTour) return;
     const updatedRecord: TourPackageRecord = {
@@ -325,6 +367,67 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
     };
     tourPackageManager.saveTour(updatedRecord);
   }, [tourTitle, clientBandName, publicationStatus, embargoUntilDate, bands, stops, activeTourId]);
+
+  // Manual explicit Save Tour Progress handler (Forces immediate Cloud & Local storage sync)
+  const handleManualSaveTour = async (e?: React.MouseEvent | KeyboardEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (!currentTour) return;
+
+    setIsSaving(true);
+    const updatedRecord: TourPackageRecord = {
+      ...currentTour,
+      id: activeTourId,
+      title: tourTitle,
+      headlinerClientName: clientBandName,
+      publicationStatus: publicationStatus,
+      embargoUntilDate: embargoUntilDate,
+      bands: bands,
+      stops: stops,
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      const saved = await tourPackageManager.saveTour(updatedRecord, true);
+      lastSavedSnapshotRef.current = JSON.stringify({
+        activeTourId: saved.id,
+        tourTitle: saved.title,
+        clientBandName: saved.headlinerClientName,
+        publicationStatus: saved.publicationStatus,
+        embargoUntilDate: saved.embargoUntilDate,
+        bands: saved.bands,
+        stops: saved.stops
+      });
+
+      setAllTours(tourPackageManager.getAllTours());
+      setHasUnsavedChanges(false);
+      setLastSavedAt(new Date());
+      setSaveSuccessAnimation(true);
+      setTimeout(() => setSaveSuccessAnimation(false), 2500);
+
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      triggerNotification?.(`💾 Tour Progress Saved: "${tourTitle}" (${stops.length} dates, ${bands.length} bands) at ${timeStr}`);
+      addLog?.(`TM Workspace: Saved "${tourTitle}" tour progress (stops: ${stops.length}, bands: ${bands.length})`);
+    } catch (err: any) {
+      triggerNotification?.(`⚠️ Error saving tour progress: ${err?.message || 'Local storage write failed'}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Keyboard shortcut support: Ctrl+S or Cmd+S
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleManualSaveTour();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentTour, activeTourId, tourTitle, clientBandName, publicationStatus, embargoUntilDate, bands, stops]);
 
   // Modals & Search state
   const [isSelectClientModal, setIsSelectClientModal] = useState(false);
@@ -921,6 +1024,57 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
 
         {/* Quick Actions & Switcher */}
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Primary Explicit Save Tour Progress Button */}
+          <button
+            type="button"
+            onClick={handleManualSaveTour}
+            disabled={isSaving}
+            className={`px-3 py-1.5 rounded-lg font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md cursor-pointer select-none ${
+              isSaving
+                ? 'bg-amber-600/70 text-white cursor-wait ring-1 ring-amber-400'
+                : saveSuccessAnimation
+                ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] border border-emerald-400'
+                : hasUnsavedChanges
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black shadow-[0_0_15px_rgba(245,158,11,0.4)] border border-amber-300 ring-2 ring-amber-400/50 animate-pulse font-black'
+                : 'bg-zinc-900 hover:bg-zinc-800 text-emerald-400 hover:text-emerald-300 border border-emerald-500/40 hover:border-emerald-400'
+            }`}
+            title={
+              hasUnsavedChanges
+                ? 'Unsaved changes detected. Click to save tour progress now (Ctrl+S / Cmd+S)'
+                : 'Tour progress is saved and synchronized with Cloud & Local storage (Ctrl+S / Cmd+S)'
+            }
+          >
+            {isSaving ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-200" />
+                <span>Saving Tour...</span>
+              </>
+            ) : saveSuccessAnimation ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 text-white stroke-[2.5]" />
+                <span>Progress Saved ✓</span>
+              </>
+            ) : hasUnsavedChanges ? (
+              <>
+                <Save className="w-3.5 h-3.5 text-black stroke-[2.5]" />
+                <span>Save Tour *</span>
+                <span className="text-[8.5px] bg-black text-amber-300 px-1 py-0.2 rounded font-black ml-0.5">
+                  UNSAVED
+                </span>
+              </>
+            ) : (
+              <>
+                <CloudUpload className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Save Progress</span>
+                {lastSavedAt && (
+                  <span className="text-[9px] text-zinc-400 font-normal hidden sm:inline ml-0.5">
+                    ({lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                  </span>
+                )}
+              </>
+            )}
+          </button>
+
           <button
             type="button"
             onClick={() => setIsAddingStopModal(true)}
@@ -1056,6 +1210,11 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
           onCopyDaySheet={handleCopyDaySheet}
           onRemoveStop={handleRemoveStop}
           onToggleAdvancing={handleToggleAdvancing}
+          onSaveProgress={handleManualSaveTour}
+          isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
+          lastSavedAt={lastSavedAt}
+          onOpenAddStopModal={() => setIsAddingStopModal(true)}
         />
       )}
 
@@ -1075,6 +1234,10 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
           onMoveBand={handleMoveBand}
           onRemoveBand={handleRemoveBand}
           onPromoteToHeadliner={handlePromoteToHeadliner}
+          onSaveProgress={handleManualSaveTour}
+          isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
+          lastSavedAt={lastSavedAt}
         />
       )}
 
@@ -1094,6 +1257,10 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
         <SharedBacklineTab
           bands={bands}
           clientBandName={clientBandName}
+          onSaveProgress={handleManualSaveTour}
+          isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
+          lastSavedAt={lastSavedAt}
         />
       )}
 
@@ -1104,6 +1271,10 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
           stops={stops}
           totalPackageGuarantees={totalPackageGuarantees}
           totalGrossPotential={totalGrossPotential}
+          onSaveProgress={handleManualSaveTour}
+          isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
+          lastSavedAt={lastSavedAt}
         />
       )}
 
@@ -1124,6 +1295,10 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
             triggerNotification?.('🔒 Tour reverted to Private & Embargoed mode.');
             addLog?.(`TM Mode: Tour "${tourTitle}" set back to private.`);
           }}
+          onSaveProgress={handleManualSaveTour}
+          isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
+          lastSavedAt={lastSavedAt}
         />
       )}
 

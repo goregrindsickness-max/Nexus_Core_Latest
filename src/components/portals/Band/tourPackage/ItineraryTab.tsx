@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, Copy, Trash2, Phone, Mail } from 'lucide-react';
+import { MapPin, Copy, Trash2, Phone, Mail, Save, Plus, CheckCircle2, RefreshCw } from 'lucide-react';
 import { TourPackageStop } from '../TourManagerPackageModule';
 
 interface ItineraryTabProps {
@@ -9,6 +9,11 @@ interface ItineraryTabProps {
   onCopyDaySheet: (stop: TourPackageStop) => void;
   onRemoveStop: (id: string, venueName: string) => void;
   onToggleAdvancing: (id: string) => void;
+  onSaveProgress?: () => void;
+  isSaving?: boolean;
+  hasUnsavedChanges?: boolean;
+  lastSavedAt?: Date | null;
+  onOpenAddStopModal?: () => void;
 }
 
 export const ItineraryTab: React.FC<ItineraryTabProps> = ({
@@ -17,12 +22,77 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({
   setSelectedStopId,
   onCopyDaySheet,
   onRemoveStop,
-  onToggleAdvancing
+  onToggleAdvancing,
+  onSaveProgress,
+  isSaving,
+  hasUnsavedChanges,
+  lastSavedAt,
+  onOpenAddStopModal
 }) => {
   const activeStop = stops.find(s => s.id === selectedStopId) || stops[0];
+  const advancedCount = stops.filter(s => s.advancingDone).length;
 
   return (
     <div className="space-y-3">
+      {/* Route Subheader with Save Progress & Quick Add */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2.5 bg-[#0e1117] border border-zinc-800 rounded-xl">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-mono font-bold text-white uppercase flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-amber-400" />
+            Tour Route ({stops.length} Stops)
+          </span>
+          <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+            Advanced: <strong className="text-emerald-400">{advancedCount}/{stops.length}</strong>
+          </span>
+          {lastSavedAt && (
+            <span className="text-[9.5px] font-mono text-zinc-500">
+              Last saved: {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 self-end sm:self-center">
+          {onOpenAddStopModal && (
+            <button
+              type="button"
+              onClick={onOpenAddStopModal}
+              className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-mono font-bold text-[9.5px] uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <Plus className="w-3 h-3 text-emerald-400" /> Add Stop
+            </button>
+          )}
+
+          {onSaveProgress && (
+            <button
+              type="button"
+              onClick={onSaveProgress}
+              disabled={isSaving}
+              className={`px-3 py-1 rounded-lg font-mono font-bold text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                isSaving
+                  ? 'bg-amber-600/50 text-white cursor-wait'
+                  : hasUnsavedChanges
+                  ? 'bg-amber-500 hover:bg-amber-400 text-black font-black ring-2 ring-amber-400/50 animate-pulse'
+                  : 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40'
+              }`}
+              title="Save tour route progress (Ctrl+S / Cmd+S)"
+            >
+              {isSaving ? (
+                <>
+                  <RefreshCw className="w-3 h-3 animate-spin" /> Saving...
+                </>
+              ) : hasUnsavedChanges ? (
+                <>
+                  <Save className="w-3 h-3" /> Save Route Changes *
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Route Saved
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Stops List */}
         <div className="lg:col-span-2 space-y-2">

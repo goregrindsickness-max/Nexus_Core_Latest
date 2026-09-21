@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, MapPin, Users, Mail, Star, MessageSquare, Send, ChevronLeft, ChevronRight, ChevronDown, Calendar, Plus, X, Radio, CheckCircle, XCircle, Clock, Edit2, Sparkles, Database, RefreshCw, Globe, Check, Trash2, Mic2, Music, Building2, SlidersHorizontal, Filter, AlertTriangle, Save, ChevronsUpDown, AlertOctagon, ShieldAlert, CheckSquare, Square } from 'lucide-react';
 import { Offer, UserReview, Venue } from '../../../types';
@@ -6,7 +6,7 @@ import { RoutingBeacon } from '../Promoter/PromoterPortalView';
 import { getSupabase } from '../../../supabase';
 import { handleSendMessage as sendDbMessage } from '../../../store/useChatStore';
 import VenueReputationCard from './VenueReputationCard';
-import { seedVenuesForCities, classifyPlace } from '../../../services/musicBrainzSeederService';
+import { seedVenuesForCities, classifyPlace, isIrrelevantPlace } from '../../../services/musicBrainzSeederService';
 
 /**
  * Detect if an existing place record appears to be closed, defunct, or former
@@ -316,9 +316,16 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
   const [isSeedingActive, setIsSeedingActive] = useState(false);
   const [seedingLogs, setSeedingLogs] = useState<string[]>([]);
   const [seedingProgress, setSeedingProgress] = useState(0);
-  const [selectedHubs, setSelectedHubs] = useState<string[]>([
-    'Austin', 'Dallas', 'Oklahoma City', 'Houston'
-  ]);
+  const [seededHubs, setSeededHubs] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_seeded_hubs');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [customHubs, setCustomHubs] = useState<string[]>([]);
+  const [selectedHubs, setSelectedHubs] = useState<string[]>([]);
   const [customCityInput, setCustomCityInput] = useState('');
 
   const TOUR_HUB_PRESETS = [
@@ -333,8 +340,20 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     { city: 'Seattle', state: 'WA', label: 'Seattle, WA' },
     { city: 'Nashville', state: 'TN', label: 'Nashville, TN' },
     { city: 'Atlanta', state: 'GA', label: 'Atlanta, GA' },
-    { city: 'New York', state: 'NY', label: 'New York, NY' }
+    { city: 'New York', state: 'NY', label: 'New York, NY' },
+    { city: 'Philadelphia', state: 'PA', label: 'Philadelphia, PA' },
+    { city: 'Portland', state: 'OR', label: 'Portland, OR' },
+    { city: 'Minneapolis', state: 'MN', label: 'Minneapolis, MN' },
+    { city: 'Detroit', state: 'MI', label: 'Detroit, MI' }
   ];
+
+  const availablePresets = TOUR_HUB_PRESETS.filter(
+    h => !seededHubs.some(sh => sh.toLowerCase() === h.city.toLowerCase())
+  );
+
+  const availableCustomHubs = customHubs.filter(
+    ch => !seededHubs.some(sh => sh.toLowerCase() === ch.toLowerCase())
+  );
 
   const toggleHubSelection = (cityName: string) => {
     setSelectedHubs(prev => 
@@ -347,10 +366,28 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
   const handleAddCustomHub = () => {
     const clean = customCityInput.trim();
     if (!clean) return;
-    if (!selectedHubs.includes(clean)) {
+
+    if (seededHubs.some(sh => sh.toLowerCase() === clean.toLowerCase())) {
+      triggerNotification(`ℹ️ '${clean}' has already been seeded in the Black Book.`);
+      setCustomCityInput('');
+      return;
+    }
+
+    if (!customHubs.some(ch => ch.toLowerCase() === clean.toLowerCase())) {
+      setCustomHubs(prev => [...prev, clean]);
+    }
+
+    if (!selectedHubs.some(sh => sh.toLowerCase() === clean.toLowerCase())) {
       setSelectedHubs(prev => [...prev, clean]);
     }
+
     setCustomCityInput('');
+    triggerNotification(`📍 Selected new region: ${clean}`);
+  };
+
+  const handleRemoveCustomHub = (cityName: string) => {
+    setCustomHubs(prev => prev.filter(c => c !== cityName));
+    setSelectedHubs(prev => prev.filter(c => c !== cityName));
   };
 
   const [localVenues, setLocalVenues] = useState<any[]>(() => {
@@ -374,8 +411,9 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     }
   });
 
-  // Category filter state: all | venue | studio | rehearsal | saved
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'venue' | 'studio' | 'rehearsal' | 'saved'>('all');
+  // Category filter state: venue | studio | rehearsal | saved (Live Stages by default)
+  const [categoryFilter, setCategoryFilter] = useState<'venue' | 'studio' | 'rehearsal' | 'saved'>('venue');
+  const [selectedCityFilter, setSelectedCityFilter] = useState<string | null>(null);
 
   // Edit Venue Modal State
   const [isEditVenueOpen, setIsEditVenueOpen] = useState(false);
@@ -439,7 +477,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
         if (overridesStr) customOverrides = JSON.parse(overridesStr);
       } catch (_) {}
 
-      const allCombined = [...dbVenues, ...cachedVenues];
+      const allCombined = [...dbVenues, ...cachedVenues].filter(v => !isIrrelevantPlace(v));
       if (allCombined.length > 0) {
         const mapped = allCombined.map(v => {
           const cls = classifyPlace(v.name, v.place_type || v.type || v.source);
@@ -599,6 +637,14 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
             }
 
             triggerNotification(`⚡ Pre-seeded ${data.totalVenues} categorized places for tour routing!`);
+
+            // Register these hubs as seeded and remove from active target list
+            const newlySeeded = Array.from(new Set([...seededHubs, ...selectedHubs]));
+            setSeededHubs(newlySeeded);
+            try {
+              localStorage.setItem('nexus_seeded_hubs', JSON.stringify(newlySeeded));
+            } catch (e) {}
+            setSelectedHubs([]);
           }
         }
       } catch (apiErr) {
@@ -649,6 +695,14 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
           }
 
           triggerNotification(`⚡ Seeded ${result.totalVenuesFound} places via MusicBrainz!`);
+
+          // Register these hubs as seeded and remove from active target list
+          const newlySeeded = Array.from(new Set([...seededHubs, ...selectedHubs]));
+          setSeededHubs(newlySeeded);
+          try {
+            localStorage.setItem('nexus_seeded_hubs', JSON.stringify(newlySeeded));
+          } catch (e) {}
+          setSelectedHubs([]);
         }
       }
     } catch (err: any) {
@@ -800,7 +854,6 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
   const activePlaces = localVenues.filter(v => !deletedVenueIds.has(v.id));
 
   // Compute category counts for tab headers
-  const totalCount = activePlaces.length;
   const venuesCount = activePlaces.filter(v => {
     const pType = v.place_type;
     if (pType === 'studio' || pType === 'rehearsal') return false;
@@ -816,8 +869,38 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
   const savedCount = activePlaces.filter(v => savedVenueIds.includes(v.id)).length;
   const detectedDefunctCount = activePlaces.filter(v => detectDefunctReason(v) !== null).length;
 
+  // Derive unique seeded cities and places counts
+  const seededHubsWithCounts = useMemo(() => {
+    const countsByCity: Record<string, number> = {};
+    activePlaces.forEach(p => {
+      if (!p.city) return;
+      const cleanCity = p.city.trim();
+      if (!cleanCity) return;
+      // Capitalize first letters nicely
+      const normalized = cleanCity;
+      countsByCity[normalized] = (countsByCity[normalized] || 0) + 1;
+    });
+
+    // Merge explicitly seeded hubs with all cities found in active places
+    const allKnownCities = Array.from(new Set([...seededHubs, ...Object.keys(countsByCity)]));
+    return allKnownCities
+      .map(city => ({
+        city,
+        count: countsByCity[city] || 0
+      }))
+      .filter(item => item.count > 0 || seededHubs.some(sh => sh.toLowerCase() === item.city.toLowerCase()))
+      .sort((a, b) => b.count - a.count || a.city.localeCompare(b.city));
+  }, [activePlaces, seededHubs]);
+
   const filteredVenues = activePlaces.filter(v => {
-    // 1. Tab category filter
+    // 1. City / Seeded Hub Smart Filter
+    if (selectedCityFilter) {
+      if (v.city.toLowerCase() !== selectedCityFilter.toLowerCase()) {
+        return false;
+      }
+    }
+
+    // 2. Tab category filter
     if (categoryFilter === 'saved' || showBookmarksOnly) {
       if (!savedVenueIds.includes(v.id)) return false;
     } else if (categoryFilter === 'venue') {
@@ -832,7 +915,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
       if (!isRehearsal) return false;
     }
 
-    // 2. Search term filter
+    // 3. Search term filter
     return (
       v.city.toLowerCase().includes(searchTerm.toLowerCase()) || 
       v.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -1345,7 +1428,7 @@ Representing ${activeBandName}`;
         {/* Action Button, Subcategory Tabs & Search Bar */}
         {activeTab === 'directory' && (
           <div className="mt-4 flex flex-col gap-3 w-full">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 onClick={() => setIsAddVenueOpen(true)}
                 className="w-full bg-transparent border-2 border-[#00ffcc] text-[#00ffcc] hover:bg-[#00ffcc]/10 py-2.5 rounded-lg flex items-center justify-center font-bold tracking-widest uppercase transition-colors font-mono cursor-pointer shadow-[0_0_15px_rgba(0,255,204,0.15)] text-xs"
@@ -1360,25 +1443,11 @@ Representing ${activeBandName}`;
                 <Sparkles className="w-4 h-4 mr-1.5 text-teal-400 group-hover:rotate-12 transition-transform shrink-0" />
                 <span className="truncate">Seed Tour Hubs</span>
               </button>
-              <button
-                onClick={handleOpenAuditModal}
-                className="w-full bg-gradient-to-r from-red-950/40 to-zinc-950 border-2 border-red-500/40 hover:border-red-500 text-red-300 hover:bg-red-950/60 py-2.5 rounded-lg flex items-center justify-center font-bold tracking-widest uppercase transition-all font-mono cursor-pointer shadow-[0_0_15px_rgba(239,68,68,0.15)] text-xs group px-2"
-                title="Scan database for closed or defunct places and remove them in bulk"
-              >
-                <AlertOctagon className="w-4 h-4 mr-1.5 text-red-400 group-hover:rotate-12 transition-transform shrink-0" />
-                <span>Audit Defunct</span>
-                {detectedDefunctCount > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-red-500 text-black text-[10px] font-black shrink-0">
-                    {detectedDefunctCount}
-                  </span>
-                )}
-              </button>
             </div>
 
-            {/* Category Filter Tabs Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 w-full pt-1">
+            {/* Category Filter Tabs Grid (Live Stages, Studios, Rehearsal, Bookmarks) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full pt-1">
               {[
-                { id: 'all', label: 'All Places', count: totalCount, icon: Globe, color: 'text-white', activeBg: 'bg-zinc-800', activeBorder: 'border-zinc-400' },
                 { id: 'venue', label: 'Live Stages', count: venuesCount, icon: Music, color: 'text-teal-400', activeBg: 'bg-teal-950/40', activeBorder: 'border-teal-500/70' },
                 { id: 'studio', label: 'Studios', count: studiosCount, icon: Mic2, color: 'text-purple-400', activeBg: 'bg-purple-950/40', activeBorder: 'border-purple-500/70' },
                 { id: 'rehearsal', label: 'Rehearsal', count: rehearsalCount, icon: Building2, color: 'text-sky-400', activeBg: 'bg-sky-950/40', activeBorder: 'border-sky-500/70' },
@@ -1465,6 +1534,82 @@ Representing ${activeBandName}`;
                 </button>
               </div>
             </div>
+
+            {/* Smart Seeded Hubs City / Region Filter Buttons */}
+            {seededHubsWithCounts.length > 0 && (
+              <div className="flex flex-col gap-1.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold uppercase text-teal-400 tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-3 h-3 text-teal-400" />
+                    <span>Seeded Hubs Filter</span>
+                    {selectedCityFilter && (
+                      <span className="text-zinc-400 font-normal">
+                        • showing <strong className="text-teal-300 underline">{selectedCityFilter}</strong>
+                      </span>
+                    )}
+                  </span>
+                  {selectedCityFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCityFilter(null)}
+                      className="text-[10px] font-mono text-teal-400 hover:text-teal-300 underline cursor-pointer"
+                    >
+                      Show All Regions
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCityFilter(null)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold shrink-0 transition-all cursor-pointer border flex items-center gap-1.5 ${
+                      selectedCityFilter === null
+                        ? 'bg-teal-400 text-black border-teal-300 shadow-[0_0_12px_rgba(45,212,191,0.4)] font-black'
+                        : 'bg-zinc-950/80 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                    }`}
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>All Hubs</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                      selectedCityFilter === null ? 'bg-black/20 text-black font-black' : 'bg-zinc-900 text-zinc-500'
+                    }`}>
+                      {activePlaces.length}
+                    </span>
+                  </button>
+
+                  {seededHubsWithCounts.map(({ city, count }) => {
+                    const isSelected = selectedCityFilter?.toLowerCase() === city.toLowerCase();
+                    return (
+                      <button
+                        key={`hub-filter-${city}`}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedCityFilter(null);
+                          } else {
+                            setSelectedCityFilter(city);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer border ${
+                          isSelected
+                            ? 'bg-teal-400 text-black border-teal-300 shadow-[0_0_15px_rgba(45,212,191,0.5)] font-black ring-1 ring-teal-300'
+                            : 'bg-zinc-950/80 border-zinc-850 text-zinc-300 hover:border-teal-500/50 hover:text-teal-200 hover:bg-zinc-900/60'
+                        }`}
+                      >
+                        <MapPin className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-black' : 'text-teal-400'}`} />
+                        <span>{city}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                          isSelected ? 'bg-black/25 text-black font-black' : 'bg-zinc-900 text-zinc-400'
+                        }`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1472,42 +1617,90 @@ Representing ${activeBandName}`;
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-5 space-y-4">
         {activeTab === 'directory' ? (
-          filteredVenues.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-zinc-800 rounded-2xl bg-zinc-950/40">
-            <MapPin className="w-10 h-10 text-zinc-750 mb-3" />
-            <p className="text-zinc-400 font-mono text-sm uppercase tracking-wider font-bold">No places found</p>
-            <p className="text-zinc-600 font-mono text-xs mt-1 max-w-sm">
-              Try adjusting your search query, switching category tabs, or running the MusicBrainz seeder above.
-            </p>
-          </div>
+          <>
+            {/* Manual Venue Addition Suggestion Banner */}
+            <div className="bg-gradient-to-r from-zinc-950 via-purple-950/25 to-zinc-950 border border-purple-500/30 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-purple-950/80 border border-purple-500/50 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(168,85,247,0.3)]">
+                  <Sparkles className="w-4 h-4 text-purple-300" />
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-mono font-bold text-zinc-200">
+                    Looking for a DIY space, house venue, or studio not listed in this region?
+                  </p>
+                  <p className="text-[11px] font-mono text-zinc-400">
+                    Enter known booking contacts, load-in intel, and stage specs manually to build the Black Book.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddVenueOpen(true)}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-teal-600 hover:from-purple-500 hover:to-teal-500 text-white rounded-lg text-xs font-mono font-bold uppercase transition-all shadow-[0_0_12px_rgba(168,85,247,0.3)] shrink-0 cursor-pointer flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Add Venue Manually</span>
+              </button>
+            </div>
+
+            {filteredVenues.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-zinc-800 rounded-2xl bg-zinc-950/40 p-6 space-y-3">
+                <MapPin className="w-10 h-10 text-zinc-700 mb-1" />
+                <p className="text-zinc-300 font-mono text-sm uppercase tracking-wider font-bold">No places found</p>
+                <p className="text-zinc-500 font-mono text-xs max-w-md">
+                  {searchTerm 
+                    ? `No places matching "${searchTerm}". If you're looking for a DIY room, underground spot, or studio in a seeded location, enter any known details manually.`
+                    : "No places found in this category. You can seed additional tour hubs or manually enter known venue details."}
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddVenueOpen(true)}
+                    className="px-4 py-2 bg-gradient-to-r from-purple-600 to-teal-600 hover:from-purple-500 hover:to-teal-500 text-white rounded-lg text-xs font-mono font-bold uppercase shadow-[0_0_15px_rgba(168,85,247,0.3)] transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Enter Venue Details Manually</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsSeederModalOpen(true)}
+                    className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg text-xs font-mono font-bold uppercase transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                    <span>Seed More Hubs</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              filteredVenues.map((venue, idx) => {
+                return (
+                  <VenueReputationCard
+                    key={`bb-venue-${venue.id || 'v'}-${idx}`}
+                    venue={venue}
+                    userReviews={userReviews}
+                    savedVenueIds={savedVenueIds}
+                    bookmarkMutating={bookmarkMutating}
+                    toggleSavedVenue={toggleSavedVenue}
+                    handleOpenSuggestion={handleOpenSuggestion}
+                    handleGeneratePitch={handleGeneratePitch}
+                    setIntelVenueId={setIntelVenueId}
+                    activeIntelIndex={activeIntelIndex}
+                    setActiveIntelIndex={setActiveIntelIndex}
+                    onTouchStart={onTouchStart}
+                    onTouchMove={onTouchMove}
+                    onTouchEndHandler={onTouchEndHandler}
+                    triggerNotification={triggerNotification}
+                    onBuyerClick={setSelectedPromoter}
+                    onEditVenue={handleOpenEditVenue}
+                    onDeleteVenue={handleOpenDeleteVenue}
+                    defaultExpanded={false}
+                    isExpandedOverride={globalExpandState}
+                  />
+                );
+              })
+            )}
+          </>
         ) : (
-          filteredVenues.map((venue, idx) => {
-            return (
-              <VenueReputationCard
-                key={`bb-venue-${venue.id || 'v'}-${idx}`}
-                venue={venue}
-                userReviews={userReviews}
-                savedVenueIds={savedVenueIds}
-                bookmarkMutating={bookmarkMutating}
-                toggleSavedVenue={toggleSavedVenue}
-                handleOpenSuggestion={handleOpenSuggestion}
-                handleGeneratePitch={handleGeneratePitch}
-                setIntelVenueId={setIntelVenueId}
-                activeIntelIndex={activeIntelIndex}
-                setActiveIntelIndex={setActiveIntelIndex}
-                onTouchStart={onTouchStart}
-                onTouchMove={onTouchMove}
-                onTouchEndHandler={onTouchEndHandler}
-                triggerNotification={triggerNotification}
-                onBuyerClick={setSelectedPromoter}
-                onEditVenue={handleOpenEditVenue}
-                onDeleteVenue={handleOpenDeleteVenue}
-                defaultExpanded={false}
-                isExpandedOverride={globalExpandState}
-              />
-            );
-          })
-        )) : (
           <div className="space-y-6">
             <div className="bg-[#0b0c10] border border-[#00ffcc]/50 rounded-2xl p-5 shadow-[0_0_20px_rgba(0,255,204,0.15)] animate-[pulse_3s_ease-in-out_infinite] relative overflow-hidden group">
               {/* Radar Sweep Effect */}
@@ -2396,9 +2589,9 @@ Representing ${activeBandName}`;
                 {/* Info Protocol Note */}
                 <div className="text-xs text-zinc-300 font-mono bg-teal-950/20 border border-teal-500/30 p-3.5 rounded-xl leading-relaxed">
                   <span className="text-teal-400 font-bold uppercase tracking-wider block mb-1">
-                    ⚡ // GEODATA HARVESTING PROTOCOL:
+                    ⚡ // APP-WIDE VENUE SEEDING PROTOCOL:
                   </span>
-                  Queries MusicBrainz API for venues in designated metros with polite rate-limiting (1.1s intervals). Coordinates (<code className="text-teal-300">[lat, lng]</code>) and addresses are persisted directly to Supabase <code className="text-teal-300">venues</code> table with duplicate suppression (<code className="text-teal-300">onConflict: 'name,city'</code>).
+                  Harvests verified music venues and recording/rehearsal spaces for selected hubs and persists them directly into the Supabase <code className="text-teal-300">venues</code> table for all users app-wide. Automatically filters out irrelevant noise such as <strong>churches</strong>, <strong>arenas</strong>, and <strong>convention centers</strong>.
                 </div>
 
                 {/* Hub Selection Matrix */}
@@ -2410,49 +2603,143 @@ Representing ${activeBandName}`;
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => setSelectedHubs(['Austin', 'Dallas', 'Oklahoma City', 'Houston'])}
-                        className="text-[10px] font-mono text-teal-400 hover:text-teal-300 underline cursor-pointer"
+                        onClick={() => setSelectedHubs([])}
+                        className="text-[10px] font-mono text-zinc-400 hover:text-zinc-200 underline cursor-pointer"
                       >
-                        Reset Defaults
+                        Clear All
                       </button>
-                      <span className="text-zinc-600">|</span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedHubs(TOUR_HUB_PRESETS.map(h => h.city))}
-                        className="text-[10px] font-mono text-teal-400 hover:text-teal-300 underline cursor-pointer"
-                      >
-                        Select All
-                      </button>
+                      {availablePresets.length > 0 && (
+                        <>
+                          <span className="text-zinc-600">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedHubs([...new Set([...availablePresets.map(h => h.city), ...availableCustomHubs])])}
+                            className="text-[10px] font-mono text-teal-400 hover:text-teal-300 underline cursor-pointer"
+                          >
+                            Select Available
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {TOUR_HUB_PRESETS.map(hub => {
-                      const isSelected = selectedHubs.includes(hub.city);
-                      return (
-                        <button
-                          key={`hub-${hub.city}`}
-                          type="button"
-                          onClick={() => toggleHubSelection(hub.city)}
-                          disabled={isSeedingActive}
-                          className={`px-3 py-2 rounded-lg border text-xs font-mono font-bold text-left flex items-center justify-between transition-all cursor-pointer ${
-                            isSelected
-                              ? 'bg-teal-950/60 border-teal-400 text-teal-200 shadow-[0_0_10px_rgba(45,212,191,0.2)]'
-                              : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
-                          }`}
+                  {/* Selected Hubs Visual Summary Bar */}
+                  {selectedHubs.length > 0 ? (
+                    <div className="mb-3 p-2.5 bg-teal-950/40 border border-teal-500/40 rounded-xl flex flex-wrap items-center gap-1.5 shadow-[0_0_15px_rgba(20,184,166,0.15)]">
+                      <span className="text-[10px] font-mono font-bold text-teal-300 uppercase tracking-wider mr-1">
+                        Active Queue:
+                      </span>
+                      {selectedHubs.map(hubCity => (
+                        <span
+                          key={`selected-pill-${hubCity}`}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-900/80 border border-teal-400 text-teal-100 text-[11px] font-mono font-bold shadow-sm"
                         >
-                          <span className="truncate">{hub.label}</span>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-teal-400 shrink-0 ml-1" />}
-                        </button>
-                      );
-                    })}
-                  </div>
+                          <Check className="w-3 h-3 text-teal-300" />
+                          {hubCity}
+                          <button
+                            type="button"
+                            onClick={() => toggleHubSelection(hubCity)}
+                            disabled={isSeedingActive}
+                            className="hover:text-red-400 ml-0.5 cursor-pointer text-teal-300/70"
+                            title={`Deselect ${hubCity}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mb-2.5 p-2 bg-zinc-900/50 border border-zinc-800 rounded-lg text-[11px] font-mono text-zinc-400">
+                      ℹ️ <span className="text-zinc-300">No hubs selected.</span> Choose from available unseeded regions below or add a custom metro.
+                    </div>
+                  )}
+
+                  {/* Available Unseeded Presets */}
+                  {availablePresets.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {availablePresets.map(hub => {
+                        const isSelected = selectedHubs.includes(hub.city);
+                        return (
+                          <button
+                            key={`hub-${hub.city}`}
+                            type="button"
+                            onClick={() => toggleHubSelection(hub.city)}
+                            disabled={isSeedingActive}
+                            className={`px-3 py-2 rounded-lg border text-xs font-mono font-bold text-left flex items-center justify-between transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-teal-950/70 border-teal-400 text-teal-100 shadow-[0_0_12px_rgba(45,212,191,0.25)] ring-1 ring-teal-400/50'
+                                : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                            }`}
+                          >
+                            <span className="truncate">{hub.label}</span>
+                            {isSelected ? (
+                              <Check className="w-3.5 h-3.5 text-teal-300 shrink-0 ml-1" />
+                            ) : (
+                              <Square className="w-3 h-3 text-zinc-600 shrink-0 ml-1" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-400">
+                      All default preset tour hubs have been seeded! Add any custom metro or international region below.
+                    </div>
+                  )}
                 </div>
+
+                {/* Custom User-Added Metros / Regions */}
+                {availableCustomHubs.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="text-[11px] uppercase font-mono font-bold text-emerald-400 tracking-wider flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                      Custom Added Regions ({availableCustomHubs.length})
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {availableCustomHubs.map(hubCity => {
+                        const isSelected = selectedHubs.includes(hubCity);
+                        return (
+                          <div
+                            key={`custom-hub-card-${hubCity}`}
+                            className={`px-3 py-2 rounded-lg border text-xs font-mono font-bold flex items-center justify-between transition-all ${
+                              isSelected
+                                ? 'bg-emerald-950/70 border-emerald-400 text-emerald-100 shadow-[0_0_12px_rgba(52,211,153,0.3)] ring-1 ring-emerald-400/50'
+                                : 'bg-zinc-900/70 border-zinc-750 text-zinc-300'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => toggleHubSelection(hubCity)}
+                              disabled={isSeedingActive}
+                              className="flex items-center gap-1.5 truncate flex-1 text-left cursor-pointer"
+                            >
+                              <MapPin className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-emerald-400' : 'text-zinc-500'}`} />
+                              <span className="truncate">{hubCity}</span>
+                            </button>
+                            <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                              {isSelected && <Check className="w-3.5 h-3.5 text-emerald-300 shrink-0" />}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCustomHub(hubCity)}
+                                disabled={isSeedingActive}
+                                className="text-zinc-500 hover:text-red-400 p-0.5 cursor-pointer transition-colors"
+                                title={`Remove custom hub '${hubCity}'`}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Custom Metro Input */}
                 <div>
-                  <label className="block text-[11px] uppercase font-mono font-bold text-zinc-400 mb-1.5 tracking-wider">
-                    Add Custom Metro / Region
+                  <label className="block text-[11px] uppercase font-mono font-bold text-zinc-300 mb-1.5 tracking-wider flex items-center justify-between">
+                    <span>Add Custom Metro / Region</span>
+                    <span className="text-[10px] text-teal-400 font-normal normal-case">Automatically selected upon adding</span>
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -2461,19 +2748,68 @@ Representing ${activeBandName}`;
                       onChange={e => setCustomCityInput(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') handleAddCustomHub(); }}
                       disabled={isSeedingActive}
-                      placeholder="e.g. Portland, Minneapolis, London..."
-                      className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-teal-500 placeholder:text-zinc-600"
+                      placeholder="e.g. Portland, Minneapolis, Montreal, Leeds..."
+                      className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 placeholder:text-zinc-600"
                     />
                     <button
                       type="button"
                       onClick={handleAddCustomHub}
                       disabled={isSeedingActive || !customCityInput.trim()}
-                      className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-white rounded-lg text-xs font-mono font-bold uppercase transition-colors"
+                      className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 disabled:opacity-40 text-black font-mono font-bold rounded-lg text-xs uppercase tracking-wider transition-all shadow-[0_0_10px_rgba(20,184,166,0.3)] cursor-pointer"
                     >
-                      + Add Hub
+                      + Add & Select
                     </button>
                   </div>
                 </div>
+
+                {/* Manual Venue Suggestion Notice */}
+                <div className="p-3 bg-purple-950/20 border border-purple-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-mono font-bold text-purple-200 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                      Looking for a specific DIY space or basement venue?
+                    </p>
+                    <p className="text-[11px] font-mono text-zinc-400">
+                      Public seeders only pull registered venues. If a spot is unlisted in a seeded location, enter any known details manually.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSeederModalOpen(false);
+                      setIsAddVenueOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-purple-600/90 hover:bg-purple-500 text-white rounded-lg text-[11px] font-mono font-bold uppercase transition-all shadow-sm shrink-0 cursor-pointer"
+                  >
+                    + Enter Manually
+                  </button>
+                </div>
+
+                {/* Already Seeded Protected Hubs */}
+                {seededHubs.length > 0 && (
+                  <div className="pt-2 border-t border-zinc-800/80">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[10px] uppercase font-mono font-bold text-zinc-500 tracking-wider flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                        Already Seeded & Protected ({seededHubs.length})
+                      </label>
+                      <span className="text-[9.5px] font-mono text-zinc-600">
+                        Locked to preserve curated entries & prevent noise
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {seededHubs.map(hubCity => (
+                        <span
+                          key={`seeded-hub-${hubCity}`}
+                          className="px-2 py-0.5 rounded bg-zinc-900/80 border border-zinc-800 text-zinc-400 text-[10px] font-mono flex items-center gap-1"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80"></span>
+                          {hubCity}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Live Seeding Terminal Logs */}
                 {seedingLogs.length > 0 && (
