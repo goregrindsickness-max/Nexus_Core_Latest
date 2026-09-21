@@ -638,7 +638,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                       <div 
                         className="relative p-[2px] rounded-full transition-transform duration-200 group-hover/avatar:scale-105"
                         style={{
-                          background: `linear-gradient(135deg, ${postTheme.colorHex}, rgba(255,255,255,0.45), ${postTheme.colorHex})`,
+                          backgroundColor: postTheme.colorHex,
                           boxShadow: `0 0 10px ${postTheme.colorHex}66, 0 0 20px ${postTheme.colorHex}26`
                         }}
                       >

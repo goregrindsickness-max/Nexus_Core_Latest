@@ -40,12 +40,57 @@ export const getDiscoverProfilesCacheKey = (userId?: string) =>
   `discoverProfiles_${userId || 'guest'}`;
 
 /**
+ * Helper to identify broken, defunct, or deleted avatar upload posts / orphaned posts
+ */
+export function isBrokenOrDeletedPost(post: any): boolean {
+  if (!post) return true;
+  const authorName = String(
+    post.author?.name || 
+    post.authorName || 
+    post.author?.full_name || 
+    post.profiles?.full_name || 
+    post.profiles?.console_handle || 
+    ''
+  ).toLowerCase().trim();
+  
+  const content = String(post.content || post.text || post.message || '').toLowerCase().trim();
+  
+  // Specific broken profile avatar uploads / orphaned records requested for removal
+  if (authorName.includes('kasper') && (content.includes('im here now') || content.includes('here now') || content.length < 30)) {
+    return true;
+  }
+  if (
+    authorName.includes('christopher wirstrom') || 
+    (authorName.includes('wirstrom') && content.includes('updated profile picture'))
+  ) {
+    return true;
+  }
+  if (content === 'im here now' && (authorName === 'kasper' || authorName === '' || authorName === 'anonymous' || authorName.includes('fan'))) {
+    return true;
+  }
+  if (content.includes('updated profile picture! check out the new look.') && (authorName.includes('christopher') || authorName.includes('wirstrom') || authorName === 'anonymous' || authorName === '')) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
  * Load cached feed items from IndexedDB
  */
 export async function loadFeedCache(portalRole: string, userId?: string, workspaceEntityId?: string): Promise<FeedItem[] | null> {
   try {
     const key = getFeedCacheKey(portalRole, userId, workspaceEntityId);
     const stored = await socialFeedStore.getItem<FeedItem[]>(key);
+    if (stored && Array.isArray(stored)) {
+      const deletedPosts = getDeletedPostIdsLocal();
+      const cleaned = stored.filter(p => p && !deletedPosts.includes(p.id) && !isBrokenOrDeletedPost(p));
+      if (cleaned.length !== stored.length) {
+        // Immediately persist cleaned cache back to IndexedDB
+        await socialFeedStore.setItem(key, cleaned);
+      }
+      return cleaned;
+    }
     return stored || null;
   } catch (e) {
     console.warn('Failed to load feed from IndexedDB:', e);
@@ -117,6 +162,29 @@ export async function loadDiscoverProfilesCache(userId?: string): Promise<any[] 
   } catch (e) {
     console.warn('Failed to load discover profiles cache:', e);
     return null;
+  }
+}
+
+/**
+ * Automatically sweeps and purges any broken/deleted post references across all IndexedDB keys
+ */
+export async function cleanBrokenPostsFromAllStores(): Promise<void> {
+  try {
+    const keys = await socialFeedStore.keys();
+    for (const key of keys) {
+      if (key.startsWith('feed_posts_')) {
+        const stored = await socialFeedStore.getItem<FeedItem[]>(key);
+        if (stored && Array.isArray(stored)) {
+          const deletedPosts = getDeletedPostIdsLocal();
+          const cleaned = stored.filter(p => p && !deletedPosts.includes(p.id) && !isBrokenOrDeletedPost(p));
+          if (cleaned.length !== stored.length) {
+            await socialFeedStore.setItem(key, cleaned);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Error during sweep of broken posts in IndexedDB:', e);
   }
 }
 

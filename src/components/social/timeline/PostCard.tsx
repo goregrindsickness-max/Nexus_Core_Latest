@@ -685,7 +685,7 @@ export const PostCard: React.FC<PostCardProps> = ({
             <div 
               className="relative p-[2px] rounded-full transition-transform duration-200 group-hover/avatar:scale-105"
               style={{
-                background: `linear-gradient(135deg, ${roleTheme.colorHex}, rgba(255,255,255,0.45), ${roleTheme.colorHex})`,
+                backgroundColor: roleTheme.colorHex,
                 boxShadow: `0 0 12px ${roleTheme.colorHex}66, 0 0 24px ${roleTheme.colorHex}26`
               }}
             >

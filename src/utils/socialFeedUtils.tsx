@@ -332,6 +332,8 @@ export function formatBandcampEmbedDarkUrl(url: string | null | undefined): stri
   return clean;
 }
 
+import { getApiFallbackEndpoints } from './apiConfig';
+
 export interface BandcampResolvedData {
   success: boolean;
   embedUrl: string | null;
@@ -346,13 +348,16 @@ export interface BandcampResolvedData {
   audioUrl?: string | null;
 }
 
+// In-memory cache for resolved Bandcamp metadata
+const bandcampResolvedMemoryCache = new Map<string, BandcampResolvedData>();
+
 export async function resolveBandcampMetadata(url: string): Promise<BandcampResolvedData | null> {
   if (!url || typeof url !== 'string') return null;
   const cleanUrl = url.trim();
 
-  // If already an iframe embed or EmbeddedPlayer url:
-  const iframeMatch = cleanUrl.match(/src=["'](https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^"']+)["']/i);
-  const directEmbedMatch = cleanUrl.match(/https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^\s"']+/i);
+  // 1. Direct iframe embed or EmbeddedPlayer URL check
+  const iframeMatch = cleanUrl.match(/src=["'](https?:\/\/bandcamp\.com\/EmbeddedPlayer\/[^"']+)["']/i);
+  const directEmbedMatch = cleanUrl.match(/https?:\/\/bandcamp\.com\/EmbeddedPlayer\/[^\s"']+/i);
   if (iframeMatch || directEmbedMatch) {
     const raw = (iframeMatch ? iframeMatch[1] : directEmbedMatch![0]).replace(/&amp;/g, '&');
     const trackId = raw.match(/track=(\d+)/i)?.[1] || null;
@@ -367,43 +372,78 @@ export async function resolveBandcampMetadata(url: string): Promise<BandcampReso
     };
   }
 
-  try {
-    const response = await fetch('/api/bandcamp/resolve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: cleanUrl })
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data && data.embedUrl) {
-        data.embedUrl = formatBandcampEmbedDarkUrl(data.embedUrl);
-      }
-      return data;
-    }
-  } catch (err) {
-    console.warn('[Bandcamp Resolve] Failed to query backend resolver:', err);
+  // 2. Check in-memory cache
+  if (bandcampResolvedMemoryCache.has(cleanUrl)) {
+    const cached = bandcampResolvedMemoryCache.get(cleanUrl)!;
+    if (cached && cached.embedUrl) return cached;
   }
 
-  // Graceful client-side fallback
-  const trackIdMatch = cleanUrl.match(/track=(\d+)/i);
-  const albumIdMatch = cleanUrl.match(/album=(\d+)/i);
+  // 3. Check localStorage cache
+  try {
+    const localCachedStr = localStorage.getItem(`nexus_bc_meta_${cleanUrl}`);
+    if (localCachedStr) {
+      const parsed = JSON.parse(localCachedStr);
+      if (parsed && parsed.embedUrl) {
+        bandcampResolvedMemoryCache.set(cleanUrl, parsed);
+        return parsed;
+      }
+    }
+  } catch (e) {}
+
+  // 4. Client-side regex match for direct track/album IDs in query params or paths
+  const trackIdMatch = cleanUrl.match(/track[=_](\d+)/i) || cleanUrl.match(/track\/[^/?#]+\?.*item_id=(\d+)/i);
+  const albumIdMatch = cleanUrl.match(/album[=_](\d+)/i) || cleanUrl.match(/album\/[^/?#]+\?.*item_id=(\d+)/i);
   if (trackIdMatch) {
-    return {
+    const resolved: BandcampResolvedData = {
       success: true,
       embedUrl: `https://bandcamp.com/EmbeddedPlayer/track=${trackIdMatch[1]}/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`,
       trackId: trackIdMatch[1],
       itemType: 'track',
       pageUrl: cleanUrl
     };
+    bandcampResolvedMemoryCache.set(cleanUrl, resolved);
+    return resolved;
   } else if (albumIdMatch) {
-    return {
+    const resolved: BandcampResolvedData = {
       success: true,
       embedUrl: `https://bandcamp.com/EmbeddedPlayer/album=${albumIdMatch[1]}/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`,
       albumId: albumIdMatch[1],
       itemType: 'album',
       pageUrl: cleanUrl
     };
+    bandcampResolvedMemoryCache.set(cleanUrl, resolved);
+    return resolved;
+  }
+
+  // 5. Query backend endpoints with automatic fallback (supporting Web & Native Android APK)
+  const endpoints = getApiFallbackEndpoints('/api/bandcamp/resolve');
+  for (const endpoint of endpoints) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: cleanUrl }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.embedUrl) {
+          data.embedUrl = formatBandcampEmbedDarkUrl(data.embedUrl);
+          bandcampResolvedMemoryCache.set(cleanUrl, data);
+          try {
+            localStorage.setItem(`nexus_bc_meta_${cleanUrl}`, JSON.stringify(data));
+          } catch (e) {}
+          return data;
+        }
+      }
+    } catch (err) {
+      console.warn(`[Bandcamp Resolve] Failed to query endpoint ${endpoint}:`, err);
+    }
   }
 
   return {

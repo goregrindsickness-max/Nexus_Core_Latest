@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { FeedItem } from '../../../data/socialFeedMockData';
-import { loadFeedCache, saveFeedCache, getDeletedPostIdsLocal, resolveWorkspaceEntityId } from '../utils/feedCacheUtils';
+import { loadFeedCache, saveFeedCache, getDeletedPostIdsLocal, resolveWorkspaceEntityId, isBrokenOrDeletedPost, cleanBrokenPostsFromAllStores } from '../utils/feedCacheUtils';
 import { getSupabase, subscribeToTable } from '../../../supabase';
 import { extractYouTubeId } from '../utils/postSyncUtils';
 import { mergePostWithReactions } from '../utils/reactionStore';
@@ -39,6 +39,9 @@ export function useFeedLocalCache({
     let active = true;
     const loadFeed = async () => {
       try {
+        // Asynchronously sweep and clean any stale broken posts across IndexedDB
+        cleanBrokenPostsFromAllStores().catch(() => {});
+
         const storedFeed = await loadFeedCache(portalRole, userProfile?.id, resolvedEntityId);
         if (!active) return;
         let finalFeed = storedFeed || [];
@@ -55,7 +58,15 @@ export function useFeedLocalCache({
 
             if (!error && data) {
               const deletedPosts = getDeletedPostIdsLocal();
-              const filteredData = data.filter((item: any) => !deletedPosts.includes(item.id));
+              const filteredData = data.filter((item: any) => {
+                if (deletedPosts.includes(item.id)) return false;
+                if (isBrokenOrDeletedPost(item)) return false;
+                try {
+                  const postObj = typeof item.data === 'string' ? JSON.parse(item.data) : (item.data || {});
+                  if (isBrokenOrDeletedPost(postObj)) return false;
+                } catch (e) {}
+                return true;
+              });
 
               if (filteredData.length > 0) {
                 const remoteFeed = filteredData.map((item: any) => {
@@ -161,6 +172,9 @@ export function useFeedLocalCache({
                       ? postObj.images
                       : (resolvedMediaUrl ? [resolvedMediaUrl] : []);
 
+                    const resolvedBandcampData = postObj.bandcampData || postObj.bandcamp_data || null;
+                    const resolvedBandcampUrl = postObj.bandcampUrl || postObj.bandcamp_url || (rawMediaUrl && rawMediaUrl.includes('bandcamp.com') ? rawMediaUrl : null);
+
                     const parsedPostItem = {
                       ...postObj,
                       id: item.id || postObj.id,
@@ -175,6 +189,10 @@ export function useFeedLocalCache({
                       youtube_id: ytId || postObj.youtube_id,
                       youtubeUrl: ytUrl || postObj.youtubeUrl,
                       youtube_url: ytUrl || postObj.youtube_url,
+                      bandcampData: resolvedBandcampData,
+                      bandcamp_data: resolvedBandcampData,
+                      bandcampUrl: resolvedBandcampUrl,
+                      bandcamp_url: resolvedBandcampUrl,
                       tapeData: postObj.tapeData,
                       songData: postObj.songData,
                       pollData: postObj.pollData,
@@ -219,14 +237,15 @@ export function useFeedLocalCache({
                   });
 
                   storedFeed.forEach(sp => {
-                    if (!remoteMap.has(sp.id) && !deletedPosts.includes(sp.id)) {
+                    const isDraftOrOptimistic = sp.id.startsWith('draft_') || sp.id.startsWith('local_') || (sp as any).isOptimistic;
+                    if (isDraftOrOptimistic && !remoteMap.has(sp.id) && !deletedPosts.includes(sp.id) && !isBrokenOrDeletedPost(sp)) {
                       merged.push(mergePostWithReactions(sp, userProfile?.id));
                     }
                   });
 
-                  finalFeed = merged;
+                  finalFeed = merged.filter(p => !isBrokenOrDeletedPost(p));
                 } else {
-                  finalFeed = remoteFeed.map(p => mergePostWithReactions(p, userProfile?.id));
+                  finalFeed = remoteFeed.filter(p => !isBrokenOrDeletedPost(p)).map(p => mergePostWithReactions(p, userProfile?.id));
                 }
 
                 // Query comments
@@ -474,7 +493,7 @@ export function useFeedLocalCache({
           };
 
           const deletedPosts = getDeletedPostIdsLocal();
-          if (deletedPosts.includes(parsedPost.id)) return;
+          if (deletedPosts.includes(parsedPost.id) || isBrokenOrDeletedPost(parsedPost)) return;
 
           _setFeed(prev => {
             let nextPrev = prev;

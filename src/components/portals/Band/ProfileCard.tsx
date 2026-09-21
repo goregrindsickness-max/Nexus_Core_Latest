@@ -1105,7 +1105,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   <div 
                     className="relative p-[3px] rounded-full mb-2 cursor-pointer transition-transform duration-200 hover:scale-105"
                     style={{
-                      background: `linear-gradient(135deg, ${getProfileGlowInfo(effTarget).color}, rgba(255,255,255,0.45), ${getProfileGlowInfo(effTarget).color})`,
+                      backgroundColor: getProfileGlowInfo(effTarget).color,
                       boxShadow: `0 0 20px ${getProfileGlowInfo(effTarget).color}88, 0 0 36px ${getProfileGlowInfo(effTarget).color}33`
                     }}
                     onClick={(e) => {

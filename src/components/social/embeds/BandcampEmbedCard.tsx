@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Disc, ExternalLink, Music2, Loader2 } from 'lucide-react';
 import { requestPauseSceneRadio } from '../utils/mediaPlaybackCoordinator';
 import { resolveBandcampMetadata, formatBandcampEmbedDarkUrl, BandcampResolvedData } from '../../../utils/socialFeedUtils';
+import { getSupabase } from '../../../supabase';
 
 interface BandcampEmbedCardProps {
   post?: any;
@@ -90,8 +91,19 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
   itemType: directItemType,
   compact = false
 }) => {
-  const bData = post?.bandcampData || {};
-  const rawEmbedUrl = directEmbedUrl || bData.embedUrl || post?.bandcampUrl || (post?.mediaUrl && post.mediaUrl.includes('bandcamp.com') ? post.mediaUrl : null) || (post?.image_url && post.image_url.includes('bandcamp.com') ? post.image_url : null);
+  const bData = post?.bandcampData || (post as any)?.bandcamp_data || (post as any)?.data?.bandcampData || (post as any)?.data?.bandcamp_data || {};
+  const rawEmbedUrl = directEmbedUrl || 
+    bData.embedUrl || 
+    bData.embed_url || 
+    post?.bandcampUrl || 
+    (post as any)?.bandcamp_url || 
+    (post as any)?.data?.bandcampUrl || 
+    (post as any)?.data?.bandcamp_url || 
+    (post?.mediaUrl && post.mediaUrl.includes('bandcamp.com') ? post.mediaUrl : null) || 
+    ((post as any)?.media_url && (post as any).media_url.includes('bandcamp.com') ? (post as any).media_url : null) || 
+    (post?.image_url && post.image_url.includes('bandcamp.com') ? post.image_url : null) || 
+    (post?.image && post.image.includes('bandcamp.com') ? post.image : null);
+
   const [asyncResolved, setAsyncResolved] = useState<BandcampResolvedData | null>(null);
   const [isResolving, setIsResolving] = useState<boolean>(false);
 
@@ -108,6 +120,24 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
         if (isMounted) {
           if (res && res.success && res.embedUrl) {
             setAsyncResolved(res);
+
+            // Asynchronously backfill Supabase if post was missing pre-resolved embedUrl
+            if (post?.id && (!bData.embedUrl && !bData.embed_url)) {
+              try {
+                const supabase = getSupabase();
+                if (supabase) {
+                  const existingData = (post as any)?.data || post || {};
+                  const updatedData = {
+                    ...existingData,
+                    bandcampData: res,
+                    bandcamp_data: res,
+                    bandcampUrl: res.pageUrl || rawEmbedUrl,
+                    bandcamp_url: res.pageUrl || rawEmbedUrl,
+                  };
+                  Promise.resolve(supabase.from('nexus_posts').update({ data: updatedData }).eq('id', post.id)).catch(() => {});
+                }
+              } catch (e) {}
+            }
           }
           setIsResolving(false);
         }
@@ -120,13 +150,13 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [rawEmbedUrl]);
+  }, [rawEmbedUrl, post?.id]);
 
-  const activeEmbedUrl = asyncResolved?.embedUrl || directEmbedUrl || bData.embedUrl || (rawEmbedUrl && rawEmbedUrl.includes('EmbeddedPlayer') ? rawEmbedUrl : null);
-  const trackTitle = directTitle || asyncResolved?.title || bData.title || post?.songData?.title || 'Bandcamp Stream';
-  const artistName = directArtist || asyncResolved?.artist || bData.artist || post?.songData?.band || post?.authorName || '';
-  const pageLink = directPageUrl || asyncResolved?.pageUrl || bData.pageUrl || post?.mediaUrl || (rawEmbedUrl && !rawEmbedUrl.includes('EmbeddedPlayer') ? rawEmbedUrl : null);
-  const itemType = directItemType || asyncResolved?.itemType || bData.itemType || (rawEmbedUrl?.includes('album=') ? 'album' : 'track');
+  const activeEmbedUrl = asyncResolved?.embedUrl || directEmbedUrl || bData.embedUrl || bData.embed_url || (rawEmbedUrl && rawEmbedUrl.includes('EmbeddedPlayer') ? rawEmbedUrl : null);
+  const trackTitle = directTitle || asyncResolved?.title || bData.title || (post as any)?.songData?.title || (post as any)?.title || 'Bandcamp Stream';
+  const artistName = directArtist || asyncResolved?.artist || bData.artist || (post as any)?.songData?.band || (post as any)?.authorName || (post as any)?.author?.name || '';
+  const pageLink = directPageUrl || asyncResolved?.pageUrl || bData.pageUrl || bData.page_url || post?.mediaUrl || (post as any)?.media_url || (rawEmbedUrl && !rawEmbedUrl.includes('EmbeddedPlayer') ? rawEmbedUrl : null);
+  const itemType = directItemType || asyncResolved?.itemType || bData.itemType || bData.item_type || (rawEmbedUrl?.includes('album=') ? 'album' : 'track');
 
   // Format the iframe embed src URL with pitch black background and cyan highlights
   let resolvedIframeSrc: string | null = null;
@@ -137,14 +167,14 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
       resolvedIframeSrc = formatBandcampEmbedDarkUrl(rawEmbedUrl);
     } else {
       // Check if trackId or albumId is available
-      const trackMatch = rawEmbedUrl.match(/track=(\d+)/i) || bData.trackId;
-      const albumMatch = rawEmbedUrl.match(/album=(\d+)/i) || bData.albumId;
+      const trackMatch = rawEmbedUrl.match(/track[=_](\d+)/i) || bData.trackId || bData.track_id;
+      const albumMatch = rawEmbedUrl.match(/album[=_](\d+)/i) || bData.albumId || bData.album_id;
       if (trackMatch) {
         const tId = typeof trackMatch === 'string' ? trackMatch : trackMatch[1];
-        resolvedIframeSrc = `https://bandcamp.com/EmbeddedPlayer/track=${tId}/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`;
+        resolvedIframeSrc = `https://bandcamp.com/EmbeddedPlayer/bgcol=000000/linkcol=06b6d4/v=2/track=${tId}/size=large/tracklist=false/artwork=small/transparent=true/`;
       } else if (albumMatch) {
         const aId = typeof albumMatch === 'string' ? albumMatch : albumMatch[1];
-        resolvedIframeSrc = `https://bandcamp.com/EmbeddedPlayer/album=${aId}/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`;
+        resolvedIframeSrc = `https://bandcamp.com/EmbeddedPlayer/bgcol=000000/linkcol=06b6d4/v=2/album=${aId}/size=large/tracklist=false/artwork=small/transparent=true/`;
       }
     }
   }
@@ -217,8 +247,9 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
             title={trackTitle || "Bandcamp Player"}
             style={{ border: 0, width: '100%', height: iframeHeight }}
             seamless
-            loading="lazy"
-            allow="autoplay"
+            loading="eager"
+            referrerPolicy="no-referrer"
+            allow="autoplay; encrypted-media; fullscreen; clipboard-write"
             className="w-full relative z-10 block bg-black"
           />
         ) : isResolving ? (

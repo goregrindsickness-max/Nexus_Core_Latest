@@ -4,6 +4,7 @@ import { StripeCheckoutModal } from './StripeCheckoutModal';
 import { requestPauseSceneRadio } from './utils/mediaPlaybackCoordinator';
 import { tapeAudioEngine } from './utils/tapeAudioEngine';
 import { isAudioUrl } from '../../utils/socialFeedUtils';
+import { isBrokenOrDeletedPost } from './utils/feedCacheUtils';
 import {
   FeedComment,
   SongEmbedData,
@@ -364,7 +365,7 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
       )}
 
       {(() => {
-        const processedPosts = [...posts].map(p => {
+        const processedPosts = [...posts].filter(p => !isBrokenOrDeletedPost(p)).map(p => {
           const override = boostedPosts[p.id];
           if (override) {
             return {

@@ -85,7 +85,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onActionClick
           <div 
             className="relative p-[2.5px] rounded-full transition-transform duration-200 group-hover/avatar:scale-105"
             style={{
-              background: `linear-gradient(135deg, ${roleColorHex}, rgba(255,255,255,0.45), ${roleColorHex})`,
+              backgroundColor: roleColorHex,
               boxShadow: `0 0 16px ${roleColorHex}88, 0 0 28px ${roleColorHex}33`
             }}
           >
