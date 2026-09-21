@@ -415,6 +415,39 @@ export async function resolveBandcampMetadata(url: string): Promise<BandcampReso
     return resolved;
   }
 
+  // 4.5. Query Bandcamp public oEmbed API directly from client (works in browser and Android APK)
+  try {
+    const oembedRes = await fetch(`https://bandcamp.com/api/oembed?url=${encodeURIComponent(cleanUrl)}&format=json`, {
+      method: 'GET',
+    });
+    if (oembedRes.ok) {
+      const oembedData = await oembedRes.json();
+      if (oembedData && oembedData.html) {
+        const srcMatch = oembedData.html.match(/src=["'](https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^"']+)["']/i);
+        if (srcMatch) {
+          const rawEmbed = srcMatch[1].replace(/&amp;/g, '&');
+          const trackId = rawEmbed.match(/track=(\d+)/i)?.[1] || null;
+          const albumId = rawEmbed.match(/album=(\d+)/i)?.[1] || null;
+          const resolved: BandcampResolvedData = {
+            success: true,
+            embedUrl: formatBandcampEmbedDarkUrl(rawEmbed),
+            trackId,
+            albumId,
+            itemType: trackId ? 'track' : (albumId ? 'album' : (cleanUrl.includes('album') ? 'album' : 'track')),
+            title: oembedData.title || undefined,
+            artist: oembedData.author_name || undefined,
+            pageUrl: cleanUrl
+          };
+          bandcampResolvedMemoryCache.set(cleanUrl, resolved);
+          try {
+            localStorage.setItem(`nexus_bc_meta_${cleanUrl}`, JSON.stringify(resolved));
+          } catch (e) {}
+          return resolved;
+        }
+      }
+    }
+  } catch (e) {}
+
   // 5. Query backend endpoints with automatic fallback (supporting Web & Native Android APK)
   const endpoints = getApiFallbackEndpoints('/api/bandcamp/resolve');
   for (const endpoint of endpoints) {
