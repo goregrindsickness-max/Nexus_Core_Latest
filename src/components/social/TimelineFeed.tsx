@@ -204,16 +204,15 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
   const openMerchLightbox = (post: FeedPost, initialIndex = 0) => {
     if (!post.merchData) return;
     const primary = post.merchData.thumbnail;
-    const extra = post.images && post.images.length > 0 ? post.images : [
-      primary,
-      'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Origin%20Destroyer%20T-Shirt%20copy.jpg',
-      'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Destroy%20the%20Opps.webp'
-    ];
-    const uniqueImages = Array.from(new Set([primary, ...extra]));
+    const merchImages = post.merchData.images && post.merchData.images.length > 0
+      ? post.merchData.images
+      : (post.images && post.images.length > 0 ? post.images : [primary]);
+    const uniqueImages = Array.from(new Set(merchImages.filter(Boolean))).slice(0, 3);
+    const imagesToUse = uniqueImages.length > 0 ? uniqueImages : [primary];
     setActiveMerchLightbox({
       post,
-      images: uniqueImages,
-      activeIndex: Math.min(initialIndex, uniqueImages.length - 1)
+      images: imagesToUse,
+      activeIndex: Math.min(initialIndex, Math.max(0, imagesToUse.length - 1))
     });
   };
 

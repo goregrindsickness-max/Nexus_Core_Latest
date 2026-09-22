@@ -227,6 +227,69 @@ export function isBandcampUrl(url?: string | null): boolean {
   return lower.includes('bandcamp.com');
 }
 
+export async function openBandcampLink(url?: string | null) {
+  if (!url) return;
+  const clean = url.trim();
+  const target = clean.startsWith('http') ? clean : `https://${clean}`;
+  try {
+    const win = window as any;
+    if (win.Capacitor && win.Capacitor.Plugins && win.Capacitor.Plugins.Browser) {
+      await win.Capacitor.Plugins.Browser.open({ url: target });
+      return;
+    }
+  } catch (e) {}
+
+  try {
+    const newWindow = window.open(target, '_blank', 'noopener,noreferrer');
+    if (!newWindow) {
+      window.location.href = target;
+    }
+  } catch (e) {
+    try {
+      window.location.href = target;
+    } catch (err) {}
+  }
+}
+
+export function normalizeBandcampUrl(url: string): string {
+  if (!url || typeof url !== 'string') return '';
+  let clean = url.trim();
+  const iframeMatch = clean.match(/src=["'](https?:\/\/[^"']+)["']/i);
+  if (iframeMatch) {
+    clean = iframeMatch[1];
+  }
+  return clean.replace(/&amp;/g, '&');
+}
+
+export function extractSlugMetadata(url: string) {
+  if (!url || typeof url !== 'string') return { artist: '', title: '', itemType: 'track' as const };
+  try {
+    const parsed = new URL(url.startsWith('http') ? url : `https://${url}`);
+    const hostParts = parsed.hostname.split('.');
+    let artist = '';
+    if (hostParts.length >= 3) {
+      artist = hostParts[0].replace(/-/g, ' ').toUpperCase();
+    }
+    const pathSegments = parsed.pathname.split('/').filter(Boolean);
+    let itemType: 'track' | 'album' = 'track';
+    let title = '';
+    if (pathSegments.length >= 2) {
+      const typeSegment = pathSegments[0].toLowerCase();
+      if (typeSegment === 'album') itemType = 'album';
+      title = pathSegments[1].replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    } else if (pathSegments.length === 1) {
+      title = pathSegments[0].replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+    return {
+      artist: artist || 'Bandcamp Artist',
+      title: title || 'Bandcamp Release',
+      itemType
+    };
+  } catch (e) {
+    return { artist: 'Bandcamp Artist', title: 'Bandcamp Release', itemType: 'track' as const };
+  }
+}
+
 export function getEmbedUrl(url: string | undefined | null): string | null {
   if (!url) return null;
   const cleanedUrl = url.trim();

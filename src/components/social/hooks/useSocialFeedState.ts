@@ -106,6 +106,13 @@ export function useSocialFeedState({
   const [merchDropName, setMerchDropName] = useState('');
   const [merchDropPrice, setMerchDropPrice] = useState('25');
   const [merchDropThumbnail, setMerchDropThumbnail] = useState('https://images.unsplash.com/photo-1572913017567-02f06497f1f9?w=500');
+  const [merchDropImages, setMerchDropImages] = useState<string[]>(['https://images.unsplash.com/photo-1572913017567-02f06497f1f9?w=500']);
+  const [merchDropCategory, setMerchDropCategory] = useState('Apparel');
+  const [merchDropDescription, setMerchDropDescription] = useState('');
+  const [merchDropVariants, setMerchDropVariants] = useState<string[]>(['S', 'M', 'L', 'XL', '2XL']);
+  const [merchDropStock, setMerchDropStock] = useState('50');
+  const [merchDropIsUnlimited, setMerchDropIsUnlimited] = useState(false);
+  const [merchDropAllowNegotiation, setMerchDropAllowNegotiation] = useState(true);
   const [merchDropIsTimed, setMerchDropIsTimed] = useState(false);
   const [merchDropTimerHours, setMerchDropTimerHours] = useState('24');
   const [merchDropTimerMinutes, setMerchDropTimerMinutes] = useState('0');
@@ -665,6 +672,7 @@ export function useSocialFeedState({
         profileAvatarUrl,
       });
 
+      const activeAuthorId = userProfile?.id || (userProfile as any)?.profile_id;
       const authorName = resolvedPersona.name;
       const authorAvatar = resolvedPersona.avatarUrl;
       const authorRole = resolvedPersona.roleBadge;
@@ -714,29 +722,50 @@ export function useSocialFeedState({
       const totalMs = (timerHoursNum * 3600 + timerMinsNum * 60) * 1000;
       const expiresAtValue = merchDropIsTimed && totalMs > 0 ? new Date(Date.now() + totalMs).toISOString() : undefined;
 
+      const parsedStock = merchDropIsUnlimited ? undefined : (Math.max(1, parseInt(merchDropStock) || 50));
+      const resolvedSizes = merchDropVariants && merchDropVariants.length > 0 ? merchDropVariants : ['Standard'];
+
+      const resolvedImages = (merchDropImages && merchDropImages.length > 0 ? merchDropImages : [merchDropThumbnail])
+        .filter(Boolean)
+        .slice(0, 3);
+      const primaryThumb = resolvedImages[0] || merchDropThumbnail.trim() || 'https://images.unsplash.com/photo-1572913017567-02f06497f1f9?w=500';
+
       const merchDataValue = merchDropName.trim()
         ? {
             name: merchDropName.trim(),
             price: Number(merchDropPrice.trim()) || 25,
-            thumbnail: merchDropThumbnail.trim() || 'https://images.unsplash.com/photo-1572913017567-02f06497f1f9?w=500',
-            sizes: ['S', 'M', 'L', 'XL', 'XXL'],
-            isTimed: merchDropIsTimed,
-            durationHours: timerHoursNum + timerMinsNum / 60,
+            thumbnail: primaryThumb,
+            images: resolvedImages.length > 0 ? resolvedImages : [primaryThumb],
+            sizes: resolvedSizes,
+            isTimed: Boolean(merchDropIsTimed),
+            durationHours: merchDropIsTimed ? (timerHoursNum + timerMinsNum / 60) : undefined,
             expiresAt: expiresAtValue,
+            stock: parsedStock,
+            totalStock: parsedStock,
+            isUnlimited: Boolean(merchDropIsUnlimited),
+            category: merchDropCategory || 'Apparel',
+            description: merchDropDescription.trim() || undefined,
+            allowNegotiation: merchDropAllowNegotiation,
           }
         : undefined;
 
       if (merchDataValue) {
+        const sellerId = isBandRole ? (activeBand?.id || resolvedPersona.id || activeAuthorId) : (resolvedPersona.id || activeAuthorId);
         createShopMerchItem({
           name: merchDataValue.name,
           price: merchDataValue.price,
           thumbnail: merchDataValue.thumbnail,
+          images: merchDataValue.images,
           sizes: merchDataValue.sizes,
           is_timed: merchDataValue.isTimed,
           expires_at: merchDataValue.expiresAt,
           duration_hours: merchDataValue.durationHours,
           seller_name: authorName,
-        });
+          category: merchDataValue.category,
+          description: merchDataValue.description,
+          stock: merchDataValue.stock,
+          allow_negotiation: merchDataValue.allowNegotiation,
+        }, sellerId);
       }
 
       // Deduplicated & Persistent Event Page Integration (Completely Optional)
@@ -805,8 +834,6 @@ export function useSocialFeedState({
       const postUuid = typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
         : 'f' + Date.now().toString(16) + '-4000-8000-8000-' + Math.floor(Math.random() * 1e12).toString(16).padStart(12, '0');
-
-      const activeAuthorId = userProfile?.id || (userProfile as any)?.profile_id;
 
       const ytId = youtubeUrl ? getYouTubeId(youtubeUrl) : undefined;
       const ytUrl = youtubeUrl || (ytId ? `https://www.youtube.com/watch?v=${ytId}` : undefined);
@@ -917,6 +944,13 @@ export function useSocialFeedState({
       setMerchDropName('');
       setMerchDropPrice('25');
       setMerchDropThumbnail('https://images.unsplash.com/photo-1572913017567-02f06497f1f9?w=500');
+      setMerchDropImages(['https://images.unsplash.com/photo-1572913017567-02f06497f1f9?w=500']);
+      setMerchDropCategory('Apparel');
+      setMerchDropDescription('');
+      setMerchDropVariants(['S', 'M', 'L', 'XL', '2XL']);
+      setMerchDropStock('50');
+      setMerchDropIsUnlimited(false);
+      setMerchDropAllowNegotiation(true);
       setMerchDropIsTimed(false);
       setMerchDropTimerHours('24');
       setMerchDropTimerMinutes('0');
@@ -1024,6 +1058,20 @@ export function useSocialFeedState({
     setMerchDropPrice,
     merchDropThumbnail,
     setMerchDropThumbnail,
+    merchDropImages,
+    setMerchDropImages,
+    merchDropCategory,
+    setMerchDropCategory,
+    merchDropDescription,
+    setMerchDropDescription,
+    merchDropVariants,
+    setMerchDropVariants,
+    merchDropStock,
+    setMerchDropStock,
+    merchDropIsUnlimited,
+    setMerchDropIsUnlimited,
+    merchDropAllowNegotiation,
+    setMerchDropAllowNegotiation,
     merchDropIsTimed,
     setMerchDropIsTimed,
     merchDropTimerHours,

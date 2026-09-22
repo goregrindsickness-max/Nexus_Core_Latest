@@ -152,7 +152,9 @@ export function UniversalSocialFeed({
   onNavigateToTab,
   setActiveTab: propSetActiveTab,
   setDashboardV2ActiveNav,
-  dashboardV2ActiveNav
+  dashboardV2ActiveNav,
+  shows: propShows,
+  setShows: propSetShows
 }: any) {
   const portalRoleState = useSocialPortalRole({
     initialRole: propPortalRole,
@@ -872,8 +874,8 @@ export function UniversalSocialFeed({
   } = useSocialStoriesState();
 
   // Map Filter States
-  const [selectedCityFilter, setSelectedCityFilter] = useState('All');
-  const [mapFilterGenre, setMapFilterGenre] = useState('All');
+  const [selectedCityFilter, setSelectedCityFilter] = useState('all');
+  const [mapFilterGenre, setMapFilterGenre] = useState('all');
 
   // EPK Drag States
   const [isEpkDragOver, setIsEpkDragOver] = useState(false);
@@ -989,8 +991,7 @@ export function UniversalSocialFeed({
   });
 
   // Fetch events and setlists with followed artist ranking and upcoming date formatting
-  useEffect(() => {
-    const fetchEventsAndSetlists = async () => {
+  const fetchEventsAndSetlists = useCallback(async () => {
       const supabaseClient = getSupabase();
       if (!supabaseClient) return;
 
@@ -1059,127 +1060,154 @@ export function UniversalSocialFeed({
           });
         }
 
-        // Also check if shows table has active dates if nexus_events is sparse
-        if (compiledGigs.length < 6) {
-          try {
-            const { data: showsData } = await supabaseClient
-              .from('shows')
-              .select('*')
-              .order('date', { ascending: true })
-              .limit(15);
+        // Unconditionally import and merge all active dates from the shows database table, local storage, and props
+        try {
+          const allRawShows: any[] = [];
 
-            if (showsData && showsData.length > 0) {
-              const showsGigs = showsData
-                .filter(s => {
-                  const sId = String(s.id || '').toLowerCase().trim();
-                  const sH = String(s.headliner || s.band_name || s.name || s.show_name || '').toLowerCase().trim();
-                  const sD = String(s.date || s.show_date || '').toLowerCase().trim();
-                  const sig = `${sH}__${sD}`;
-                  if (sId && deletedShowIds.has(sId)) return false;
-                  if (sH && sD && deletedShowIds.has(sig)) return false;
-                  return true;
-                })
-                .map(s => {
-                const extra = extendedMap[s.id] || (s.show_name ? Object.values(extendedMap).find((v: any) => v.name === s.show_name || v.show_name === s.show_name || (v.date === s.date && v.city === s.city)) : null);
-                const headlinerClean = (extra?.headliner || s.headliner || s.band_name || s.name || s.show_name || extra?.name || 'Headliner').trim();
-                const isFollowed = !!(localFollows[headlinerClean.toLowerCase()] || (s.band_id && localFollows[s.band_id]));
-                
-                let dateDisplay = 'Upcoming';
-                const rawDate = s.date || s.show_date || extra?.date;
-                if (rawDate) {
-                  try {
-                    const dateStr = String(rawDate).split('T')[0];
-                    const parts = dateStr.split('-');
-                    if (parts.length === 3) {
-                      const year = parseInt(parts[0], 10);
-                      const month = parseInt(parts[1], 10) - 1;
-                      const day = parseInt(parts[2], 10);
-                      const parsedDate = new Date(year, month, day);
-                      const today = new Date();
-                      const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                      const tomorrowNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+          // 1. Fetch from Supabase shows table
+          const { data: showsData } = await supabaseClient
+            .from('shows')
+            .select('*')
+            .order('date', { ascending: true });
 
-                      if (parsedDate.getTime() === todayNorm.getTime()) {
-                        dateDisplay = 'Tonight';
-                      } else if (parsedDate.getTime() === tomorrowNorm.getTime()) {
-                        dateDisplay = 'Tomorrow';
-                      } else {
-                        dateDisplay = parsedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-                      }
-                    }
-                  } catch (e) {}
-                }
-
-                const doorsVal = extra?.doors_time || s.doors_time;
-                const timeDisplay = doorsVal 
-                  ? (String(doorsVal).toLowerCase().includes('door') ? doorsVal : `Doors ${doorsVal}`) 
-                  : (s.set_time ? `Set ${s.set_time}` : (extra?.set_time ? `Set ${extra.set_time}` : (s.time || 'Doors 7:30 PM')));
-
-                const venueDisplay = extra?.venue || extra?.venue_name || s.venue || s.venue_name || s.venue_address || (s.name && !s.name.includes('Live') ? s.name : undefined) || 'Underground Venue';
-                
-                // Prioritize exact user prices and prevent falling back to hardcoded $25.00
-                let priceDisplay = extra?.price || s.price;
-                if (!priceDisplay) {
-                  if (extra?.day_of_show_price || s.day_of_show_price) {
-                    const dos = extra?.day_of_show_price || s.day_of_show_price;
-                    const presale = extra?.presale_price || s.presale_price;
-                    priceDisplay = presale ? `$${presale} / $${dos}` : (dos.startsWith('$') ? dos : `$${dos}`);
-                  } else if (extra?.presale_price || s.presale_price) {
-                    const presale = extra?.presale_price || s.presale_price;
-                    priceDisplay = presale.startsWith('$') ? presale : `$${presale}`;
-                  } else if (s.ticket_price) {
-                    priceDisplay = `$${s.ticket_price}`;
-                  } else if (extra?.external_ticket_url || s.external_ticket_url) {
-                    priceDisplay = 'External Tickets';
-                  } else if (s.is_community_submitted || extra?.is_community_submitted) {
-                    priceDisplay = 'Free / DIY';
-                  } else if (s.guarantee_amount && s.guarantee_amount > 0) {
-                    priceDisplay = `$${Math.min(45, Math.max(15, Math.round(s.guarantee_amount / 100)))}`;
-                  } else {
-                    priceDisplay = '$20.00';
-                  }
-                }
-
-                const rawCity = s.city || extra?.city;
-                const rawState = s.state_province || extra?.state_province;
-                const rawCountry = s.country || extra?.country;
-                const venueNameVal = extra?.venue_name || s.venue_name || extra?.venue || s.venue || 'Underground Venue';
-                const venueAddrVal = extra?.venue_address || s.venue_address;
-                const capVal = extra?.capacity || s.capacity || extra?.venue_capacity || s.venue_capacity || extra?.expected_attendance || s.expected_attendance;
-
-                return {
-                  ...s,
-                  ...(extra || {}),
-                  id: s.id,
-                  venue: venueDisplay,
-                  venue_name: venueNameVal,
-                  venue_address: venueAddrVal,
-                  capacity: capVal,
-                  venue_capacity: capVal,
-                  headliner: headlinerClean,
-                  time: timeDisplay,
-                  date: dateDisplay,
-                  rawDate: rawDate,
-                  city: rawCity,
-                  state_province: rawState,
-                  country: rawCountry,
-                  price: priceDisplay,
-                  day_of_show_price: extra?.day_of_show_price || s.day_of_show_price,
-                  presale_price: extra?.presale_price || s.presale_price,
-                  safety_code: extra?.safety_code || s.safety_code,
-                  isFollowed,
-                  external_ticket_url: extra?.external_ticket_url || s.external_ticket_url,
-                  ticket_url: extra?.ticket_url || s.ticket_url || extra?.external_ticket_url || s.external_ticket_url,
-                  ticketsAvailable: !!(extra?.external_ticket_url || s.external_ticket_url || extra?.ticket_url || s.ticket_url || priceDisplay),
-                  ticketStatus: 'active',
-                  is_community_submitted: !!(s.is_community_submitted || extra?.is_community_submitted)
-                };
-              });
-
-              compiledGigs = [...compiledGigs, ...showsGigs];
+          if (showsData && Array.isArray(showsData) && showsData.length > 0) {
+            allRawShows.push(...showsData);
+          } else {
+            // Fallback only if no shows in Supabase table
+            if (propShows && Array.isArray(propShows) && propShows.length > 0) {
+              allRawShows.push(...propShows);
             }
-          } catch (e) {}
-        }
+          }
+
+          if (allRawShows.length > 0) {
+            // Deduplicate raw shows by id or headliner + date
+            const dedupedRawShows: any[] = [];
+            const seenShowMap = new Set<string>();
+
+            allRawShows.forEach(s => {
+              if (!s) return;
+              const sId = String(s.id || '').toLowerCase().trim();
+              const sH = String(s.headliner || s.band_name || s.name || s.show_name || '').toLowerCase().trim();
+              const sD = String(s.date || s.show_date || '').toLowerCase().trim();
+              const sig = sId ? `id_${sId}` : `h_${sH}__${sD}`;
+              if (!seenShowMap.has(sig)) {
+                seenShowMap.add(sig);
+                dedupedRawShows.push(s);
+              }
+            });
+
+            const showsGigs = dedupedRawShows
+              .filter(s => {
+                const sId = String(s.id || '').toLowerCase().trim();
+                const sH = String(s.headliner || s.band_name || s.name || s.show_name || '').toLowerCase().trim();
+                const sD = String(s.date || s.show_date || '').toLowerCase().trim();
+                const sig = `${sH}__${sD}`;
+                if (sId && deletedShowIds.has(sId)) return false;
+                if (sH && sD && deletedShowIds.has(sig)) return false;
+                return true;
+              })
+              .map(s => {
+              const extra = extendedMap[s.id] || (s.show_name ? Object.values(extendedMap).find((v: any) => v.name === s.show_name || v.show_name === s.show_name || (v.date === s.date && v.city === s.city)) : null);
+              const headlinerClean = (extra?.headliner || s.headliner || s.band_name || s.name || s.show_name || extra?.name || 'Headliner').trim();
+              const isFollowed = !!(localFollows[headlinerClean.toLowerCase()] || (s.band_id && localFollows[s.band_id]));
+              
+              let dateDisplay = 'Upcoming';
+              const rawDate = s.date || s.show_date || extra?.date;
+              if (rawDate) {
+                try {
+                  const dateStr = String(rawDate).split('T')[0];
+                  const parts = dateStr.split('-');
+                  if (parts.length === 3) {
+                    const year = parseInt(parts[0], 10);
+                    const month = parseInt(parts[1], 10) - 1;
+                    const day = parseInt(parts[2], 10);
+                    const parsedDate = new Date(year, month, day);
+                    const today = new Date();
+                    const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                    const tomorrowNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
+                    if (parsedDate.getTime() === todayNorm.getTime()) {
+                      dateDisplay = 'Tonight';
+                    } else if (parsedDate.getTime() === tomorrowNorm.getTime()) {
+                      dateDisplay = 'Tomorrow';
+                    } else {
+                      dateDisplay = parsedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+                    }
+                  }
+                } catch (e) {}
+              }
+
+              const doorsVal = extra?.doors_time || s.doors_time;
+              const timeDisplay = doorsVal 
+                ? (String(doorsVal).toLowerCase().includes('door') ? doorsVal : `Doors ${doorsVal}`) 
+                : (s.set_time ? `Set ${s.set_time}` : (extra?.set_time ? `Set ${extra.set_time}` : (s.time || 'Doors 7:30 PM')));
+
+              const venueDisplay = extra?.venue || extra?.venue_name || s.venue || s.venue_name || s.venue_address || (s.name && !s.name.includes('Live') ? s.name : undefined) || 'Underground Venue';
+              
+              // Prioritize exact user prices and prevent falling back to hardcoded $25.00
+              let priceDisplay = extra?.price || s.price;
+              if (!priceDisplay) {
+                if (extra?.day_of_show_price || s.day_of_show_price) {
+                  const dos = extra?.day_of_show_price || s.day_of_show_price;
+                  const presale = extra?.presale_price || s.presale_price;
+                  priceDisplay = presale ? `$${presale} / $${dos}` : (dos.startsWith('$') ? dos : `$${dos}`);
+                } else if (extra?.presale_price || s.presale_price) {
+                  const presale = extra?.presale_price || s.presale_price;
+                  priceDisplay = presale.startsWith('$') ? presale : `$${presale}`;
+                } else if (s.ticket_price) {
+                  priceDisplay = `$${s.ticket_price}`;
+                } else if (extra?.external_ticket_url || s.external_ticket_url) {
+                  priceDisplay = 'External Tickets';
+                } else if (s.is_community_submitted || extra?.is_community_submitted) {
+                  priceDisplay = 'Free / DIY';
+                } else if (s.guarantee_amount && s.guarantee_amount > 0) {
+                  priceDisplay = `$${Math.min(45, Math.max(15, Math.round(s.guarantee_amount / 100)))}`;
+                } else {
+                  priceDisplay = '$20.00';
+                }
+              }
+
+              const rawCity = s.city || extra?.city;
+              const rawState = s.state_province || extra?.state_province;
+              const rawCountry = s.country || extra?.country;
+              const venueNameVal = extra?.venue_name || s.venue_name || extra?.venue || s.venue || 'Underground Venue';
+              const venueAddrVal = extra?.venue_address || s.venue_address;
+              const capVal = extra?.capacity || s.capacity || extra?.venue_capacity || s.venue_capacity || extra?.expected_attendance || s.expected_attendance;
+
+              return {
+                ...s,
+                ...(extra || {}),
+                id: s.id,
+                venue: venueDisplay,
+                venue_name: venueNameVal,
+                venue_address: venueAddrVal,
+                capacity: capVal,
+                venue_capacity: capVal,
+                headliner: headlinerClean,
+                time: timeDisplay,
+                date: dateDisplay,
+                rawDate: rawDate,
+                city: rawCity,
+                state_province: rawState,
+                country: rawCountry,
+                price: priceDisplay,
+                day_of_show_price: extra?.day_of_show_price || s.day_of_show_price,
+                presale_price: extra?.presale_price || s.presale_price,
+                safety_code: extra?.safety_code || s.safety_code,
+                isFollowed,
+                isFromShowsTable: true,
+                source: 'shows_table',
+                external_ticket_url: extra?.external_ticket_url || s.external_ticket_url,
+                ticket_url: extra?.ticket_url || s.ticket_url || extra?.external_ticket_url || s.external_ticket_url,
+                ticketsAvailable: !!(extra?.external_ticket_url || s.external_ticket_url || extra?.ticket_url || s.ticket_url || priceDisplay),
+                ticketStatus: 'active',
+                is_community_submitted: !!(s.is_community_submitted || extra?.is_community_submitted)
+              };
+            });
+
+            compiledGigs = [...compiledGigs, ...showsGigs];
+          }
+        } catch (e) {}
 
         // Clean up any stale duplicate keys from extendedMap that now exist in compiledGigs
         if (Object.keys(extendedMap).length > 0) {
@@ -1318,9 +1346,11 @@ export function UniversalSocialFeed({
       } catch (err) {
         console.error("Failed to fetch events and setlists:", err);
       }
-    };
+  }, [propShows]);
+
+  useEffect(() => {
     fetchEventsAndSetlists();
-  }, []);
+  }, [fetchEventsAndSetlists]);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 1500);
@@ -1642,6 +1672,20 @@ export function UniversalSocialFeed({
     setMerchDropPrice,
     merchDropThumbnail,
     setMerchDropThumbnail,
+    merchDropImages,
+    setMerchDropImages,
+    merchDropCategory,
+    setMerchDropCategory,
+    merchDropDescription,
+    setMerchDropDescription,
+    merchDropVariants,
+    setMerchDropVariants,
+    merchDropStock,
+    setMerchDropStock,
+    merchDropIsUnlimited,
+    setMerchDropIsUnlimited,
+    merchDropAllowNegotiation,
+    setMerchDropAllowNegotiation,
     merchDropIsTimed,
     setMerchDropIsTimed,
     merchDropTimerHours,
@@ -1854,26 +1898,26 @@ export function UniversalSocialFeed({
 
     const handleAvatarUpdateEvent = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail && detail.avatarUrl) {
-        const autoPost: FeedItem = {
-          id: `avatar_update_${Date.now()}`,
-          type: 'post',
-          author: {
-            name: detail.authorName || userProfile?.name || 'User',
-            avatar: detail.avatarUrl,
-            role: detail.authorRole || portalRole || 'Artist',
-          },
-          timeAgo: 'Just now',
-            timestamp: new Date().toISOString(),
-          content: '✨ Updated profile picture! Check out the new look.',
-          tag: 'PROFILE SIGNAL',
-          image: detail.avatarUrl,
-          images: [detail.avatarUrl],
-          reactions: [{ type: 'flame', count: 1, active: true }],
-          comments: []
-        };
-        setFeed(prev => [autoPost, ...prev]);
-        syncPostToSupabase(autoPost);
+      const newAvatarUrl = detail?.avatarUrl || detail?.avatar_url || detail?.logo_url;
+      if (newAvatarUrl && typeof newAvatarUrl === 'string') {
+        const targetUserId = detail.id || userProfile?.id;
+        const targetName = (detail.authorName || detail.name || userProfile?.name || '').toLowerCase().trim();
+        // Dynamically update the author avatar across in-memory feed items without creating a duplicate post
+        setFeed(prev => prev.map(item => {
+          const rawItem = item as any;
+          const itemUserId = rawItem.user_id || rawItem.author_id || item.author?.id;
+          const itemName = (item.author?.name || rawItem.authorName || '').toLowerCase().trim();
+          if ((targetUserId && itemUserId === targetUserId) || (targetName && itemName === targetName)) {
+            return {
+              ...item,
+              author: {
+                ...item.author,
+                avatar: newAvatarUrl
+              }
+            };
+          }
+          return item;
+        }));
       }
     };
 
@@ -5361,7 +5405,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         setItemImages={setItemImages}
         handleSaveItem={handleSaveItem}
 
-        // Map
+        // Map & Events Directory
         showMapModal={showMapModal}
         setShowMapModal={setShowMapModal}
         setSelectedGigOnMap={setSelectedGigOnMap}
@@ -5370,6 +5414,15 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         setSelectedCityFilter={setSelectedCityFilter}
         mapFilterGenre={mapFilterGenre}
         setMapFilterGenre={setMapFilterGenre}
+        liveEvents={liveEvents}
+        setLiveEvents={setLiveEvents}
+        shows={propShows}
+        setShows={propSetShows}
+        onImportShowsFromTable={fetchEventsAndSetlists}
+        onOpenShowCreator={() => { setEditingCommunityShow(null); setIsCommunityShowModalOpen(true); }}
+        onSelectEvent={(gig) => {
+          setActiveEventData(gig);
+        }}
 
         // Poll
         showPollModal={showPollModal}
@@ -5397,14 +5450,26 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         setMerchDropPrice={setMerchDropPrice}
         merchDropThumbnail={merchDropThumbnail}
         setMerchDropThumbnail={setMerchDropThumbnail}
+        merchDropImages={merchDropImages}
+        setMerchDropImages={setMerchDropImages}
+        merchDropCategory={merchDropCategory}
+        setMerchDropCategory={setMerchDropCategory}
+        merchDropDescription={merchDropDescription}
+        setMerchDropDescription={setMerchDropDescription}
+        merchDropVariants={merchDropVariants}
+        setMerchDropVariants={setMerchDropVariants}
+        merchDropStock={merchDropStock}
+        setMerchDropStock={setMerchDropStock}
+        merchDropIsUnlimited={merchDropIsUnlimited}
+        setMerchDropIsUnlimited={setMerchDropIsUnlimited}
+        merchDropAllowNegotiation={merchDropAllowNegotiation}
+        setMerchDropAllowNegotiation={setMerchDropAllowNegotiation}
         merchDropIsTimed={merchDropIsTimed}
         setMerchDropIsTimed={setMerchDropIsTimed}
         merchDropTimerHours={merchDropTimerHours}
         setMerchDropTimerHours={setMerchDropTimerHours}
         merchDropTimerMinutes={merchDropTimerMinutes}
         setMerchDropTimerMinutes={setMerchDropTimerMinutes}
-        merchDropDescription=""
-        setMerchDropDescription={() => {}}
         handlePublishMerchDrop={() => {}}
 
         // DIY Event Modal

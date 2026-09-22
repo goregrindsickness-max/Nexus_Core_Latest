@@ -684,6 +684,24 @@ export async function autoArchiveProfileAssets(
       userProfileName || existingProfile.full_name || existingProfile.name || 'Nexus Member';
 
     const insertArchivePost = async (folderName: string, mediaUrl: string, captionText: string) => {
+      // Deduplicate: check if this media URL is already archived for this user in nexus_posts
+      if (supabaseClient) {
+        try {
+          const { data: existingPost } = await supabaseClient
+            .from('nexus_posts')
+            .select('id')
+            .eq('profile_id', userId)
+            .eq('media_url', mediaUrl)
+            .limit(1);
+          if (existingPost && existingPost.length > 0) {
+            console.log(`[AutoArchive] Media asset ${mediaUrl} already archived for user ${userId}, skipping duplicate.`);
+            return;
+          }
+        } catch (e) {
+          // continue with insertion
+        }
+      }
+
       const postUuid =
         typeof crypto !== 'undefined' && crypto.randomUUID
           ? crypto.randomUUID()
@@ -706,6 +724,10 @@ export async function autoArchiveProfileAssets(
         gallery_folder: folderName,
         folder: folderName,
         is_archived_asset: true,
+        is_gallery_only: true,
+        gallery_only: true,
+        post_to_feed: false,
+        hidden_from_feed: true,
       };
 
       if (supabaseClient) {
@@ -726,19 +748,18 @@ export async function autoArchiveProfileAssets(
         }
       }
 
+      // Add quietly to local vault cache for Photo Pit / Gallery view without spamming public feed
       try {
-        const cachedFeedRaw =
-          localStorage.getItem('nexus_social_feed_cache') || localStorage.getItem('nexus_social_feed_v2');
-        let feedItems: any[] = [];
-        if (cachedFeedRaw) {
+        const vaultRaw = localStorage.getItem('nexus_dbUserPosts');
+        let vaultItems: any[] = [];
+        if (vaultRaw) {
           try {
-            feedItems = JSON.parse(cachedFeedRaw);
+            vaultItems = JSON.parse(vaultRaw);
           } catch (e) {}
         }
-        if (!feedItems.some((item: any) => item.image === mediaUrl || item.media_url === mediaUrl)) {
-          feedItems.unshift(postObj);
-          localStorage.setItem('nexus_social_feed_cache', JSON.stringify(feedItems));
-          localStorage.setItem('nexus_social_feed_v2', JSON.stringify(feedItems));
+        if (!vaultItems.some((item: any) => item.image === mediaUrl || item.media_url === mediaUrl || item.id === postUuid)) {
+          vaultItems.unshift(postObj);
+          localStorage.setItem('nexus_dbUserPosts', JSON.stringify(vaultItems));
         }
       } catch (e) {}
     };

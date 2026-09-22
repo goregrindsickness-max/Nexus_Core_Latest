@@ -5,6 +5,7 @@ import { base64ToBlob, uploadStoryMediaToStorage } from '../../../services/stora
 import { publishStoryAuthoritative, StoryItem } from '../utils/storiesPersistenceService';
 import { StickerPlayer } from '../../stories/StickerPlayer';
 import { resolveBandcampMetadata } from '../../../utils/socialFeedUtils';
+import { BandcampSearchHelper } from '../embeds/BandcampSearchHelper';
 import {
   Sparkles,
   X,
@@ -169,6 +170,16 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
     } finally {
       setIsFetchingBandcamp(false);
     }
+  };
+
+  const handleSelectStoryBandcampTrack = (track: { url: string; title: string; artist: string; artworkUrl?: string; previewUrl?: string }) => {
+    setBandcampLinkInput(track.url);
+    if (track.title) setBcTrackTitle(track.title);
+    if (track.artist) setBcArtistName(track.artist);
+    if (track.artworkUrl) setBcCoverArtUrl(track.artworkUrl);
+    if (track.previewUrl) setBcAudioUrl(track.previewUrl);
+    setBcBandcampUrl(track.url);
+    triggerNotification?.(`Connected: ${track.artist} - ${track.title}`);
   };
 
   const handleAddBandcampSticker = () => {
@@ -996,10 +1007,15 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
                     {/* BANDCAMP STICKER CREATOR */}
                     {stickerCategory === 'bandcamp_badge' && (
                       <div className="space-y-3 bg-zinc-950/70 p-3 rounded-xl border border-cyan-500/30">
+                        {/* Search Bar for Songs on Bandcamp */}
+                        <BandcampSearchHelper
+                          onSelectTrack={handleSelectStoryBandcampTrack}
+                        />
+
                         {/* Auto-Fetch Bar */}
                         <div>
                           <label className="text-[9px] font-mono text-cyan-400 uppercase font-bold block mb-1 flex items-center gap-1">
-                            <Sparkles className="w-2.5 h-2.5" /> AUTO-RESOLVE BANDCAMP LINK
+                            <Sparkles className="w-2.5 h-2.5" /> OR PASTE DIRECT BANDCAMP LINK
                           </label>
                           <div className="flex gap-2">
                             <input

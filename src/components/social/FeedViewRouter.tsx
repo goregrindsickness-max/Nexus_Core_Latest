@@ -267,7 +267,16 @@ export const FeedViewRouter: React.FC<any> = (props) => {
       {(() => {
         const filteredFeed = feed.filter(post => {
           // Hide quiet vault uploads / gallery-only items from the public feed
-          if (post.is_gallery_only === true || post.post_to_feed === false || post.hidden_from_feed === true || post.gallery_only === true) {
+          if (
+            post.is_gallery_only === true ||
+            post.post_to_feed === false ||
+            post.hidden_from_feed === true ||
+            post.gallery_only === true ||
+            post.is_archived_asset === true ||
+            post.content === 'Archived Profile Photo' ||
+            post.content === 'Archived Cover Photo' ||
+            String(post.content || '').startsWith('Archived ')
+          ) {
             return false;
           }
 

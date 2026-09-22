@@ -392,8 +392,20 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
 
       const formattedPosts: TimelinePost[] = (data || []).filter((item: any) => {
         const postObj = typeof item.data === 'string' ? JSON.parse(item.data) : (item.data || {});
-        // Exclude quiet vault posts from timeline view
-        if (postObj.is_gallery_only === true || postObj.post_to_feed === false || postObj.hidden_from_feed === true || postObj.gallery_only === true) {
+        // Exclude quiet vault posts and archived asset posts from timeline view
+        if (
+          postObj.is_gallery_only === true ||
+          postObj.post_to_feed === false ||
+          postObj.hidden_from_feed === true ||
+          postObj.gallery_only === true ||
+          postObj.is_archived_asset === true ||
+          item.content === 'Archived Profile Photo' ||
+          item.content === 'Archived Cover Photo' ||
+          postObj.content === 'Archived Profile Photo' ||
+          postObj.content === 'Archived Cover Photo' ||
+          String(item.content || '').startsWith('Archived ') ||
+          String(postObj.content || '').startsWith('Archived ')
+        ) {
           return false;
         }
         return true;
@@ -507,6 +519,20 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
       if (feedSources.length > 0) {
         feedSources.forEach((fp: any) => {
           if (!fp) return;
+          // Exclude quiet vault posts and archived assets
+          if (
+            fp.is_gallery_only === true ||
+            fp.post_to_feed === false ||
+            fp.hidden_from_feed === true ||
+            fp.gallery_only === true ||
+            fp.is_archived_asset === true ||
+            fp.content === 'Archived Profile Photo' ||
+            fp.content === 'Archived Cover Photo' ||
+            String(fp.content || '').startsWith('Archived ')
+          ) {
+            return;
+          }
+
           const aId = fp.authorId || fp.author_id || fp.userId || fp.profile_id || fp.author?.id;
           const aName = (fp.authorName || fp.author?.name || '').toLowerCase();
           const matches = (targetId && aId === targetId) ||
@@ -549,7 +575,32 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         });
       }
 
-      setPosts(formattedPosts);
+      // Deduplicate posts on the timeline: keep only unique posts (by id or content + media),
+      // and for profile picture update announcements, retain only the single newest one
+      const seenPostKeys = new Set<string>();
+      const deduplicatedPosts = formattedPosts.filter(p => {
+        const primaryImage = (p.images && p.images[0]) || p.media_url || '';
+        const contentKey = (p.content || '').trim().toLowerCase();
+
+        // If it's an automated profile update signal, keep only the newest one per author
+        if (contentKey.includes('updated profile picture')) {
+          const authorKey = (p.author?.name || p.user_id || '').toLowerCase();
+          const signalKey = `profile_update_signal_${authorKey}`;
+          if (seenPostKeys.has(signalKey)) {
+            return false;
+          }
+          seenPostKeys.add(signalKey);
+        }
+
+        const dedupKey = p.id ? String(p.id) : `${contentKey}_${primaryImage}`;
+        if (seenPostKeys.has(dedupKey)) {
+          return false;
+        }
+        seenPostKeys.add(dedupKey);
+        return true;
+      });
+
+      setPosts(deduplicatedPosts);
     } catch (err: any) {
       console.error('Error loading timeline posts:', err);
       setError(err.message || 'Failed to fetch posts');

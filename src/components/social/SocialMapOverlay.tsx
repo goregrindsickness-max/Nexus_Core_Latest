@@ -1,20 +1,10 @@
 import React from 'react';
-import { GigMapModal } from './modals/GigMapModal';
+import { EventsDirectoryModal, EventsDirectoryModalProps } from './modals/EventsDirectoryModal';
 
-export interface SocialMapOverlayProps {
-  isOpen: boolean;
-  onClose: () => void;
-  selectedMapEvent: any;
-  setSelectedMapEvent: (evt: any) => void;
-  selectedCityFilter: string;
-  setSelectedCityFilter: (city: string) => void;
-  mapFilterGenre: string;
-  setMapFilterGenre: (genre: string) => void;
-  userProfile: any;
-  triggerNotification?: (msg: string) => void;
-  liveEvents?: any[];
-}
+export interface SocialMapOverlayProps extends EventsDirectoryModalProps {}
 
 export const SocialMapOverlay: React.FC<SocialMapOverlayProps> = (props) => {
-  return <GigMapModal {...props} />;
+  return <EventsDirectoryModal {...props} />;
 };
+
+export { EventsDirectoryModal };

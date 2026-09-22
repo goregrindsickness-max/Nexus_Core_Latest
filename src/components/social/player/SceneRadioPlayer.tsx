@@ -18,7 +18,9 @@ import {
   Share2,
   ExternalLink,
   Disc,
-  Sparkles
+  Sparkles,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { RADIO_PLAYLISTS, FRONTEND_FALLBACK_PLAYLISTS } from '../../../data/socialFeedMockData';
 import {
@@ -101,6 +103,17 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
+  const [radioVolume, setRadioVolume] = useState<number>(100);
+
+  const handleRadioVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value, 10);
+    setRadioVolume(val);
+    if (ytPlayerRef.current && typeof ytPlayerRef.current.setVolume === 'function') {
+      try {
+        ytPlayerRef.current.setVolume(val);
+      } catch (e) {}
+    }
+  };
 
   useEffect(() => {
     currentVideoIndexRef.current = currentVideoIndex;
@@ -401,6 +414,11 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
         events: {
           onReady: (event: any) => {
             console.log("[RADIO PLAYER] YT Player is Ready.");
+            if (ytPlayerRef.current) {
+              if (typeof ytPlayerRef.current.setVolume === 'function') {
+                ytPlayerRef.current.setVolume(radioVolume);
+              }
+            }
             if (ytPlayerRef.current && typeof ytPlayerRef.current.getPlaylist === 'function') {
                 if (typeof ytPlayerRef.current.setShuffle === 'function') {
                   ytPlayerRef.current.setShuffle(isShuffleRef.current);
@@ -1327,6 +1345,37 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
               >
                 <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${likedTrackIds.has(playlistVideos[currentVideoIndex]?.videoId) ? 'fill-rose-500 text-rose-500' : ''}`} />
               </button>
+
+              {/* Volume Slider Control */}
+              <div className="hidden sm:flex items-center gap-1.5 ml-1 pl-2 border-l border-zinc-800">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const newVol = radioVolume > 0 ? 0 : 100;
+                    setRadioVolume(newVol);
+                    if (ytPlayerRef.current && typeof ytPlayerRef.current.setVolume === 'function') {
+                      ytPlayerRef.current.setVolume(newVol);
+                    }
+                  }}
+                  className="text-zinc-400 hover:text-white cursor-pointer transition-colors"
+                  title={radioVolume > 0 ? "Mute Volume" : "Unmute Volume"}
+                >
+                  {radioVolume > 0 ? <Volume2 className="w-3.5 h-3.5 text-zinc-400" /> : <VolumeX className="w-3.5 h-3.5 text-rose-500" />}
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={radioVolume}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleRadioVolumeChange(e);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-16 sm:w-20 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-rose-500"
+                  title={`Volume: ${radioVolume}%`}
+                />
+              </div>
 
               {/* Open directly on YouTube Button (Visible when player expanded) */}
               {isRadioExpanded && playlistVideos[currentVideoIndex]?.videoId && (

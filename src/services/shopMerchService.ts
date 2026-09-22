@@ -132,8 +132,19 @@ export async function createShopMerchItem(
 ): Promise<ShopMerchItem> {
   const supabase = getSupabase();
 
-  // Upload image to shop-merch bucket first
-  let thumbnailUrl = item.thumbnail;
+  // Upload images to shop-merch bucket first
+  const rawImages = (item.images && item.images.length > 0 ? item.images : [item.thumbnail]).filter(Boolean).slice(0, 3);
+  const uploadedImages: string[] = [];
+  for (const img of rawImages) {
+    if (img && img.startsWith('data:')) {
+      const uploaded = await uploadMerchImageToBucket(img, userId);
+      uploadedImages.push(uploaded);
+    } else {
+      uploadedImages.push(img);
+    }
+  }
+
+  let thumbnailUrl = uploadedImages[0] || item.thumbnail;
   if (thumbnailUrl && thumbnailUrl.startsWith('data:')) {
     thumbnailUrl = await uploadMerchImageToBucket(thumbnailUrl, userId);
   }
@@ -147,7 +158,7 @@ export async function createShopMerchItem(
     description: item.description || '',
     sizes: item.sizes || ['S', 'M', 'L', 'XL', '2XL'],
     thumbnail: thumbnailUrl,
-    images: item.images || [thumbnailUrl],
+    images: uploadedImages.length > 0 ? uploadedImages : [thumbnailUrl],
     stock: item.stock ?? 30,
     is_timed: !!item.is_timed,
     expires_at: item.expires_at,

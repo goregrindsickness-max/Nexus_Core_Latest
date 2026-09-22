@@ -192,6 +192,11 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       const base = selectedUserProfile || targetProfile;
       if (!base) return;
 
+      if (isMounted) {
+        setFetchedBandData(null);
+        setLinkedBandData(null);
+      }
+
       const targetRoleStr = (base?.role || base?.portalRole || '').toLowerCase();
       const isPersonal = !!(
         base?.isPersonal ||
@@ -1109,7 +1114,13 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                 {/* ASSOCIATED ENTITIES (2x2 GRID) */}
                 {(() => {
-                  const registeredWorkspaces = effTarget?.registered_workspaces || effTarget?.allowed_workspaces || effTarget?.workspaces || (effTarget?.isYou || effTarget?.id === userProfile?.id ? userProfile?.registered_workspaces || userProfile?.allowed_workspaces : []) || [];
+                  const isTargetSelf = Boolean(
+                    effTarget?.isYou ||
+                    (userProfile?.id && effTarget?.id && String(effTarget.id) === String(userProfile.id))
+                  );
+                  const registeredWorkspaces = isTargetSelf
+                    ? (userProfile?.registered_workspaces || effTarget?.registered_workspaces || userProfile?.allowed_workspaces || effTarget?.allowed_workspaces || effTarget?.workspaces || [])
+                    : (effTarget?.registered_workspaces || effTarget?.allowed_workspaces || effTarget?.workspaces || []);
 
                   const hasWorkspaceType = (type: string) => {
                     if (!registeredWorkspaces || !Array.isArray(registeredWorkspaces)) return false;
@@ -1155,8 +1166,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     (targetRole && targetRole.toLowerCase() === 'band')
                   );
 
-                  const isEffTargetMiguel = isMiguelNameOrProfile(effTarget) || (effTarget.isYou && isMiguelNameOrProfile(userProfile)) || isOwnerMiguel;
-                  const targetBandId = isEffTargetMiguel ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (effTarget?.band_id || (effTarget?.isYou ? userProfile?.band_id : null));
+                  const isEffTargetMiguel = isMiguelNameOrProfile(effTarget) || (isTargetSelf && isMiguelNameOrProfile(userProfile));
+                  const targetBandId = isEffTargetMiguel ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (effTarget?.band_id || (isTargetSelf ? userProfile?.band_id : null));
                   let matchingBandProfile: any = null;
 
                   if (isEffTargetMiguel) {
@@ -1166,57 +1177,57 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       const cleanName = (p.name || p.band_name || '').toLowerCase().trim();
                       return pId === 'cbddb810-259b-4230-9968-3d402dfdb872' || pId === 'real-b-cbddb810-259b-4230-9968-3d402dfdb872' || rawId === 'cbddb810-259b-4230-9968-3d402dfdb872' || cleanName === 'virulent excision';
                     });
-                  }
-
-                  if (!matchingBandProfile && targetBandId) {
+                  } else if (targetBandId) {
                     matchingBandProfile = allProfiles.find((p: any) => {
                       if (isCommunityBandRecord(p.id) || isCommunityBandRecord(p.name) || isCommunityBandRecord(p.band_name) || (p.name && p.name.toLowerCase().includes('necroticgorebeast'))) return false;
                       const isBandType = p.type === 'band' || p.isBandProfile || p.category === 'bands' || (p.role && p.role.toLowerCase() === 'band') || (p.portalRole && p.portalRole.toLowerCase() === 'band');
                       if (!isBandType) return false;
                       return p.id === targetBandId || p.band_id === targetBandId || p.id === `real-b-${targetBandId}`;
                     });
-                  }
-
-                  if (!matchingBandProfile && typeof bandWsRef === 'object' && bandWsRef?.workspace_id) {
+                  } else if (typeof bandWsRef === 'object' && bandWsRef?.workspace_id) {
                      matchingBandProfile = allProfiles.find((p: any) => (p.type === 'band' || p.isBandProfile || p.category === 'bands' || p.role === 'Band') && (p.id === bandWsRef.workspace_id || p.id === `real-b-${bandWsRef.workspace_id}`));
-                  }
-                  if (!matchingBandProfile && typeof bandWsRef === 'object' && bandWsRef?.name) {
+                  } else if (typeof bandWsRef === 'object' && bandWsRef?.name) {
                      matchingBandProfile = allProfiles.find((p: any) => (p.type === 'band' || p.isBandProfile || p.category === 'bands' || p.role === 'Band') && p.name?.toLowerCase() === bandWsRef.name.toLowerCase());
-                  }
-                  if (!matchingBandProfile) {
-                     matchingBandProfile = allProfiles.find((p: any) => {
-                       const isBandType = p.type === 'band' || p.isBandProfile || p.category === 'bands' || (p.role && p.role.toLowerCase() === 'band') || (p.portalRole && p.portalRole.toLowerCase() === 'band');
-                       if (!isBandType) return false;
-                       // Community archives must never be treated as personal band workspaces
-                       const isComm = isCommunityBandRecord(p.id) || isCommunityBandRecord(p.name) || isCommunityBandRecord(p.band_name) || p.verification_status === 'community_archive' || p.is_community || (p.name && p.name.toLowerCase().includes('necroticgorebeast'));
-                       if (isComm) return false;
-                       if (targetBandId && (p.id === targetBandId || p.band_id === targetBandId)) return true;
-                       if (effTarget.id && (p.user_id === effTarget.id || p.owner_id === effTarget.id || p.creator_id === effTarget.id || p.id === effTarget.id)) return true;
-                       if (userProfile?.id && (p.user_id === userProfile.id || p.owner_id === userProfile.id || p.creator_id === userProfile.id || p.id === userProfile.id)) return true;
-                       if (effTarget.band_name && (p.name?.toLowerCase() === effTarget.band_name.toLowerCase() || p.band_name?.toLowerCase() === effTarget.band_name.toLowerCase())) return true;
-                       return false;
-                     });
+                  } else if (effTarget?.band_name || (isTargetSelf && userProfile?.band_name)) {
+                     const bName = effTarget?.band_name || (isTargetSelf ? userProfile?.band_name : '');
+                     if (bName && !isCommunityBandRecord(bName)) {
+                       matchingBandProfile = allProfiles.find((p: any) => {
+                         const isBandType = p.type === 'band' || p.isBandProfile || p.category === 'bands' || (p.role && p.role.toLowerCase() === 'band') || (p.portalRole && p.portalRole.toLowerCase() === 'band');
+                         if (!isBandType) return false;
+                         if (isCommunityBandRecord(p.id) || isCommunityBandRecord(p.name) || isCommunityBandRecord(p.band_name)) return false;
+                         return (p.name?.toLowerCase() === bName.toLowerCase() || p.band_name?.toLowerCase() === bName.toLowerCase());
+                       });
+                     }
                   }
 
                   const lbd = matchingBandProfile || (
-                    typeof fetchedBandData !== 'undefined' && fetchedBandData ? fetchedBandData : null
+                    isTargetSelf && (userProfile?.band_name || userProfile?.band_id) ? (
+                      typeof fetchedBandData !== 'undefined' && fetchedBandData ? fetchedBandData : null
+                    ) : null
                   );
 
                   let rawBandName = isEffTargetMiguel
                     ? 'Virulent Excision'
-                    : (lbd?.band_name || lbd?.name || effTarget.band_name || effTarget.bandName || (typeof bandWsRef === 'object' && bandWsRef?.name ? bandWsRef.name : null) || userProfile?.band_name || userProfile?.bandName || (hasWorkspaceType('band') ? (effTarget.name ? `${effTarget.name} Band` : 'Artist Workspace') : null));
+                    : (lbd?.band_name || lbd?.name || effTarget.band_name || effTarget.bandName || (typeof bandWsRef === 'object' && bandWsRef?.name ? bandWsRef.name : null) || (isTargetSelf ? (userProfile?.band_name || userProfile?.bandName) : null) || (hasWorkspaceType('band') ? (effTarget.name ? `${effTarget.name} Band` : 'Artist Workspace') : null));
                   
-                  const isCommunityName = isCommunityBandRecord(rawBandName) || (typeof rawBandName === 'string' && (rawBandName.toLowerCase() === 'dying fetus' || rawBandName.toLowerCase().includes('molested') || rawBandName.toLowerCase().includes('necroticgorebeast')));
-                  if (isEffTargetMiguel || isCommunityName) {
+                  if (isEffTargetMiguel) {
                     rawBandName = 'Virulent Excision';
                   }
 
-                  const hasBandWorkspace = (hasWorkspaceType('band') || Boolean(matchingBandProfile) || Boolean(targetBandId) || Boolean(effTarget.band_name) || Boolean(effTarget.bandName) || isEffTargetMiguel || isCommunityName) && Boolean(rawBandName) && String(rawBandName).trim() !== '';
+                  const hasBandWorkspace = (
+                    isEffTargetMiguel ||
+                    hasWorkspaceType('band') ||
+                    Boolean(matchingBandProfile) ||
+                    Boolean(targetBandId) ||
+                    Boolean(effTarget.band_name) ||
+                    Boolean(effTarget.bandName) ||
+                    (isTargetSelf && Boolean(userProfile?.band_name || userProfile?.band_id))
+                  ) && Boolean(rawBandName) && String(rawBandName).trim() !== '' && !isCommunityBandRecord(rawBandName);
 
                    const hasBand = !isCurrentProfileBand && hasBandWorkspace;
 
                    if (hasBand) {
-                    const isVeOverride = isEffTargetMiguel || isCommunityName || (typeof rawBandName === 'string' && rawBandName.toLowerCase() === 'virulent excision');
+                    const isVeOverride = isEffTargetMiguel || (typeof rawBandName === 'string' && rawBandName.toLowerCase() === 'virulent excision');
                     const name = isVeOverride ? 'Virulent Excision' : String(rawBandName).trim();
                     const isVirulentExcision = name.toLowerCase() === 'virulent excision' || isVeOverride;
                     const veLogo = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396';
@@ -1313,7 +1324,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                   if (hasPromoter) {
                     const name = String(rawPromoterName).trim();
-                    const logo = matchingPromoterProfile?.promoter_logo || effTarget?.promoter_logo || userProfile?.promoter_logo || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=300';
+                    const logo = matchingPromoterProfile?.promoter_logo || effTarget?.promoter_logo || (isTargetSelf ? userProfile?.promoter_logo : null) || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=300';
                     const subtitle = effTarget.venue || effTarget.location || 'Promoter & Venue Booking';
 
                     entities.push({
@@ -1370,17 +1381,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     effTarget.creative_name || 
                     effTarget.creative_business_name || 
                     effTarget.business_name || 
-                    (effTarget?.isYou ? (userProfile?.creative_business_name || userProfile?.creative_name || userProfile?.creative_metadata?.business_name) : null) ||
+                    (isTargetSelf ? (userProfile?.creative_business_name || userProfile?.creative_name || userProfile?.creative_metadata?.business_name) : null) ||
                     matchingCreativeProfile?.name || 
                     (typeof creativeWsRef === 'object' && creativeWsRef?.name ? creativeWsRef.name : null) || 
                     (hasWorkspaceType('creative') ? (effTarget.name && !['user', 'user name', 'industry pro', 'pro_user', 'fan listener', 'member', 'fan_core', 'listener'].includes(String(effTarget.name).toLowerCase().trim()) ? `${effTarget.name} Studios` : 'Vortex Graphics') : null);
-                  const hasCreativeWorkspace = (hasWorkspaceType('creative') || Boolean(matchingCreativeProfile) || Boolean(effTarget.business_name) || Boolean(effTarget.creative_name) || Boolean(effTarget.creative_id)) && Boolean(rawCreativeName) && String(rawCreativeName).trim() !== '';
+                  const hasCreativeWorkspace = (hasWorkspaceType('creative') || Boolean(matchingCreativeProfile) || Boolean(effTarget.business_name) || Boolean(effTarget.creative_name) || Boolean(effTarget.creative_id) || (isTargetSelf && Boolean(userProfile?.creative_id || userProfile?.creative_name || userProfile?.creative_business_name))) && Boolean(rawCreativeName) && String(rawCreativeName).trim() !== '';
 
                   const hasCreative = !isCurrentProfileCreative && hasCreativeWorkspace;
 
                   if (hasCreative) {
                     const name = String(rawCreativeName).trim();
-                    const logo = matchingCreativeProfile?.creative_avatar || effTarget?.creative_avatar || userProfile?.creative_avatar || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
+                    const logo = matchingCreativeProfile?.creative_avatar || effTarget?.creative_avatar || (isTargetSelf ? userProfile?.creative_avatar : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
                     const subtitle = effTarget.primary_specialty || effTarget.specialty || 'Creative Media & Sound Design';
 
                     entities.push({
@@ -1393,9 +1404,9 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       logo,
                       subtitle,
                       onClick: () => {
-                        const creativeBanner = matchingCreativeProfile?.creative_banner || matchingCreativeProfile?.banner_url || matchingCreativeProfile?.cover_url || effTarget?.creative_banner || (effTarget?.isYou ? userProfile?.creative_banner : null) || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200';
-                        const creativeHandle = matchingCreativeProfile?.creative_handle || matchingCreativeProfile?.console_handle || matchingCreativeProfile?.handle || effTarget?.creative_handle || (effTarget?.isYou ? userProfile?.creative_handle : null) || 'vortexgraphics';
-                        const creativeName = name || matchingCreativeProfile?.business_name || matchingCreativeProfile?.creative_name || effTarget?.creative_name || (effTarget?.isYou ? userProfile?.creative_business_name : null) || 'Vortex Graphics';
+                        const creativeBanner = matchingCreativeProfile?.creative_banner || matchingCreativeProfile?.banner_url || matchingCreativeProfile?.cover_url || effTarget?.creative_banner || (isTargetSelf ? userProfile?.creative_banner : null) || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200';
+                        const creativeHandle = matchingCreativeProfile?.creative_handle || matchingCreativeProfile?.console_handle || matchingCreativeProfile?.handle || effTarget?.creative_handle || (isTargetSelf ? userProfile?.creative_handle : null) || 'vortexgraphics';
+                        const creativeName = name || matchingCreativeProfile?.business_name || matchingCreativeProfile?.creative_name || effTarget?.creative_name || (isTargetSelf ? userProfile?.creative_business_name : null) || 'Vortex Graphics';
 
                         const creativeProfileObj = {
                           ...(matchingCreativeProfile || {}),
@@ -1453,16 +1464,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     effTarget.label_company_name || 
                     effTarget.label_name || 
                     effTarget.labelName || 
+                    (isTargetSelf ? userProfile?.label_company_name : null) ||
                     matchingLabelProfile?.name || 
                     (typeof labelWsRef === 'object' && labelWsRef?.name ? labelWsRef.name : null) || 
                     (hasWorkspaceType('label') ? (effTarget.name ? `${effTarget.name} Records` : 'Record Label') : null);
-                  const hasLabelWorkspace = (hasWorkspaceType('label') || Boolean(matchingLabelProfile) || Boolean(effTarget?.label_name) || Boolean(effTarget?.labelName) || Boolean(effTarget?.label_id)) && Boolean(rawLabelName) && String(rawLabelName).trim() !== '';
+                  const hasLabelWorkspace = (hasWorkspaceType('label') || Boolean(matchingLabelProfile) || Boolean(effTarget?.label_name) || Boolean(effTarget?.labelName) || Boolean(effTarget?.label_id) || (isTargetSelf && Boolean(userProfile?.label_id || userProfile?.label_company_name))) && Boolean(rawLabelName) && String(rawLabelName).trim() !== '';
 
                   const hasLabel = !isCurrentProfileLabel && hasLabelWorkspace;
 
                   if (hasLabel) {
                     const name = String(rawLabelName).trim();
-                    const logo = matchingLabelProfile?.label_avatar || effTarget?.label_avatar || userProfile?.label_avatar || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=300';
+                    const logo = matchingLabelProfile?.label_avatar || effTarget?.label_avatar || (isTargetSelf ? userProfile?.label_avatar : null) || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=300';
                     const subtitle = effTarget.label_region || effTarget.location || 'Independent Label Group';
 
                     entities.push({

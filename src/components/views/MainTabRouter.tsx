@@ -734,6 +734,8 @@ export const MainTabRouter: React.FC<MainTabRouterProps> = (props) => {
             activeBand={activeBand}
             bands={bands}
             setBands={setBands}
+            shows={shows}
+            setShows={setShows}
             onLogout={() => {
               localStorage.removeItem('nexus_core_user_profile');
               setUserProfile(null);

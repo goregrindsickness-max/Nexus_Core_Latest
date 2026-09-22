@@ -124,6 +124,7 @@ export interface FeedPost {
     name: string;
     price: number;
     thumbnail: string;
+    images?: string[];
     sizes: string[];
     isTimed?: boolean;
     durationHours?: number;
@@ -131,6 +132,8 @@ export interface FeedPost {
     expiresAt?: string;
     stock?: number;
     totalStock?: number;
+    isUnlimited?: boolean;
+    description?: string;
     allowNegotiation?: boolean;
     condition?: string;
     category?: string;

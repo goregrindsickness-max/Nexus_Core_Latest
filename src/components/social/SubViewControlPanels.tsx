@@ -127,9 +127,10 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                   e.stopPropagation();
                   onOpenMapModal();
                 }}
-                className="text-[9px] font-mono uppercase text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 px-2 py-0.5 rounded-md flex items-center gap-1 transition-all cursor-pointer"
+                className="text-[9px] font-mono uppercase text-cyan-300 hover:text-black bg-cyan-950/60 hover:bg-cyan-400 border border-cyan-800/80 hover:border-cyan-400 px-2 py-0.5 rounded-md flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                title="Explore all upcoming events, filter by band, city, date, or radar map"
               >
-                <MapIcon className="w-3 h-3 text-rose-500" /> Gig Map
+                <Calendar className="w-3 h-3 text-cyan-400 group-hover:text-black" /> View All Events
               </button>
             )}
             <ChevronDown

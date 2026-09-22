@@ -559,6 +559,31 @@ if (!leftDrawerOpen) return null;
                           </button>
                         )}
 
+                        {/* Events Directory & Gigs */}
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setLeftDrawerOpen(false);
+                            setShowMapModal?.(true);
+                          }} 
+                          className="w-full flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/60 hover:bg-zinc-900/90 border border-zinc-900 hover:border-zinc-800 transition-all duration-200 group cursor-pointer text-left"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 group-hover:border-cyan-500/40 group-hover:bg-cyan-500/15 group-hover:shadow-[0_0_10px_rgba(6,182,212,0.25)] transition-all shrink-0">
+                              <Calendar className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors truncate">
+                                Events & Gigs Directory
+                              </span>
+                              <span className="text-[10px] text-zinc-500 group-hover:text-zinc-400 font-mono transition-colors truncate">
+                                Search tours, venues & radar map
+                              </span>
+                            </div>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                        </button>
+
                         {/* Following Lists */}
                         <button 
                           type="button"

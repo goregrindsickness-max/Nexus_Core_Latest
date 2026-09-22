@@ -36,8 +36,9 @@ import {
 } from 'lucide-react';
 import { checkDuplicateCommunityEvent, EVENT_CATEGORIES } from '../../utils/communityEventUtils';
 import { getExistingPhotoPitAlbums, persistPhotoPitFolders } from './utils/photoPitAlbums';
-import { resolveBandcampMetadata, BandcampResolvedData } from '../../utils/socialFeedUtils';
+import { resolveBandcampMetadata, isBandcampUrl, normalizeBandcampUrl, BandcampResolvedData } from '../../utils/socialFeedUtils';
 import { BandcampEmbedCard } from './embeds/BandcampEmbedCard';
+import { BandcampSearchHelper } from './embeds/BandcampSearchHelper';
 
 
 export type ComposerRoleTheme = 'band' | 'creative' | 'promoter' | 'label' | 'industry_pro' | 'fan_only';
@@ -517,6 +518,22 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
   const [bandcampResolved, setBandcampResolved] = useState<BandcampResolvedData | null>(null);
   const [isResolvingBandcamp, setIsResolvingBandcamp] = useState<boolean>(false);
 
+  const handleSelectBandcampTrack = (track: { url: string; title: string; artist: string; artworkUrl?: string }) => {
+    setNewPostImageUrl(track.url);
+    setBandcampResolved({
+      success: true,
+      embedUrl: `https://bandcamp.com/EmbeddedPlayer/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`,
+      title: track.title,
+      artist: track.artist,
+      artwork: track.artworkUrl,
+      pageUrl: track.url,
+      itemType: 'track'
+    });
+    if (triggerNotification) {
+      triggerNotification(`🎵 Attached Bandcamp track "${track.title}" by ${track.artist}!`);
+    }
+  };
+
   useEffect(() => {
     if (!newPostImageUrl || !newPostImageUrl.toLowerCase().includes('bandcamp.com')) {
       setBandcampResolved(null);
@@ -531,7 +548,17 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
       try {
         const result = await resolveBandcampMetadata(newPostImageUrl);
         if (isMounted) {
-          setBandcampResolved(result);
+          setBandcampResolved((prev) => {
+            if (result && result.embedUrl) {
+              return {
+                ...result,
+                title: result.title || prev?.title,
+                artist: result.artist || prev?.artist,
+                artwork: result.artwork || prev?.artwork,
+              };
+            }
+            return prev || result;
+          });
           setIsResolvingBandcamp(false);
         }
       } catch (err) {
@@ -1368,14 +1395,27 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
               )}
             </div>
 
+            {/* 2.8 Search Songs on Bandcamp Helper */}
+            <BandcampSearchHelper
+              onSelectTrack={handleSelectBandcampTrack}
+              theme={theme}
+            />
+
             {/* 3. Direct Image or Bandcamp URL input */}
             <div className="space-y-1">
-              <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block">Or Paste Direct Image / Bandcamp Track Link</label>
+              <div className="flex items-center justify-between">
+                <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block">Or Paste Direct Image / Bandcamp Track Link</label>
+                {isBandcampUrl(newPostImageUrl) && (
+                  <span className="text-[8px] font-mono font-bold text-cyan-400 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30 animate-pulse">
+                    ⚡ Smart Bandcamp Slug Resolver Active
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
-                placeholder="https://artistname.bandcamp.com/track/... or image URL..."
+                placeholder="https://artistname.bandcamp.com/track/symbiotic-voracity..."
                 value={newPostImageUrl}
-                onChange={(e) => setNewPostImageUrl(e.target.value)}
+                onChange={(e) => setNewPostImageUrl(normalizeBandcampUrl(e.target.value))}
                 className={`w-full ${theme.innerPanelBg} text-xs text-white placeholder:text-zinc-600 border ${theme.inputBorder} rounded-lg p-2 font-mono ${theme.inputFocus}`}
               />
             </div>
@@ -1416,6 +1456,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                       embedUrl={bandcampResolved?.embedUrl || (newPostImageUrl.includes('EmbeddedPlayer') ? newPostImageUrl : null)}
                       title={bandcampResolved?.title}
                       artist={bandcampResolved?.artist}
+                      artworkUrl={bandcampResolved?.artwork}
                       pageUrl={bandcampResolved?.pageUrl || newPostImageUrl}
                       itemType={bandcampResolved?.itemType}
                       compact={false}

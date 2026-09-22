@@ -9,3 +9,4 @@ export * from './EventEmbedCard';
 export * from './MerchEmbedCard';
 export * from './MediaGalleryGrid';
 export * from './BandcampEmbedCard';
+export * from './BandcampSearchHelper';

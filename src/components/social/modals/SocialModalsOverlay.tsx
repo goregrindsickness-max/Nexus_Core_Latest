@@ -300,7 +300,7 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
         triggerNotification={triggerNotification}
       />
 
-      {/* Gig Map Modal / Social Map Overlay */}
+      {/* Events Directory Modal / Gig Map Modal / Social Map Overlay */}
       <SocialMapOverlay
         isOpen={showMapModal}
         onClose={() => { setShowMapModal(false); setSelectedGigOnMap(null); }}
@@ -313,6 +313,12 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
         userProfile={userProfile}
         triggerNotification={triggerNotification}
         liveEvents={props.liveEvents}
+        setLiveEvents={props.setLiveEvents}
+        shows={props.shows}
+        setShows={props.setShows}
+        onImportShowsFromTable={props.onImportShowsFromTable}
+        onOpenShowCreator={props.onOpenShowCreator}
+        onSelectEvent={props.onSelectEvent}
       />
 
       {/* Poll Creation Modal */}
@@ -342,6 +348,18 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
         setMerchDropName={setMerchDropName}
         merchDropPrice={merchDropPrice}
         setMerchDropPrice={setMerchDropPrice}
+        merchDropCategory={props.merchDropCategory}
+        setMerchDropCategory={props.setMerchDropCategory}
+        merchDropDescription={props.merchDropDescription}
+        setMerchDropDescription={props.setMerchDropDescription}
+        merchDropVariants={props.merchDropVariants}
+        setMerchDropVariants={props.setMerchDropVariants}
+        merchDropStock={props.merchDropStock}
+        setMerchDropStock={props.setMerchDropStock}
+        merchDropIsUnlimited={props.merchDropIsUnlimited}
+        setMerchDropIsUnlimited={props.setMerchDropIsUnlimited}
+        merchDropAllowNegotiation={props.merchDropAllowNegotiation}
+        setMerchDropAllowNegotiation={props.setMerchDropAllowNegotiation}
         merchDropIsTimed={merchDropIsTimed}
         setMerchDropIsTimed={setMerchDropIsTimed}
         merchDropTimerHours={merchDropTimerHours}
@@ -350,6 +368,8 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
         setMerchDropTimerMinutes={setMerchDropTimerMinutes}
         merchDropThumbnail={merchDropThumbnail}
         setMerchDropThumbnail={setMerchDropThumbnail}
+        merchDropImages={props.merchDropImages}
+        setMerchDropImages={props.setMerchDropImages}
         triggerNotification={triggerNotification}
       />
 
@@ -763,34 +783,6 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
 
             if (cropperType === 'avatar') {
               triggerNotification?.("✨ Profile avatar updated & synchronized!");
-              
-              const authorName = isEmbedded ? (userProfile?.bandName || userProfile?.companyName || userProfile?.label_company_name || userProfile?.name || 'Pro Account') : (profileHandle || userProfile?.name || 'User');
-              const authorRole = isEmbedded ? portalRole.charAt(0).toUpperCase() + portalRole.slice(1) : (profileSceneRoles.join(' • ') || 'Fan');
-              const postedByValue = isEmbedded ? (profileFullLegalName.split(' ')[0] || userProfile?.name?.split(' ')[0]) : undefined;
-
-              const autoAvatarPost: FeedItem = {
-                id: `avatar_update_${Date.now()}`,
-                type: 'post',
-                author: {
-                  name: authorName,
-                  avatar: publicUrl,
-                  role: authorRole,
-                  postedBy: postedByValue
-                },
-                timeAgo: 'Just now',
-            timestamp: new Date().toISOString(),
-                content: '✨ Updated profile picture! Check out the new look.',
-                tag: 'PROFILE SIGNAL',
-                image: publicUrl,
-                images: [publicUrl],
-                reactions: [
-                  { type: 'flame', count: 1, active: true }
-                ],
-                comments: []
-              };
-
-              setFeed(prev => [autoAvatarPost, ...prev]);
-              syncPostToSupabase(autoAvatarPost);
             } else {
               triggerNotification?.("✨ Profile cover banner updated & synchronized!");
             }

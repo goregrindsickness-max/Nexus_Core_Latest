@@ -1104,8 +1104,17 @@ Return a valid JSON object matching the requested schema. If any field is not fo
 
   if (vapidKeys.publicKey && vapidKeys.privateKey) {
     try {
+      let vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@thenexuscoreapp.com";
+      if (vapidSubject && !vapidSubject.startsWith("mailto:") && !vapidSubject.startsWith("http://") && !vapidSubject.startsWith("https://")) {
+        if (vapidSubject.includes("@")) {
+          vapidSubject = `mailto:${vapidSubject}`;
+        } else {
+          vapidSubject = `https://${vapidSubject}`;
+        }
+      }
+
       webpush.setVapidDetails(
-        process.env.VAPID_SUBJECT || "mailto:admin@thenexuscoreapp.com",
+        vapidSubject,
         vapidKeys.publicKey,
         vapidKeys.privateKey
       );
