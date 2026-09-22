@@ -101,6 +101,49 @@ const isHardcodedPlaceholder = (imgUrl?: string, title?: string, id?: string) =>
   return false;
 };
 
+const isActualImageUrl = (url?: string): boolean => {
+  if (!url || typeof url !== 'string') return false;
+  const clean = url.trim().toLowerCase().split('?')[0];
+
+  // Exclude audio/video platforms and files
+  if (
+    clean.includes('bandcamp.com') ||
+    clean.includes('youtube.com') ||
+    clean.includes('youtu.be') ||
+    clean.includes('vimeo.com') ||
+    clean.endsWith('.mp3') ||
+    clean.endsWith('.wav') ||
+    clean.endsWith('.ogg') ||
+    clean.endsWith('.m4a') ||
+    clean.endsWith('.flac') ||
+    clean.endsWith('.aac') ||
+    clean.endsWith('.mp4') ||
+    clean.endsWith('.webm') ||
+    clean.endsWith('.mov') ||
+    clean.endsWith('.avi') ||
+    clean.endsWith('.mkv')
+  ) {
+    return false;
+  }
+
+  // Check if it's a standard image format, or starts with base64 image prefix,
+  // or is an unsplash / supabase storage image that does not contain audio/video
+  const isImageExt =
+    clean.endsWith('.jpg') ||
+    clean.endsWith('.jpeg') ||
+    clean.endsWith('.png') ||
+    clean.endsWith('.webp') ||
+    clean.endsWith('.gif') ||
+    clean.endsWith('.svg') ||
+    clean.endsWith('.bmp');
+
+  const isBase64 = url.trim().startsWith('data:image/');
+  const isStorageUrl = url.includes('/storage/v1/object/public/');
+  const isUnsplash = url.includes('images.unsplash.com');
+
+  return isImageExt || isBase64 || isStorageUrl || isUnsplash;
+};
+
 // Subcomponent for interactive pinch-to-zoom lightbox stage in PhotoPit
 const PhotoPitLightboxStage: React.FC<{
   imageUrl: string;
@@ -369,11 +412,22 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
   // Combine user-owned posts from feed & database
   const allUserPosts = useMemo(() => {
     const map = new Map<string, any>();
+    
+    const hasValidImage = (post: any): boolean => {
+      if (!post) return false;
+      const imagesList = post.images && post.images.length > 0
+        ? post.images
+        : (post.image ? [post.image] : (post.media_url ? [post.media_url] : []));
+      return imagesList.some(isActualImageUrl);
+    };
+
     dbUserPosts.forEach((p) => {
-      if (p.id) map.set(p.id, p);
+      if (p.id && hasValidImage(p)) {
+        map.set(p.id, p);
+      }
     });
     (feed || []).forEach((p) => {
-      if (isUserPhotoPost(p) && p.id) {
+      if (isUserPhotoPost(p) && p.id && hasValidImage(p)) {
         map.set(p.id, { ...map.get(p.id), ...p });
       }
     });
@@ -476,9 +530,11 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
     };
 
     allUserPosts.forEach((post: any) => {
-      const postImages = post.images && post.images.length > 0
+      const rawImages = post.images && post.images.length > 0
         ? post.images
         : (post.image ? [post.image] : (post.media_url ? [post.media_url] : []));
+
+      const postImages = rawImages.filter(isActualImageUrl);
 
       if (postImages.length > 0) {
         postImages.forEach((img: string, idx: number) => {
