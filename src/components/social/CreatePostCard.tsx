@@ -520,14 +520,23 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
 
   const handleSelectBandcampTrack = (track: { url: string; title: string; artist: string; artworkUrl?: string }) => {
     setNewPostImageUrl(track.url);
+    setIsResolvingBandcamp(true);
     setBandcampResolved({
       success: true,
-      embedUrl: `https://bandcamp.com/EmbeddedPlayer/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`,
+      embedUrl: null,
       title: track.title,
       artist: track.artist,
       artwork: track.artworkUrl,
       pageUrl: track.url,
       itemType: 'track'
+    });
+    resolveBandcampMetadata(track.url).then((res) => {
+      if (res && res.success && res.embedUrl) {
+        setBandcampResolved(res);
+      }
+      setIsResolvingBandcamp(false);
+    }).catch(() => {
+      setIsResolvingBandcamp(false);
     });
     if (triggerNotification) {
       triggerNotification(`🎵 Attached Bandcamp track "${track.title}" by ${track.artist}!`);

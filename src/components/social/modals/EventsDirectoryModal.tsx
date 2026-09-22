@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
+  ArrowLeft,
   MapPin,
   Calendar,
   Ticket,
@@ -401,21 +402,20 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
 }) => {
   // View mode toggle: List (default) vs Map
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState<'all' | 'tonight' | 'tomorrow' | 'weekend' | 'upcoming'>('all');
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [ticketOnly, setTicketOnly] = useState(false);
-  const [showsTableOnly, setShowsTableOnly] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [localImportedShows, setLocalImportedShows] = useState<any[]>([]);
 
-  // Function to import all shows directly from the shows table into the event directory
+  // Function to aggregate all shows directly from the database, indexedDB and props into the directory
   const handleImportShowsFromTable = useCallback(async () => {
     setIsImporting(true);
     try {
-      let importedCount = 0;
       const allExtractedShows: any[] = [];
 
       // 1. Fetch directly from Supabase shows table
@@ -435,12 +435,31 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
         console.warn('Direct Supabase fetch for shows table had an issue:', err);
       }
 
-      // 2. If no direct Supabase shows found, check passed-in props.shows as fallback
-      if (allExtractedShows.length === 0 && shows && Array.isArray(shows) && shows.length > 0) {
+      // 2. Fetch from IndexedDB showsStore if available
+      try {
+        if (showsStore) {
+          const idbList: any[] = [];
+          await showsStore.iterate((value: any) => {
+            if (Array.isArray(value)) {
+              idbList.push(...value);
+            } else if (value && typeof value === 'object') {
+              idbList.push(value);
+            }
+          });
+          if (idbList.length > 0) {
+            allExtractedShows.push(...idbList);
+          }
+        }
+      } catch (err) {
+        console.warn('IndexedDB shows store read error:', err);
+      }
+
+      // 3. If props.shows provided, include them as well
+      if (shows && Array.isArray(shows) && shows.length > 0) {
         allExtractedShows.push(...shows);
       }
 
-      // 3. Deduplicate extracted shows by id or headliner + date
+      // 4. Deduplicate extracted shows by id or headliner + date
       const dedupedShows: any[] = [];
       const seenShowSigs = new Set<string>();
 
@@ -457,7 +476,6 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
         }
       });
 
-      importedCount = dedupedShows.length;
       setLocalImportedShows(dedupedShows);
 
       // If parent onImportShowsFromTable callback is provided, invoke it
@@ -478,17 +496,12 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
           return [...currentList, ...toAdd];
         });
       }
-
-      triggerNotification?.(
-        `✨ Successfully imported ${importedCount} shows from the Show Table into the Event Directory!`
-      );
     } catch (err) {
-      console.error('Error importing shows table:', err);
-      triggerNotification?.('⚠️ Error importing shows from database table.');
+      console.error('Error aggregating shows table:', err);
     } finally {
       setIsImporting(false);
     }
-  }, [shows, setLiveEvents, onImportShowsFromTable, triggerNotification]);
+  }, [shows, setLiveEvents, onImportShowsFromTable]);
 
   // Auto-run show table import when modal opens if we don't have shows yet
   useEffect(() => {
@@ -655,26 +668,25 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
         if (dateFilter === 'upcoming' && (d.includes('tonight') || d.includes('tomorrow'))) return false;
       }
 
-      // 5. Checkboxes & Shows Table Only
-      if (showsTableOnly && !evt.isFromShowsTable) return false;
+      // 5. Checkboxes (Verified, Tickets)
       if (verifiedOnly && !evt.verified) return false;
       if (ticketOnly && !evt.ticketsAvailable && !evt.ticketUrl) return false;
 
       return true;
     });
-  }, [normalizedEvents, searchQuery, selectedCityFilter, mapFilterGenre, dateFilter, showsTableOnly, verifiedOnly, ticketOnly]);
+  }, [normalizedEvents, searchQuery, selectedCityFilter, mapFilterGenre, dateFilter, verifiedOnly, ticketOnly]);
 
   const activeEvent = selectedMapEvent || filteredEvents[0] || null;
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[150] bg-black/90 flex items-center justify-center p-2 sm:p-4 backdrop-blur-xl animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[10050] bg-black/95 flex items-center justify-center p-1.5 sm:p-4 backdrop-blur-2xl animate-in fade-in duration-200">
           <motion.div
             initial={{ scale: 0.96, opacity: 0, y: 12 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.96, opacity: 0, y: 12 }}
-            className="bg-[#0b0c10] border border-cyan-900/50 rounded-2xl w-full max-w-6xl h-[92vh] max-h-[900px] overflow-hidden flex flex-col relative shadow-[0_0_60px_rgba(6,182,212,0.18)]"
+            className="bg-[#0b0c10] border border-cyan-900/50 rounded-2xl w-full max-w-6xl h-[94vh] sm:h-[90vh] max-h-[900px] overflow-hidden flex flex-col relative shadow-[0_0_60px_rgba(6,182,212,0.18)]"
           >
             {/* TOP HEADER & TITLE BAR */}
             <div className="p-3.5 sm:p-4 border-b border-zinc-900 bg-black/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
@@ -690,11 +702,6 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                     <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/40">
                       {filteredEvents.length} Shows
                     </span>
-                    {localImportedShows.length > 0 && (
-                      <span className="text-[9.5px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400" /> {localImportedShows.length} From Show Table
-                      </span>
-                    )}
                   </div>
                   <p className="text-[10px] text-zinc-400 font-mono hidden sm:block">
                     Search upcoming tours, booked shows, local club dates, DIY gigs & festivals by city or band
@@ -704,27 +711,14 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
 
               {/* View Mode Toggle (List vs Map) & Action Controls */}
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Import Shows from Show Table Button */}
-                <button
-                  type="button"
-                  onClick={handleImportShowsFromTable}
-                  disabled={isImporting}
-                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-mono font-bold uppercase transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  title="Import and sync all booked dates from the shows database table into the directory"
-                >
-                  {isImporting ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Database className="w-3.5 h-3.5" />
-                  )}
-                  <span>{isImporting ? 'Importing...' : 'Import Show Table'}</span>
-                </button>
-
                 {/* List / Map View Switch */}
                 <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-xl p-0.5">
                   <button
                     type="button"
-                    onClick={() => setViewMode('list')}
+                    onClick={() => {
+                      setViewMode('list');
+                      setMobileDetailOpen(false);
+                    }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                       viewMode === 'list'
                         ? 'bg-cyan-500 text-black shadow-md'
@@ -736,7 +730,10 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setViewMode('map')}
+                    onClick={() => {
+                      setViewMode('map');
+                      setMobileDetailOpen(false);
+                    }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                       viewMode === 'map'
                         ? 'bg-cyan-500 text-black shadow-md'
@@ -753,6 +750,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      setMobileDetailOpen(false);
                       onClose();
                       onOpenShowCreator();
                     }}
@@ -764,7 +762,10 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
 
                 {/* Close modal */}
                 <button
-                  onClick={onClose}
+                  onClick={() => {
+                    setMobileDetailOpen(false);
+                    onClose();
+                  }}
                   className="w-8 h-8 rounded-full bg-zinc-900 hover:bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors cursor-pointer"
                   title="Close"
                 >
@@ -868,20 +869,6 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
 
                 {/* Fast toggles */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  {/* Shows Table Only Filter Chip */}
-                  <button
-                    type="button"
-                    onClick={() => setShowsTableOnly(!showsTableOnly)}
-                    className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors flex items-center gap-1 cursor-pointer ${
-                      showsTableOnly
-                        ? 'bg-teal-500/20 text-teal-300 border-teal-500/60 shadow-sm'
-                        : 'bg-zinc-950 text-zinc-500 border-zinc-800 hover:text-zinc-300'
-                    }`}
-                    title="Filter only shows imported from the show database table"
-                  >
-                    <Database className="w-3 h-3 text-teal-400" /> Shows Table Only
-                  </button>
-
                   <button
                     type="button"
                     onClick={() => setTicketOnly(!ticketOnly)}
@@ -906,7 +893,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                     <ShieldCheck className="w-3 h-3" /> Verified Gigs
                   </button>
 
-                  {(searchQuery || selectedCityFilter !== 'all' || mapFilterGenre !== 'all' || dateFilter !== 'all' || showsTableOnly || verifiedOnly || ticketOnly) && (
+                  {(searchQuery || selectedCityFilter !== 'all' || mapFilterGenre !== 'all' || dateFilter !== 'all' || verifiedOnly || ticketOnly) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -914,7 +901,6 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                         setSelectedCityFilter('all');
                         setMapFilterGenre('all');
                         setDateFilter('all');
-                        setShowsTableOnly(false);
                         setVerifiedOnly(false);
                         setTicketOnly(false);
                       }}
@@ -928,12 +914,12 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
             </div>
 
             {/* MAIN CONTENT AREA: LIST DIRECTORY OR RADAR MAP */}
-            <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
+            <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col md:flex-row relative">
               {viewMode === 'list' ? (
                 /* ======================== LIST / DIRECTORY VIEW ======================== */
-                <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-                  {/* Left Column: Events Grid / List */}
-                  <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-3.5 bg-black/40">
+                <div className="flex-1 min-h-0 min-w-0 flex flex-col md:flex-row overflow-hidden w-full h-full">
+                  {/* Left Column: Events Grid / List (Hidden on mobile when detailed view is open) */}
+                  <div className={`${mobileDetailOpen ? 'hidden md:block' : 'block'} flex-1 min-h-0 min-w-0 h-full overflow-y-auto overscroll-contain p-3 sm:p-5 space-y-3.5 bg-black/40 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent`}>
                     {filteredEvents.length === 0 ? (
                       <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-6 space-y-3">
                         <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
@@ -952,7 +938,6 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                             setSelectedCityFilter('all');
                             setMapFilterGenre('all');
                             setDateFilter('all');
-                            setShowsTableOnly(false);
                             setVerifiedOnly(false);
                             setTicketOnly(false);
                           }}
@@ -962,7 +947,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                         </button>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 pb-8 sm:pb-0">
                         {filteredEvents.map((evt) => {
                           const isSelected = selectedMapEvent?.id === evt.id;
                           const isTonight = evt.date.toLowerCase().includes('tonight');
@@ -974,6 +959,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                               onClick={() => {
                                 setSelectedMapEvent(evt);
                                 onSelectEvent?.(evt);
+                                setMobileDetailOpen(true);
                               }}
                               className={`group bg-[#090b10] border rounded-2xl p-4 transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between hover:shadow-lg ${
                                 isSelected
@@ -984,12 +970,6 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                               {/* Top Banner Tag */}
                               <div className="flex items-start justify-between gap-2 mb-2">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  {evt.isFromShowsTable && (
-                                    <span className="bg-teal-950/90 border border-teal-500/70 text-teal-300 font-mono font-bold text-[8.5px] px-2 py-0.5 rounded flex items-center gap-1 shadow-sm">
-                                      <Database className="w-2.5 h-2.5 text-teal-400" /> SHOW TABLE
-                                    </span>
-                                  )}
-
                                   {isTonight ? (
                                     <span className="bg-rose-950/80 border border-rose-500/60 text-rose-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1 animate-pulse">
                                       <Flame className="w-3 h-3 text-rose-400 fill-rose-400" /> TONIGHT
@@ -1088,10 +1068,13 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setSelectedMapEvent(evt);
+                                      onSelectEvent?.(evt);
+                                      setMobileDetailOpen(true);
                                     }}
-                                    className="p-1 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-900"
+                                    className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 flex items-center gap-1 font-mono text-[10px]"
                                     title="View Full Show Dossier"
                                   >
+                                    <span className="hidden sm:inline">Details</span>
                                     <ChevronRight className="w-4 h-4" />
                                   </button>
                                 </div>
@@ -1103,10 +1086,22 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                     )}
                   </div>
 
-                  {/* Right Column: Selected Show Detail Panel (Rich Dossier) */}
-                  <div className="w-full md:w-80 lg:w-96 bg-[#08090d] border-t md:border-t-0 md:border-l border-zinc-900 p-4 sm:p-5 flex flex-col justify-between overflow-y-auto shrink-0">
+                  {/* Right Column: Selected Show Detail Panel (Rich Dossier - Hidden on mobile unless show is tapped) */}
+                  <div className={`${mobileDetailOpen ? 'flex' : 'hidden md:flex'} w-full md:w-80 lg:w-96 bg-[#08090d] border-t md:border-t-0 md:border-l border-zinc-900 p-4 sm:p-5 flex-col justify-between overflow-y-auto overscroll-contain shrink-0 min-h-0 h-full scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent`}>
+                    {/* Mobile Back Button */}
+                    <div className="flex items-center justify-between pb-3 mb-2 border-b border-zinc-900 md:hidden shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setMobileDetailOpen(false)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 font-mono text-xs font-bold cursor-pointer hover:bg-cyan-900 transition-colors"
+                      >
+                        <ArrowLeft className="w-4 h-4" /> Back to All Shows
+                      </button>
+                      <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Show Dossier</span>
+                    </div>
+
                     {activeEvent ? (
-                      <div className="space-y-4">
+                      <div className="space-y-4 pb-8 sm:pb-0">
                         {/* Event Flyer / Photo Banner */}
                         {activeEvent.flyerUrl && (
                           <div className="w-full h-36 rounded-xl overflow-hidden bg-black border border-zinc-800 relative group">
@@ -1129,11 +1124,6 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
 
                         <div>
                           <div className="flex items-center gap-1.5 text-cyan-400 text-[10px] font-mono uppercase tracking-wider font-bold mb-1 flex-wrap">
-                            {activeEvent.isFromShowsTable && (
-                              <span className="bg-teal-950 border border-teal-500/70 text-teal-300 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                <Database className="w-2.5 h-2.5 text-teal-400" /> Booked Show
-                              </span>
-                            )}
                             {activeEvent.verified && <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />}
                             <span>{activeEvent.genre}</span>
                           </div>
@@ -1239,9 +1229,9 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                 </div>
               ) : (
                 /* ======================== RADAR MAP VIEW (SECONDARY TOGGLE) ======================== */
-                <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+                <div className="flex-1 min-h-0 min-w-0 flex flex-col md:flex-row overflow-hidden relative w-full h-full">
                   {/* Canvas */}
-                  <div className="flex-1 bg-zinc-950 relative overflow-hidden flex items-center justify-center p-4">
+                  <div className={`${mobileDetailOpen ? 'hidden md:flex' : 'flex'} flex-1 bg-zinc-950 relative overflow-hidden items-center justify-center p-4`}>
                     {/* Grid Background Effect */}
                     <div
                       className="absolute inset-0 opacity-20 pointer-events-none"
@@ -1274,7 +1264,10 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                               key={`pin-${evt.id}-${idx}`}
                               whileHover={{ scale: 1.1 }}
                               whileTap={{ scale: 0.95 }}
-                              onClick={() => setSelectedMapEvent(evt)}
+                              onClick={() => {
+                                setSelectedMapEvent(evt);
+                                setMobileDetailOpen(true);
+                              }}
                               className="relative group cursor-pointer flex flex-col items-center max-w-[130px]"
                             >
                               <div
@@ -1309,9 +1302,21 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                   </div>
 
                   {/* Sidebar for Map */}
-                  <div className="w-full md:w-80 bg-[#07080a] border-t md:border-t-0 md:border-l border-zinc-900 p-4 flex flex-col justify-between overflow-y-auto shrink-0">
+                  <div className={`${mobileDetailOpen ? 'flex' : 'hidden md:flex'} w-full md:w-80 bg-[#07080a] border-t md:border-t-0 md:border-l border-zinc-900 p-4 flex-col justify-between overflow-y-auto shrink-0 h-full`}>
+                    {/* Mobile Back Button for Map */}
+                    <div className="flex items-center justify-between pb-3 mb-2 border-b border-zinc-900 md:hidden shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setMobileDetailOpen(false)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 font-mono text-xs font-bold cursor-pointer hover:bg-cyan-900 transition-colors"
+                      >
+                        <ArrowLeft className="w-4 h-4" /> Back to Radar Map
+                      </button>
+                      <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Pin Dossier</span>
+                    </div>
+
                     {activeEvent ? (
-                      <div className="space-y-4">
+                      <div className="space-y-4 pb-8 sm:pb-0">
                         <div>
                           <div className="flex items-center gap-1.5 text-cyan-400 text-[10px] font-mono uppercase tracking-wider font-bold mb-1">
                             {activeEvent.verified && <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />}

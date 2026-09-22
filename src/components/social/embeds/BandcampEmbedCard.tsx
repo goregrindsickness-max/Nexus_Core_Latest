@@ -108,6 +108,9 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
 
   const [asyncResolved, setAsyncResolved] = useState<BandcampResolvedData | null>(null);
   const [isResolving, setIsResolving] = useState<boolean>(false);
+  const [headerImgError, setHeaderImgError] = useState<boolean>(false);
+  const [artImgError, setArtImgError] = useState<boolean>(false);
+  const [fallbackImgError, setFallbackImgError] = useState<boolean>(false);
 
   // If rawEmbedUrl is a regular Bandcamp link without EmbeddedPlayer, resolve it asynchronously
   useEffect(() => {
@@ -212,8 +215,14 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
       <div className="px-3.5 py-2.5 bg-gradient-to-r from-black via-zinc-950 to-[#02181f] border-b border-cyan-500/30 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <div className="w-6 h-6 rounded-lg bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(6,182,212,0.25)] overflow-hidden">
-            {artworkUrl ? (
-              <img src={artworkUrl} alt={trackTitle} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            {artworkUrl && !headerImgError ? (
+              <img 
+                src={artworkUrl} 
+                alt={trackTitle} 
+                className="w-full h-full object-cover" 
+                referrerPolicy="no-referrer"
+                onError={() => setHeaderImgError(true)}
+              />
             ) : (
               <Disc className="w-3.5 h-3.5 text-cyan-400 animate-spin" style={{ animationDuration: '5s' }} />
             )}
@@ -255,15 +264,27 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
             {/* Album Art / Vinyl Thumbnail on Left (Fills full height of container) */}
             <div className="w-full sm:w-auto sm:aspect-square h-32 sm:h-auto bg-zinc-950 flex items-center justify-center shrink-0 border-b sm:border-b-0 sm:border-r border-cyan-500/30 relative overflow-hidden group/art">
               <div className="absolute inset-0 opacity-25 filter blur-sm">
-                {artworkUrl ? (
-                  <img src={artworkUrl} alt={trackTitle} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                {artworkUrl && !artImgError ? (
+                  <img 
+                    src={artworkUrl} 
+                    alt={trackTitle} 
+                    className="w-full h-full object-cover" 
+                    referrerPolicy="no-referrer"
+                    onError={() => setArtImgError(true)}
+                  />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-cyan-950 to-zinc-900" />
                 )}
               </div>
               <div className="relative h-full aspect-square overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.4)] border-x border-cyan-400/50 sm:border-x-0 bg-black flex items-center justify-center">
-                {artworkUrl ? (
-                  <img src={artworkUrl} alt={trackTitle} className="w-full h-full object-cover group-hover/art:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
+                {artworkUrl && !artImgError ? (
+                  <img 
+                    src={artworkUrl} 
+                    alt={trackTitle} 
+                    className="w-full h-full object-cover group-hover/art:scale-105 transition-transform duration-300" 
+                    referrerPolicy="no-referrer"
+                    onError={() => setArtImgError(true)}
+                  />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-[#02181f] via-zinc-900 to-black flex flex-col items-center justify-center p-2 text-center">
                     <Disc className="w-8 h-8 text-cyan-400 animate-spin mb-1" style={{ animationDuration: '6s' }} />
@@ -280,7 +301,7 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
                 seamless
                 loading="eager"
                 referrerPolicy="no-referrer"
-                allow="autoplay; encrypted-media; fullscreen; clipboard-write"
+                allow="autoplay; encrypted-media; fullscreen; clipboard-write; picture-in-picture"
                 className="w-full relative z-10 block bg-black"
               />
             </div>
@@ -296,12 +317,18 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
         ) : (
           <div 
             onClick={() => openBandcampLink(pageLink || rawEmbedUrl)}
-            className="p-5 flex items-center justify-between gap-4 bg-gradient-to-r from-cyan-950/30 via-black to-zinc-950 border-t border-cyan-500/30 hover:border-cyan-400/80 transition-all cursor-pointer group/fallback"
+            className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 bg-gradient-to-r from-cyan-950/30 via-black to-zinc-950 border-t border-cyan-500/30 hover:border-cyan-400/80 transition-all cursor-pointer group/fallback"
           >
-            <div className="flex items-center gap-3.5 min-w-0 flex-1">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="w-12 h-12 rounded-xl bg-cyan-950/90 border border-cyan-500/50 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(6,182,212,0.3)] overflow-hidden group-hover/fallback:scale-105 transition-transform">
-                {artworkUrl ? (
-                  <img src={artworkUrl} alt={trackTitle} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                {artworkUrl && !fallbackImgError ? (
+                  <img 
+                    src={artworkUrl} 
+                    alt={trackTitle} 
+                    className="w-full h-full object-cover" 
+                    referrerPolicy="no-referrer"
+                    onError={() => setFallbackImgError(true)}
+                  />
                 ) : (
                   <Music2 className="w-6 h-6 text-cyan-400 animate-pulse" />
                 )}
@@ -312,12 +339,12 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
                     BANDCAMP RELEASE PREVIEW
                   </span>
                 </div>
-                <AutoScrollText title={trackTitle} className="text-xs font-bold text-white">
+                <div className="text-xs font-bold text-white truncate">
                   {trackTitle}
-                </AutoScrollText>
-                <AutoScrollText title={artistName || 'Bandcamp Artist'} className="text-[10px] text-cyan-300/80 mt-0.5">
+                </div>
+                <div className="text-[10px] text-cyan-300/80 mt-0.5 truncate">
                   {artistName || 'Bandcamp Artist'}
-                </AutoScrollText>
+                </div>
                 <span className="text-[9px] font-mono text-cyan-400/60 mt-1 block truncate">
                   {pageLink || rawEmbedUrl || 'bandcamp.com'}
                 </span>
@@ -330,7 +357,7 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
                 e.stopPropagation();
                 openBandcampLink(pageLink || rawEmbedUrl);
               }}
-              className="px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-mono font-black flex items-center gap-1.5 shrink-0 shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all cursor-pointer active:scale-95"
+              className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-mono font-black flex items-center justify-center gap-1.5 shrink-0 shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all cursor-pointer active:scale-95 w-full sm:w-auto"
             >
               <span>Listen on Bandcamp</span>
               <ExternalLink className="w-3.5 h-3.5" />

@@ -542,6 +542,90 @@ export async function resolveBandcampMetadata(url: string): Promise<BandcampReso
     }
   }
 
+  // 6. Direct Client-Side Proxy Scraper Fallback (for Android APK when Cloud Run backend is offline or sleeping)
+  const proxyUrls = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(cleanUrl)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(cleanUrl)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(cleanUrl)}`
+  ];
+
+  for (const pUrl of proxyUrls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(pUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const html = await res.text();
+        if (html && html.length > 200) {
+          // Extract og:video or direct EmbeddedPlayer URL
+          const ogVideoMatch = html.match(/<meta[^>]+property=["']og:video["'][^>]+content=["']([^"']+)["']/i) ||
+                               html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:video["']/i) ||
+                               html.match(/<meta[^>]+property=["']twitter:player["'][^>]+content=["']([^"']+)["']/i);
+          let embedUrl = ogVideoMatch ? ogVideoMatch[1].replace(/&amp;/g, '&') : null;
+          if (!embedUrl) {
+            const directEmbedInHtml = html.match(/https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^\s"'<>]+/i);
+            if (directEmbedInHtml) {
+              embedUrl = directEmbedInHtml[0].replace(/&amp;/g, '&');
+            }
+          }
+
+          const trackIdMatch = html.match(/track_id(?:&quot;|")?\s*:\s*(\d+)/i) || 
+                               (embedUrl ? embedUrl.match(/track=(\d+)/i) : null) ||
+                               html.match(/item_id=(\d+)/i);
+          const albumIdMatch = html.match(/album_id(?:&quot;|")?\s*:\s*(\d+)/i) || 
+                               (embedUrl ? embedUrl.match(/album=(\d+)/i) : null);
+          const trackId = trackIdMatch ? trackIdMatch[1] : null;
+          const albumId = albumIdMatch ? albumIdMatch[1] : null;
+
+          if (!embedUrl && (trackId || albumId)) {
+            if (trackId) {
+              embedUrl = `https://bandcamp.com/EmbeddedPlayer/track=${trackId}/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`;
+            } else if (albumId) {
+              embedUrl = `https://bandcamp.com/EmbeddedPlayer/album=${albumId}/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/`;
+            }
+          }
+
+          if (embedUrl) {
+            const titleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+                               html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+            const imageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+                               html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+            const artistMatch = html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i) ||
+                                html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["']/i);
+
+            let title = titleMatch ? titleMatch[1] : "";
+            let artist = artistMatch ? artistMatch[1] : "";
+            if (title.includes(", by ")) {
+              const parts = title.split(", by ");
+              title = parts[0];
+              if (!artist) artist = parts[1];
+            }
+
+            const resolved: BandcampResolvedData = {
+              success: true,
+              embedUrl: formatBandcampEmbedDarkUrl(embedUrl),
+              trackId,
+              albumId,
+              title: title || undefined,
+              artist: artist || undefined,
+              artwork: imageMatch ? imageMatch[1] : undefined,
+              itemType: trackId ? "track" : albumId ? "album" : "track",
+              pageUrl: cleanUrl
+            };
+
+            bandcampResolvedMemoryCache.set(cleanUrl, resolved);
+            try {
+              localStorage.setItem(`nexus_bc_meta_${cleanUrl}`, JSON.stringify(resolved));
+            } catch (e) {}
+            return resolved;
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
   return {
     success: false,
     embedUrl: null,

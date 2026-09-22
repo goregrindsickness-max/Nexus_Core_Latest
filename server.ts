@@ -285,6 +285,18 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Enable CORS for all incoming origins (critical for Android APK WebView, Capacitor, iOS, and Web)
+  app.use((req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin");
+    res.setHeader("Access-Control-Max-Age", "86400");
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(204);
+    }
+    next();
+  });
+
   // Stripe webhook needs raw body parser, so place it BEFORE express.json()
   app.post("/api/webhooks/stripe", express.raw({ type: 'application/json' }), async (req: express.Request, res: express.Response) => {
     const signature = req.headers["stripe-signature"];
