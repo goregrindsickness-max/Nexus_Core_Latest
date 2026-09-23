@@ -15,6 +15,7 @@ import FlightTrackerModal from './FlightTrackerModal';
 import TourChecklistView from './TourChecklistView';
 import OnRouteEssentialsView from './OnRouteEssentialsView';
 import TourManagerPackageModule from './TourManagerPackageModule';
+import CreativesHubView from './CreativesHubView';
 
 export default function EventsWorkspace(props: any) {
   const {
@@ -1280,6 +1281,21 @@ export default function EventsWorkspace(props: any) {
                     >
                       <div className="w-full">
                         <BlackBookView onBack={() => {}} triggerNotification={triggerNotification} userProfile={userProfile} setUserProfile={setUserProfile} activeBandName={activeBand?.name || ''} offers={offers} onUpdateOffer={handleUpdateOffer} userReviews={userReviews} venues={venues} setVenues={setVenues} initialTab="beacons" hideTabs={true} disableScrollToTop={true} />
+                      </div>
+                    </V2ExpandableCard>
+                    <V2ExpandableCard 
+                      theme="yellow" 
+                      title="Creatives Hub" 
+                      isExpanded={activeEventsSection === 'CREATIVES_HUB'} 
+                      onToggle={() => setActiveEventsSection(activeEventsSection === 'CREATIVES_HUB' ? null : 'CREATIVES_HUB')}
+                    >
+                      <div className="w-full bg-black">
+                        <CreativesHubView
+                          onBack={() => {}}
+                          triggerNotification={triggerNotification}
+                          addLog={addLog}
+                          activeBandName={activeBand?.name || 'Artist'}
+                        />
                       </div>
                     </V2ExpandableCard>
                     <V2ExpandableCard theme="yellow" title="Tactical Road Tools" isExpanded={activeEventsSection === 'NOTES'} onToggle={() => setActiveEventsSection(activeEventsSection === 'NOTES' ? null : 'NOTES')}>

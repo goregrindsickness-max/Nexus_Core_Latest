@@ -112,13 +112,83 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
   const [artImgError, setArtImgError] = useState<boolean>(false);
   const [fallbackImgError, setFallbackImgError] = useState<boolean>(false);
 
-  // If rawEmbedUrl is a regular Bandcamp link without EmbeddedPlayer, resolve it asynchronously
+  // Check if we already have a pre-resolved embed URL from props or post data
+  const knownEmbedUrl = directEmbedUrl || 
+    bData.embedUrl || 
+    bData.embed_url || 
+    (rawEmbedUrl && rawEmbedUrl.includes('EmbeddedPlayer') ? rawEmbedUrl : null) ||
+    (bData.trackId ? `https://bandcamp.com/EmbeddedPlayer/bgcol=000000/linkcol=06b6d4/v=2/track=${bData.trackId}/size=large/tracklist=false/artwork=small/transparent=true/` : null) ||
+    (bData.albumId ? `https://bandcamp.com/EmbeddedPlayer/bgcol=000000/linkcol=06b6d4/v=2/album=${bData.albumId}/size=large/tracklist=false/artwork=small/transparent=true/` : null);
+
+  const handleManualResolve = (overrideUrl?: string) => {
+    const targetUrl = overrideUrl || rawEmbedUrl;
+    if (!targetUrl || typeof targetUrl !== 'string') return;
+    setIsResolving(true);
+
+    resolveBandcampMetadata(targetUrl)
+      .then((res) => {
+        if (res && res.success && res.embedUrl) {
+          setAsyncResolved(res);
+          if (post?.id) {
+            try {
+              const supabase = getSupabase();
+              if (supabase) {
+                const existingData = (post as any)?.data || post || {};
+                const updatedData = {
+                  ...existingData,
+                  bandcampData: res,
+                  bandcamp_data: res,
+                  bandcampUrl: res.pageUrl || targetUrl,
+                  bandcamp_url: res.pageUrl || targetUrl,
+                };
+                Promise.resolve(supabase.from('nexus_posts').update({ data: updatedData }).eq('id', post.id)).catch(() => {});
+              }
+            } catch (e) {}
+          }
+        }
+        setIsResolving(false);
+      })
+      .catch((err) => {
+        console.warn('[BandcampEmbedCard] Async resolution error:', err);
+        setIsResolving(false);
+      });
+  };
+
+  // If knownEmbedUrl is missing and rawEmbedUrl is a standard link, resolve it
   useEffect(() => {
+    if (knownEmbedUrl) return;
     if (!rawEmbedUrl || typeof rawEmbedUrl !== 'string') return;
-    if (rawEmbedUrl.includes('EmbeddedPlayer')) return;
 
     let isMounted = true;
     setIsResolving(true);
+
+    // 1. First check if Supabase has fresh data for this post ID
+    if (post?.id) {
+      try {
+        const supabase = getSupabase();
+        if (supabase) {
+          Promise.resolve(
+            supabase
+              .from('nexus_posts')
+              .select('data')
+              .eq('id', post.id)
+              .limit(1)
+          )
+            .then(({ data: rows }: any) => {
+              if (isMounted && rows && rows[0]) {
+                const rowData = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : (rows[0].data || {});
+                const freshBData = rowData.bandcampData || rowData.bandcamp_data;
+                if (freshBData && freshBData.embedUrl) {
+                  setAsyncResolved(freshBData);
+                  setIsResolving(false);
+                  return;
+                }
+              }
+            })
+            .catch(() => {});
+        }
+      } catch (e) {}
+    }
 
     resolveBandcampMetadata(rawEmbedUrl)
       .then((res) => {
@@ -126,7 +196,7 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
           if (res && res.success && res.embedUrl) {
             setAsyncResolved(res);
 
-            // Asynchronously backfill Supabase if post was missing pre-resolved embedUrl
+            // Backfill Supabase if post was missing pre-resolved embedUrl
             if (post?.id && (!bData.embedUrl && !bData.embed_url)) {
               try {
                 const supabase = getSupabase();
@@ -155,14 +225,14 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [rawEmbedUrl, post?.id]);
+  }, [rawEmbedUrl, post?.id, knownEmbedUrl]);
 
-  const activeEmbedUrl = asyncResolved?.embedUrl || directEmbedUrl || bData.embedUrl || bData.embed_url || (rawEmbedUrl && rawEmbedUrl.includes('EmbeddedPlayer') ? rawEmbedUrl : null);
+  const activeEmbedUrl = asyncResolved?.embedUrl || knownEmbedUrl || directEmbedUrl || bData.embedUrl || bData.embed_url || (rawEmbedUrl && rawEmbedUrl.includes('EmbeddedPlayer') ? rawEmbedUrl : null);
   
   const slugMeta = rawEmbedUrl && !rawEmbedUrl.includes('EmbeddedPlayer') ? extractSlugMetadata(rawEmbedUrl) : { artist: '', title: '', itemType: 'track' as const };
 
   const trackTitle = directTitle || asyncResolved?.title || bData.title || (post as any)?.songData?.title || (post as any)?.title || slugMeta.title || 'Bandcamp Release';
-  const artistName = directArtist || asyncResolved?.artist || bData.artist || (post as any)?.songData?.band || (post as any)?.authorName || (post as any)?.author?.name || slugMeta.artist || '';
+  const artistName = directArtist || asyncResolved?.artist || bData.artist || (post as any)?.songData?.band || slugMeta.artist || (post as any)?.author?.name || (post as any)?.authorName || '';
   const pageLink = directPageUrl || asyncResolved?.pageUrl || bData.pageUrl || bData.page_url || post?.mediaUrl || (post as any)?.media_url || (rawEmbedUrl && !rawEmbedUrl.includes('EmbeddedPlayer') ? rawEmbedUrl : null);
   const itemType = directItemType || asyncResolved?.itemType || bData.itemType || bData.item_type || slugMeta.itemType || (rawEmbedUrl?.includes('album=') ? 'album' : 'track');
   const artworkUrl = directArtworkUrl || asyncResolved?.artwork || (asyncResolved as any)?.artworkUrl || bData.artwork || bData.artworkUrl || bData.artwork_url || bData.imageUrl || bData.image_url || post?.imageUrl || post?.image_url || post?.image || null;
@@ -301,7 +371,7 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
                 seamless
                 loading="eager"
                 referrerPolicy="no-referrer"
-                allow="autoplay; encrypted-media; fullscreen; clipboard-write; picture-in-picture"
+                allow="autoplay; encrypted-media; fullscreen; clipboard-write; picture-in-picture; web-share"
                 className="w-full relative z-10 block bg-black"
               />
             </div>
@@ -351,17 +421,32 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                openBandcampLink(pageLink || rawEmbedUrl);
-              }}
-              className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-mono font-black flex items-center justify-center gap-1.5 shrink-0 shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all cursor-pointer active:scale-95 w-full sm:w-auto"
-            >
-              <span>Listen on Bandcamp</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleManualResolve();
+                }}
+                className="px-3 py-2 rounded-xl bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 hover:text-cyan-200 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]"
+                title="Force reload player embed"
+              >
+                <Loader2 className="w-3.5 h-3.5" />
+                <span>Load Player</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openBandcampLink(pageLink || rawEmbedUrl);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-mono font-black flex items-center justify-center gap-1.5 shrink-0 shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all cursor-pointer active:scale-95 w-full sm:w-auto"
+              >
+                <span>Bandcamp</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
       </div>

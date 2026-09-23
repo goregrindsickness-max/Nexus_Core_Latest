@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChevronLeft, MapPin, Phone, Search, Navigation, Crosshair, LocateFixed, RefreshCw } from 'lucide-react';
 import InfoTip from '../../InfoTip';
 import { getCurrentCoordinates } from '../../../services/locationService';
+import UsMapOutlineBackground from './UsMapOutlineBackground';
 
 interface OnRouteEssentialsViewProps {
   onBack: () => void;
@@ -309,30 +310,36 @@ export default function OnRouteEssentialsView({ onBack, venueAddress }: OnRouteE
     <div className="min-h-screen bg-gradient-to-br from-[#0c0400] via-black to-[#1a0a00] text-zinc-300 font-sans flex flex-col relative selection:bg-orange-500/30 selection:text-white">
       <div className="flex-1 w-full max-w-4xl mx-auto p-4 md:p-8 pt-8 md:pt-12 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
         
-        {/* HEADER */}
-        <div className="border-b border-orange-500/30 pb-6 text-center shadow-[0_4px_20px_-10px_rgba(249,115,22,0.2)] flex flex-col items-center justify-center">
-          <div className="mb-4">
-            <Crosshair style={{ width: '48px', height: '48px' }} className="text-orange-500 animate-[spin_6s_linear_infinite] drop-shadow-[0_0_15px_rgba(249,115,22,0.6)]" />
+        {/* HEADER WITH OUTLINE US MAP BACKGROUND */}
+        <div className="relative overflow-hidden rounded-2xl border border-orange-500/30 bg-black/40 backdrop-blur-md p-6 sm:p-8 text-center shadow-[0_4px_30px_-10px_rgba(249,115,22,0.3)] flex flex-col items-center justify-center">
+          {/* Subtle US Map Vector Outline Layer */}
+          <UsMapOutlineBackground className="opacity-40" />
+
+          {/* Foreground Header Content */}
+          <div className="relative z-10 flex flex-col items-center justify-center">
+            <div className="mb-4">
+              <Crosshair style={{ width: '48px', height: '48px' }} className="text-orange-500 animate-[spin_6s_linear_infinite] drop-shadow-[0_0_15px_rgba(249,115,22,0.6)]" />
+            </div>
+            <div className="flex items-center justify-center gap-3">
+              <h1 className="text-orange-500 font-mono font-black tracking-[0.2em] uppercase text-2xl sm:text-3xl md:text-4xl drop-shadow-[0_0_20px_rgba(249,115,22,0.8)]">
+                LOCAL AMENITIES FINDER
+              </h1>
+              <InfoTip 
+                title="LOCAL AMENITIES ENGINE"
+                bullets={[
+                  "AUTO-DETECTS VENUE GEOLOCATION FOR SHIFT LANDING SPOTS.",
+                  "INPUT AN ADDRESS OR LOCK LIVE GPS DEVICE POSITION CONTEXT.",
+                  "QUICK PRESETS FILTER FOR RESTAURANTS, HOTELS, PHARMACIES & STORES.",
+                  "CLICK TO DEEP-LINK DIRECTLY INTO NATIVE TURN-BY-TURN ROUTING NAV."
+                ]}
+                accentColor="#f97316"
+                position="bottom-right"
+              />
+            </div>
+            <p className="text-zinc-300 text-xs text-center max-w-md mx-auto mb-1 mt-2 leading-relaxed font-mono drop-shadow-sm">
+              Find essential spots near your venue or current location for food, sleep, gear fixes, or quick supply runs.
+            </p>
           </div>
-          <div className="flex items-center justify-center gap-3">
-            <h1 className="text-orange-500 font-mono font-black tracking-[0.2em] uppercase text-2xl sm:text-3xl md:text-4xl drop-shadow-[0_0_20px_rgba(249,115,22,0.8)]">
-              LOCAL AMENITIES FINDER
-            </h1>
-            <InfoTip 
-              title="LOCAL AMENITIES ENGINE"
-              bullets={[
-                "AUTO-DETECTS VENUE GEOLOCATION FOR SHIFT LANDING SPOTS.",
-                "INPUT AN ADDRESS OR LOCK LIVE GPS DEVICE POSITION CONTEXT.",
-                "QUICK PRESETS FILTER FOR RESTAURANTS, HOTELS, PHARMACIES & STORES.",
-                "CLICK TO DEEP-LINK DIRECTLY INTO NATIVE TURN-BY-TURN ROUTING NAV."
-              ]}
-              accentColor="#f97316"
-              position="bottom-right"
-            />
-          </div>
-          <p className="text-zinc-400 text-xs text-center max-w-sm mx-auto mb-4 mt-1 leading-relaxed">
-            Find essential spots near your venue or current location for food, sleep, gear fixes, or quick supply runs.
-          </p>
         </div>
 
         {/* The Operational Mode Segment Toggle */}

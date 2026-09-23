@@ -12,6 +12,7 @@ import { communityBandManager, CommunityBandRecord, isCommunityBandRecord } from
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
 import CommunityBandCuratorModal from '../../social/modals/CommunityBandCuratorModal';
 import BandClaimHandoverModal from '../../social/modals/BandClaimHandoverModal';
+import BandBookingModal from '../../social/modals/BandBookingModal';
 import MarqueeText from '../../MarqueeText';
 import { SonicFootprint, ListenerMetric, calculateListenerMetrics } from '../../profile/SonicFootprint';
 import { TimelineTab } from '../../profile/TimelineTab';
@@ -139,6 +140,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const [dbReleases, setDbReleases] = useState<any[]>([]);
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [showCuratorModal, setShowCuratorModal] = useState(false);
+  const [showBandBookingModal, setShowBandBookingModal] = useState(false);
   const [selectedRelease, setSelectedRelease] = React.useState<any>(null);
 
   // Synchronous sync of communityArchiveMatch on profile selection changes
@@ -3029,17 +3031,13 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               </div>
                             </div>
                             <button 
-                              onClick={() => {
-                                const userRole = (userProfile?.role || '').toLowerCase();
-                                const isPromoter = userRole.includes('promoter') || userRole.includes('label') || userRole.includes('manager') || userProfile?.allowed_workspaces?.includes('promoter') || userProfile?.allowed_workspaces?.includes('label');
-                                
-                                if (!isPromoter) {
-                                  triggerNotification?.("⚠️ Only registered Promoters or Labels can request bookings. Elevate profile in Settings.");
-                                } else {
-                                  triggerNotification?.(`🤘 Booking contract & routing request sent for ${selectedUserProfile.name}!`);
-                                }
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setShowBandBookingModal(true);
                               }}
-                              className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-black text-[10px] px-3 py-1.5 rounded-lg transition-colors uppercase tracking-wider font-mono shrink-0 shadow-md flex items-center gap-1 cursor-pointer"
+                              className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-black text-[10px] px-3 py-1.5 rounded-lg transition-colors uppercase tracking-wider font-mono shrink-0 shadow-md flex items-center gap-1 cursor-pointer active:scale-95 relative z-20"
                             >
                               📥 Book Band
                             </button>
@@ -4229,6 +4227,16 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       release={selectedRelease}
       onClose={() => setSelectedRelease(null)}
       bandName={bData?.name || communityArchiveMatch?.name || selectedUserProfile?.name || fetchedBandData?.name || 'Band'}
+    />
+
+    {/* FORMAL BAND BOOKING TRANSMISSION MODAL */}
+    <BandBookingModal
+      key="band-booking-transmission-modal"
+      isOpen={showBandBookingModal}
+      onClose={() => setShowBandBookingModal(false)}
+      targetProfile={selectedUserProfile || targetProfile || bData || communityArchiveMatch}
+      userProfile={userProfile}
+      triggerNotification={triggerNotification}
     />
   </>
 );

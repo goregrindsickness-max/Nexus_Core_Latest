@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { labelCatalogStore } from '../../../utils/indexedDB';
 import { V2ExpandableCard } from '../../V2ExpandableCard';
 import InventoryView from './InventoryView';
-import CreativesHubView from './CreativesHubView';
 import ReleasesCatalogTab from '../Label/ReleasesCatalogTab';
 import PublicStorefrontView from '../../sales/PublicStorefrontView';
 import { ShoppingBag, Globe, Play, Music, Radio, Sparkles, Box, Check, Star, RefreshCw, Layers } from 'lucide-react';
@@ -318,19 +317,7 @@ export default function MerchWorkspaceWrapper({
         />
       </div>
 
-      {/* SECTION 2: CREATIVES HUB (COLLAPSIBLE) */}
-      <V2ExpandableCard title="Creatives Hub" defaultExpanded={false}>
-        <div className="bg-black border-t border-[#1a1a1a]">
-          <CreativesHubView
-            onBack={() => {}}
-            triggerNotification={triggerNotification}
-            addLog={addLog}
-            activeBandName={activeBand?.name || 'Artist'}
-          />
-        </div>
-      </V2ExpandableCard>
-
-      {/* SECTION 3: MUSIC CATALOG (COLLAPSIBLE) */}
+      {/* SECTION 2: MUSIC CATALOG (COLLAPSIBLE) */}
       <V2ExpandableCard title="Music Catalog & Master Releases" defaultExpanded={false}>
         <div className="bg-black border-t border-[#1a1a1a] p-1">
           {!isLoading && (

@@ -11,6 +11,7 @@ import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../
 import { isCommunityBandRecord } from '../../../lib/seedBandsData';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
 import MarqueeText from '../../MarqueeText';
+import BandBookingModal from '../../social/modals/BandBookingModal';
 import { SonicFootprint, ListenerMetric, calculateListenerMetrics } from '../../profile/SonicFootprint';
 import { TimelineTab } from '../../profile/TimelineTab';
 import { ProfileMarketplaceTab } from '../../profile/ProfileMarketplaceTab';
@@ -115,6 +116,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   feed
 }) => {
   const [liveRoutingStats, setLiveRoutingStats] = React.useState<{ toursCount: number; showsCount: number }>({ toursCount: 0, showsCount: 0 });
+  const [showBandBookingModal, setShowBandBookingModal] = React.useState(false);
   const [fetchedBandData, setFetchedBandData] = React.useState<any>(null);
   const [linkedBandData, setLinkedBandData] = React.useState<any>(null);
   const [fetchedProfileData, setFetchedProfileData] = React.useState<any>(null);
@@ -580,8 +582,9 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   );
   
   return (
-    <AnimatePresence>
-      {selectedUserProfile && (
+    <>
+      <AnimatePresence>
+        {selectedUserProfile && (
         <motion.div
           key="public-profile-modal-backdrop"
           initial={{ opacity: 0 }}
@@ -2236,17 +2239,13 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               </div>
                             </div>
                             <button 
-                              onClick={() => {
-                                const userRole = (userProfile?.role || '').toLowerCase();
-                                const isPromoter = userRole.includes('promoter') || userRole.includes('label') || userRole.includes('manager') || userProfile?.allowed_workspaces?.includes('promoter') || userProfile?.allowed_workspaces?.includes('label');
-                                
-                                if (!isPromoter) {
-                                  triggerNotification?.("⚠️ Only registered Promoters or Labels can request bookings. Elevate profile in Settings.");
-                                } else {
-                                  triggerNotification?.(`🤘 Booking contract & routing request sent for ${selectedUserProfile.name}!`);
-                                }
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setShowBandBookingModal(true);
                               }}
-                              className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-black text-[10px] px-3 py-1.5 rounded-lg transition-colors uppercase tracking-wider font-mono shrink-0 shadow-md flex items-center gap-1 cursor-pointer"
+                              className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-black text-[10px] px-3 py-1.5 rounded-lg transition-colors uppercase tracking-wider font-mono shrink-0 shadow-md flex items-center gap-1 cursor-pointer active:scale-95 relative z-20"
                             >
                               📥 Book Band
                             </button>
@@ -3176,5 +3175,16 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         </motion.div>
       )}
     </AnimatePresence>
+
+    {/* FORMAL BAND BOOKING TRANSMISSION MODAL */}
+    <BandBookingModal
+      key="label-band-booking-modal"
+      isOpen={showBandBookingModal}
+      onClose={() => setShowBandBookingModal(false)}
+      targetProfile={selectedUserProfile || targetProfile || fetchedBandData || linkedBandData}
+      userProfile={userProfile}
+      triggerNotification={triggerNotification}
+    />
+  </>
   );
 };
