@@ -334,7 +334,7 @@ export const MainTabRouter: React.FC<MainTabRouterProps> = (props) => {
             inventory={inventory}
             setInventory={setInventory}
             commitInventoryMutation={commitInventoryMutation}
-            shows={shows}
+            shows={filteredShows || shows}
             setShows={setShows}
             onSubmitSale={handleDataSubmit}
             onBack={() => setActiveTab('home-v2')}
@@ -487,10 +487,12 @@ export const MainTabRouter: React.FC<MainTabRouterProps> = (props) => {
       return (
         <div className="flex-grow overflow-y-auto">
           <SetlistsView
-            shows={shows}
+            shows={filteredShows || shows}
             onBack={() => setActiveTab('home-v2')}
             triggerNotification={triggerNotification}
             addLog={addLog}
+            bandName={activeBand?.name || 'Artist'}
+            activeBandId={activeBand?.id}
           />
         </div>
       );
@@ -499,13 +501,14 @@ export const MainTabRouter: React.FC<MainTabRouterProps> = (props) => {
       return (
         <div className="flex-grow overflow-y-auto">
           <GuestlistsView
-            shows={shows}
+            shows={filteredShows || shows}
             setShows={setShows}
             onBack={() => setActiveTab('home-v2')}
             triggerNotification={triggerNotification}
             addLog={addLog}
             initialShowId={selectedGuestlistShowId}
             bandName={activeBand?.name || 'Artist'}
+            activeBandId={activeBand?.id}
           />
         </div>
       );

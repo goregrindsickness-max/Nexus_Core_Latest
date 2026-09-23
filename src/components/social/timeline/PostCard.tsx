@@ -939,6 +939,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       {/* RICH EMBED 4: TAPE / BOOTLEG CARD */}
       {post.tapeData && (
         <TapeEmbedCard
+          variant="feed"
           post={post}
           isPlaying={playingTapeId === post.id}
           progress={tapeProgress || 0}

@@ -1055,7 +1055,8 @@ export function HomeV2DashboardView(props: any & { renderTourNotesCard: any; ren
   setLoyaltyMembers={setLoyaltyMembers}
   setShows={setShows}
   setStagedDistroItems={setStagedDistroItems}
-  shows={shows}
+  shows={filteredShows || shows}
+  filteredShows={filteredShows}
   stagedDistroItems={stagedDistroItems}
   triggerNotification={triggerNotification}
   handleNewSaleClick={handleNewSaleClick}

@@ -49,6 +49,7 @@ export interface EventsDirectoryModalProps {
   onImportShowsFromTable?: () => Promise<void> | void;
   onOpenShowCreator?: () => void;
   onSelectEvent?: (evt: any) => void;
+  onOpenEventPage?: (evt: any) => void;
 }
 
 const CITY_GEOLOCATIONS: Record<string, { lng: number; lat: number }> = {
@@ -398,7 +399,8 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
   setShows,
   onImportShowsFromTable,
   onOpenShowCreator,
-  onSelectEvent
+  onSelectEvent,
+  onOpenEventPage
 }) => {
   // View mode toggle: List (default) vs Map
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
@@ -411,6 +413,17 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
   const [ticketOnly, setTicketOnly] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [localImportedShows, setLocalImportedShows] = useState<any[]>([]);
+
+  // Open Full Event Companion Page handler
+  const handleOpenFullEventPage = (event: any) => {
+    if (!event) return;
+    if (onOpenEventPage) {
+      onOpenEventPage(event);
+    }
+    // Also dispatch custom window event for universal deep-linking across the app
+    window.dispatchEvent(new CustomEvent('open-event-companion', { detail: event }));
+    triggerNotification?.(`Opening event page: ${event.title || event.headliner || 'Show'}`);
+  };
 
   // Function to aggregate all shows directly from the database, indexedDB and props into the directory
   const handleImportShowsFromTable = useCallback(async () => {
@@ -1197,6 +1210,14 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                         <div className="pt-2 space-y-2">
                           <button
                             type="button"
+                            onClick={() => handleOpenFullEventPage(activeEvent)}
+                            className="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:via-orange-400 hover:to-amber-400 text-black font-mono uppercase font-black text-xs py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.35)] flex items-center justify-center gap-2 cursor-pointer border border-amber-300/80 active:scale-[0.98]"
+                          >
+                            <Sparkles className="w-4 h-4 text-black animate-pulse" /> Open Full Event Page
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => {
                               triggerNotification?.(`🎟️ Reserved pass for ${activeEvent.title}!`);
                             }}
@@ -1356,6 +1377,14 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                         )}
 
                         <div className="pt-2 space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenFullEventPage(activeEvent)}
+                            className="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:via-orange-400 hover:to-amber-400 text-black font-mono uppercase font-black text-xs py-2.5 rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.35)] flex items-center justify-center gap-2 cursor-pointer border border-amber-300/80 active:scale-[0.98]"
+                          >
+                            <Sparkles className="w-4 h-4 text-black animate-pulse" /> Open Full Event Page
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => triggerNotification?.(`🎟️ Reserved pass for ${activeEvent.title}!`)}

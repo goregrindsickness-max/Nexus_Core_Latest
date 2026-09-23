@@ -841,6 +841,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                 {/* Tape / Bootleg Embed Card */}
                 {post.tapeData && (
                   <TapeEmbedCard
+                    variant="profile"
                     post={post as any}
                     isPlaying={playingTapeId === post.id}
                     progress={tapeProgress[post.id] || 0}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, MapPin, Calendar, Ticket, Music, Navigation, Filter, ExternalLink, ShieldCheck } from 'lucide-react';
+import { X, MapPin, Calendar, Ticket, Music, Navigation, Filter, ExternalLink, ShieldCheck, Sparkles } from 'lucide-react';
 
 interface GigMapModalProps {
   isOpen: boolean;
@@ -271,6 +271,17 @@ export const GigMapModal: React.FC<GigMapModalProps> = ({
                     )}
 
                     <div className="pt-2 space-y-2">
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          window.dispatchEvent(new CustomEvent('open-event-companion', { detail: selectedMapEvent }));
+                          triggerNotification?.(`Opening full event page for ${selectedMapEvent.title || 'show'}...`);
+                        }}
+                        className="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:via-orange-400 hover:to-amber-400 text-black font-mono uppercase font-black text-xs py-2.5 rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.35)] flex items-center justify-center gap-2 cursor-pointer border border-amber-300/80 active:scale-[0.98]"
+                      >
+                        <Sparkles className="w-4 h-4 text-black animate-pulse" /> Open Full Event Page
+                      </button>
+
                       <button 
                         onClick={() => {
                           triggerNotification?.(`🎟️ Reserved presale pass for ${selectedMapEvent.title}!`);

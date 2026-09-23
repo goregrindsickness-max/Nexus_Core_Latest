@@ -29,6 +29,20 @@ const getDistanceMiles = (lat1: number, lon1: number, lat2: number, lon2: number
   return (R * c).toFixed(1);
 };
 
+// Comprehensive category-to-keyword matrices for complete real-world POI discovery
+const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  HOTELS: ['hotel', 'motel', 'inn', 'suites', 'best western', 'hampton inn', 'holiday inn', 'marriott', 'hilton', 'la quinta', 'super 8', 'comfort inn', 'lodging'],
+  GROCERY: ['supermarket', 'grocery', 'albertsons', 'walmart', 'kroger', 'heb', 'brookshires', 'aldi', 'dollar general', 'family dollar', 'target', 'costco', 'sams club', 'trader joes', 'food mart', 'market'],
+  PHARMACY: ['pharmacy', 'cvs', 'walgreens', 'rite aid', 'medicine', 'drugstore', 'walmart pharmacy', 'kroger pharmacy', 'albertsons pharmacy'],
+  CONVENIENCE: ['convenience', 'gas station', '7-eleven', 'circle k', 'quiktrip', 'buc-ees', 'racetrac', 'shell', 'chevron', 'exxon', 'valero', 'pilot flying j', 'loves travel stop', 'caseys'],
+  RESTAURANTS: ['restaurant', 'diner', 'tacos', 'bbq', 'pizza', 'burger', 'grill', 'cafe', 'mcdonalds', 'wendys', 'whataburger', 'chick-fil-a', 'subway', 'chipotle', 'sonic', 'steakhouse'],
+  HARDWARE: ['hardware', 'home depot', 'lowes', 'ace hardware', 'harbor freight', 'tractor supply', 'true value', 'lumber'],
+  'LIQUOR STORE': ['liquor', 'spirits', 'package store', 'beer', 'wine', 'spec', 'total wine', 'beverage depot'],
+  'REPAIR SHOP': ['auto repair', 'mechanic', 'tire', 'autozone', 'oreilly', 'advance auto', 'discount tire', 'firestone', 'pep boys', 'brakes', 'oil change'],
+  HOSPITALS: ['hospital', 'emergency room', 'urgent care', 'medical center', 'clinic', 'health center', 'er', 'trauma'],
+  INSTRUMENTS: ['guitar', 'music store', 'musical instruments', 'guitar center', 'pawn shop', 'audio equipment', 'sam ash', 'music supply', 'drums', 'amps']
+};
+
 export default function OnRouteEssentialsView({ onBack, venueAddress }: OnRouteEssentialsViewProps) {
   const [sourceLocation, setSourceLocation] = useState('');
   const [customSearch, setCustomSearch] = useState('');
@@ -66,19 +80,28 @@ export default function OnRouteEssentialsView({ onBack, venueAddress }: OnRouteE
     const match = address.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
     if (match) return { lat: parseFloat(match[1]), lon: parseFloat(match[2]) };
     
-    // Otherwise use Nominatim geocoding with an email parameter to prevent rate limits or empty response blocks
+    // Fast geocode with Photon first (instant, no rate limits)
+    try {
+      const pRes = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`);
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        if (pData.features && pData.features.length > 0) {
+          const [lon, lat] = pData.features[0].geometry.coordinates;
+          return { lat, lon };
+        }
+      }
+    } catch (e) {
+      console.warn("Photon geocode fallback:", e);
+    }
+
+    // Secondary geocoding with OpenStreetMap
     try {
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&email=goregrindsickness@gmail.com`);
-      if (!res.ok) {
-        throw new Error(`Nominatim geocoding status error: ${res.status}`);
-      }
-      const contentType = res.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
-        throw new Error("Nominatim geocoding returned non-JSON response.");
-      }
-      const data = await res.json();
-      if (data && data.length > 0) {
-        return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.length > 0) {
+          return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+        }
       }
     } catch (e) {
       console.error("Geocoding failed", e);
@@ -86,10 +109,59 @@ export default function OnRouteEssentialsView({ onBack, venueAddress }: OnRouteE
     return null;
   };
 
+  // High-performance proximity search utilizing Photon OSM with multi-keyword sweeps
+  const queryPhotonProximity = async (lat: number, lon: number, keywords: string[], maxRangeMiles: number): Promise<PlaceResult[]> => {
+    const fetches = keywords.map(kw =>
+      fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(kw)}&lat=${lat}&lon=${lon}&limit=15`)
+        .then(r => r.json())
+        .catch(() => ({ features: [] }))
+    );
+
+    const allResponses = await Promise.all(fetches);
+    const seen = new Set<string>();
+    const list: PlaceResult[] = [];
+
+    allResponses.forEach(res => {
+      res.features?.forEach((f: any) => {
+        if (!f.geometry || !f.geometry.coordinates) return;
+        const [fLon, fLat] = f.geometry.coordinates;
+        const dist = parseFloat(getDistanceMiles(lat, lon, fLat, fLon));
+        
+        // Include items within the specified range (or up to 2.5x if sparse)
+        if (dist <= maxRangeMiles) {
+          const name = f.properties.name || f.properties.street || 'Local Facility';
+          const key = `${name.toLowerCase().trim()}_${fLat.toFixed(3)}_${fLon.toFixed(3)}`;
+          
+          if (!seen.has(key)) {
+            seen.add(key);
+            const street = f.properties.street || '';
+            const housenumber = f.properties.housenumber || '';
+            const streetAddr = [housenumber, street].filter(Boolean).join(' ');
+            const city = f.properties.city || f.properties.county || f.properties.district || '';
+            const state = f.properties.state || '';
+            const postcode = f.properties.postcode || '';
+            const fullAddress = [streetAddr, city, state, postcode].filter(Boolean).join(', ');
+
+            list.push({
+              id: f.properties.osm_id?.toString() || Math.random().toString(),
+              name: name.toUpperCase(),
+              distance: `${dist} MILES`,
+              address: fullAddress || 'Location coordinates active on GPS route',
+              phone: 'Direct GPS Navigation Available'
+            });
+          }
+        }
+      });
+    });
+
+    list.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+    return list;
+  };
+
   const executeRealSearch = async (type: string, rangeMilesOverride?: number) => {
     setSearchError(null);
     const currentRange = rangeMilesOverride !== undefined ? rangeMilesOverride : radialRangeMiles;
-    setSearchStatus(`SWEEPING PRIMARY ${currentRange}-MILE RADIUS...`);
+    setSearchStatus(`SWEEPING SECTOR (${currentRange}-MILE RADIUS)...`);
     setIsSearching(true);
     setResults([]);
     setLastExecutedType(type);
@@ -111,180 +183,52 @@ export default function OnRouteEssentialsView({ onBack, venueAddress }: OnRouteE
     }
 
     const { lat, lon } = coords;
-    let filter = '';
     
-    if (type === 'HOTELS') {
-        filter = `["tourism"="hotel"]`;
-    } else if (type === 'GROCERY') {
-        filter = `["shop"~"supermarket|grocery"]`;
-    } else if (type === 'PHARMACY') {
-        filter = `["amenity"="pharmacy"]`;
-    } else if (type === 'CONVENIENCE') {
-        filter = `["shop"="convenience"]`;
-    } else if (type === 'RESTAURANTS') {
-        filter = `["amenity"~"restaurant|fast_food|pub|cafe"]`;
-    } else if (type === 'HARDWARE') {
-        filter = `["shop"~"hardware|doityourself"]`;
-    } else if (type === 'LIQUOR STORE') {
-        filter = `["shop"~"alcohol|beverages|wine"]`;
-    } else if (type === 'REPAIR SHOP') {
-        filter = `["shop"~"car_repair|auto_repair"]`;
-    } else if (type === 'HOSPITALS') {
-        filter = `["amenity"~"hospital|clinic"]`;
-    } else if (type === 'INSTRUMENTS') {
-        filter = `["shop"~"music|musical_instrument|musical_instruments"]`;
+    // Determine keywords to search
+    let searchKeywords: string[] = [];
+    const upperType = type.toUpperCase().trim();
+
+    if (CATEGORY_KEYWORDS[upperType]) {
+      searchKeywords = CATEGORY_KEYWORDS[upperType];
     } else {
-        const cleanSearch = type.trim();
-        const terms = cleanSearch.toLowerCase().split(/\s+/).filter(w => w.length > 1);
-        if (terms.length > 0) {
-            const coreTerms = terms.filter(t => !['shop', 'store', 'center', 'near', 'me', 'the', 'and', 'with'].includes(t));
-            const queryTerms = coreTerms.length > 0 ? coreTerms : terms;
-            const nameRegex = queryTerms.join('|');
-            
-            // Build escaped string versions for safety with Overpass query syntax
-            const escapedNameRegex = nameRegex.replace(/"/g, '\\"');
-            const escapedCleanSearch = cleanSearch.replace(/"/g, '\\"');
-
-            const addedCategories: string[] = [];
-            // Match instruments or music gears
-            if ((queryTerms || []).some(t => /guitar|music|instrument|bass|piano|drum|amp|record|synth|strings|gc/i.test(t))) {
-                addedCategories.push(`nwr(around:__RADIUS__,__LAT__,__LON__)["shop"~"music|musical_instrument|musical_instruments"]`);
-                addedCategories.push(`nwr(around:__RADIUS__,__LAT__,__LON__)["name"~"guitar|music|instrument|piano",i]`);
-            }
-            if ((queryTerms || []).some(t => /food|burger|pizza|eat|restaurant|breakfast|dinner|lunch|sub|sandwich/i.test(t))) {
-                addedCategories.push(`nwr(around:__RADIUS__,__LAT__,__LON__)["amenity"~"restaurant|fast_food|pub|cafe"]`);
-            }
-            if ((queryTerms || []).some(t => /repair|auto|car|mechanic|tire|fix/i.test(t))) {
-                addedCategories.push(`nwr(around:__RADIUS__,__LAT__,__LON__)["shop"~"car_repair|auto_repair"]`);
-            }
-            if ((queryTerms || []).some(t => /hardware|tool|home|lumber|supply|screw|nail|material/i.test(t))) {
-                addedCategories.push(`nwr(around:__RADIUS__,__LAT__,__LON__)["shop"~"hardware|doityourself"]`);
-            }
-            if ((queryTerms || []).some(t => /liquor|alcohol|beer|wine|package/i.test(t))) {
-                addedCategories.push(`nwr(around:__RADIUS__,__LAT__,__LON__)["shop"~"alcohol|beverages|wine"]`);
-            }
-            if ((queryTerms || []).some(t => /hospital|medical|clinic|doctor|emergency/i.test(t))) {
-                addedCategories.push(`nwr(around:__RADIUS__,__LAT__,__LON__)["amenity"~"hospital|clinic"]`);
-            }
-
-            // A powerful, highly unionized multi-dimensional Osm query for robust lookup:
-            filter = `(
-              nwr(around:__RADIUS__,__LAT__,__LON__)["name"~"${escapedNameRegex}",i];
-              nwr(around:__RADIUS__,__LAT__,__LON__)["brand"~"${escapedNameRegex}",i];
-              nwr(around:__RADIUS__,__LAT__,__LON__)["name"~"${escapedCleanSearch}",i];
-              nwr(around:__RADIUS__,__LAT__,__LON__)["brand"~"${escapedCleanSearch}",i];
-              ${addedCategories.length > 0 ? addedCategories.join(';\n              ') + ';' : ''}
-            )`;
-        } else {
-            const escapedType = type.replace(/"/g, '\\"');
-            filter = `(
-              nwr(around:__RADIUS__,__LAT__,__LON__)["name"~"${escapedType}",i];
-              nwr(around:__RADIUS__,__LAT__,__LON__)["brand"~"${escapedType}",i];
-            )`;
-        }
+      // Custom user query
+      const cleanSearch = type.trim();
+      searchKeywords = [cleanSearch];
+      const terms = cleanSearch.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+      if (terms.length > 0) {
+        searchKeywords.push(...terms);
+      }
     }
 
-    const getOverpassQuery = (r: number, f: string) => {
-      if (f.startsWith('(')) {
-        return `[out:json][timeout:25];
-        ${f.replaceAll('__RADIUS__', r.toString()).replaceAll('__LAT__', lat.toString()).replaceAll('__LON__', lon.toString())};
-        out center 150;`;
-      }
-      return `[out:json][timeout:25];
-      nwr(around:${r},${lat},${lon})${f};
-      out center 150;`;
-    };
-
-    let radius = Math.round(currentRange * 1609.34);
-    let overpassQuery = getOverpassQuery(radius, filter);
-
     try {
-      let res = await fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST',
-        body: overpassQuery
-      });
-      if (!res.ok) {
-        setSearchError(`The search satellite is temporarily offline (Status ${res.status}). Please try again later.`);
-        setSearchStatus(null);
-        setIsSearching(false);
-        return;
-      }
-      let contentType = res.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
-        setSearchError("The search satellite returned an incompatible format. Please try again later.");
-        setSearchStatus(null);
-        setIsSearching(false);
-        return;
-      }
-      let data = await res.json();
-      
-      let elements = data && data.elements ? data.elements : [];
+      // Step 1: Search within primary radius
+      let places = await queryPhotonProximity(lat, lon, searchKeywords, currentRange);
+
+      // Step 2: If fewer than 3 results found, automatically expand radius up to 2.5x to capture nearby regional hubs
       let isExtended = false;
-
-      if (elements.length === 0) {
-        const extRange = currentRange * 2;
-        setSearchStatus(`PRIMARY SWEEP EMPTY. EXPANDING SWEEP RADIUS TO ${extRange} MILES...`);
-        radius = Math.round(extRange * 1609.34);
-        overpassQuery = getOverpassQuery(radius, filter);
-        res = await fetch('https://overpass-api.de/api/interpreter', {
-          method: 'POST',
-          body: overpassQuery
-        });
-        if (!res.ok) {
-          setSearchError(`Extended sweep failed: satellite server returned status ${res.status}`);
-          setSearchStatus(null);
-          setIsSearching(false);
-          return;
+      if (places.length < 3) {
+        const expandedRadius = Math.max(currentRange * 2.5, 25);
+        setSearchStatus(`EXPANDING SEARCH RADIUS TO ${Math.round(expandedRadius)} MILES...`);
+        const expandedPlaces = await queryPhotonProximity(lat, lon, searchKeywords, expandedRadius);
+        if (expandedPlaces.length > places.length) {
+          places = expandedPlaces;
+          isExtended = true;
         }
-        contentType = res.headers.get("content-type") || "";
-        if (!contentType.includes("application/json")) {
-          setSearchError("Extended sweep failed: satellite server returned incompatible format.");
-          setSearchStatus(null);
-          setIsSearching(false);
-          return;
-        }
-        data = await res.json();
-        elements = data && data.elements ? data.elements : [];
-        isExtended = true;
       }
 
-      if (elements && elements.length > 0) {
-        const parsedResults: PlaceResult[] = elements.map((el: any) => {
-          const eLat = el.center ? el.center.lat : el.lat;
-          const eLon = el.center ? el.center.lon : el.lon;
-          const tags = el.tags || {};
-          
-          // Construct address string from tags if available
-          const street = tags['addr:street'] || '';
-          const housenumber = tags['addr:housenumber'] || '';
-          const city = tags['addr:city'] || '';
-          let addrFull = `${housenumber} ${street}`.trim();
-          addrFull = addrFull ? `${addrFull}, ${city}`.replace(/,\s*$/, '') : city;
-          if (!addrFull) addrFull = 'Address unlisted';
-
-          return {
-            id: el.id.toString(),
-            name: tags.name ? tags.name.toUpperCase() : `${type.toUpperCase()} FACILITY`,
-            distance: `${getDistanceMiles(lat, lon, eLat, eLon)} MILES`,
-            address: addrFull.toLowerCase(),
-            phone: tags.phone || tags['contact:phone'] || 'N/A'
-          };
-        });
-
-        // Now sort by calculated miles mathematically
-        parsedResults.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
-        
-        // Let's only display up to 25 top sorted entries to keep it perfect and high priority!
-        const trimmedResults = parsedResults.slice(0, 25);
-        setResults(trimmedResults);
-        setSearchStatus(isExtended ? `${currentRange * 2}-MILE EXTENDED SWEEP COMPLETED` : `${currentRange}-MILE SWEEP COMPLETED (${parsedResults.length} FOUND)`);
+      if (places.length > 0) {
+        const trimmed = places.slice(0, 25);
+        setResults(trimmed);
+        setSearchStatus(isExtended 
+          ? `EXTENDED SWEEP COMPLETED (${trimmed.length} FOUND)` 
+          : `${currentRange}-MILE SWEEP COMPLETED (${trimmed.length} FOUND)`);
       } else {
-        setSearchError(`No active intercepts found within primary (${currentRange}mi) or secondary (${currentRange * 2}mi) sweeps.`);
+        setSearchError(`No active intercepts found within primary (${currentRange}mi) or extended sweeps. Try expanding search distance or searching a custom term.`);
         setSearchStatus(null);
       }
-    } catch(err: any) {
-      console.warn("Satellite Uplink Failed logic:", err?.message || err);
-      setSearchError("⚠️ Connection lost. Pulling cached local amenities from your offline storage.");
+    } catch (err: any) {
+      console.error("Proximity Search Error:", err);
+      setSearchError("Satellite search encountered a network interruption. Please tap search again.");
       setSearchStatus(null);
     }
 

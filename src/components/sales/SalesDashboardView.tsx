@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import { 
   ChevronLeft, 
@@ -78,6 +78,95 @@ export default function SalesDashboardView({
   setLoyaltyMembers,
   commitInventoryMutation
 }: SalesDashboardViewProps) {
+  // Filter out community shows unless the band created them or was explicitly added to them
+  const eligibleShows = useMemo(() => {
+    const currentBandName = (activeBandName || '').trim().toLowerCase();
+    const currentBandId = (activeBandId || '').trim();
+
+    return shows.filter(show => {
+      // 1. Explicit match on band_id for the active band
+      if (currentBandId && show.band_id === currentBandId) {
+        return true;
+      }
+
+      // 2. Check if the band is added to this show (lineup, support, headliner, acts, collaborators, or title)
+      const isBandAddedToShow = (() => {
+        // Check collaborator IDs
+        if (currentBandId && Array.isArray(show.collaborator_ids) && show.collaborator_ids.includes(currentBandId)) {
+          return true;
+        }
+
+        if (!currentBandName) return false;
+
+        // Check title / name / festival
+        const title = (show.name || '').toLowerCase();
+        const festival = (show.festival_name || '').toLowerCase();
+        if (title.includes(currentBandName) || festival.includes(currentBandName)) {
+          return true;
+        }
+
+        // Check support_bands string
+        if (typeof show.support_bands === 'string' && show.support_bands.toLowerCase().includes(currentBandName)) {
+          return true;
+        }
+
+        // Check support_lineup array
+        if (Array.isArray(show.support_lineup)) {
+          const matchInSupport = show.support_lineup.some((item: any) => {
+            if (typeof item === 'string') return item.toLowerCase().includes(currentBandName);
+            if (item && typeof item === 'object') {
+              const nameStr = (item.name || item.band_name || item.act || '').toLowerCase();
+              return nameStr.includes(currentBandName);
+            }
+            return false;
+          });
+          if (matchInSupport) return true;
+        }
+
+        // Check acts / lineup if present
+        const anyShow = show as any;
+        if (Array.isArray(anyShow.acts)) {
+          const matchActs = anyShow.acts.some((act: any) => {
+            if (typeof act === 'string') return act.toLowerCase().includes(currentBandName);
+            if (act && typeof act === 'object') {
+              const nameStr = (act.name || act.band_name || act.title || '').toLowerCase();
+              return nameStr.includes(currentBandName);
+            }
+            return false;
+          });
+          if (matchActs) return true;
+        }
+
+        if (typeof anyShow.lineup === 'string' && anyShow.lineup.toLowerCase().includes(currentBandName)) {
+          return true;
+        }
+
+        if (typeof anyShow.headliner === 'string' && anyShow.headliner.toLowerCase().includes(currentBandName)) {
+          return true;
+        }
+
+        return false;
+      })();
+
+      if (isBandAddedToShow) {
+        return true;
+      }
+
+      // 3. Identify if this is a community show
+      const isCommunityOnly = show.is_community_submitted === true || 
+        (typeof show.id === 'string' && show.id.startsWith('sh_comm_')) || 
+        (show.band_id && (show.band_id === 'community_hub' || show.band_id.startsWith('community')));
+
+      // If it is a community show and band is NOT added to it, strictly exclude
+      if (isCommunityOnly) {
+        return false;
+      }
+
+      // 4. Regular band shows: belong to this band or legacy show without band_id
+      return !show.band_id || show.band_id === currentBandId;
+    });
+  }, [shows, activeBandName, activeBandId]);
+
   // Navigation & Filtering State
   const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'APPAREL' | 'MEDIA' | 'ACCESSORIES'>('ALL');
   
@@ -85,13 +174,26 @@ export default function SalesDashboardView({
   const [isShowDropdownOpen, setIsShowDropdownOpen] = useState(false);
   const [selectedShowId, setSelectedShowId] = useState<string>(() => {
     const todayStr = new Date().toISOString().split('T')[0];
-    const upcoming = shows.find(s => s.date >= todayStr) || shows[0];
+    const upcoming = eligibleShows.find(s => s.date >= todayStr) || eligibleShows[0];
     return upcoming ? upcoming.id : '';
   });
 
+  // Keep selectedShowId synced if eligibleShows changes
+  useEffect(() => {
+    if (eligibleShows && eligibleShows.length > 0) {
+      if (!selectedShowId || !eligibleShows.some(s => s.id === selectedShowId)) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const upcoming = eligibleShows.find(s => s.date >= todayStr) || eligibleShows[0];
+        setSelectedShowId(upcoming ? upcoming.id : '');
+      }
+    } else if (selectedShowId) {
+      setSelectedShowId('');
+    }
+  }, [eligibleShows, selectedShowId]);
+
   const activeShow = useMemo(() => {
-    return shows.find(s => s.id === selectedShowId) || shows[0];
-  }, [shows, selectedShowId]);
+    return eligibleShows.find(s => s.id === selectedShowId) || eligibleShows[0] || null;
+  }, [eligibleShows, selectedShowId]);
 
   // Size Picker popup state
   const [pickerItem, setPickerItem] = useState<InventoryItem | null>(null);
@@ -1084,29 +1186,35 @@ export default function SalesDashboardView({
                 exit={{ opacity: 0, y: 5 }}
                 className="absolute left-0 right-0 mt-1 z-40 bg-[#13161d] border border-zinc-800 rounded-xl overflow-hidden shadow-2xl max-h-56 overflow-y-auto"
               >
-                {shows.map((s, idx) => (
-                  <button
-                    key={s.id ? `show-drop-${s.id}-${idx}` : `show-drop-${idx}`}
-                    onClick={() => {
-                      setSelectedShowId(s.id);
-                      setIsShowDropdownOpen(false);
-                      addLog(`Campaign checkout location swapped to: ${s.name}`);
-                    }}
-                    className={`w-full p-3 text-left border-b border-zinc-850/60 last:border-b-0 flex flex-col justify-center hover:bg-zinc-800 transition-colors ${
-                      selectedShowId === s.id ? 'bg-[#1a202c]/50 text-white' : 'text-zinc-400'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10.5px] font-bold text-white uppercase tracking-wider truncate">{s.festival_name || s.name}</span>
-                      <span className="text-[8px] font-mono text-[#00ffcc] shrink-0">{s.date}</span>
-                    </div>
-                    {(s.city || s.venue_address) && (
-                      <span className="text-[8.5px] font-mono text-zinc-500 mt-1 truncate block">
-                        📍 {s.city || s.venue_address}
-                      </span>
-                    )}
-                  </button>
-                ))}
+                {eligibleShows.length === 0 ? (
+                  <div className="p-3 text-xs text-zinc-500 font-mono italic text-center">
+                    No registered band shows scheduled
+                  </div>
+                ) : (
+                  eligibleShows.map((s, idx) => (
+                    <button
+                      key={s.id ? `show-drop-${s.id}-${idx}` : `show-drop-${idx}`}
+                      onClick={() => {
+                        setSelectedShowId(s.id);
+                        setIsShowDropdownOpen(false);
+                        addLog(`Campaign checkout location swapped to: ${s.name}`);
+                      }}
+                      className={`w-full p-3 text-left border-b border-zinc-850/60 last:border-b-0 flex flex-col justify-center hover:bg-zinc-800 transition-colors ${
+                        selectedShowId === s.id ? 'bg-[#1a202c]/50 text-white' : 'text-zinc-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10.5px] font-bold text-white uppercase tracking-wider truncate">{s.festival_name || s.name}</span>
+                        <span className="text-[8px] font-mono text-[#00ffcc] shrink-0">{s.date}</span>
+                      </div>
+                      {(s.city || s.venue_address) && (
+                        <span className="text-[8.5px] font-mono text-zinc-500 mt-1 truncate block">
+                          📍 {s.city || s.venue_address}
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
               </motion.div>
             )}
           </AnimatePresence>

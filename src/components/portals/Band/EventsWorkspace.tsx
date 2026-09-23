@@ -1233,12 +1233,12 @@ export default function EventsWorkspace(props: any) {
                     </V2ExpandableCard>
                     <V2ExpandableCard theme="darkgrey" title="Setlist Manager" isExpanded={activeEventsSection === 'SETLISTS'} onToggle={() => setActiveEventsSection(activeEventsSection === 'SETLISTS' ? null : 'SETLISTS')}>
                       <div className="w-full">
-                        <SetlistsView shows={shows} onBack={() => {}} triggerNotification={triggerNotification} addLog={addLog} />
+                        <SetlistsView shows={filteredShows || shows} onBack={() => {}} triggerNotification={triggerNotification} addLog={addLog} bandName={activeBand?.name || 'Artist'} activeBandId={activeBand?.id || props.activeBandId} />
                       </div>
                     </V2ExpandableCard>
                     <V2ExpandableCard theme="darkgrey" title="Guest List Manager" isExpanded={activeEventsSection === 'GUEST_LIST'} onToggle={() => setActiveEventsSection(activeEventsSection === 'GUEST_LIST' ? null : 'GUEST_LIST')}>
                       <div className="w-full">
-                        <GuestlistsView shows={shows} setShows={setShows} onBack={() => {}} triggerNotification={triggerNotification} addLog={addLog} initialShowId={selectedGuestlistShowId} bandName={activeBand?.name || 'Artist'} />
+                        <GuestlistsView shows={filteredShows || shows} setShows={setShows} onBack={() => {}} triggerNotification={triggerNotification} addLog={addLog} initialShowId={selectedGuestlistShowId} bandName={activeBand?.name || 'Artist'} activeBandId={activeBand?.id || props.activeBandId} />
                       </div>
                     </V2ExpandableCard>
 

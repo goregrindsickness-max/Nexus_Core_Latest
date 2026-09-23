@@ -3959,12 +3959,23 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
       } catch (_) {}
     };
 
+    const handleOpenEventCompanion = (e: any) => {
+      const gig = e.detail;
+      if (gig) {
+        setActiveEventData(gig);
+        setIsEventModeActive(true);
+        setShowMapModal(false);
+      }
+    };
+
     handleUrlProfileRouting();
     window.addEventListener('popstate', handleUrlProfileRouting);
     window.addEventListener('openPublicProfile', handleOpenPublicProfile as any);
+    window.addEventListener('open-event-companion', handleOpenEventCompanion as any);
     return () => {
       window.removeEventListener('popstate', handleUrlProfileRouting);
       window.removeEventListener('openPublicProfile', handleOpenPublicProfile as any);
+      window.removeEventListener('open-event-companion', handleOpenEventCompanion as any);
     };
   }, [userProfile?.id, userProfile?.band_id]);
 
@@ -5422,6 +5433,11 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         onOpenShowCreator={() => { setEditingCommunityShow(null); setIsCommunityShowModalOpen(true); }}
         onSelectEvent={(gig) => {
           setActiveEventData(gig);
+        }}
+        onOpenEventPage={(gig) => {
+          setActiveEventData(gig);
+          setIsEventModeActive(true);
+          setShowMapModal(false);
         }}
 
         // Poll

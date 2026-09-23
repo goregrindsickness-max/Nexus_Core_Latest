@@ -319,6 +319,7 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
         onImportShowsFromTable={props.onImportShowsFromTable}
         onOpenShowCreator={props.onOpenShowCreator}
         onSelectEvent={props.onSelectEvent}
+        onOpenEventPage={props.onOpenEventPage}
       />
 
       {/* Poll Creation Modal */}

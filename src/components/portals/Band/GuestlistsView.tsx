@@ -37,6 +37,7 @@ interface GuestlistsViewProps {
   addLog: (msg: string) => void;
   initialShowId?: string;
   bandName?: string;
+  activeBandId?: string;
 }
 
 export default function GuestlistsView({
@@ -46,12 +47,116 @@ export default function GuestlistsView({
   triggerNotification,
   addLog,
   initialShowId = '',
-  bandName = 'Artist'
+  bandName = 'Artist',
+  activeBandId = ''
 }: GuestlistsViewProps) {
-  // Select active show
-  const [activeShowId, setActiveShowId] = useState<string>(
-    initialShowId || (shows.length > 0 ? shows[0].id : '')
-  );
+  // Filter out community shows unless the band created them or is added to them
+  const eligibleShows = useMemo(() => {
+    const currentBandName = (bandName || '').trim().toLowerCase();
+    const currentBandId = (activeBandId || '').trim();
+
+    return shows.filter(show => {
+      // 1. Explicit match on band_id for the active band
+      if (currentBandId && show.band_id === currentBandId) {
+        return true;
+      }
+
+      // 2. Check if the band is added to this show (lineup, support, headliner, acts, collaborators, or title)
+      const isBandAddedToShow = (() => {
+        // Check collaborator IDs
+        if (currentBandId && Array.isArray(show.collaborator_ids) && show.collaborator_ids.includes(currentBandId)) {
+          return true;
+        }
+
+        if (!currentBandName) return false;
+
+        // Check title / name / festival
+        const title = (show.name || '').toLowerCase();
+        const festival = (show.festival_name || '').toLowerCase();
+        if (title.includes(currentBandName) || festival.includes(currentBandName)) {
+          return true;
+        }
+
+        // Check support_bands string
+        if (typeof show.support_bands === 'string' && show.support_bands.toLowerCase().includes(currentBandName)) {
+          return true;
+        }
+
+        // Check support_lineup array
+        if (Array.isArray(show.support_lineup)) {
+          const matchInSupport = show.support_lineup.some((item: any) => {
+            if (typeof item === 'string') return item.toLowerCase().includes(currentBandName);
+            if (item && typeof item === 'object') {
+              const nameStr = (item.name || item.band_name || item.act || '').toLowerCase();
+              return nameStr.includes(currentBandName);
+            }
+            return false;
+          });
+          if (matchInSupport) return true;
+        }
+
+        // Check acts / lineup if present
+        const anyShow = show as any;
+        if (Array.isArray(anyShow.acts)) {
+          const matchActs = anyShow.acts.some((act: any) => {
+            if (typeof act === 'string') return act.toLowerCase().includes(currentBandName);
+            if (act && typeof act === 'object') {
+              const nameStr = (act.name || act.band_name || act.title || '').toLowerCase();
+              return nameStr.includes(currentBandName);
+            }
+            return false;
+          });
+          if (matchActs) return true;
+        }
+
+        if (typeof anyShow.lineup === 'string' && anyShow.lineup.toLowerCase().includes(currentBandName)) {
+          return true;
+        }
+
+        if (typeof anyShow.headliner === 'string' && anyShow.headliner.toLowerCase().includes(currentBandName)) {
+          return true;
+        }
+
+        return false;
+      })();
+
+      if (isBandAddedToShow) {
+        return true;
+      }
+
+      // 3. Identify if this is a community show
+      const isCommunityOnly = show.is_community_submitted === true || 
+        (typeof show.id === 'string' && show.id.startsWith('sh_comm_')) || 
+        (show.band_id && (show.band_id === 'community_hub' || show.band_id.startsWith('community')));
+
+      // If it is a community show and band is NOT added to it, strictly exclude
+      if (isCommunityOnly) {
+        return false;
+      }
+
+      // 4. Regular band shows: belong to this band or legacy show without band_id
+      return !show.band_id || show.band_id === currentBandId;
+    });
+  }, [shows, bandName, activeBandId]);
+
+  // Select active show from eligible shows only
+  const [activeShowId, setActiveShowId] = useState<string>(() => {
+    if (initialShowId && eligibleShows.some(s => s.id === initialShowId)) {
+      return initialShowId;
+    }
+    return eligibleShows.length > 0 ? eligibleShows[0].id : '';
+  });
+
+  // Keep activeShowId synced with eligible shows
+  useEffect(() => {
+    if (initialShowId && eligibleShows.some(s => s.id === initialShowId)) {
+      setActiveShowId(initialShowId);
+    } else if (activeShowId && !eligibleShows.some(s => s.id === activeShowId)) {
+      setActiveShowId(eligibleShows.length > 0 ? eligibleShows[0].id : '');
+    } else if (!activeShowId && eligibleShows.length > 0) {
+      setActiveShowId(eligibleShows[0].id);
+    }
+  }, [eligibleShows, initialShowId, activeShowId]);
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,8 +181,8 @@ export default function GuestlistsView({
 
   // Active show object
   const activeShow = useMemo(() => {
-    return shows.find(s => s.id === activeShowId);
-  }, [shows, activeShowId]);
+    return eligibleShows.find(s => s.id === activeShowId);
+  }, [eligibleShows, activeShowId]);
 
   // Guest list selector
   const guestList = useMemo(() => {
@@ -408,8 +513,8 @@ export default function GuestlistsView({
           <label className="text-[10px] font-mono text-zinc-400 font-bold uppercase tracking-wider block">
             SELECT SHOW TO MANAGE
           </label>
-          {shows.length === 0 ? (
-            <div className="text-xs text-zinc-500 italic py-1">No scheduled shows available. Please create a schedule in Shows tab.</div>
+          {eligibleShows.length === 0 ? (
+            <div className="text-xs text-zinc-500 italic py-1">No scheduled band shows available. Please create a schedule in Shows tab.</div>
           ) : (
             <select
               value={activeShowId}
@@ -419,7 +524,7 @@ export default function GuestlistsView({
               }}
               className="w-full bg-[#161a23] border border-zinc-800 text-xs text-white rounded-xl p-3 font-medium focus:outline-none focus:border-[#00ffcc] tracking-wide"
             >
-              {shows.map((s, sIdx) => (
+              {eligibleShows.map((s, sIdx) => (
                 <option key={`${s.id}-${sIdx}`} value={s.id}>
                   {s.date} - {s.festival_name || s.name} ({s.guest_list?.length || 0} guests)
                 </option>

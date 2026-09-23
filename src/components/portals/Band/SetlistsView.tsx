@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   ArrowLeft, ChevronLeft, Save, Plus, Trash2, Edit2, ChevronUp, ChevronDown, 
   Music, Copy, RefreshCw, Clock, Sparkles, Check, X, ListMusic, Search, Flame, Zap,
@@ -41,14 +41,107 @@ interface SetlistsViewProps {
   onBack: () => void;
   triggerNotification: (msg: string) => void;
   addLog: (msg: string) => void;
+  bandName?: string;
+  activeBandId?: string;
 }
 
 export default function SetlistsView({
   shows,
   onBack,
   triggerNotification,
-  addLog
+  addLog,
+  bandName = 'Artist',
+  activeBandId = ''
 }: SetlistsViewProps) {
+  // Filter out community shows unless the band created them or was explicitly added to them
+  const eligibleShows = useMemo(() => {
+    const currentBandName = (bandName || '').trim().toLowerCase();
+    const currentBandId = (activeBandId || '').trim();
+
+    return shows.filter(show => {
+      // 1. Explicit match on band_id for the active band
+      if (currentBandId && show.band_id === currentBandId) {
+        return true;
+      }
+
+      // 2. Check if the band is added to this show (lineup, support, headliner, acts, collaborators, or title)
+      const isBandAddedToShow = (() => {
+        // Check collaborator IDs
+        if (currentBandId && Array.isArray(show.collaborator_ids) && show.collaborator_ids.includes(currentBandId)) {
+          return true;
+        }
+
+        if (!currentBandName) return false;
+
+        // Check title / name / festival
+        const title = (show.name || '').toLowerCase();
+        const festival = (show.festival_name || '').toLowerCase();
+        if (title.includes(currentBandName) || festival.includes(currentBandName)) {
+          return true;
+        }
+
+        // Check support_bands string
+        if (typeof show.support_bands === 'string' && show.support_bands.toLowerCase().includes(currentBandName)) {
+          return true;
+        }
+
+        // Check support_lineup array
+        if (Array.isArray(show.support_lineup)) {
+          const matchInSupport = show.support_lineup.some((item: any) => {
+            if (typeof item === 'string') return item.toLowerCase().includes(currentBandName);
+            if (item && typeof item === 'object') {
+              const nameStr = (item.name || item.band_name || item.act || '').toLowerCase();
+              return nameStr.includes(currentBandName);
+            }
+            return false;
+          });
+          if (matchInSupport) return true;
+        }
+
+        // Check acts / lineup if present
+        const anyShow = show as any;
+        if (Array.isArray(anyShow.acts)) {
+          const matchActs = anyShow.acts.some((act: any) => {
+            if (typeof act === 'string') return act.toLowerCase().includes(currentBandName);
+            if (act && typeof act === 'object') {
+              const nameStr = (act.name || act.band_name || act.title || '').toLowerCase();
+              return nameStr.includes(currentBandName);
+            }
+            return false;
+          });
+          if (matchActs) return true;
+        }
+
+        if (typeof anyShow.lineup === 'string' && anyShow.lineup.toLowerCase().includes(currentBandName)) {
+          return true;
+        }
+
+        if (typeof anyShow.headliner === 'string' && anyShow.headliner.toLowerCase().includes(currentBandName)) {
+          return true;
+        }
+
+        return false;
+      })();
+
+      if (isBandAddedToShow) {
+        return true;
+      }
+
+      // 3. Identify if this is a community show
+      const isCommunityOnly = show.is_community_submitted === true || 
+        (typeof show.id === 'string' && show.id.startsWith('sh_comm_')) || 
+        (show.band_id && (show.band_id === 'community_hub' || show.band_id.startsWith('community')));
+
+      // If it is a community show and band is NOT added to it, strictly exclude
+      if (isCommunityOnly) {
+        return false;
+      }
+
+      // 4. Regular band shows: belong to this band or legacy show without band_id
+      return !show.band_id || show.band_id === currentBandId;
+    });
+  }, [shows, bandName, activeBandId]);
+
   // Load initial active show
   const [selectedShowId, setSelectedShowId] = useState<string>('');
 
@@ -214,15 +307,18 @@ export default function SetlistsView({
   // Swapping mode: stores the setlist song ID that is currently being swapped with a master song
   const [swappingSongId, setSwappingSongId] = useState<string | null>(null);
 
-  // Pre-load selecting first show if available
+  // Pre-load selecting first eligible show if available
   useEffect(() => {
-    if (shows && shows.length > 0 && !selectedShowId) {
-      // Find the upcoming show or fallback to first
-      const today = new Date().toISOString().split('T')[0];
-      const nextShow = shows.find(s => s.date >= today) || shows[0];
-      setSelectedShowId(nextShow.id);
+    if (eligibleShows && eligibleShows.length > 0) {
+      if (!selectedShowId || !eligibleShows.some(s => s.id === selectedShowId)) {
+        const today = new Date().toISOString().split('T')[0];
+        const nextShow = eligibleShows.find(s => s.date >= today) || eligibleShows[0];
+        setSelectedShowId(nextShow.id);
+      }
+    } else if (selectedShowId) {
+      setSelectedShowId('');
     }
-  }, [shows]);
+  }, [eligibleShows, selectedShowId]);
 
   // Load from Supabase on mount (Real dynamic syncing)
   useEffect(() => {
@@ -598,7 +694,7 @@ export default function SetlistsView({
     return `${totalSecs < 0 ? '-' : ''}${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const selectedShow = shows.find(s => s.id === selectedShowId);
+  const selectedShow = eligibleShows.find(s => s.id === selectedShowId);
 
   // Filter master song bank
   const filteredMasterSongs = masterSongs.filter(m => {
@@ -681,10 +777,10 @@ export default function SetlistsView({
               }}
               className="w-full bg-[#11141c] border-2 border-purple-950/40 hover:border-purple-500/50 rounded-xl p-3 text-xs uppercase font-mono tracking-wide text-white focus:outline-none focus:border-purple-500 cursor-pointer appearance-none transition-colors"
             >
-              {shows.length === 0 ? (
-                <option value="">-- No shows registered yet --</option>
+              {eligibleShows.length === 0 ? (
+                <option value="">-- No band shows registered yet --</option>
               ) : (
-                shows.map((s, sIdx) => (
+                eligibleShows.map((s, sIdx) => (
                   <option key={`${s.id}-${sIdx}`} value={s.id}>
                     {s.festival_name || s.name} ({s.date}) {s.city ? `• ${s.city}` : ''}
                   </option>
@@ -696,7 +792,7 @@ export default function SetlistsView({
         </div>
 
         {/* CLONE PANEL */}
-        {shows.length > 1 && (
+        {eligibleShows.length > 1 && (
           <div 
             className="p-3 border border-[#2a2d36]/30 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between text-left gap-3 bg-[#0d162a]"
           >
@@ -715,7 +811,7 @@ export default function SetlistsView({
               className="bg-[#090b0f] border border-purple-900/40 hover:border-purple-500 text-[10px] font-mono rounded p-2 focus:outline-none focus:border-purple-400 text-purple-300 cursor-pointer w-full sm:w-auto min-w-[130px]"
             >
               <option value="" disabled>Clone from...</option>
-              {shows.filter(s => s.id !== selectedShowId).map((s, sIdx) => (
+              {eligibleShows.filter(s => s.id !== selectedShowId).map((s, sIdx) => (
                 <option key={`${s.id}-${sIdx}`} value={s.id}>
                   {s.festival_name || s.name} ({s.date})
                 </option>
