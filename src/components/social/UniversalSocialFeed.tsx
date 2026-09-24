@@ -1898,15 +1898,37 @@ export function UniversalSocialFeed({
 
     const handleAvatarUpdateEvent = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      const newAvatarUrl = detail?.avatarUrl || detail?.avatar_url || detail?.logo_url;
+      if (!detail) return;
+      // Guard: Ignore if this update is for a band entity, community band, or release
+      if (detail.isBand || detail.type === 'band' || detail.isCommunityBand || detail.is_community_band) {
+        return;
+      }
+
+      const newAvatarUrl = detail.avatarUrl || detail.avatar_url || detail.logo_url;
       if (newAvatarUrl && typeof newAvatarUrl === 'string') {
-        const targetUserId = detail.id || userProfile?.id;
-        const targetName = (detail.authorName || detail.name || userProfile?.name || '').toLowerCase().trim();
+        const isUserExplicit = Boolean(
+          detail.isUserAvatar ||
+          detail.target === 'user' ||
+          (detail.id && userProfile?.id && detail.id === userProfile.id) ||
+          (detail.authorName && userProfile?.name && detail.authorName.toLowerCase().trim() === userProfile.name.toLowerCase().trim())
+        );
+
+        // Do not default to current user if ID belongs to someone else
+        const targetUserId = detail.id || (isUserExplicit ? userProfile?.id : null);
+        const targetName = (detail.authorName || detail.name || (isUserExplicit ? userProfile?.name : '') || '').toLowerCase().trim();
+
+        if (!targetUserId && !targetName) return;
+
         // Dynamically update the author avatar across in-memory feed items without creating a duplicate post
         setFeed(prev => prev.map(item => {
           const rawItem = item as any;
           const itemUserId = rawItem.user_id || rawItem.author_id || item.author?.id;
           const itemName = (item.author?.name || rawItem.authorName || '').toLowerCase().trim();
+          const itemIsBand = Boolean((item.author as any)?.isBand || rawItem.isBand || rawItem.workspace_type === 'band' || rawItem.authorRole === 'Band / Artist' || item.author?.role === 'Band / Artist');
+
+          // If this is a personal user avatar update, never touch posts made by bands
+          if (isUserExplicit && itemIsBand) return item;
+
           if ((targetUserId && itemUserId === targetUserId) || (targetName && itemName === targetName)) {
             return {
               ...item,

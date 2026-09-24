@@ -74,7 +74,13 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onActionClick
 
   const roleColorHex = isBand ? '#39ff14' : isLabel ? '#ff6b00' : isCreative ? '#ff00aa' : isPromoter ? '#ffff00' : isIndustry ? '#8b5cf6' : '#00f0ff';
 
-  const isWorkspace = isBand || isLabel || isCreative || isPromoter;
+  const isPersonal = profile?.isIndustryProPersonal === true || 
+    profile?.isPersonal === true || 
+    profile?.isYou === true || 
+    (profile?.email && String(profile.email).includes('goregrindsickness')) || 
+    (profile?.name && String(profile.name).toLowerCase().includes('miguel'));
+
+  const isWorkspace = !isPersonal && (isBand || isLabel || isCreative || isPromoter);
 
   return (
     <div className={`bg-zinc-950 border border-zinc-900 rounded-3xl p-4 sm:p-5 space-y-5 shadow-2xl ${className}`}>

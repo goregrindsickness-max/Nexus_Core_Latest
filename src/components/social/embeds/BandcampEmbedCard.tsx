@@ -8,11 +8,13 @@ interface BandcampEmbedCardProps {
   post?: any;
   embedUrl?: string | null;
   title?: string;
+  trackTitle?: string;
   artist?: string;
   pageUrl?: string;
   itemType?: 'track' | 'album' | 'unknown';
   compact?: boolean;
   artworkUrl?: string | null;
+  variant?: 'feed' | 'timeline' | 'profile' | 'compact';
 }
 
 const AutoScrollText: React.FC<{
@@ -87,11 +89,13 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
   post,
   embedUrl: directEmbedUrl,
   title: directTitle,
+  trackTitle: directTrackTitle,
   artist: directArtist,
   pageUrl: directPageUrl,
   itemType: directItemType,
   compact = false,
-  artworkUrl: directArtworkUrl
+  artworkUrl: directArtworkUrl,
+  variant
 }) => {
   const bData = post?.bandcampData || (post as any)?.bandcamp_data || (post as any)?.data?.bandcampData || (post as any)?.data?.bandcamp_data || {};
   const rawEmbedUrl = directEmbedUrl || 
@@ -231,11 +235,41 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
   
   const slugMeta = rawEmbedUrl && !rawEmbedUrl.includes('EmbeddedPlayer') ? extractSlugMetadata(rawEmbedUrl) : { artist: '', title: '', itemType: 'track' as const };
 
-  const trackTitle = directTitle || asyncResolved?.title || bData.title || (post as any)?.songData?.title || (post as any)?.title || slugMeta.title || 'Bandcamp Release';
+  const trackTitle = directTrackTitle || directTitle || asyncResolved?.title || bData.title || (post as any)?.songData?.title || (post as any)?.title || slugMeta.title || 'Bandcamp Release';
   const artistName = directArtist || asyncResolved?.artist || bData.artist || (post as any)?.songData?.band || slugMeta.artist || (post as any)?.author?.name || (post as any)?.authorName || '';
   const pageLink = directPageUrl || asyncResolved?.pageUrl || bData.pageUrl || bData.page_url || post?.mediaUrl || (post as any)?.media_url || (rawEmbedUrl && !rawEmbedUrl.includes('EmbeddedPlayer') ? rawEmbedUrl : null);
   const itemType = directItemType || asyncResolved?.itemType || bData.itemType || bData.item_type || slugMeta.itemType || (rawEmbedUrl?.includes('album=') ? 'album' : 'track');
-  const artworkUrl = directArtworkUrl || asyncResolved?.artwork || (asyncResolved as any)?.artworkUrl || bData.artwork || bData.artworkUrl || bData.artwork_url || bData.imageUrl || bData.image_url || post?.imageUrl || post?.image_url || post?.image || null;
+  // Filter out web URLs that aren't actual image assets
+  const isValidArtworkUrl = (url: string | null | undefined): boolean => {
+    if (!url || typeof url !== 'string') return false;
+    const u = url.trim().toLowerCase();
+    if (!u.startsWith('http://') && !u.startsWith('https://') && !u.startsWith('data:image/')) return false;
+    // If it's a bandcamp webpage link (not the bcbits image CDN), don't treat it as an image
+    if (u.includes('bandcamp.com') && !u.includes('bcbits.com')) return false;
+    return true;
+  };
+
+  const rawCandidateArtwork = directArtworkUrl || 
+    asyncResolved?.artwork || 
+    (asyncResolved as any)?.artworkUrl || 
+    bData.artwork || 
+    bData.artworkUrl || 
+    bData.artwork_url || 
+    bData.imageUrl || 
+    bData.image_url || 
+    post?.imageUrl || 
+    post?.image_url || 
+    post?.image || 
+    (post as any)?.songData?.cover || 
+    (post as any)?.songData?.artwork || 
+    (post as any)?.data?.artwork ||
+    (post as any)?.data?.imageUrl ||
+    (post as any)?.data?.image_url ||
+    (post?.media_url && typeof post.media_url === 'string' && post.media_url.match(/\.(jpeg|jpg|gif|png|webp|avif)/i) ? post.media_url : null) ||
+    (post?.mediaUrl && typeof post.mediaUrl === 'string' && post.mediaUrl.match(/\.(jpeg|jpg|gif|png|webp|avif)/i) ? post.mediaUrl : null) ||
+    null;
+
+  const artworkUrl = isValidArtworkUrl(rawCandidateArtwork) ? rawCandidateArtwork : null;
 
   // Format the iframe embed src URL with pitch black background and cyan highlights
   let resolvedIframeSrc: string | null = null;
@@ -263,11 +297,25 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
     resolvedIframeSrc = resolvedIframeSrc.replace('http://', 'https://');
   }
 
-  const iframeHeight = compact ? '120px' : (itemType === 'album' ? '180px' : '120px');
+  // Keep both feed and public profile card iframe at the exact standard 120px Bandcamp player height
+  // so the player controls, play button, and scrubber track maintain the exact same clean, unobstructed proportions.
+  const iframeHeight = '120px';
+  const containerMinHeight = 'min-h-[120px]';
+
+  const handleOpenLink = (url: string) => {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('nexus_bandcamp_support_clicked', {
+          detail: { title: trackTitle, artist: artistName, url }
+        })
+      );
+    } catch (_) {}
+    openBandcampLink(url);
+  };
 
   return (
     <div 
-      className="my-3 rounded-2xl overflow-hidden border border-cyan-500/40 hover:border-cyan-400/60 bg-black shadow-[0_4px_30px_rgba(0,0,0,0.9),0_0_20px_rgba(6,182,212,0.12)] group/bandcamp transition-all duration-300"
+      className={`${compact ? 'my-2 rounded-xl border-cyan-500/30' : 'my-3 rounded-2xl border-cyan-500/40'} overflow-hidden border hover:border-cyan-400/60 bg-black shadow-[0_4px_25px_rgba(0,0,0,0.9),0_0_15px_rgba(6,182,212,0.1)] group/bandcamp transition-all duration-300 w-full max-w-full`}
       onMouseEnter={() => requestPauseSceneRadio('bandcamp_embed_hover')}
     >
       <style>{`
@@ -282,9 +330,9 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
       `}</style>
 
       {/* Header bar with Bandcamp branding and auto-scrolling metadata */}
-      <div className="px-3.5 py-2.5 bg-gradient-to-r from-black via-zinc-950 to-[#02181f] border-b border-cyan-500/30 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-          <div className="w-6 h-6 rounded-lg bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(6,182,212,0.25)] overflow-hidden">
+      <div className={`${compact ? 'px-2.5 py-1.5' : 'px-3.5 py-2.5'} bg-gradient-to-r from-black via-zinc-950 to-[#02181f] border-b border-cyan-500/30 flex items-center justify-between gap-2.5`}>
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className={`${compact ? 'w-5 h-5' : 'w-6 h-6'} rounded-lg bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(6,182,212,0.25)] overflow-hidden`}>
             {artworkUrl && !headerImgError ? (
               <img 
                 src={artworkUrl} 
@@ -294,19 +342,19 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
                 onError={() => setHeaderImgError(true)}
               />
             ) : (
-              <Disc className="w-3.5 h-3.5 text-cyan-400 animate-spin" style={{ animationDuration: '5s' }} />
+              <Disc className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-cyan-400 animate-spin`} style={{ animationDuration: '5s' }} />
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono font-black uppercase tracking-wider text-cyan-400 drop-shadow-[0_0_6px_rgba(6,182,212,0.4)]">
+            <div className="flex items-center gap-1.5">
+              <span className={`${compact ? 'text-[9px]' : 'text-[10px]'} font-mono font-black uppercase tracking-wider text-cyan-400 drop-shadow-[0_0_6px_rgba(6,182,212,0.4)]`}>
                 BANDCAMP
               </span>
             </div>
             {trackTitle && (
               <AutoScrollText 
                 title={`${trackTitle}${artistName ? ` by ${artistName}` : ''}`}
-                className="text-[11px] font-semibold text-zinc-100 leading-tight mt-0.5"
+                className={`${compact ? 'text-[10px]' : 'text-[11px]'} font-semibold text-zinc-100 leading-tight mt-0.5`}
               >
                 <span>{trackTitle}</span>
                 {artistName ? <span className="text-cyan-400/80 font-normal ml-1.5">— {artistName}</span> : ''}
@@ -318,8 +366,8 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
         {pageLink && (
           <button
             type="button"
-            onClick={() => openBandcampLink(pageLink)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/30 text-cyan-300 hover:text-white border border-cyan-500/40 hover:border-cyan-400 text-[9px] font-mono font-bold uppercase tracking-wider transition-all shrink-0 ml-2 shadow-[0_0_10px_rgba(6,182,212,0.15)] cursor-pointer"
+            onClick={() => handleOpenLink(pageLink)}
+            className={`flex items-center gap-1 ${compact ? 'px-2 py-0.5 text-[8.5px]' : 'px-2.5 py-1 text-[9px]'} rounded-lg bg-cyan-500/15 hover:bg-cyan-500/30 text-cyan-300 hover:text-white border border-cyan-500/40 hover:border-cyan-400 font-mono font-bold uppercase tracking-wider transition-all shrink-0 ml-1.5 shadow-[0_0_10px_rgba(6,182,212,0.15)] cursor-pointer`}
           >
             <span>BUY / SUPPORT</span>
             <ExternalLink className="w-2.5 h-2.5 text-cyan-400" />
@@ -327,54 +375,52 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
         )}
       </div>
 
-      {/* Embed Player Iframe Container with Side-by-Side Album Art / Dedicated Release Preview Fallback */}
-      <div className="relative w-full bg-black min-h-[120px]">
+      {/* Album Artwork Showcase on Top: same proportions, scaled down slightly when compact to fit public profile margins */}
+      {artworkUrl && !artImgError && (
+        <div 
+          onClick={() => pageLink && handleOpenLink(pageLink)}
+          className={`w-full relative bg-zinc-950 border-b border-cyan-500/30 overflow-hidden flex items-center justify-center ${compact ? 'max-h-[200px] sm:max-h-[240px]' : 'max-h-[340px] sm:max-h-[400px]'} group/art cursor-pointer`}
+          title={pageLink ? "Open on Bandcamp" : undefined}
+        >
+          {/* Ambient blurred backdrop for atmospheric depth */}
+          <div className="absolute inset-0 opacity-25 filter blur-lg scale-105 pointer-events-none">
+            <img 
+              src={artworkUrl} 
+              alt={trackTitle} 
+              className="w-full h-full object-cover" 
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          {/* Crisp, centered album artwork */}
+          <img 
+            src={artworkUrl} 
+            alt={trackTitle} 
+            className={`relative z-10 w-full ${compact ? 'max-h-[200px] sm:max-h-[240px]' : 'max-h-[340px] sm:max-h-[400px]'} object-contain mx-auto shadow-[0_4px_30px_rgba(0,0,0,0.85)] group-hover/art:scale-[1.01] transition-transform duration-300`} 
+            referrerPolicy="no-referrer"
+            onError={() => setArtImgError(true)}
+          />
+        </div>
+      )}
+
+      {/* Embed Player Iframe Container (Full width, 100% unobstructed) / Fallback */}
+      <div className={`relative w-full bg-black ${containerMinHeight}`}>
         {resolvedIframeSrc && resolvedIframeSrc.includes('EmbeddedPlayer') ? (
-          <div className="flex flex-col sm:flex-row items-stretch bg-black border-t border-cyan-500/30">
-            {/* Album Art / Vinyl Thumbnail on Left (Fills full height of container) */}
-            <div className="w-full sm:w-auto sm:aspect-square h-32 sm:h-auto bg-zinc-950 flex items-center justify-center shrink-0 border-b sm:border-b-0 sm:border-r border-cyan-500/30 relative overflow-hidden group/art">
-              <div className="absolute inset-0 opacity-25 filter blur-sm">
-                {artworkUrl && !artImgError ? (
-                  <img 
-                    src={artworkUrl} 
-                    alt={trackTitle} 
-                    className="w-full h-full object-cover" 
-                    referrerPolicy="no-referrer"
-                    onError={() => setArtImgError(true)}
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-cyan-950 to-zinc-900" />
-                )}
-              </div>
-              <div className="relative h-full aspect-square overflow-hidden shadow-[0_0_20px_rgba(6,182,212,0.4)] border-x border-cyan-400/50 sm:border-x-0 bg-black flex items-center justify-center">
-                {artworkUrl && !artImgError ? (
-                  <img 
-                    src={artworkUrl} 
-                    alt={trackTitle} 
-                    className="w-full h-full object-cover group-hover/art:scale-105 transition-transform duration-300" 
-                    referrerPolicy="no-referrer"
-                    onError={() => setArtImgError(true)}
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-[#02181f] via-zinc-900 to-black flex flex-col items-center justify-center p-2 text-center">
-                    <Disc className="w-8 h-8 text-cyan-400 animate-spin mb-1" style={{ animationDuration: '6s' }} />
-                    <span className="text-[9px] font-mono font-bold text-cyan-300 truncate w-full">{artistName || 'BANDCAMP'}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex-1 min-w-0 bg-black relative">
-              <iframe
-                src={resolvedIframeSrc}
-                title={trackTitle || "Bandcamp Player"}
-                style={{ border: 0, width: '100%', height: iframeHeight }}
-                seamless
-                loading="eager"
-                referrerPolicy="no-referrer"
-                allow="autoplay; encrypted-media; fullscreen; clipboard-write; picture-in-picture; web-share"
-                className="w-full relative z-10 block bg-black"
-              />
-            </div>
+          <div className="w-full bg-black relative">
+            <iframe
+              src={resolvedIframeSrc}
+              title={trackTitle || "Bandcamp Player"}
+              style={{ border: 0, width: '100%', height: iframeHeight, minHeight: iframeHeight }}
+              seamless
+              loading="eager"
+              referrerPolicy="no-referrer"
+              allow="autoplay; encrypted-media; fullscreen; clipboard-write; picture-in-picture; web-share"
+              className="w-full relative z-10 block bg-black"
+              onLoad={() => {
+                try {
+                  window.dispatchEvent(new CustomEvent('nexus_bandcamp_played', { detail: { title: trackTitle, artist: artistName } }));
+                } catch (_) {}
+              }}
+            />
           </div>
         ) : isResolving ? (
           <div className="p-6 flex flex-col items-center justify-center gap-2 bg-black text-center border-t border-cyan-950/60">
@@ -387,10 +433,10 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
         ) : (
           <div 
             onClick={() => openBandcampLink(pageLink || rawEmbedUrl)}
-            className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 bg-gradient-to-r from-cyan-950/30 via-black to-zinc-950 border-t border-cyan-500/30 hover:border-cyan-400/80 transition-all cursor-pointer group/fallback"
+            className={`${compact ? 'p-3 gap-2.5' : 'p-4 sm:p-5 gap-3.5'} flex flex-col sm:flex-row sm:items-center justify-between bg-gradient-to-r from-cyan-950/30 via-black to-zinc-950 border-t border-cyan-500/30 hover:border-cyan-400/80 transition-all cursor-pointer group/fallback`}
           >
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="w-12 h-12 rounded-xl bg-cyan-950/90 border border-cyan-500/50 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(6,182,212,0.3)] overflow-hidden group-hover/fallback:scale-105 transition-transform">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className={`${compact ? 'w-10 h-10' : 'w-12 h-12'} rounded-xl bg-cyan-950/90 border border-cyan-500/50 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(6,182,212,0.3)] overflow-hidden group-hover/fallback:scale-105 transition-transform`}>
                 {artworkUrl && !fallbackImgError ? (
                   <img 
                     src={artworkUrl} 
@@ -400,38 +446,38 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
                     onError={() => setFallbackImgError(true)}
                   />
                 ) : (
-                  <Music2 className="w-6 h-6 text-cyan-400 animate-pulse" />
+                  <Music2 className={`${compact ? 'w-5 h-5' : 'w-6 h-6'} text-cyan-400 animate-pulse`} />
                 )}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className="px-1.5 py-0.5 rounded text-[8px] font-mono font-black uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                  <span className={`px-1.5 py-0.5 rounded ${compact ? 'text-[7.5px]' : 'text-[8px]'} font-mono font-black uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/40`}>
                     BANDCAMP RELEASE PREVIEW
                   </span>
                 </div>
-                <div className="text-xs font-bold text-white truncate">
+                <div className={`${compact ? 'text-[11px]' : 'text-xs'} font-bold text-white truncate`}>
                   {trackTitle}
                 </div>
-                <div className="text-[10px] text-cyan-300/80 mt-0.5 truncate">
+                <div className={`${compact ? 'text-[9.5px]' : 'text-[10px]'} text-cyan-300/80 mt-0.5 truncate`}>
                   {artistName || 'Bandcamp Artist'}
                 </div>
-                <span className="text-[9px] font-mono text-cyan-400/60 mt-1 block truncate">
+                <span className={`${compact ? 'text-[8.5px]' : 'text-[9px]'} font-mono text-cyan-400/60 mt-0.5 block truncate`}>
                   {pageLink || rawEmbedUrl || 'bandcamp.com'}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0 mt-2 sm:mt-0">
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleManualResolve();
                 }}
-                className="px-3 py-2 rounded-xl bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 hover:text-cyan-200 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]"
+                className={`${compact ? 'px-2.5 py-1.5 text-[10.5px]' : 'px-3 py-2 text-xs'} rounded-xl bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 hover:text-cyan-200 font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]`}
                 title="Force reload player embed"
               >
-                <Loader2 className="w-3.5 h-3.5" />
+                <Loader2 className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />
                 <span>Load Player</span>
               </button>
 
@@ -441,10 +487,10 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
                   e.stopPropagation();
                   openBandcampLink(pageLink || rawEmbedUrl);
                 }}
-                className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-mono font-black flex items-center justify-center gap-1.5 shrink-0 shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all cursor-pointer active:scale-95 w-full sm:w-auto"
+                className={`${compact ? 'px-3 py-1.5 text-[10.5px]' : 'px-3.5 py-2 text-xs'} rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-black flex items-center justify-center gap-1.5 shrink-0 shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all cursor-pointer active:scale-95 w-full sm:w-auto`}
               >
                 <span>Bandcamp</span>
-                <ExternalLink className="w-3.5 h-3.5" />
+                <ExternalLink className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />
               </button>
             </div>
           </div>

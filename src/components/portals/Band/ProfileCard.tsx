@@ -16,10 +16,12 @@ import BandBookingModal from '../../social/modals/BandBookingModal';
 import MarqueeText from '../../MarqueeText';
 import { SonicFootprint, ListenerMetric, calculateListenerMetrics } from '../../profile/SonicFootprint';
 import { TimelineTab } from '../../profile/TimelineTab';
+import { BandcampEmbedCard } from '../../social/embeds/BandcampEmbedCard';
 import { ProfileMarketplaceTab } from '../../profile/ProfileMarketplaceTab';
 import { GalleryTab } from '../../profile/GalleryTab';
 import { CrtTvFrame } from '../../profile/CrtTvFrame';
 import { ReleaseDetailsModal } from './ReleaseDetailsModal';
+import PublicStorefrontView from '../../sales/PublicStorefrontView';
 import { fetchReleasesFromDatabase } from '../../../services/releasesService';
 
 export type { ListenerMetric };
@@ -142,6 +144,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const [showCuratorModal, setShowCuratorModal] = useState(false);
   const [showBandBookingModal, setShowBandBookingModal] = useState(false);
   const [selectedRelease, setSelectedRelease] = React.useState<any>(null);
+  const [isIsolatedStorefrontOpen, setIsIsolatedStorefrontOpen] = useState(false);
+  const [storefrontBandData, setStorefrontBandData] = useState<any>(null);
 
   // Synchronous sync of communityArchiveMatch on profile selection changes
   React.useEffect(() => {
@@ -1541,11 +1545,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         {/* 4. Storefront Button */}
                         {showStorefront && (
                           <button
-                            onClick={() => {
-                              if (setShopBrandFilter) setShopBrandFilter(effTarget.name || selectedUserProfile.name);
-                              setProfileActiveTab('shop');
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const targetData = effTarget || selectedUserProfile;
+                              const targetBandName = effTarget?.band_name || effTarget?.name || selectedUserProfile?.band_name || selectedUserProfile?.name || 'Band';
+                              setStorefrontBandData(targetData);
+                              setIsIsolatedStorefrontOpen(true);
+                              triggerNotification?.(`🛒 Opening ${targetBandName}'s Official Storefront...`);
                             }}
-                            className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-500 text-white text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-colors uppercase font-mono shadow-md"
+                            className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-500 text-white text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-colors uppercase font-mono shadow-md cursor-pointer"
                           >
                             <ShoppingCart className="w-3.5 h-3.5" /> Storefront
                           </button>
@@ -2328,12 +2338,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     </button>
 
                     <button
-                      onClick={() => {
-                        const labelName = selectedUserProfile.name;
-                        setSelectedUserProfile(null);
-                        setShopBrandFilter?.(labelName);
-                        setActiveTab?.('shop');
-                        triggerNotification?.(`🛒 Entering ${labelName}'s In-App Storefront...`);
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const targetData = selectedUserProfile || effTarget;
+                        const labelName = selectedUserProfile?.name || effTarget?.name || 'Store';
+                        setStorefrontBandData(targetData);
+                        setIsIsolatedStorefrontOpen(true);
+                        triggerNotification?.(`🛒 Opening ${labelName}'s Official Storefront...`);
                       }}
                       className="col-span-2 mt-2 w-full flex items-center justify-center gap-2 py-2 px-3 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-[10px] font-black rounded-xl uppercase tracking-widest font-mono transition-all cursor-pointer shadow-[0_0_15px_rgba(249,115,22,0.3)] border border-orange-400/40 hover:scale-[1.01]"
                     >
@@ -2745,6 +2758,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   ? (effTarget?.featured_youtube_url || effTarget?.streaming_url || effTarget?.top_song_url || '')
                   : (effTarget?.top_song_url || (effTarget?.isYou ? ((selectedUserProfile as any)?.top_song_url || (userProfile as any)?.top_song_url || '') : ''));
                 const embedUrl = getEmbedUrl(songUrl);
+                const isBandcampSong = Boolean(
+                  (songUrl && typeof songUrl === 'string' && songUrl.includes('bandcamp.com')) ||
+                  (embedUrl && typeof embedUrl === 'string' && embedUrl.includes('bandcamp.com'))
+                );
                 
                 let songTitle = '';
                 if (effTarget?.top_song_artist && effTarget?.top_song_title) {
@@ -2779,53 +2796,66 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       )}
                     </div>
 
-                    <div className="w-full flex justify-center items-center my-1">
-                      <CrtTvFrame>
-                        <div className="w-full bg-black h-full overflow-hidden">
-                          {embedUrl ? (
-                            embedUrl.includes('spotify.com') ? (
-                              <iframe
-                                src={embedUrl}
-                                width="100%"
-                                height="100%"
-                                frameBorder="0"
-                                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                                loading="lazy"
-                                className="w-full h-full"
-                              />
-                            ) : embedUrl.includes('soundcloud.com') ? (
-                              <iframe
-                                width="100%"
-                                height="100%"
-                                scrolling="no"
-                                frameBorder="no"
-                                allow="autoplay"
-                                src={embedUrl}
-                                className="w-full h-full"
-                              />
+                    {isBandcampSong ? (
+                      <div className="w-full my-1 max-w-full overflow-hidden">
+                        <BandcampEmbedCard
+                          embedUrl={embedUrl || songUrl}
+                          pageUrl={songUrl}
+                          trackTitle={songTitle}
+                          artist={effTarget?.top_song_artist || effTarget?.name || selectedUserProfile?.name}
+                          compact={true}
+                          variant="profile"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-full flex justify-center items-center my-1">
+                        <CrtTvFrame>
+                          <div className="w-full bg-black h-full overflow-hidden">
+                            {embedUrl ? (
+                              embedUrl.includes('spotify.com') ? (
+                                <iframe
+                                  src={embedUrl}
+                                  width="100%"
+                                  height="100%"
+                                  frameBorder="0"
+                                  allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                                  loading="lazy"
+                                  className="w-full h-full"
+                                />
+                              ) : embedUrl.includes('soundcloud.com') ? (
+                                <iframe
+                                  width="100%"
+                                  height="100%"
+                                  scrolling="no"
+                                  frameBorder="no"
+                                  allow="autoplay"
+                                  src={embedUrl}
+                                  className="w-full h-full"
+                                />
+                              ) : (
+                                <iframe
+                                  src={embedUrl}
+                                  width="100%"
+                                  height="100%"
+                                  frameBorder="0"
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                  allowFullScreen
+                                  className="w-full h-full"
+                                />
+                              )
                             ) : (
-                              <iframe
-                                src={embedUrl}
-                                width="100%"
-                                height="100%"
-                                frameBorder="0"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                allowFullScreen
-                                className="w-full h-full"
-                              />
-                            )
-                          ) : (
-                            <div className="flex items-center gap-3 p-2 h-full bg-zinc-950/80">
-                              <Disc className="w-8 h-8 text-emerald-400 animate-spin-slow shrink-0" />
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[9px] font-mono uppercase text-zinc-500 tracking-wider">AUDIO MATRIX READY</div>
-                                <div className="text-xs font-bold text-white truncate">{songTitle || ((selectedUserProfile?.isYou || effTarget?.isYou) ? "No Anthem Selected (Click Edit Anthem to add your top song)" : "No Anthem Selected")}</div>
+                              <div className="flex items-center gap-3 p-2 h-full bg-zinc-950/80">
+                                <Disc className="w-8 h-8 text-emerald-400 animate-spin-slow shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[9px] font-mono uppercase text-zinc-500 tracking-wider">AUDIO MATRIX READY</div>
+                                  <div className="text-xs font-bold text-white truncate">{songTitle || ((selectedUserProfile?.isYou || effTarget?.isYou) ? "No Anthem Selected (Click Edit Anthem to add your top song)" : "No Anthem Selected")}</div>
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      </CrtTvFrame>
-                    </div>
+                            )}
+                          </div>
+                        </CrtTvFrame>
+                      </div>
+                    )}
 
                     {songTitle && (
                       <div className="w-full overflow-hidden bg-zinc-950/60 border border-zinc-900/80 rounded px-2 py-1 mb-1">
@@ -3004,7 +3034,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   {(() => {
                     const r = (selectedUserProfile?.role || selectedUserProfile?.account_type || selectedUserProfile?.portalRole || selectedUserProfile?.type || '').toLowerCase();
                     const isArtist = r.includes('artist') || r.includes('band') || selectedUserProfile?.isBandProfile === true || selectedUserProfile?.isBand === true;
-                    const isWorkspace = isArtist || 
+                    const isPersonal = selectedUserProfile?.isIndustryProPersonal === true || 
+                      selectedUserProfile?.isPersonal === true || 
+                      selectedUserProfile?.isYou === true || 
+                      (selectedUserProfile?.email && String(selectedUserProfile.email).includes('goregrindsickness')) ||
+                      (selectedUserProfile?.name && String(selectedUserProfile.name).toLowerCase().includes('miguel')) ||
+                      (selectedUserProfile?.username && String(selectedUserProfile.username).toLowerCase().includes('miguel')) ||
+                      (selectedUserProfile?.full_name && String(selectedUserProfile.full_name).toLowerCase().includes('miguel'));
+
+                    const isWorkspace = !isPersonal && (isArtist || 
                       selectedUserProfile?.isCreativeProfile === true || 
                       selectedUserProfile?.isLabelProfile === true || 
                       selectedUserProfile?.isPromoterProfile === true || 
@@ -3014,53 +3052,51 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       r.includes('videographer') || 
                       r.includes('label') || 
                       r.includes('promoter') || 
-                      r.includes('venue');
+                      r.includes('venue'));
                     
-                    if (isArtist) {
-                      return (
-                        <>
-                          <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono mb-2 flex items-center gap-1.5 flex-wrap">
-                            <Award className="w-3.5 h-3.5 text-emerald-500" />
-                            EPK Analytics & Booking
-                          </h3>
-                          <div className="flex items-center justify-between gap-3 bg-zinc-900/30 border border-zinc-900/60 p-2.5 rounded-xl">
-                            <div className="min-w-0 flex-1">
-                              <div className="text-[9px] font-black uppercase tracking-wider text-zinc-500 leading-none">Live Routing Status</div>
-                              <div className="text-zinc-400 text-[10px] font-mono mt-1 font-bold">
-                                {liveRoutingStats.toursCount} {liveRoutingStats.toursCount === 1 ? 'Tour' : 'Tours'} • {liveRoutingStats.showsCount} Active {liveRoutingStats.showsCount === 1 ? 'Date' : 'Dates'}
+                    return (
+                      <div className="space-y-3">
+                        {isArtist && (
+                          <>
+                            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono mb-2 flex items-center gap-1.5 flex-wrap">
+                              <Award className="w-3.5 h-3.5 text-emerald-500" />
+                              EPK Analytics & Booking
+                            </h3>
+                            <div className="flex items-center justify-between gap-3 bg-zinc-900/30 border border-zinc-900/60 p-2.5 rounded-xl">
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[9px] font-black uppercase tracking-wider text-zinc-500 leading-none">Live Routing Status</div>
+                                <div className="text-zinc-400 text-[10px] font-mono mt-1 font-bold">
+                                  {liveRoutingStats.toursCount} {liveRoutingStats.toursCount === 1 ? 'Tour' : 'Tours'} • {liveRoutingStats.showsCount} Active {liveRoutingStats.showsCount === 1 ? 'Date' : 'Dates'}
+                                </div>
                               </div>
+                              <button 
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  setShowBandBookingModal(true);
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-black text-[10px] px-3 py-1.5 rounded-lg transition-colors uppercase tracking-wider font-mono shrink-0 shadow-md flex items-center gap-1 cursor-pointer active:scale-95 relative z-20"
+                              >
+                                📥 Book Band
+                              </button>
                             </div>
-                            <button 
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                setShowBandBookingModal(true);
-                              }}
-                              className="bg-emerald-600 hover:bg-emerald-500 text-neutral-950 font-black text-[10px] px-3 py-1.5 rounded-lg transition-colors uppercase tracking-wider font-mono shrink-0 shadow-md flex items-center gap-1 cursor-pointer active:scale-95 relative z-20"
-                            >
-                              📥 Book Band
-                            </button>
+                          </>
+                        )}
+                        
+                        {/* Personal Sonic Footprint - Active for personal profiles & listener cards */}
+                        {(isPersonal || !isWorkspace) && (
+                          <div className="mt-2">
+                            <SonicFootprint 
+                              profile={selectedUserProfile} 
+                              onActionClick={(actionLabel) => {
+                                triggerNotification?.(`⚡ Navigating to ${actionLabel}...`);
+                              }} 
+                            />
                           </div>
-                        </>
-                      );
-                    }
-                    
-                    // Sonic Footprint only on user accounts, not on any workspace profiles
-                    if (!isWorkspace) {
-                      return (
-                        <div className="mt-2">
-                          <SonicFootprint 
-                            profile={selectedUserProfile} 
-                            onActionClick={(actionLabel) => {
-                              triggerNotification?.(`⚡ Navigating to ${actionLabel}...`);
-                            }} 
-                          />
-                        </div>
-                      );
-                    }
-
-                    return null;
+                        )}
+                      </div>
+                    );
                   })()}
                 </div>
               )}
@@ -4238,6 +4274,20 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       userProfile={userProfile}
       triggerNotification={triggerNotification}
     />
+
+    {/* ISOLATED PUBLIC STOREFRONT MODAL */}
+    {isIsolatedStorefrontOpen && (
+      <div className="fixed inset-0 z-[10000000] bg-black/95 backdrop-blur-md flex flex-col animate-fadeIn pointer-events-auto">
+        <PublicStorefrontView
+          labelName={storefrontBandData?.band_name || storefrontBandData?.name || selectedUserProfile?.name || 'Band Store'}
+          activeBandId={storefrontBandData?.id || selectedUserProfile?.id}
+          activeBand={storefrontBandData || selectedUserProfile}
+          onClose={() => setIsIsolatedStorefrontOpen(false)}
+          triggerNotification={triggerNotification}
+          isInline={false}
+        />
+      </div>
+    )}
   </>
 );
 };

@@ -34,6 +34,13 @@ import {
   DiscoveryZone,
   PeopleYouMayKnow,
 } from './timeline';
+import { ForumHighlightCard } from './ForumHighlightCard';
+import {
+  getCuratedForumHighlights,
+  syncForumHighlightsFromSupabase,
+  isUserForumThread,
+  ForumHighlightThread,
+} from '../../services/forumHighlightService';
 
 export type {
   FeedComment,
@@ -81,10 +88,35 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
   onTriggerNotification,
   discoverProfiles = [],
   onFollowProfile,
+  onNavigateToForum,
 }) => {
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
   const [expandedTourDates, setExpandedTourDates] = useState<Record<string, boolean>>({});
+
+  // Curated Forum Highlights in Feed (prioritizing user's real forum posts)
+  const [forumHighlights, setForumHighlights] = useState<ForumHighlightThread[]>(() =>
+    getCuratedForumHighlights(8, userProfile, currentUserName, currentUserId)
+  );
+  const [dismissedHighlightIds, setDismissedHighlightIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    // Initial sync with user context
+    setForumHighlights(getCuratedForumHighlights(8, userProfile, currentUserName, currentUserId));
+
+    // Also run asynchronous Supabase sync if connected
+    syncForumHighlightsFromSupabase().then(() => {
+      setForumHighlights(getCuratedForumHighlights(8, userProfile, currentUserName, currentUserId));
+    });
+
+    const handleForumCacheUpdated = () => {
+      setForumHighlights(getCuratedForumHighlights(8, userProfile, currentUserName, currentUserId));
+    };
+    window.addEventListener('nexus_forum_cache_updated' as any, handleForumCacheUpdated);
+    return () => {
+      window.removeEventListener('nexus_forum_cache_updated' as any, handleForumCacheUpdated);
+    };
+  }, [userProfile, currentUserName, currentUserId]);
   
   // Ticket purchase modal state
   const [selectedTicketShow, setSelectedTicketShow] = useState<{ post: FeedPost; date: any } | null>(null);
@@ -391,10 +423,30 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
           );
         }
 
+        const activeHighlights = forumHighlights.filter(
+          (h) => !dismissedHighlightIds.has(h.id)
+        );
+
         return (
           <React.Fragment>
             {processedPosts.map((post, index) => {
               const showSuggestionsAfterThis = (index === 3) || (processedPosts.length < 4 && index === processedPosts.length - 1);
+
+              // Curated Forum Highlight interleaving (spaced evenly, never flooding)
+              let highlightToRender: ForumHighlightThread | null = null;
+              if (activeHighlights.length > 0) {
+                const hasUserPost = isUserForumThread(activeHighlights[0], userProfile, currentUserName, currentUserId);
+                // When the user has a real forum post, spotlight it after post #3 (index 2) so it's directly visible
+                const firstSlotIndex = hasUserPost ? (processedPosts.length > 2 ? 2 : 0) : (processedPosts.length >= 6 ? 5 : (processedPosts.length >= 2 ? 1 : 0));
+
+                if (index === firstSlotIndex) {
+                  highlightToRender = activeHighlights[0];
+                } else if (index > firstSlotIndex && (index - firstSlotIndex) % 8 === 0) {
+                  const slot = Math.floor((index - firstSlotIndex) / 8);
+                  highlightToRender = activeHighlights[slot % activeHighlights.length];
+                }
+              }
+
               return (
                 <React.Fragment key={post.id ? `feed-post-${index}-${post.id}` : `feed-post-${index}`}>
                   <PostCard
@@ -512,6 +564,33 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
                       onFollowProfile={onFollowProfile}
                       onTriggerNotification={onTriggerNotification}
                     />
+                  )}
+                  {highlightToRender && (
+                    <div
+                      key={`forum-highlight-slot-${highlightToRender.id}-${index}`}
+                      className="my-3 animate-in fade-in duration-200"
+                    >
+                      <ForumHighlightCard
+                        thread={highlightToRender}
+                        currentUserName={userProfile?.name || currentUserName || 'You'}
+                        currentUserAvatar={userProfile?.avatar || ''}
+                        isUserPost={isUserForumThread(highlightToRender, userProfile, currentUserName, currentUserId)}
+                        onOpenThread={(threadId) => {
+                          if (onNavigateToForum) {
+                            onNavigateToForum(threadId);
+                          } else {
+                            window.dispatchEvent(
+                              new CustomEvent('nexus_open_forum_thread', { detail: { threadId } })
+                            );
+                          }
+                        }}
+                        onDismiss={(threadId) => {
+                          setDismissedHighlightIds((prev) => new Set(prev).add(threadId));
+                          onTriggerNotification?.('Forum highlight hidden from feed.');
+                        }}
+                        onTriggerNotification={onTriggerNotification}
+                      />
+                    </div>
                   )}
                 </React.Fragment>
               );

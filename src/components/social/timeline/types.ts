@@ -185,6 +185,7 @@ export interface TimelineFeedProps {
   onTriggerNotification?: (msg: string) => void;
   discoverProfiles?: any[];
   onFollowProfile?: (profile: any) => void;
+  onNavigateToForum?: (threadId?: string) => void;
 }
 
 export const REACTION_PALETTE = [

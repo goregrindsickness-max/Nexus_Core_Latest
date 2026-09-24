@@ -13,6 +13,7 @@ import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
 import MarqueeText from '../../MarqueeText';
 import { ListenerMetric, calculateListenerMetrics } from '../../profile/SonicFootprint';
 import { TimelineTab } from '../../profile/TimelineTab';
+import { BandcampEmbedCard } from '../../social/embeds/BandcampEmbedCard';
 import { ProfileMarketplaceTab } from '../../profile/ProfileMarketplaceTab';
 import { GalleryTab } from '../../profile/GalleryTab';
 import { CrtTvFrame } from '../../profile/CrtTvFrame';
@@ -2362,53 +2363,66 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       )}
                     </div>
 
-                    <div className="w-full flex justify-center items-center my-1">
-                      <CrtTvFrame>
-                        <div className="w-full bg-black h-full overflow-hidden">
-                          {embedUrl ? (
-                            embedUrl.includes('spotify.com') ? (
-                              <iframe
-                                src={embedUrl}
-                                width="100%"
-                                height="100%"
-                                frameBorder="0"
-                                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                                loading="lazy"
-                                className="w-full h-full"
-                              />
-                            ) : embedUrl.includes('soundcloud.com') ? (
-                              <iframe
-                                width="100%"
-                                height="100%"
-                                scrolling="no"
-                                frameBorder="no"
-                                allow="autoplay"
-                                src={embedUrl}
-                                className="w-full h-full"
-                              />
+                    {((songUrl && songUrl.includes('bandcamp.com')) || (embedUrl && embedUrl.includes('bandcamp.com'))) ? (
+                      <div className="w-full my-1 max-w-full overflow-hidden">
+                        <BandcampEmbedCard
+                          embedUrl={embedUrl || songUrl}
+                          pageUrl={songUrl}
+                          trackTitle={songTitle}
+                          artist={effTarget?.top_song_artist || effTarget?.name || selectedUserProfile?.name}
+                          compact={true}
+                          variant="profile"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-full flex justify-center items-center my-1">
+                        <CrtTvFrame>
+                          <div className="w-full bg-black h-full overflow-hidden">
+                            {embedUrl ? (
+                              embedUrl.includes('spotify.com') ? (
+                                <iframe
+                                  src={embedUrl}
+                                  width="100%"
+                                  height="100%"
+                                  frameBorder="0"
+                                  allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                                  loading="lazy"
+                                  className="w-full h-full"
+                                />
+                              ) : embedUrl.includes('soundcloud.com') ? (
+                                <iframe
+                                  width="100%"
+                                  height="100%"
+                                  scrolling="no"
+                                  frameBorder="no"
+                                  allow="autoplay"
+                                  src={embedUrl}
+                                  className="w-full h-full"
+                                />
+                              ) : (
+                                <iframe
+                                  src={embedUrl}
+                                  width="100%"
+                                  height="100%"
+                                  frameBorder="0"
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                  allowFullScreen
+                                  className="w-full h-full"
+                                />
+                              )
                             ) : (
-                              <iframe
-                                src={embedUrl}
-                                width="100%"
-                                height="100%"
-                                frameBorder="0"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                allowFullScreen
-                                className="w-full h-full"
-                              />
-                            )
-                          ) : (
-                            <div className="flex items-center gap-3 p-2 h-full bg-zinc-950/80">
-                              <Disc className="w-8 h-8 text-emerald-400 animate-spin-slow shrink-0" />
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[9px] font-mono uppercase text-zinc-500 tracking-wider">AUDIO MATRIX READY</div>
-                                <div className="text-xs font-bold text-white truncate">{songTitle || ((selectedUserProfile?.isYou || effTarget?.isYou) ? (isCreative ? "No Highlight Track Selected (Click Edit Track to add your showcase song)" : "No Anthem Selected (Click Edit Anthem to add your top song)") : (isCreative ? "No Highlight Track Selected" : "No Anthem Selected"))}</div>
+                              <div className="flex items-center gap-3 p-2 h-full bg-zinc-950/80">
+                                <Disc className="w-8 h-8 text-emerald-400 animate-spin-slow shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[9px] font-mono uppercase text-zinc-500 tracking-wider">AUDIO MATRIX READY</div>
+                                  <div className="text-xs font-bold text-white truncate">{songTitle || ((selectedUserProfile?.isYou || effTarget?.isYou) ? (isCreative ? "No Highlight Track Selected (Click Edit Track to add your showcase song)" : "No Anthem Selected (Click Edit Anthem to add your top song)") : (isCreative ? "No Highlight Track Selected" : "No Anthem Selected"))}</div>
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      </CrtTvFrame>
-                    </div>
+                            )}
+                          </div>
+                        </CrtTvFrame>
+                      </div>
+                    )}
 
                     {songTitle && (
                       <div className="w-full overflow-hidden bg-zinc-950/60 border border-zinc-900/80 rounded px-2 py-1 mb-1">

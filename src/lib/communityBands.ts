@@ -14,6 +14,7 @@ import {
   upsertBandToDatabase,
   processOfflineQueue
 } from '../supabase';
+import { syncBandDiscographyToPhysicalAndDigital } from '../services/discographySyncService';
 
 export type BandVerificationStatus = 'community_archive' | 'claim_pending' | 'verified_official';
 
@@ -671,7 +672,6 @@ export class CommunityBandManager {
         localStorage.setItem(`nexus_core_band_cover_${existing.id}`, updated.cover_url);
       }
       window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: updated }));
-      window.dispatchEvent(new CustomEvent('nexus_avatar_updated', { detail: { avatar_url: updated.avatar_url, logo_url: updated.logo_url } }));
       result = updated;
     } else {
       // BRAND NEW ENTRY - Guaranteed unique fresh UUID, never matching fallback strings or overwriting existing items
@@ -720,7 +720,6 @@ export class CommunityBandManager {
       all.unshift(newBand);
       this.saveToStorage(all);
       window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: newBand }));
-      window.dispatchEvent(new CustomEvent('nexus_avatar_updated', { detail: { avatar_url: newBand.avatar_url, logo_url: newBand.logo_url } }));
       result = newBand;
     }
 
@@ -1004,12 +1003,6 @@ export class CommunityBandManager {
           logo_url: finalAvatarUrl,
           cover_url: finalCoverUrl,
           banner_url: finalCoverUrl
-        }
-      }));
-      window.dispatchEvent(new CustomEvent('nexus_avatar_updated', {
-        detail: {
-          avatar_url: finalAvatarUrl,
-          logo_url: finalAvatarUrl
         }
       }));
 
@@ -1382,6 +1375,9 @@ export class CommunityBandManager {
 
     // Proactively sync handover state to Supabase
     this.syncToSupabaseTables(updated).catch(console.warn);
+
+    // Automatically populate digital music player and physical release inventory with discography
+    syncBandDiscographyToPhysicalAndDigital(updated).catch(console.warn);
 
     return { success: true, bandRecord: updated };
   }

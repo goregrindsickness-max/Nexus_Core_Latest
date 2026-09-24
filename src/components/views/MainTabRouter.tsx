@@ -363,12 +363,18 @@ export const MainTabRouter: React.FC<MainTabRouterProps> = (props) => {
           <AddItemView
             isOffline={isOfflineSimActive || !isOnline}
             initialItem={editingItem || undefined}
-            onBack={() => setActiveTab('inventory')}
+            onBack={() => {
+              setEditingItem(null);
+              if (props.setDashboardV2ActiveNav) props.setDashboardV2ActiveNav('MERCH');
+              setActiveTab('home-v2');
+            }}
             onSave={async (savedItem) => {
               const completeItem = { ...savedItem, band_id: activeBandId } as InventoryItem;
               commitInventoryMutation(completeItem);
               processingGlobalSyncQueue();
               setEditingItem(null);
+              if (props.setDashboardV2ActiveNav) props.setDashboardV2ActiveNav('MERCH');
+              setActiveTab('home-v2');
               return true;
             }}
             onDelete={async (itemId) => {
@@ -387,6 +393,8 @@ export const MainTabRouter: React.FC<MainTabRouterProps> = (props) => {
                 return updated;
               });
               setEditingItem(null);
+              if (props.setDashboardV2ActiveNav) props.setDashboardV2ActiveNav('MERCH');
+              setActiveTab('home-v2');
             }}
             triggerNotification={triggerNotification}
           />

@@ -39,6 +39,8 @@ import { getExistingPhotoPitAlbums, persistPhotoPitFolders } from './utils/photo
 import { resolveBandcampMetadata, isBandcampUrl, normalizeBandcampUrl, BandcampResolvedData } from '../../utils/socialFeedUtils';
 import { BandcampEmbedCard } from './embeds/BandcampEmbedCard';
 import { BandcampSearchHelper } from './embeds/BandcampSearchHelper';
+import { VenueAutocompleteInput } from './VenueAutocompleteInput';
+import { BandTagAutocomplete } from './BandTagAutocomplete';
 
 
 export type ComposerRoleTheme = 'band' | 'creative' | 'promoter' | 'label' | 'industry_pro' | 'fan_only';
@@ -1468,6 +1470,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                       artworkUrl={bandcampResolved?.artwork}
                       pageUrl={bandcampResolved?.pageUrl || newPostImageUrl}
                       itemType={bandcampResolved?.itemType}
+                      variant="feed"
                       compact={false}
                     />
                   </div>
@@ -1644,43 +1647,75 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
         {activePanel === 'venue' && (
           <div className={`${theme.panelBg} p-3 rounded-xl border ${theme.panelBorder} space-y-2 animate-in fade-in duration-150`}>
             <div className={`flex items-center justify-between text-[10px] font-mono ${theme.badgeText} font-bold uppercase`}>
-              <span>TAG VENUE & SHOW LOCATION</span>
+              <span className="flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                TAG VENUE & SHOW LOCATION
+              </span>
               <button type="button" onClick={() => setActivePanel(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-3.5 h-3.5" /></button>
             </div>
-            <input
-              type="text"
-              placeholder="e.g. The Underground • Doors 8:00 PM..."
+
+            <VenueAutocompleteInput
               value={taggedVenue}
-              onChange={(e) => setTaggedVenue && setTaggedVenue(e.target.value)}
-              className={`w-full ${theme.innerPanelBg} text-xs text-white placeholder:text-zinc-600 border ${theme.inputBorder} rounded-lg p-2 font-mono ${theme.inputFocus}`}
+              onChange={(venue, venueData) => {
+                if (setTaggedVenue) setTaggedVenue(venue);
+                if (venueData && !eventLocationName && setEventLocationName) {
+                  setEventLocationName(venueData.name);
+                }
+                if (venueData?.fullAddress && !eventAddress && setEventAddress) {
+                  setEventAddress(venueData.fullAddress);
+                }
+              }}
+              placeholder="Search Black Book or Google Places venue (e.g. Chain Reaction, The Echo)..."
+              theme={{
+                innerPanelBg: theme.innerPanelBg,
+                inputBorder: theme.inputBorder,
+                inputFocus: theme.inputFocus,
+                badgeBg: theme.badgeBg,
+                badgeText: theme.badgeText,
+                accentText: theme.accentText
+              }}
+              onClose={() => setActivePanel(null)}
             />
           </div>
         )}
 
         {/* Tag Band Panel */}
         {activePanel === 'band' && (
-          <div className={`${theme.panelBg} p-3 rounded-xl border ${theme.panelBorder} space-y-2 animate-in fade-in duration-150`}>
+          <div className={`${theme.panelBg} p-3 rounded-xl border ${theme.panelBorder} space-y-2.5 animate-in fade-in duration-150`}>
             <div className={`flex items-center justify-between text-[10px] font-mono ${theme.badgeText} font-bold uppercase`}>
-              <span>TAG BANDS IN THIS POST</span>
+              <span className="flex items-center gap-1.5">
+                <Music className={`w-3.5 h-3.5 ${theme.accentText}`} />
+                TAG BAND PROFILES IN THIS POST
+              </span>
               <button type="button" onClick={() => setActivePanel(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-3.5 h-3.5" /></button>
             </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Band name (e.g. DYING FETUS)..."
-                value={tagBandInput}
-                onChange={(e) => setTagBandInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTaggedBand(); } }}
-                className={`flex-1 ${theme.innerPanelBg} text-xs text-white placeholder:text-zinc-600 border ${theme.inputBorder} rounded-lg p-2 font-mono ${theme.inputFocus}`}
-              />
-              <button
-                type="button"
-                onClick={addTaggedBand}
-                className={`px-3 py-1.5 ${theme.badgeBg} hover:${theme.accentBg} ${theme.badgeText} text-xs font-mono font-bold rounded-lg border ${theme.accentBorder}`}
-              >
-                + ADD
-              </button>
-            </div>
+            
+            <BandTagAutocomplete
+              taggedBands={taggedBands}
+              onAddBand={(bandName) => {
+                if (setTaggedBands && !taggedBands.includes(bandName)) {
+                  setTaggedBands([...taggedBands, bandName]);
+                }
+              }}
+              onRemoveBand={(bandName) => {
+                if (setTaggedBands) {
+                  setTaggedBands(taggedBands.filter((b) => b !== bandName));
+                }
+              }}
+              availableBands={bands}
+              theme={{
+                innerPanelBg: theme.innerPanelBg,
+                inputBorder: theme.inputBorder,
+                inputFocus: theme.inputFocus,
+                badgeBg: theme.badgeBg,
+                badgeText: theme.badgeText,
+                accentText: theme.accentText,
+                accentBg: theme.accentBg,
+                accentBorder: theme.accentBorder,
+                attachedTagBg: theme.attachedTagBg
+              }}
+              onClose={() => setActivePanel(null)}
+            />
           </div>
         )}
 
@@ -2222,14 +2257,22 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="space-y-1">
                 <label className="text-[9px] font-mono text-amber-400 uppercase font-bold block">
-                  Venue / Location Name
+                  Venue / Location Name (Black Book & Places)
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. The Underground, Basement, Saint Vitus"
+                <VenueAutocompleteInput
                   value={eventLocationName}
-                  onChange={(e) => setEventLocationName?.(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 focus:border-amber-500 rounded-lg p-2 text-xs text-white font-mono placeholder:text-zinc-600 focus:outline-none transition-colors"
+                  onChange={(venue, venueData) => {
+                    setEventLocationName?.(venueData ? venueData.name : venue);
+                    if (venueData?.fullAddress && setEventAddress) {
+                      setEventAddress(venueData.fullAddress);
+                    }
+                  }}
+                  placeholder="e.g. Chain Reaction, The Echo, Saint Vitus..."
+                  theme={{
+                    innerPanelBg: 'bg-zinc-950',
+                    inputBorder: 'border-zinc-800',
+                    inputFocus: 'focus:border-amber-500'
+                  }}
                 />
               </div>
 
@@ -2242,7 +2285,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                   placeholder="e.g. 1120 Manhattan Ave, Brooklyn NY"
                   value={eventAddress}
                   onChange={(e) => setEventAddress?.(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 focus:border-amber-500 rounded-lg p-2 text-xs text-white font-mono placeholder:text-zinc-600 focus:outline-none transition-colors"
+                  className="w-full bg-zinc-950 border border-zinc-800 focus:border-amber-500 rounded-lg p-2.5 text-xs text-white font-mono placeholder:text-zinc-600 focus:outline-none transition-colors"
                 />
               </div>
             </div>

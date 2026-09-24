@@ -278,6 +278,8 @@ interface ForumViewProps {
   profileAvatarUrl?: string;
   discoverProfiles?: any[];
   allProfiles?: any[];
+  initialThreadId?: string | null;
+  onClearInitialThread?: () => void;
 }
 
 const DEFAULT_FORUM_THREADS = [
@@ -448,6 +450,9 @@ function generateUUID(): string {
 function saveForumCache(threads: any[]) {
   try {
     localStorage.setItem('nexus_forum_threads_cache', JSON.stringify(threads));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nexus_forum_cache_updated', { detail: { count: threads.length } }));
+    }
   } catch (e) {
     console.warn('Failed to save forum cache to localStorage:', e);
   }
@@ -471,6 +476,8 @@ export const ForumView: React.FC<ForumViewProps> = ({
   profileAvatarUrl,
   discoverProfiles = [],
   allProfiles = [],
+  initialThreadId,
+  onClearInitialThread,
 }) => {
   const [forumThreads, setForumThreads] = useState<any[]>(() => {
     const cached = loadForumCache();
@@ -480,7 +487,33 @@ export const ForumView: React.FC<ForumViewProps> = ({
   const [forumCategory, setForumCategory] = useState('All');
   const [forumPrimaryGenre, setForumPrimaryGenre] = useState('All');
   const [forumMicroGenre, setForumMicroGenre] = useState('All');
-  const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
+  const [expandedThreadId, setExpandedThreadId] = useState<string | null>(initialThreadId || null);
+
+  useEffect(() => {
+    if (initialThreadId) {
+      setExpandedThreadId(initialThreadId);
+    }
+  }, [initialThreadId]);
+
+  useEffect(() => {
+    const handleOpenThread = (e: any) => {
+      if (e?.detail?.threadId) {
+        setExpandedThreadId(e.detail.threadId);
+      }
+    };
+    const handleCacheUpdated = () => {
+      const cached = loadForumCache();
+      if (cached && cached.length > 0) {
+        setForumThreads(cached);
+      }
+    };
+    window.addEventListener('nexus_open_forum_thread' as any, handleOpenThread);
+    window.addEventListener('nexus_forum_cache_updated' as any, handleCacheUpdated);
+    return () => {
+      window.removeEventListener('nexus_open_forum_thread' as any, handleOpenThread);
+      window.removeEventListener('nexus_forum_cache_updated' as any, handleCacheUpdated);
+    };
+  }, []);
 
   // Space Subscriptions state
   const [subscribedSpaces, setSubscribedSpaces] = useState<string[]>(() => {
@@ -986,6 +1019,9 @@ export const ForumView: React.FC<ForumViewProps> = ({
       primaryGenre: newThreadPrimaryGenre,
       author: authorName,
       authorAvatar: avatarUrl,
+      userId: userProfile?.id,
+      user_id: userProfile?.id,
+      isUserCreated: true,
       image: newThreadMediaUrl || undefined,
       youtubeId: yId,
       timeAgo: 'Just now',

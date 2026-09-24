@@ -439,9 +439,12 @@ export const PostCard: React.FC<PostCardProps> = ({
     rawPostAvatar.trim() === ''
   );
 
-  const displayAvatar = (!isGenericUiAvatar && rawPostAvatar)
-    ? rawPostAvatar
-    : (isCurrentUser ? (liveSelfAvatar || null) : null);
+  // For current user's personal / industry pro posts, liveSelfAvatar is authoritative over any stale or corrupted cached snapshot
+  const displayAvatar = (isCurrentUser && !isArtistOrBand && liveSelfAvatar)
+    ? liveSelfAvatar
+    : ((!isGenericUiAvatar && rawPostAvatar)
+      ? rawPostAvatar
+      : (isCurrentUser ? (liveSelfAvatar || null) : null));
 
   const getInitials = (str?: string) => {
     if (!str) return 'NX';
@@ -956,7 +959,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 
       {/* Bandcamp Embed Player */}
       {(post.bandcampUrl || post.bandcamp_url || post.bandcampData || post.bandcamp_data || (post.mediaUrl && post.mediaUrl.includes('bandcamp.com')) || (post.media_url && post.media_url.includes('bandcamp.com')) || (post.image_url && post.image_url.includes('bandcamp.com')) || (post.image && post.image.includes('bandcamp.com'))) && (
-        <BandcampEmbedCard post={post} />
+        <BandcampEmbedCard post={post} variant="feed" compact={false} />
       )}
 
       {/* Media Attachment Image(s) - Edge-to-Edge Showcase */}

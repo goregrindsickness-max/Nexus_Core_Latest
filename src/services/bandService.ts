@@ -639,11 +639,8 @@ export async function upsertBandToDatabase(
     window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: cleanBand }));
     if (cleanBand.logo_url) {
       verifyAndResyncBandLogo(cleanBand.logo_url, cleanBand.id);
-      window.dispatchEvent(new CustomEvent('nexus_avatar_updated', {
-        detail: { avatar_url: cleanBand.logo_url, logo_url: cleanBand.logo_url }
-      }));
       window.dispatchEvent(new CustomEvent('nexus_band_logo_updated', {
-        detail: { logo_url: cleanBand.logo_url }
+        detail: { logo_url: cleanBand.logo_url, id: cleanBand.id }
       }));
     }
   }

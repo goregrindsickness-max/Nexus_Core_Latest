@@ -31,6 +31,7 @@ import InteractiveRoutePreview from './components/portals/Band/InteractiveRouteP
 import { inventoryStore, posSalesStore, itinerariesStore, socialFeedStore, reviewsStore, showsStore, registrationStagingStore, venuesStore, offersStore, routingBeaconsStore, creativeNodesStore, expensesStore, profileStore } from './utils/indexedDB';
 import { wipeAllLocalData } from './utils/resetApp';
 import { registerNotificationsOnStartup } from './services/pushNotificationService';
+import { initializeSonicActivityListeners } from './services/sonicFootprintService';
 import { formatTimeAgo, extractUUID } from './utils/socialFeedUtils';
 import { 
   Menu, 
@@ -393,6 +394,7 @@ export default function App() {
        wipeAllLocalData();
     }
     registerNotificationsOnStartup();
+    initializeSonicActivityListeners();
   }, []);
 
   // Suppress "Invalid Refresh Token" from Supabase if it throws an unhandled rejection

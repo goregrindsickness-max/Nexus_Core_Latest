@@ -29,9 +29,13 @@ import {
   SkipForward,
   Pause,
   Play,
-  Volume2
+  Volume2,
+  CheckCircle2,
+  Layers,
+  FileAudio
 } from 'lucide-react';
 import { InventoryItem, StagedDistroItem } from '../../../types';
+import { syncBandDiscographyToPhysicalAndDigital } from '../../../services/discographySyncService';
 
 const BANNER_PRESETS = [
   { name: 'Slayer Crimson Gradient', url: 'linear-gradient(135deg, #7a0010 0%, #140003 100%)' },
@@ -64,6 +68,9 @@ interface DevBandDistroDeckProps {
   setStagedDistroItems: React.Dispatch<React.SetStateAction<StagedDistroItem[]>>;
   initialSubTab?: 'feed' | 'merch' | 'fans' | 'customizer' | 'alliances' | 'music';
   subTabMode?: 'all' | 'decoupled_merch';
+  activeBandId?: string;
+  activeBand?: any;
+  bandName?: string;
 }
 
 interface SimulatedFollow {
@@ -81,27 +88,39 @@ export default function DevBandDistroDeck({
   stagedDistroItems,
   setStagedDistroItems,
   initialSubTab,
-  subTabMode = 'all'
+  subTabMode = 'all',
+  activeBandId,
+  activeBand,
+  bandName: propsBandName
 }: DevBandDistroDeckProps) {
+  const effectiveBandId = activeBandId || activeBand?.id || 'cbddb810-259b-4230-9968-3d402dfdb872';
+  const effectiveBandName = activeBand?.name || activeBand?.band_name || propsBandName || 'Virulent Excision';
+
   // --- Persistent & Customize Settings ---
   const [bandName, setBandName] = useState<string>(() => {
-    return localStorage.getItem('distro_db_band_name') || 'Virulent Excision';
+    return effectiveBandName || localStorage.getItem('distro_db_band_name') || 'Virulent Excision';
   });
+
+  useEffect(() => {
+    if (effectiveBandName) {
+      setBandName(effectiveBandName);
+    }
+  }, [effectiveBandName]);
 
   const [profileAccentColor, setProfileAccentColor] = useState<string>(() => {
     return localStorage.getItem('distro_db_accent_color') || '#39ff14';
   });
 
   const [profileBannerMode, setProfileBannerMode] = useState<string>(() => {
-    return localStorage.getItem('distro_db_banner_url') || 'linear-gradient(135deg, #1d1e22 0%, #0b0c10 100%)';
+    return activeBand?.cover_url || localStorage.getItem('distro_db_banner_url') || 'linear-gradient(135deg, #1d1e22 0%, #0b0c10 100%)';
   });
 
   const [bandLogoUrl, setBandLogoUrl] = useState<string>(() => {
-    return localStorage.getItem('distro_db_band_logo') || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop';
+    return activeBand?.logo_url || activeBand?.avatar_url || localStorage.getItem('distro_db_band_logo') || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop';
   });
 
   const [bandBio, setBandBio] = useState<string>(() => {
-    return localStorage.getItem('distro_db_band_bio') || 'Heavy DIY death metal sound systems & intense underground physical distribution networks.';
+    return activeBand?.bio || localStorage.getItem('distro_db_band_bio') || 'Heavy DIY death metal sound systems & intense underground physical distribution networks.';
   });
 
   const [featuredDistroItemId, setFeaturedDistroItemId] = useState<string>(() => {
@@ -114,7 +133,10 @@ export default function DevBandDistroDeck({
   const [audioPipelineProgress, setAudioPipelineProgress] = useState<number>(0);
   const [processedTrackName, setProcessedTrackName] = useState<string>('');
 
-  const handleAudioPipelineUpload = (file: File) => {
+  const [targetTrackForUpload, setTargetTrackForUpload] = useState<string | null>(null);
+  const trackFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAudioPipelineUpload = (file: File, targetTrackId?: string) => {
     setIsProcessingAudio(true);
     setAudioPipelineProgress(0);
     setProcessedTrackName(file.name);
@@ -149,25 +171,62 @@ export default function DevBandDistroDeck({
           const createdUrl = URL.createObjectURL(file);
           const isWav = file.name.toLowerCase().endsWith('.wav');
           
-          const newTrackObj = {
-            id: 'local_track_' + Date.now(),
-            title: file.name.substring(0, file.name.lastIndexOf('.')) || file.name,
-            duration: isWav ? '4:12' : '3:45', 
-            url: createdUrl,
-            fileType: isWav ? 'mp3 (320kbps Stream)' : 'mp3 (Streaming Opt)',
-            track_preview_mode: '30_SEC_CLIP',
-            track_price: 1.00,
-            track_visibility: true,
-            isOptimized: true
-          };
+          setUploadedTracks(prev => {
+            // If targetTrackId is specified, attach audio directly to that metadata track
+            if (targetTrackId) {
+              return prev.map(t => {
+                if (t.id === targetTrackId) {
+                  return {
+                    ...t,
+                    url: createdUrl,
+                    hasAudio: true,
+                    fileType: isWav ? 'WAV (24-bit PCM Master)' : 'MP3 (320kbps Stream)',
+                    isOptimized: true
+                  };
+                }
+                return t;
+              });
+            }
 
-          setUploadedTracks(prev => [...prev, newTrackObj]);
+            // Check if any existing track in the discography matches the uploaded file name
+            const rawTitle = file.name.substring(0, file.name.lastIndexOf('.')).replace(/^[0-9\s._-]+/, '').trim().toLowerCase();
+            const matchedIndex = prev.findIndex(t => !t.hasAudio && !t.url && (t.title?.toLowerCase().includes(rawTitle) || rawTitle.includes(t.title?.toLowerCase() || '')));
+
+            if (matchedIndex !== -1) {
+              const updated = [...prev];
+              updated[matchedIndex] = {
+                ...updated[matchedIndex],
+                url: createdUrl,
+                hasAudio: true,
+                fileType: isWav ? 'WAV (24-bit PCM Master)' : 'MP3 (320kbps Stream)',
+                isOptimized: true
+              };
+              return updated;
+            }
+
+            // Otherwise, append as new track
+            const newTrackObj = {
+              id: 'local_track_' + Date.now(),
+              title: file.name.substring(0, file.name.lastIndexOf('.')) || file.name,
+              duration: isWav ? '4:12' : '3:45', 
+              url: createdUrl,
+              hasAudio: true,
+              fileType: isWav ? 'mp3 (320kbps Stream)' : 'mp3 (Streaming Opt)',
+              track_preview_mode: '30_SEC_CLIP',
+              track_price: 1.00,
+              track_visibility: true,
+              isOptimized: true,
+              band_id: effectiveBandId
+            };
+            return [...prev, newTrackObj];
+          });
+
           if (triggerNotification) {
-            triggerNotification(`Audio optimized and compiled successfully! 📻`);
+            triggerNotification(`Audio master stream connected and verified! 📻`);
           }
         }, 500);
       }
-    }, 400);
+    }, 300);
   };
 
   // --- Crop Modal & Editor States ---
@@ -419,6 +478,14 @@ export default function DevBandDistroDeck({
 
   // --- Our Music & YouTube Video States ---
   const [uploadedTracks, setUploadedTracks] = useState<any[]>(() => {
+    const bandKey = `distro_db_music_tracks_${effectiveBandId}`;
+    const cachedBand = localStorage.getItem(bandKey);
+    if (cachedBand) {
+      try {
+        const parsed = JSON.parse(cachedBand);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
     const cached = localStorage.getItem('distro_db_music_tracks');
     if (cached) {
       try {
@@ -429,9 +496,52 @@ export default function DevBandDistroDeck({
     return [];
   });
 
+  // Automatically sync and re-hydrate tracks when activeBand or effectiveBandId changes
   useEffect(() => {
+    const bandKey = `distro_db_music_tracks_${effectiveBandId}`;
+    const loadTracks = () => {
+      const cached = localStorage.getItem(bandKey) || localStorage.getItem('distro_db_music_tracks');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            setUploadedTracks(parsed);
+            return;
+          }
+        } catch (e) {}
+      }
+      // If no tracks, run discography auto-sync if available
+      if (activeBand) {
+        syncBandDiscographyToPhysicalAndDigital(activeBand).then(() => {
+          const updated = localStorage.getItem(bandKey);
+          if (updated) {
+            try {
+              setUploadedTracks(JSON.parse(updated));
+            } catch (_) {}
+          }
+        });
+      }
+    };
+
+    loadTracks();
+
+    const handleSyncUpdate = (e: any) => {
+      if (!e.detail?.bandId || e.detail.bandId === effectiveBandId) {
+        if (e.detail?.tracks) {
+          setUploadedTracks(e.detail.tracks);
+        }
+      }
+    };
+
+    window.addEventListener('nexus_distro_tracks_updated', handleSyncUpdate);
+    return () => window.removeEventListener('nexus_distro_tracks_updated', handleSyncUpdate);
+  }, [effectiveBandId, activeBand]);
+
+  useEffect(() => {
+    const bandKey = `distro_db_music_tracks_${effectiveBandId}`;
+    localStorage.setItem(bandKey, JSON.stringify(uploadedTracks));
     localStorage.setItem('distro_db_music_tracks', JSON.stringify(uploadedTracks));
-  }, [uploadedTracks]);
+  }, [uploadedTracks, effectiveBandId]);
 
   const [youtubeVideos, setYoutubeVideos] = useState<any[]>(() => {
     const cached = localStorage.getItem('distro_db_music_yt');
@@ -2085,30 +2195,63 @@ Keep it heavy, keep it loud!
 
                   {/* TRACK DISCOGRAPHY LIST */}
                   <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5 shadow-2xl text-left space-y-4">
-                    <div className="flex items-center justify-between border-b border-zinc-900/60 pb-3">
-                      <span className="text-xs font-mono font-black text-white uppercase tracking-wider">
-                        Lossless Track Catalog ({uploadedTracks.length})
-                      </span>
-
-                      {/* Hidden File Upload input for Mp3/Wav */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-900/60 pb-3">
                       <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-black text-white uppercase tracking-wider">
+                            Lossless Discography & Track Catalog ({uploadedTracks.length})
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[9px] font-mono font-black uppercase">
+                            DIRECT MASTER LINK
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                          Attach studio masters (MP3/WAV) to metadata-synced tracks below or upload new files.
+                        </p>
+                      </div>
+
+                      {/* Hidden File Upload input for targeted track */}
+                      <input 
+                        type="file" 
+                        ref={trackFileInputRef}
+                        accept=".mp3,.wav,audio/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          handleAudioPipelineUpload(file, targetTrackForUpload || undefined);
+                          if (e.target) e.target.value = '';
+                        }}
+                      />
+
+                      {/* Top Action Buttons */}
+                      <div className="flex items-center gap-2">
                         <input 
                           type="file" 
-                          id="local-music-uploader" 
-                          accept=".mp3,.wav" 
+                          id="local-music-uploader-batch" 
+                          accept=".mp3,.wav,audio/*" 
+                          multiple
                           className="hidden" 
                           onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            handleAudioPipelineUpload(file);
+                            const files = Array.from(e.target.files || []);
+                            if (files.length === 0) return;
+                            files.forEach((file, i) => {
+                              setTimeout(() => {
+                                handleAudioPipelineUpload(file);
+                              }, i * 600);
+                            });
+                            if (e.target) e.target.value = '';
                           }}
                         />
                         <button
                           type="button"
-                          onClick={() => document.getElementById('local-music-uploader')?.click()}
-                          className="px-2.5 py-1 bg-zinc-900 border border-zinc-800 hover:border-[#39ff14]/30 hover:bg-[#39ff14]/5 text-zinc-450 hover:text-[#39ff14] text-[9px] font-mono font-black uppercase rounded transition cursor-pointer select-none flex items-center gap-1.5"
+                          onClick={() => {
+                            setTargetTrackForUpload(null);
+                            document.getElementById('local-music-uploader-batch')?.click();
+                          }}
+                          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black text-[9px] font-mono font-black uppercase rounded-lg transition cursor-pointer select-none flex items-center gap-1.5 shadow-md shadow-emerald-950/40"
                         >
-                          <Upload className="w-3.5 h-3.5 text-[#39ff14]" /> UPLOAD MP3/WAV
+                          <Upload className="w-3.5 h-3.5 text-black" /> BATCH UPLOAD (MP3/WAV)
                         </button>
                       </div>
                     </div>
@@ -2116,8 +2259,9 @@ Keep it heavy, keep it loud!
                     {isProcessingAudio && (
                       <div className="bg-[#000000] border border-[#1A1A1A] rounded-xl p-5 space-y-4 animate-fadeIn my-2 font-mono">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-zinc-400 font-bold tracking-widest uppercase animate-pulse">
-                            [ AUDIO PIPELINE ACTIVE ]
+                          <span className="text-[10px] text-zinc-400 font-bold tracking-widest uppercase animate-pulse flex items-center gap-2">
+                            <Layers className="w-3.5 h-3.5 text-[#39ff14] animate-spin" />
+                            [ MASTERING PIPELINE ACTIVE ]
                           </span>
                           <span className="text-[11px] text-[#39ff14] font-black">{audioPipelineProgress}%</span>
                         </div>
@@ -2140,114 +2284,185 @@ Keep it heavy, keep it loud!
                         </div>
                         
                         <div className="flex justify-between items-center text-[8px] text-zinc-500">
-                          <span>SOURCE: {processedTrackName}</span>
-                          <span>NORMALIZATION TARGET: -14.0 LUFS</span>
+                          <span>TARGET: {processedTrackName}</span>
+                          <span>NORMALIZATION: -14.0 LUFS BROADCAST STANDARD</span>
                         </div>
                       </div>
                     )}
 
-                    <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 scrollbar-barely-visible">
-                      {uploadedTracks.map((track, idx) => (
-                        <div key={`${track.id}-${idx}`} className="flex flex-col gap-2 p-3 rounded-2xl border transition duration-150 bg-[#0a0c10] border-zinc-900 group">
-                          <div
-                            onClick={() => selectTrackToPlay(idx)}
-                            className={`cursor-pointer flex items-center justify-between gap-3 text-left`}
+                    <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1 scrollbar-barely-visible">
+                      {uploadedTracks.length === 0 ? (
+                        <div className="text-center py-10 border border-dashed border-zinc-800 rounded-2xl bg-zinc-950/40 space-y-3">
+                          <Music className="w-8 h-8 text-zinc-600 mx-auto" />
+                          <div>
+                            <p className="text-xs font-mono font-bold text-zinc-400 uppercase">No Tracks In Audio Station Yet</p>
+                            <p className="text-[10px] text-zinc-600 font-mono mt-1">Upload audio masters or sync your band's discography catalog.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => document.getElementById('local-music-uploader-batch')?.click()}
+                            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-[#39ff14] border border-zinc-700 text-[10px] font-mono font-black uppercase rounded-lg cursor-pointer inline-flex items-center gap-2"
                           >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span className="font-mono text-[10px] text-zinc-650 shrink-0 w-4">
-                                {currentTrackIndex === idx && musicIsPlaying ? (
-                                  <span className="text-[#39ff14] font-black animate-pulse">▶</span>
-                                ) : (
-                                  String(idx + 1).padStart(2, '0')
-                                )}
-                              </span>
-                              
-                              <div className="min-w-0">
-                                <span className="block text-[11px] font-bold font-mono tracking-wide truncate text-zinc-300 group-hover:text-white transition-colors">
-                                  {track.title}
-                                </span>
-                                <span className="text-[8px] font-mono text-zinc-600 block mt-0.5">
-                                  STEM SYSTEM: SOURCE FILE ({track.fileType?.toUpperCase()})
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 font-mono text-[10px] text-zinc-550 shrink-0">
-                              <span>{track.duration}</span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const filtered = uploadedTracks.filter(t => t.id !== track.id);
-                                  setUploadedTracks(filtered);
-                                  if (currentTrackIndex >= filtered.length) {
-                                    setCurrentTrackIndex(0);
-                                  }
-                                  triggerNotification?.("Removed track from current playback node!");
-                                }}
-                                className="p-1 hover:text-red-500 text-zinc-700 transition"
-                                title="Delete from local play stack"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                          
-                          {/* Track-level Monetization and Schema Toggles */}
-                          <div className="mt-1 pt-2 border-t border-zinc-900/50 flex flex-wrap items-center gap-3">
-                            {/* Preview Mode */}
-                            <div className="flex items-center gap-1.5 bg-zinc-950/50 px-2 py-1 rounded-md border border-zinc-900">
-                              <span className="text-[8px] font-mono uppercase tracking-widest text-zinc-500">Preview:</span>
-                              <select 
-                                value={track.track_preview_mode || '30_SEC_CLIP'}
-                                onChange={(e) => {
-                                  setUploadedTracks(prev => prev.map(t => t.id === track.id ? { ...t, track_preview_mode: e.target.value } : t));
-                                }}
-                                className="bg-transparent text-[9px] font-mono font-bold text-zinc-300 focus:outline-none cursor-pointer p-0 border-none appearance-none hover:text-white"
-                              >
-                                <option value="30_SEC_CLIP" className="bg-zinc-900 text-zinc-300">30_SEC_CLIP</option>
-                                <option value="FULL_STREAM" className="bg-zinc-900 text-zinc-300">FULL_STREAM</option>
-                                <option value="LOCKED" className="bg-zinc-900 text-zinc-300">LOCKED</option>
-                              </select>
-                            </div>
-
-                            {/* Price */}
-                            <div className="flex items-center gap-1.5 bg-zinc-950/50 px-2 py-1 rounded-md border border-zinc-900">
-                              <span className="text-[8px] font-mono uppercase tracking-widest text-zinc-500">Price:</span>
-                              <div className="flex items-center">
-                                <span className="text-[9px] font-mono text-zinc-500">$</span>
-                                <input 
-                                  type="number"
-                                  min="0"
-                                  step="0.10"
-                                  value={track.track_price ?? 1.00}
-                                  onChange={(e) => {
-                                    setUploadedTracks(prev => prev.map(t => t.id === track.id ? { ...t, track_price: parseFloat(e.target.value) || 0 } : t));
-                                  }}
-                                  className="w-12 bg-transparent text-[9px] font-mono font-bold text-[#00ffcc] focus:outline-none p-0 border-none text-right placeholder-zinc-700"
-                                  placeholder="1.00"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Visibility Toggle */}
-                            <div className="flex items-center gap-1.5 bg-zinc-950/50 px-2 py-1 rounded-md border border-zinc-900">
-                               <label className="flex items-center gap-1.5 cursor-pointer">
-                                 <input
-                                   type="checkbox"
-                                   checked={track.track_visibility ?? true}
-                                   onChange={(e) => {
-                                      setUploadedTracks(prev => prev.map(t => t.id === track.id ? { ...t, track_visibility: e.target.checked } : t));
-                                   }}
-                                   className="w-2.5 h-2.5 accent-[#39ff14] bg-zinc-900 rounded-sm cursor-pointer"
-                                 />
-                                 <span className={`text-[8px] font-mono uppercase tracking-widest ${track.track_visibility !== false ? 'text-[#39ff14]' : 'text-zinc-500'}`}>Visibile</span>
-                               </label>
-                            </div>
-
-                          </div>
+                            <Upload className="w-3.5 h-3.5" /> Upload Master File
+                          </button>
                         </div>
-                      ))}
+                      ) : (
+                        uploadedTracks.map((track, idx) => {
+                          const hasAudioFile = Boolean(track.url || track.hasAudio);
+                          return (
+                            <div 
+                              key={`${track.id}-${idx}`} 
+                              className={`flex flex-col gap-2.5 p-3.5 rounded-2xl border transition duration-150 ${
+                                hasAudioFile 
+                                  ? 'bg-[#0a0c10] border-zinc-900/80 hover:border-zinc-800' 
+                                  : 'bg-amber-950/10 border-amber-900/30 hover:border-amber-700/50'
+                              } group`}
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left">
+                                <div 
+                                  onClick={() => {
+                                    if (hasAudioFile) selectTrackToPlay(idx);
+                                  }}
+                                  className={`flex items-center gap-3 min-w-0 ${hasAudioFile ? 'cursor-pointer' : ''}`}
+                                >
+                                  <span className="font-mono text-[10px] text-zinc-500 shrink-0 w-5">
+                                    {currentTrackIndex === idx && musicIsPlaying ? (
+                                      <span className="text-[#39ff14] font-black animate-pulse">▶</span>
+                                    ) : (
+                                      String(idx + 1).padStart(2, '0')
+                                    )}
+                                  </span>
+                                  
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="block text-[11px] font-bold font-mono tracking-wide truncate text-zinc-200 group-hover:text-white transition-colors">
+                                        {track.title}
+                                      </span>
+                                      {track.albumTitle && (
+                                        <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 text-[8px] font-mono uppercase truncate max-w-[140px]">
+                                          💿 {track.albumTitle}
+                                        </span>
+                                      )}
+                                      {hasAudioFile ? (
+                                        <span className="inline-flex items-center gap-1 text-[8px] font-mono text-emerald-400 font-bold bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/40">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                          STREAM READY
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 text-[8px] font-mono text-amber-400 font-bold bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-800/40">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                          AWAITING MASTER AUDIO
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <span className="text-[8px] font-mono text-zinc-500 block mt-0.5">
+                                      {hasAudioFile 
+                                        ? `MASTER SOURCE: ${track.fileType?.toUpperCase() || 'PCM LOSSLESS / MP3 STREAM'}` 
+                                        : 'METADATA INTACT • READY FOR AUDIO ATTACHMENT'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2.5 font-mono text-[10px] text-zinc-400 shrink-0 justify-between sm:justify-end">
+                                  <span>{track.duration || '--:--'}</span>
+
+                                  {/* Upload Audio File Action Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTargetTrackForUpload(track.id);
+                                      trackFileInputRef.current?.click();
+                                    }}
+                                    className={`px-2.5 py-1 text-[9px] font-mono font-black uppercase rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                                      hasAudioFile
+                                        ? 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'
+                                        : 'bg-amber-500 hover:bg-amber-400 text-black border border-amber-400 shadow-md font-black'
+                                    }`}
+                                    title={hasAudioFile ? "Replace master audio file" : "Upload master MP3/WAV audio for this track"}
+                                  >
+                                    <Upload className={`w-3 h-3 ${hasAudioFile ? 'text-zinc-400' : 'text-black'}`} />
+                                    {hasAudioFile ? 'REPLACE AUDIO' : 'ATTACH AUDIO'}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const filtered = uploadedTracks.filter(t => t.id !== track.id);
+                                      setUploadedTracks(filtered);
+                                      if (currentTrackIndex >= filtered.length) {
+                                        setCurrentTrackIndex(0);
+                                      }
+                                      triggerNotification?.("Removed track from current playback node!");
+                                    }}
+                                    className="p-1 hover:text-red-500 text-zinc-600 transition"
+                                    title="Delete from local play stack"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                              
+                              {/* Track-level Monetization and Schema Toggles */}
+                              <div className="mt-1 pt-2 border-t border-zinc-900/60 flex flex-wrap items-center gap-2.5 text-left">
+                                {/* Preview Mode */}
+                                <div className="flex items-center gap-1.5 bg-zinc-950/70 px-2 py-1 rounded-lg border border-zinc-850">
+                                  <span className="text-[8px] font-mono uppercase tracking-widest text-zinc-400 font-bold">Preview:</span>
+                                  <select 
+                                    value={track.track_preview_mode || '30_SEC_CLIP'}
+                                    onChange={(e) => {
+                                      setUploadedTracks(prev => prev.map(t => t.id === track.id ? { ...t, track_preview_mode: e.target.value } : t));
+                                    }}
+                                    className="bg-transparent text-[9px] font-mono font-bold text-zinc-200 focus:outline-none cursor-pointer p-0 border-none appearance-none hover:text-white"
+                                  >
+                                    <option value="30_SEC_CLIP" className="bg-zinc-900 text-zinc-300">30_SEC_CLIP</option>
+                                    <option value="FULL_STREAM" className="bg-zinc-900 text-zinc-300">FULL_STREAM</option>
+                                    <option value="LOCKED" className="bg-zinc-900 text-zinc-300">LOCKED</option>
+                                  </select>
+                                </div>
+
+                                {/* Price */}
+                                <div className="flex items-center gap-1.5 bg-zinc-950/70 px-2 py-1 rounded-lg border border-zinc-850">
+                                  <span className="text-[8px] font-mono uppercase tracking-widest text-zinc-400 font-bold">Price:</span>
+                                  <div className="flex items-center">
+                                    <span className="text-[9px] font-mono text-zinc-500">$</span>
+                                    <input 
+                                      type="number"
+                                      min="0"
+                                      step="0.10"
+                                      value={track.track_price ?? 1.00}
+                                      onChange={(e) => {
+                                        setUploadedTracks(prev => prev.map(t => t.id === track.id ? { ...t, track_price: parseFloat(e.target.value) || 0 } : t));
+                                      }}
+                                      className="w-12 bg-transparent text-[9px] font-mono font-bold text-[#00ffcc] focus:outline-none p-0 border-none text-right placeholder-zinc-700"
+                                      placeholder="1.00"
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Visibility Toggle */}
+                                <div className="flex items-center gap-1.5 bg-zinc-950/70 px-2 py-1 rounded-lg border border-zinc-850">
+                                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={track.track_visibility ?? true}
+                                      onChange={(e) => {
+                                        setUploadedTracks(prev => prev.map(t => t.id === track.id ? { ...t, track_visibility: e.target.checked } : t));
+                                      }}
+                                      className="w-3 h-3 accent-[#39ff14] bg-zinc-900 rounded-sm cursor-pointer"
+                                    />
+                                    <span className={`text-[8px] font-mono uppercase tracking-widest ${track.track_visibility !== false ? 'text-[#39ff14] font-bold' : 'text-zinc-500'}`}>
+                                      {track.track_visibility !== false ? 'Public Stream' : 'Private'}
+                                    </span>
+                                  </label>
+                                </div>
+
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   </div>
 

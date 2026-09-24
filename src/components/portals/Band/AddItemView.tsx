@@ -101,16 +101,23 @@ export default function AddItemView({ onBack, onSave, onDelete, triggerNotificat
     const prefixes: Record<string, string> = {
       'APPAREL': 'AP',
       'MUSIC': 'MU',
+      'MEDIA': 'MD',
+      'VINYL': 'VN',
+      'CD': 'CD',
+      'CASSETTE': 'CS',
       'ACCESSORIES': 'AC',
-      'POSTERS': 'PO'
+      'POSTERS': 'PO',
+      'HEADWEAR': 'HW',
+      'STICKERS': 'ST'
     };
-    const prefix = prefixes[category] || 'IT';
+    const prefix = prefixes[category?.toUpperCase()] || 'IT';
     const randNum = Math.floor(1000 + Math.random() * 9000);
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const randChar = chars[Math.floor(Math.random() * chars.length)];
-    const generated = `${prefix}`;
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const randChar1 = chars[Math.floor(Math.random() * chars.length)];
+    const randChar2 = chars[Math.floor(Math.random() * chars.length)];
+    const generated = `${prefix}-${randNum}-${randChar1}${randChar2}`;
     setSku(generated);
-    triggerNotification(`Generated SKU: ${generated}`);
+    triggerNotification(`Generated SKU & Barcode: ${generated}`);
   };
 
 

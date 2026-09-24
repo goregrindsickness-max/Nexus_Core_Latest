@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { StorefrontView } from './StorefrontView';
 import { InboxTerminal } from '../messaging/InboxTerminal';
 import { CreatePostCard } from './CreatePostCard';
@@ -154,6 +154,8 @@ export const FeedViewRouter: React.FC<any> = (props) => {
     getProfileForUser,
     getPostAuthorDisplayName,
   } = props;
+
+  const [selectedForumThreadId, setSelectedForumThreadId] = useState<string | null>(null);
 
   return (
     <>
@@ -460,14 +462,25 @@ export const FeedViewRouter: React.FC<any> = (props) => {
             (userProfile?.console_handle && p.author?.name && (
               p.author.name.toLowerCase().includes(userProfile.console_handle.toLowerCase().replace(/^@/, '')) ||
               (p.authorName && p.authorName.toLowerCase().includes(userProfile.console_handle.toLowerCase().replace(/^@/, '')))
+            )) ||
+            (userProfile?.name && p.author?.name && (
+              p.author.name.toLowerCase().includes(userProfile.name.toLowerCase()) ||
+              (p.authorName && p.authorName.toLowerCase().includes(userProfile.name.toLowerCase()))
             ))
           );
 
+          const postWorkspace = (p.workspace_type || p.workspaceType || p.author?.workspace_type || p.author?.workspaceType || '').toLowerCase();
+          const isBandPost = postWorkspace === 'band' || p.authorRole === 'Band / Artist' || p.author?.role === 'Band / Artist' || Boolean(p.author?.isBand);
+
           const rawAvatar = typeof p.author?.avatar === 'string' ? p.author.avatar : (typeof p.authorAvatar === 'string' ? p.authorAvatar : undefined);
           const isGenericUiAvatar = rawAvatar && (rawAvatar.includes('ui-avatars.com') || rawAvatar === 'U' || rawAvatar === 'Anon');
-          const resolvedAuthorAvatar = (!isGenericUiAvatar && rawAvatar)
-            ? rawAvatar
-            : (isSelf ? liveUserAvatar : (!isGenericUiAvatar ? rawAvatar : undefined));
+
+          // For personal/industry pro posts by current user, liveUserAvatar is authoritative over stale/corrupted snapshots
+          const resolvedAuthorAvatar = (isSelf && !isBandPost && liveUserAvatar)
+            ? liveUserAvatar
+            : ((!isGenericUiAvatar && rawAvatar)
+              ? rawAvatar
+              : (isSelf ? liveUserAvatar : (!isGenericUiAvatar ? rawAvatar : undefined)));
 
           const parsedPost = {
             id: p.id,
@@ -694,6 +707,12 @@ export const FeedViewRouter: React.FC<any> = (props) => {
               discoverProfiles={discoverProfiles}
               onFollowProfile={props.handleFollowProfile}
               onTriggerNotification={triggerNotification}
+              onNavigateToForum={(threadId) => {
+                if (threadId) {
+                  setSelectedForumThreadId(threadId);
+                }
+                setActiveTab('forum');
+              }}
             />
           </div>
         );
@@ -746,6 +765,8 @@ export const FeedViewRouter: React.FC<any> = (props) => {
           profileAvatarUrl={profileAvatarUrl}
           discoverProfiles={discoverProfiles}
           allProfiles={allProfiles}
+          initialThreadId={selectedForumThreadId}
+          onClearInitialThread={() => setSelectedForumThreadId(null)}
         />
       )}
 

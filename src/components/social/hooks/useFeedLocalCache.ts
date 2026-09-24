@@ -44,7 +44,30 @@ export function useFeedLocalCache({
 
         const storedFeed = await loadFeedCache(portalRole, userProfile?.id, resolvedEntityId);
         if (!active) return;
-        let finalFeed = storedFeed || [];
+        const currentLiveAvatar = userProfile?.avatar || userProfile?.avatar_url || userProfile?.profile_avatar;
+        // Sanitize stored feed in case any of the current user's personal posts had their avatar corrupted by a band event
+        let finalFeed = (storedFeed || []).map(post => {
+          const rawPost = post as any;
+          const isPostSelf = Boolean(
+            post.author?.isYou ||
+            rawPost.isYou ||
+            (userProfile?.id && (post.author?.id === userProfile.id || rawPost.profile_id === userProfile.id || rawPost.user_id === userProfile.id)) ||
+            (userProfile?.console_handle && post.author?.name && post.author.name.toLowerCase().includes(userProfile.console_handle.toLowerCase().replace(/^@/, ''))) ||
+            (userProfile?.name && post.author?.name && post.author.name.toLowerCase().includes(userProfile.name.toLowerCase()))
+          );
+          const postWorkspace = (rawPost.workspace_type || rawPost.workspaceType || post.author?.workspace_type || post.author?.workspaceType || '').toLowerCase();
+          const isBandPost = postWorkspace === 'band' || post.author?.role === 'Band / Artist' || Boolean((post.author as any)?.isBand);
+          if (isPostSelf && !isBandPost && currentLiveAvatar) {
+            return {
+              ...post,
+              author: {
+                ...post.author,
+                avatar: currentLiveAvatar
+              }
+            };
+          }
+          return post;
+        });
 
         // Fetch from Supabase
         const supabaseClient = getSupabase();
@@ -130,11 +153,28 @@ export function useFeedLocalCache({
                       : (postObj.authorName || postObj.author?.name || item.profiles?.console_handle || item.profiles?.full_name || 'Anonymous');
 
                     const dedicatedAvatar = postObj.authorAvatar || postObj.author?.avatar;
-                    const resolvedAvatar = (dedicatedAvatar && !dedicatedAvatar.includes('ui-avatars.com'))
-                      ? dedicatedAvatar
-                      : (isSelf
-                        ? (liveSelfAvatar || item.profiles?.avatar_url || item.profiles?.avatar || item.profiles?.profile_avatar || item.profiles?.profile_image || dedicatedAvatar || undefined)
-                        : (item.profiles?.avatar_url || item.profiles?.avatar || item.profiles?.profile_avatar || item.profiles?.profile_image || dedicatedAvatar || undefined));
+                    const resolvedAvatar = (isSelf && !isBandPost && (liveSelfAvatar || item.profiles?.avatar_url || item.profiles?.avatar || item.profiles?.profile_avatar))
+                      ? (liveSelfAvatar || item.profiles?.avatar_url || item.profiles?.avatar || item.profiles?.profile_avatar)
+                      : ((dedicatedAvatar && !dedicatedAvatar.includes('ui-avatars.com'))
+                        ? dedicatedAvatar
+                        : (isSelf
+                          ? (liveSelfAvatar || item.profiles?.avatar_url || item.profiles?.avatar || item.profiles?.profile_avatar || item.profiles?.profile_image || dedicatedAvatar || undefined)
+                          : (item.profiles?.avatar_url || item.profiles?.avatar || item.profiles?.profile_avatar || item.profiles?.profile_image || dedicatedAvatar || undefined)));
+
+                    // Auto-heal Supabase post record if personal post avatar was corrupted by a band event
+                    if (isSelf && !isBandPost && liveSelfAvatar && supabaseClient && item.id) {
+                      if (postObj.author?.avatar && postObj.author.avatar !== liveSelfAvatar && !postObj.author.avatar.includes('ui-avatars.com')) {
+                        const healedData = {
+                          ...postObj,
+                          author: {
+                            ...(postObj.author || {}),
+                            avatar: liveSelfAvatar
+                          },
+                          authorAvatar: liveSelfAvatar
+                        };
+                        supabaseClient.from('nexus_posts').update({ data: healedData }).eq('id', item.id).then();
+                      }
+                    }
 
                     const author = {
                       id: postObj.author?.id || item.profiles?.id || item.profile_id,
