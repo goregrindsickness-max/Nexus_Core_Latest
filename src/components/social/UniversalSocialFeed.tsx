@@ -78,6 +78,7 @@ import { getProfileGlowInfo } from '../../utils/profileGlow';
 import { triggerPictureViewer } from '../../utils/avatarPopupEvents';
 import { TimelineTab } from '../profile/TimelineTab';
 import { SocialSubNav } from './SocialSubNav';
+import { formatTimeTo12Hour } from '../../lib/timeUtils';
 import { SocialMapOverlay } from './SocialMapOverlay';
 import { SubViewControlPanels } from './SubViewControlPanels';
 import CreateCommunityShowModal from './modals/CreateCommunityShowModal';
@@ -420,9 +421,10 @@ export function UniversalSocialFeed({
           setEditingCommunityShow(null);
           
           try {
-            const doorsDisplay = newShow.doors_time 
-              ? (String(newShow.doors_time).toLowerCase().includes('door') ? newShow.doors_time : `Doors ${newShow.doors_time}`)
-              : (newShow.set_time ? `Set ${newShow.set_time}` : 'Doors 7:30 PM');
+            const formattedDoors = newShow.doors_time ? formatTimeTo12Hour(newShow.doors_time) : '';
+            const doorsDisplay = formattedDoors 
+              ? (String(formattedDoors).toLowerCase().includes('door') ? formattedDoors : `Doors ${formattedDoors}`)
+              : (newShow.set_time ? `Set ${formatTimeTo12Hour(newShow.set_time)}` : 'Doors 7:30 PM');
 
             const newGig = {
               ...newShow,
@@ -475,9 +477,10 @@ export function UniversalSocialFeed({
     setEditingCommunityShow(null);
 
     try {
-      const doorsDisplay = newShow.doors_time 
-        ? (String(newShow.doors_time).toLowerCase().includes('door') ? newShow.doors_time : `Doors ${newShow.doors_time}`)
-        : (newShow.set_time ? `Set ${newShow.set_time}` : 'Doors 7:30 PM');
+      const formattedDoors = newShow.doors_time ? formatTimeTo12Hour(newShow.doors_time) : '';
+      const doorsDisplay = formattedDoors 
+        ? (String(formattedDoors).toLowerCase().includes('door') ? formattedDoors : `Doors ${formattedDoors}`)
+        : (newShow.set_time ? `Set ${formatTimeTo12Hour(newShow.set_time)}` : 'Doors 7:30 PM');
 
       const newGig = {
         ...newShow,
@@ -1138,9 +1141,10 @@ export function UniversalSocialFeed({
               }
 
               const doorsVal = extra?.doors_time || s.doors_time;
-              const timeDisplay = doorsVal 
-                ? (String(doorsVal).toLowerCase().includes('door') ? doorsVal : `Doors ${doorsVal}`) 
-                : (s.set_time ? `Set ${s.set_time}` : (extra?.set_time ? `Set ${extra.set_time}` : (s.time || 'Doors 7:30 PM')));
+              const formattedDoors = doorsVal ? formatTimeTo12Hour(doorsVal) : '';
+              const timeDisplay = formattedDoors 
+                ? (String(formattedDoors).toLowerCase().includes('door') ? formattedDoors : `Doors ${formattedDoors}`) 
+                : (s.set_time ? `Set ${formatTimeTo12Hour(s.set_time)}` : (extra?.set_time ? `Set ${formatTimeTo12Hour(extra.set_time)}` : (s.time || 'Doors 7:30 PM')));
 
               const venueDisplay = extra?.venue || extra?.venue_name || s.venue || s.venue_name || s.venue_address || (s.name && !s.name.includes('Live') ? s.name : undefined) || 'Underground Venue';
               

@@ -1,15 +1,17 @@
-import React from 'react';
-import { Crown, Plus, ArrowUp, ArrowDown, Trash2, Save, CheckCircle2, RefreshCw } from 'lucide-react';
-import { TourPackageBand } from '../TourManagerPackageModule';
+import React, { useState } from 'react';
+import { Crown, Plus, ArrowUp, ArrowDown, Trash2, Save, CheckCircle2, RefreshCw, Edit3, X, Phone, Mail, MapPin, Users, Clock, DollarSign, Truck } from 'lucide-react';
+import { TourPackageBand, TourVehicle } from '../../../../lib/tourPackageManager';
 
 interface LineupBandsTabProps {
   bands: TourPackageBand[];
   clientBandName: string;
+  vehicles?: TourVehicle[];
   onOpenSelectClientModal: () => void;
   onOpenAddBandModal: () => void;
   onMoveBand: (fromIdx: number, toIdx: number) => void;
   onRemoveBand: (id: string, name: string) => void;
   onPromoteToHeadliner: (id: string) => void;
+  onUpdateBand?: (updatedBand: TourPackageBand) => void;
   onSaveProgress?: () => void;
   isSaving?: boolean;
   hasUnsavedChanges?: boolean;
@@ -19,22 +21,83 @@ interface LineupBandsTabProps {
 export const LineupBandsTab: React.FC<LineupBandsTabProps> = ({
   bands,
   clientBandName,
+  vehicles = [],
   onOpenSelectClientModal,
   onOpenAddBandModal,
   onMoveBand,
   onRemoveBand,
   onPromoteToHeadliner,
+  onUpdateBand,
   onSaveProgress,
   isSaving,
   hasUnsavedChanges,
   lastSavedAt
 }) => {
+  const [editingBand, setEditingBand] = useState<TourPackageBand | null>(null);
+
+  // Editing form states
+  const [name, setName] = useState('');
+  const [role, setRole] = useState<TourPackageBand['role']>('direct_support');
+  const [setMinutes, setSetMinutes] = useState(45);
+  const [guarantee, setGuarantee] = useState(1000);
+  const [guaranteeType, setGuaranteeType] = useState<'fixed' | 'percentage'>('percentage');
+  const [percentageSplit, setPercentageSplit] = useState(30);
+  const [contactName, setContactName] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [membersCount, setMembersCount] = useState(4);
+  const [city, setCity] = useState('');
+  const [sharedGearNotes, setSharedGearNotes] = useState('');
+  const [assignedVehicleId, setAssignedVehicleId] = useState('');
+
+  const openEditModal = (b: TourPackageBand) => {
+    setEditingBand(b);
+    setName(b.name);
+    setRole(b.role);
+    setSetMinutes(b.setMinutes);
+    setGuarantee(b.guarantee);
+    setGuaranteeType(b.guaranteeType || 'percentage');
+    setPercentageSplit(b.percentageSplit ?? 30);
+    setContactName(b.contactName || '');
+    setContactPhone(b.contactPhone || '');
+    setContactEmail(b.contactEmail || '');
+    setMembersCount(b.membersCount || 4);
+    setCity(b.city || '');
+    setSharedGearNotes(b.sharedGearNotes || '');
+    setAssignedVehicleId(b.assignedVehicleId || '');
+  };
+
+  const handleSaveBand = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBand || !name.trim()) return;
+
+    const updated: TourPackageBand = {
+      ...editingBand,
+      name: name.trim(),
+      role,
+      setMinutes: Number(setMinutes) || 30,
+      guarantee: Number(guarantee) || 0,
+      guaranteeType,
+      percentageSplit: Number(percentageSplit) || 0,
+      contactName: contactName.trim() || 'Tour Manager',
+      contactPhone: contactPhone.trim(),
+      contactEmail: contactEmail.trim(),
+      membersCount: Number(membersCount) || 1,
+      city: city.trim() || undefined,
+      sharedGearNotes: sharedGearNotes.trim() || 'Standard gear agreement',
+      assignedVehicleId: assignedVehicleId || undefined
+    };
+
+    onUpdateBand?.(updated);
+    setEditingBand(null);
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
         <div>
           <p className="text-[11px] text-zinc-400">
-            Billing lineup for this tour package. Reorder slots, set guarantees, designate the headliner/client, and manage gear sharing.
+            Billing lineup for this tour package. Edit any band's full details, guarantees, splits, gear contribution, and traveling party.
           </p>
           <div className="text-[9.5px] font-mono text-amber-400/90 pt-0.5">
             Current Client / Headliner: <strong className="text-amber-300 font-bold">{clientBandName}</strong>
@@ -85,16 +148,18 @@ export const LineupBandsTab: React.FC<LineupBandsTabProps> = ({
           <button
             type="button"
             onClick={onOpenAddBandModal}
-            className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer"
+            className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shadow-sm"
           >
             <Plus className="w-3 h-3" /> Add Band
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {bands.map((band, idx) => {
           const isHeadliner = band.role === 'headliner' || band.name.toLowerCase() === clientBandName.toLowerCase();
+          const assignedVeh = vehicles.find(v => v.id === band.assignedVehicleId || (v.assignedBands && v.assignedBands.includes(band.name)));
+
           return (
             <div
               key={band.id}
@@ -104,11 +169,11 @@ export const LineupBandsTab: React.FC<LineupBandsTabProps> = ({
                   : 'bg-[#0e1117] border-zinc-850 hover:border-zinc-700'
               }`}
             >
-              {/* Header with bill rank badge & reordering */}
+              {/* Header with bill rank badge & controls */}
               <div className="space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${band.avatarColor} flex items-center justify-center text-white font-mono font-black text-xs shrink-0 shadow-md`}>
+                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${band.avatarColor || 'from-amber-600 to-yellow-950'} flex items-center justify-center text-white font-mono font-black text-xs shrink-0 shadow-md`}>
                       {idx + 1}
                     </div>
                     <div>
@@ -139,8 +204,16 @@ export const LineupBandsTab: React.FC<LineupBandsTabProps> = ({
                     </div>
                   </div>
 
-                  {/* Top Right Slot Controls */}
+                  {/* Slot & Edit Controls */}
                   <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(band)}
+                      className="p-1 text-zinc-400 hover:text-amber-300 transition cursor-pointer"
+                      title="Edit Band Details"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => onMoveBand(idx, idx - 1)}
@@ -162,7 +235,7 @@ export const LineupBandsTab: React.FC<LineupBandsTabProps> = ({
                     <button
                       type="button"
                       onClick={() => onRemoveBand(band.id, band.name)}
-                      className="p-1 text-zinc-600 hover:text-rose-400 transition-colors cursor-pointer ml-1"
+                      className="p-1 text-zinc-600 hover:text-rose-400 transition-colors cursor-pointer ml-0.5"
                       title="Remove from package"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -177,31 +250,60 @@ export const LineupBandsTab: React.FC<LineupBandsTabProps> = ({
                     onClick={() => onPromoteToHeadliner(band.id)}
                     className="w-full py-1 rounded bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/30 text-amber-300 text-[8.5px] font-mono font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-all cursor-pointer"
                   >
-                    <Crown className="w-2.5 h-2.5" /> Set as Headliner & Client
+                    <Crown className="w-2.5 h-2.5" /> Set as Headliner &amp; Client
                   </button>
                 )}
 
                 {/* Details */}
                 <div className="space-y-1.5 pt-1 text-[10px] text-zinc-300 font-mono">
                   <div className="flex justify-between border-b border-zinc-900 pb-1">
-                    <span className="text-zinc-500">Nightly Guarantee:</span>
-                    <span className="text-emerald-400 font-bold">${band.guarantee.toLocaleString()} ({band.percentageSplit}% deal)</span>
+                    <span className="text-zinc-500">Nightly Deal:</span>
+                    <span className="text-emerald-400 font-bold">
+                      ${band.guarantee.toLocaleString()} {band.percentageSplit ? `(${band.percentageSplit}% deal)` : ''}
+                    </span>
                   </div>
                   <div className="flex justify-between border-b border-zinc-900 pb-1">
                     <span className="text-zinc-500">Contact / TM:</span>
-                    <span className="text-white truncate max-w-[140px]">{band.contactName}</span>
+                    <span className="text-white truncate max-w-[140px]">{band.contactName || 'Unassigned'}</span>
                   </div>
                   {band.contactPhone && (
                     <div className="flex justify-between border-b border-zinc-900 pb-1">
                       <span className="text-zinc-500">Phone:</span>
-                      <span className="text-zinc-400">{band.contactPhone}</span>
+                      <a href={`tel:${band.contactPhone}`} className="text-zinc-300 hover:text-amber-300 flex items-center gap-1">
+                        <Phone className="w-2.5 h-2.5 text-zinc-500" /> {band.contactPhone}
+                      </a>
+                    </div>
+                  )}
+                  {band.contactEmail && (
+                    <div className="flex justify-between border-b border-zinc-900 pb-1">
+                      <span className="text-zinc-500">Email:</span>
+                      <a href={`mailto:${band.contactEmail}`} className="text-cyan-400 hover:underline truncate max-w-[150px]">
+                        {band.contactEmail}
+                      </a>
+                    </div>
+                  )}
+                  {assignedVeh && (
+                    <div className="flex justify-between border-b border-zinc-900 pb-1">
+                      <span className="text-zinc-500">Convoy Vehicle:</span>
+                      <span className="text-purple-300 flex items-center gap-1 truncate max-w-[150px]">
+                        <Truck className="w-2.5 h-2.5 text-purple-400" /> {assignedVeh.name}
+                      </span>
                     </div>
                   )}
                 </div>
 
                 {/* Gear sharing notes */}
                 <div className="bg-zinc-950 p-2 rounded border border-zinc-900 space-y-0.5 text-left">
-                  <span className="text-[7.5px] font-mono text-amber-400 uppercase font-bold block">Backline / Shared Gear:</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[7.5px] font-mono text-amber-400 uppercase font-bold block">Backline / Shared Gear:</span>
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(band)}
+                      className="text-[8px] font-mono text-zinc-500 hover:text-amber-300 uppercase cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                  </div>
                   <p className="text-[9.5px] text-zinc-400 font-sans leading-normal">
                     {band.sharedGearNotes || 'Standard gear agreement.'}
                   </p>
@@ -218,6 +320,215 @@ export const LineupBandsTab: React.FC<LineupBandsTabProps> = ({
           );
         })}
       </div>
+
+      {/* Edit Band Modal */}
+      {editingBand && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0f121a] border border-amber-500/40 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-bold text-white font-mono uppercase">
+                  Edit Band Details: {editingBand.name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingBand(null)}
+                className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBand} className="p-4 space-y-3 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+                <div>
+                  <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">
+                    Band / Act Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">
+                    Billing Role
+                  </label>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as any)}
+                    className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="headliner">Headliner (Top of Bill)</option>
+                    <option value="direct_support">Direct Support</option>
+                    <option value="opener">Opener</option>
+                    <option value="local_support">Local Support</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">
+                    Set Time (Minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min="15"
+                    max="180"
+                    value={setMinutes}
+                    onChange={(e) => setSetMinutes(parseInt(e.target.value) || 30)}
+                    className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">
+                    Nightly Guarantee ($)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={guarantee}
+                    onChange={(e) => setGuarantee(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">
+                    Split Percentage (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={percentageSplit}
+                    onChange={(e) => setPercentageSplit(parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">
+                    Traveling Party (PAX Count)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={membersCount}
+                    onChange={(e) => setMembersCount(parseInt(e.target.value) || 1)}
+                    className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">
+                    City / Home Base
+                  </label>
+                  <input
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="e.g. Columbus, OH"
+                    className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">
+                    Assigned Convoy Vehicle
+                  </label>
+                  <select
+                    value={assignedVehicleId}
+                    onChange={(e) => setAssignedVehicleId(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="">None / Own Vehicle</option>
+                    {vehicles.map(v => (
+                      <option key={v.id} value={v.id}>{v.name} ({v.type.replace('_', ' ')})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">
+                    Tour Manager / Contact Name
+                  </label>
+                  <input
+                    type="text"
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                    placeholder="e.g. Devin Swank"
+                    className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">
+                    Contact Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                    placeholder="(555) 847-2931"
+                    className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">
+                    Contact Email
+                  </label>
+                  <input
+                    type="email"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    placeholder="bandmgmt@gmail.com"
+                    className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="text-[9px] font-mono text-zinc-400 uppercase font-bold block mb-1">
+                    Shared Backline &amp; Gear Contribution Notes
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={sharedGearNotes}
+                    onChange={(e) => setSharedGearNotes(e.target.value)}
+                    placeholder="e.g. Provides complete 8x10 Bass Cab & Pearl Drum shell kit. Brings dual 4x12 guitar cabs."
+                    className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingBand(null)}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-xs uppercase cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-xs uppercase shadow-md cursor-pointer"
+                >
+                  Update Band Details
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

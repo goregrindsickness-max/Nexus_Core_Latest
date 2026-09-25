@@ -1912,13 +1912,21 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                      }
                   }
 
+                  let localSavedBand: any = null;
+                  try {
+                    const localStr = localStorage.getItem('nexus_my_band_profile');
+                    if (localStr) localSavedBand = JSON.parse(localStr);
+                  } catch (e) {}
+
                   const lbd = matchingBandProfile || (
-                    isTargetSelf && (userProfile?.band_name || userProfile?.band_id) && typeof fetchedBandData !== 'undefined' && fetchedBandData ? fetchedBandData : null
+                    isTargetSelf && (userProfile?.band_name || userProfile?.band_id) ? (
+                      (typeof fetchedBandData !== 'undefined' && fetchedBandData) ? fetchedBandData : localSavedBand
+                    ) : null
                   );
 
                   let rawBandName = isEffTargetMiguel
                     ? 'Virulent Excision'
-                    : (lbd?.band_name || lbd?.name || effTarget.band_name || effTarget.bandName || (typeof bandWsRef === 'object' && bandWsRef?.name ? bandWsRef.name : null) || (isTargetSelf ? (userProfile?.band_name || userProfile?.bandName) : null) || (hasWorkspaceType('band') ? (effTarget.name ? `${effTarget.name} Band` : 'Artist Workspace') : null));
+                    : (lbd?.band_name || lbd?.name || effTarget.band_name || effTarget.bandName || localSavedBand?.name || localSavedBand?.band_name || (typeof bandWsRef === 'object' && bandWsRef?.name ? bandWsRef.name : null) || (isTargetSelf ? (userProfile?.band_name || userProfile?.bandName) : null) || (hasWorkspaceType('band') ? 'Artist Workspace' : null));
                   
                   if (isEffTargetMiguel) {
                     rawBandName = 'Virulent Excision';
@@ -1931,20 +1939,46 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     Boolean(targetBandId) ||
                     Boolean(effTarget.band_name) ||
                     Boolean(effTarget.bandName) ||
+                    Boolean(localSavedBand?.name) ||
                     (isTargetSelf && Boolean(userProfile?.band_name || userProfile?.band_id))
                   ) && Boolean(rawBandName) && String(rawBandName).trim() !== '' && !isCommunityBandRecord(rawBandName);
 
-                  const hasBand = !isCurrentProfileBand && hasBandWorkspace;
+                   const hasBand = !isCurrentProfileBand && hasBandWorkspace;
 
-                  if (hasBand) {
+                   const promoterRefLogo = effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null);
+
+                   const isLogoPromoterLogo = (candidateLogo?: string | null) => {
+                     if (!candidateLogo) return false;
+                     if (promoterRefLogo && candidateLogo === promoterRefLogo) return true;
+                     if (effTarget?.promoter_logo && candidateLogo === effTarget.promoter_logo) return true;
+                     if (effTarget?.promoter_metadata?.logo_url && candidateLogo === effTarget.promoter_metadata.logo_url) return true;
+                     if (userProfile?.promoter_logo && candidateLogo === userProfile.promoter_logo) return true;
+                     if (userProfile?.promoter_metadata?.logo_url && candidateLogo === userProfile.promoter_metadata.logo_url) return true;
+                     return false;
+                   };
+
+                   if (hasBand) {
                     const isVeOverride = isEffTargetMiguel || (typeof rawBandName === 'string' && rawBandName.toLowerCase() === 'virulent excision');
                     const name = isVeOverride ? 'Virulent Excision' : String(rawBandName).trim();
                     const isVirulentExcision = name.toLowerCase() === 'virulent excision' || isVeOverride;
                     const veLogo = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396';
                     const veBanner = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-cover_1787467851123.jpg?t=1787467851123';
+                    
+                    const candidateBandLogo = (
+                      (lbd?.logo_url && !lbd.logo_url.includes('unsplash') && !isLogoPromoterLogo(lbd.logo_url) ? lbd.logo_url : null) ||
+                      (isTargetSelf && localSavedBand?.logo_url && !isLogoPromoterLogo(localSavedBand.logo_url) ? localSavedBand.logo_url : null) ||
+                      (isTargetSelf && userProfile?.band_metadata?.logo_url && !isLogoPromoterLogo(userProfile.band_metadata.logo_url) ? userProfile.band_metadata.logo_url : null) ||
+                      (isTargetSelf && userProfile?.band_logo && !isLogoPromoterLogo(userProfile.band_logo) ? userProfile.band_logo : null) ||
+                      (lbd?.avatar_url && !lbd.avatar_url.includes('unsplash') && !isLogoPromoterLogo(lbd.avatar_url) ? lbd.avatar_url : null) ||
+                      (lbd?.avatar && !lbd.avatar.includes('unsplash') && !isLogoPromoterLogo(lbd.avatar) ? lbd.avatar : null) ||
+                      (isTargetSelf && localSavedBand?.avatar_url && !isLogoPromoterLogo(localSavedBand.avatar_url) ? localSavedBand.avatar_url : null) ||
+                      (lbd?.logo_url && !isLogoPromoterLogo(lbd.logo_url) ? lbd.logo_url : null) ||
+                      null
+                    );
+
                     const logo = isVirulentExcision
-                      ? (lbd?.logo_url && !lbd.logo_url.includes('unsplash') ? lbd.logo_url : veLogo)
-                      : (lbd?.logo_url || lbd?.avatar_url || lbd?.avatar || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=300');
+                      ? (candidateBandLogo && !candidateBandLogo.includes('unsplash') ? candidateBandLogo : veLogo)
+                      : (candidateBandLogo || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=300');
                     const subtitle = isVirulentExcision
                       ? 'Brutal Death Metal • Slamming BDM • Death Metal'
                       : (lbd?.genre || (lbd?.micro_genres && Array.isArray(lbd.micro_genres) && lbd.micro_genres.length > 0 ? lbd.micro_genres.join(' • ') : 'Metal / Hardcore'));
@@ -2019,23 +2053,34 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   }) : null;
 
                   const rawPromoterName = 
+                    matchingPromoterProfile?.brand_name ||
                     matchingPromoterProfile?.promoter_name || 
                     matchingPromoterProfile?.promoterName || 
                     matchingPromoterProfile?.agency_name || 
+                    matchingPromoterProfile?.company_name ||
+                    effTarget.promoter_agency ||
+                    effTarget.promoter_brand ||
                     effTarget.promoter_name || 
                     effTarget.promoterName || 
                     effTarget.agency_name || 
-                    matchingPromoterProfile?.name || 
-                    (typeof promoterWsRef === 'object' && promoterWsRef?.name ? promoterWsRef.name : null) || 
-                    (hasWorkspaceType('promoter') ? (effTarget.name ? `${effTarget.name} Booking` : 'Promoter Agency') : null);
-                  const hasPromoterWorkspace = (hasWorkspaceType('promoter') || Boolean(matchingPromoterProfile) || Boolean(effTarget.agency_name) || Boolean(effTarget.promoter_name) || Boolean(effTarget.promoter_id)) && Boolean(rawPromoterName) && String(rawPromoterName).trim() !== '';
+                    effTarget.company_name ||
+                    effTarget.promoter_metadata?.brand_name ||
+                    effTarget.promoter_metadata?.agency_name ||
+                    effTarget.promoter_metadata?.promoter_name ||
+                    (isTargetSelf ? (userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_metadata?.agency_name || userProfile?.promoter_agency || userProfile?.promoter_brand || userProfile?.promoter_name) : null) ||
+                    (typeof promoterWsRef === 'object' && promoterWsRef?.name ? promoterWsRef.name : null) ||
+                    (hasWorkspaceType('promoter') ? 'Nexus Live Productions' : null) ||
+                    matchingPromoterProfile?.name ||
+                    'Nexus Live Productions';
+
+                  const hasPromoterWorkspace = (hasWorkspaceType('promoter') || Boolean(matchingPromoterProfile) || Boolean(effTarget.agency_name) || Boolean(effTarget.promoter_name) || Boolean(effTarget.promoter_agency) || Boolean(effTarget.promoter_id)) && Boolean(rawPromoterName) && String(rawPromoterName).trim() !== '';
 
                   const hasPromoter = !isCurrentProfilePromoter && hasPromoterWorkspace;
 
                   if (hasPromoter) {
                     const name = String(rawPromoterName).trim();
-                    const logo = matchingPromoterProfile?.promoter_logo || effTarget?.promoter_logo || (isTargetSelf ? userProfile?.promoter_logo : null) || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=300';
-                    const subtitle = effTarget.venue || effTarget.location || 'Promoter & Venue Booking';
+                    const logo = matchingPromoterProfile?.promoter_logo || matchingPromoterProfile?.logo_url || effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=300';
+                    const subtitle = effTarget?.promoter_metadata?.region || effTarget?.target_region || (isTargetSelf ? (userProfile?.promoter_metadata?.region || userProfile?.target_region) : null) || effTarget.venue || effTarget.location || 'Promoter & Venue Booking';
 
                     entities.push({
                       key: 'promoter',

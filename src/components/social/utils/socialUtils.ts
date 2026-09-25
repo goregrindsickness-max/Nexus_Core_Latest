@@ -33,24 +33,27 @@ export const getAvatarBorderColorClass = (role: string = ''): string => {
   return 'border border-zinc-800'; // fallback
 };
 
-export const getRoleBorderAndGlowClass = (role: string = ''): string => {
+export const getRoleBorderAndGlowClass = (role: string = '', userProfile?: any): string => {
   const r = (role || '').toLowerCase();
-  if (r === 'industry_pro' || r.includes('industry') || r.includes('pro')) {
+  const ws = (userProfile?.active_workspace || '').toLowerCase();
+  const acc = (userProfile?.account_type || '').toLowerCase();
+
+  if (r === 'promoter' || ws === 'promoter' || r.includes('promoter') || r.includes('venue') || acc === 'promoter') {
+    return 'border-2 border-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.8)]';
+  }
+  if ((r === 'industry_pro' || r === 'industry pro' || r.includes('industry') || acc === 'industry_pro' || acc === 'industry pro' || acc === 'pro') && !r.includes('promoter') && ws !== 'promoter') {
     return 'border-2 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.7)]';
   }
   if (r === 'fan_only' || r.includes('fan')) {
     return 'border-2 border-[#00d2ff] shadow-[0_0_15px_rgba(0,210,255,0.7)]';
   }
-  if (r === 'band' || r.includes('band') || r.includes('artist')) {
+  if (r === 'band' || r.includes('band') || r.includes('artist') || ws === 'band' || acc === 'band') {
     return 'border-2 border-[#39ff14] shadow-[0_0_15px_rgba(57,255,20,0.7)]';
   }
-  if (r === 'label' || r.includes('label')) {
+  if (r === 'label' || r.includes('label') || ws === 'label' || acc === 'label') {
     return 'border-2 border-[#ff6c00] shadow-[0_0_15px_rgba(255,108,0,0.7)]';
   }
-  if (r === 'promoter' || r.includes('promoter') || r.includes('venue')) {
-    return 'border-2 border-[#f3ff00] shadow-[0_0_15px_rgba(243,255,0,0.7)]';
-  }
-  if (r === 'creative' || r.includes('creative')) {
+  if (r === 'creative' || r.includes('creative') || ws === 'creative' || acc === 'creative') {
     return 'border-2 border-[#ff00ff] shadow-[0_0_15px_rgba(255,0,255,0.7)]';
   }
   return 'border-2 border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.7)]';

@@ -47,7 +47,7 @@ export const getProfileGlowInfo = (profile: any): ProfileGlowInfo => {
   });
 
   // 1. Explicit Creative Profile (Neon Pink / Magenta: #ff007f)
-  if (!isPersonal && (rawType === 'creative' || accType === 'creative' || rLower === 'creative' || rLower.includes('creative specialist') || rLower.includes('designer') || rLower.includes('photographer') || rLower.includes('videographer') || rLower.includes('audio engineer'))) {
+  if (rawType === 'creative' || accType === 'creative' || profile?.portalRole === 'creative' || rLower === 'creative' || rLower.includes('creative specialist') || rLower.includes('designer') || rLower.includes('photographer') || rLower.includes('videographer') || rLower.includes('audio engineer')) {
     return createInfo(
       'creative',
       'Creative Specialist',
@@ -61,7 +61,7 @@ export const getProfileGlowInfo = (profile: any): ProfileGlowInfo => {
   }
 
   // 2. Explicit Record Label Profile (Neon Orange: #ff6b00)
-  if (!isPersonal && (rawType === 'label' || accType === 'label' || rLower === 'label' || rLower.includes('record label') || rLower.includes('label executive'))) {
+  if (rawType === 'label' || accType === 'label' || profile?.portalRole === 'label' || rLower === 'label' || rLower.includes('record label') || rLower.includes('label executive')) {
     return createInfo(
       'label',
       'Record Label',
@@ -75,7 +75,7 @@ export const getProfileGlowInfo = (profile: any): ProfileGlowInfo => {
   }
 
   // 3. Explicit Promoter / Venue Profile (Neon Yellow: #ffe600)
-  if (!isPersonal && (rawType === 'promoter' || accType === 'promoter' || rLower === 'promoter' || rLower.includes('venue') || rLower.includes('talent buyer') || rLower.includes('booking agent'))) {
+  if (rawType === 'promoter' || accType === 'promoter' || profile?.portalRole === 'promoter' || rLower === 'promoter' || rLower.includes('venue') || rLower.includes('talent buyer') || rLower.includes('booking agent')) {
     return createInfo(
       'promoter',
       'Promoter / Venue',
@@ -89,7 +89,7 @@ export const getProfileGlowInfo = (profile: any): ProfileGlowInfo => {
   }
 
   // 4. Explicit Band / Artist Profile (Neon Green: #39ff14)
-  if (!isPersonal && (profile?.isBandProfile || rawType === 'band' || accType === 'band' || (rLower.includes('band') && !rLower.includes('fan')) || (rLower.includes('artist') && !rLower.includes('fan')) || rLower.includes('musician') || rLower.includes('group'))) {
+  if (profile?.isBandProfile || rawType === 'band' || accType === 'band' || profile?.portalRole === 'band' || (rLower.includes('band') && !rLower.includes('fan')) || (rLower.includes('artist') && !rLower.includes('fan')) || rLower.includes('musician') || rLower.includes('group')) {
     return createInfo(
       'band',
       'Band / Artist',

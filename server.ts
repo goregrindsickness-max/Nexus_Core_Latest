@@ -18,7 +18,7 @@ let supabaseServiceClient: any = null;
 function getSupabaseService() {
   if (!supabaseServiceClient) {
     const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
     if (url && serviceRoleKey) {
       supabaseServiceClient = createClient(url, serviceRoleKey, {
         auth: {
@@ -3280,6 +3280,57 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   });
 
   /**
+   * VENUES LOCAL PERSISTENCE & CACHE
+   * Retains discovered and custom venues in uploads/venues_cache.json
+   */
+  const venuesCacheFile = path.join(uploadsDir, 'venues_cache.json');
+
+  async function loadCachedVenues(): Promise<any[]> {
+    try {
+      if (fs.existsSync(venuesCacheFile)) {
+        const content = await fs.promises.readFile(venuesCacheFile, 'utf8');
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn('[SERVER VENUES] Local cache read warning:', e);
+    }
+    return [];
+  }
+
+  async function saveCachedVenues(venuesList: any[]): Promise<void> {
+    try {
+      const existing = await loadCachedVenues();
+      const map = new Map<string, any>();
+      existing.forEach((v: any) => {
+        if (v && (v.id || v.name)) {
+          const key = v.id || `${(v.name || '').toLowerCase()}_${(v.city || '').toLowerCase()}`;
+          map.set(key, v);
+        }
+      });
+      venuesList.forEach((v: any) => {
+        if (v && (v.id || v.name)) {
+          const key = v.id || `${(v.name || '').toLowerCase()}_${(v.city || '').toLowerCase()}`;
+          map.set(key, { ...(map.get(key) || {}), ...v });
+        }
+      });
+      await fs.promises.writeFile(venuesCacheFile, JSON.stringify(Array.from(map.values()), null, 2), 'utf8');
+    } catch (e) {
+      console.warn('[SERVER VENUES] Local cache write warning:', e);
+    }
+  }
+
+  // API ROUTE: Get cached venues
+  app.get('/api/venues', async (_req: express.Request, res: express.Response) => {
+    try {
+      const venues = await loadCachedVenues();
+      res.json({ success: true, venues });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to load venues' });
+    }
+  });
+
+  /**
    * MUSICBRAINZ VENUE SEEDING & GEOLOCATION API
    * Pre-seeds regional hub venues with coordinates for tour routing
    */
@@ -3480,58 +3531,46 @@ Return a valid JSON object matching the requested schema. If any field is not fo
             };
 
             allSeededVenues.push(venueItem);
+            citySeeded++;
 
+            // Optional Supabase synchronization if credentials and table write permissions permit
             if (supabase) {
               try {
-                // Check if existing venue in Supabase
-                const { data: existing } = await supabase
+                const { error: upsertErr } = await supabase
                   .from('venues')
-                  .select('id')
-                  .ilike('name', venueItem.name)
-                  .ilike('city', venueItem.city)
-                  .maybeSingle();
+                  .upsert(venueItem, { onConflict: 'id' });
 
-                if (existing?.id) {
-                  const { error: updateErr } = await supabase
-                    .from('venues')
-                    .update({
-                      address: venueItem.address,
+                if (upsertErr) {
+                  const errMsg = (upsertErr.message || '').toLowerCase();
+                  if (!errMsg.includes('permission denied') && upsertErr.code !== '42501') {
+                    // Try fallback base structure
+                    const baseItem = {
+                      id: venueItem.id,
+                      name: venueItem.name,
+                      city: venueItem.city,
                       state_province: venueItem.state_province,
-                      lat: venueItem.lat,
-                      lng: venueItem.lng,
-                      place_type: venueItem.place_type,
+                      country: venueItem.country,
                       capacity: venueItem.capacity,
-                      source: 'MusicBrainz',
-                      intel_entries: venueItem.intel_entries
-                    })
-                    .eq('id', existing.id);
+                      email: venueItem.email || null,
+                      buyers: venueItem.buyers,
+                      genre_fit: venueItem.genre_fit,
+                      payout_rating: venueItem.payout_rating,
+                      load_in_rating: venueItem.load_in_rating,
+                      intel_entries: [
+                        ...(venueItem.intel_entries || []),
+                        `Address: ${venueItem.address || 'Inquire with promoter'}`,
+                        venueItem.lat && venueItem.lng ? `Coordinates: [${venueItem.lat}, ${venueItem.lng}]` : ''
+                      ].filter(Boolean)
+                    };
 
-                  if (!updateErr) {
-                    citySeeded++;
-                  }
-                } else {
-                  const { error: insertErr } = await supabase
-                    .from('venues')
-                    .insert([venueItem]);
-
-                  if (!insertErr) {
-                    citySeeded++;
-                  } else {
-                    // Fallback to upsert by id
-                    const { error: upsertErr } = await supabase
+                    await supabase
                       .from('venues')
-                      .upsert(venueItem, { onConflict: 'id' });
-
-                    if (!upsertErr) {
-                      citySeeded++;
-                    }
+                      .upsert(baseItem, { onConflict: 'id' });
                   }
                 }
-              } catch (dbErr) {
-                // Non-blocking database upsert fallback
+              } catch (_) {
+                // Supabase sync failure is gracefully ignored in favor of local persistence
               }
-            } else {
-              citySeeded++;
             }
           }
 
@@ -3545,6 +3584,11 @@ Return a valid JSON object matching the requested schema. If any field is not fo
         if (i < requestedCities.length - 1) {
           await new Promise((r) => setTimeout(r, 1100));
         }
+      }
+
+      // Persist all newly seeded places to the local persistent cache file
+      if (allSeededVenues.length > 0) {
+        await saveCachedVenues(allSeededVenues);
       }
 
       return res.json({

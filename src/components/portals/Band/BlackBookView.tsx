@@ -267,15 +267,28 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     const supabase = getSupabase();
     if (supabase) {
       try {
-        const { error } = await supabase
+        // Update user profile metadata cleanly
+        const { error: updateError } = await supabase
           .from('profiles')
-          .upsert({
-            id: userProfile?.id,
-            email: userProfile?.email,
-            full_name: userProfile?.name,
-            role: userProfile?.role,
+          .update({
             [metadataKey]: updatedMetadata
-          });
+          })
+          .eq('id', userProfile?.id);
+
+        let error = updateError;
+
+        // If row not found or update failed, fallback to safe upsert without invalid 'role' column
+        if (updateError) {
+          const { error: upsertError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: userProfile?.id,
+              email: userProfile?.email || '',
+              full_name: userProfile?.name || userProfile?.full_name || 'User',
+              [metadataKey]: updatedMetadata
+            }, { onConflict: 'id' });
+          error = upsertError;
+        }
 
         if (error) {
           console.error("Supabase upsert bookmark error:", error);
@@ -426,6 +439,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     city: '',
     state: '',
     country: 'USA',
+    website: '',
     lat: '',
     lng: '',
     buyers: '',
@@ -464,6 +478,18 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
         } catch (_) {}
       }
 
+      // Fetch server-persisted venues cache
+      let serverVenues: any[] = [];
+      try {
+        const res = await fetch('/api/venues');
+        if (res.ok) {
+          const sData = await res.json();
+          if (sData.success && Array.isArray(sData.venues)) {
+            serverVenues = sData.venues;
+          }
+        }
+      } catch (_) {}
+
       let cachedVenues: any[] = [];
       try {
         const local = localStorage.getItem('nexus_musicbrainz_venues');
@@ -477,7 +503,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
         if (overridesStr) customOverrides = JSON.parse(overridesStr);
       } catch (_) {}
 
-      const allCombined = [...dbVenues, ...cachedVenues].filter(v => !isIrrelevantPlace(v));
+      const allCombined = [...dbVenues, ...serverVenues, ...cachedVenues].filter(v => !isIrrelevantPlace(v));
       if (allCombined.length > 0) {
         const mapped = allCombined.map(v => {
           const cls = classifyPlace(v.name, v.place_type || v.type || v.source);
@@ -564,6 +590,59 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     });
   }, [venues]);
 
+  const syncVenuesBatchToSupabase = async (venuesList: any[]) => {
+    const supabase = getSupabase();
+    if (!supabase || !venuesList || venuesList.length === 0) return;
+    for (const v of venuesList) {
+      try {
+        const venueId = v.id || `mb_${v.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${v.city.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+        const payload: any = {
+          id: venueId,
+          name: v.name,
+          address: v.address || null,
+          city: v.city,
+          state_province: v.state_province || v.state || null,
+          country: v.country || 'USA',
+          lat: v.lat || null,
+          lng: v.lng || null,
+          place_type: v.place_type || 'venue',
+          capacity: v.capacity || null,
+          email: v.email || null,
+          buyers: v.buyers || 'Local Booking Coordinator',
+          genre_fit: v.genre_fit || v.genreFit || 85,
+          payout_rating: v.payout_rating || v.payoutRating || 4.5,
+          load_in_rating: v.load_in_rating || v.loadInRating || 4.0,
+          source: 'MusicBrainz',
+          intel_entries: Array.isArray(v.intel_entries || v.intelEntries) ? (v.intel_entries || v.intelEntries) : []
+        };
+        
+        const { error: err1 } = await supabase.from('venues').upsert(payload, { onConflict: 'id' });
+        if (err1) {
+          // Fallback with base columns
+          const basePayload = {
+            id: payload.id,
+            name: payload.name,
+            city: payload.city,
+            state_province: payload.state_province,
+            country: payload.country,
+            capacity: payload.capacity,
+            email: payload.email,
+            buyers: payload.buyers,
+            genre_fit: payload.genre_fit,
+            payout_rating: payload.payout_rating,
+            load_in_rating: payload.load_in_rating,
+            intel_entries: [
+              ...(payload.intel_entries || []),
+              payload.address ? `Address: ${payload.address}` : '',
+              payload.lat && payload.lng ? `GPS: [${payload.lat}, ${payload.lng}]` : ''
+            ].filter(Boolean)
+          };
+          await supabase.from('venues').upsert(basePayload, { onConflict: 'id' });
+        }
+      } catch (_) {}
+    }
+  };
+
   const handleRunVenueSeeder = async () => {
     if (selectedHubs.length === 0) {
       triggerNotification("⚠️ Please select at least one tour hub city.");
@@ -645,6 +724,11 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
               localStorage.setItem('nexus_seeded_hubs', JSON.stringify(newlySeeded));
             } catch (e) {}
             setSelectedHubs([]);
+
+            // Guarantee direct sync to Supabase venues table from client
+            if (data.venues && data.venues.length > 0) {
+              syncVenuesBatchToSupabase(data.venues);
+            }
           }
         }
       } catch (apiErr) {
@@ -703,6 +787,11 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
             localStorage.setItem('nexus_seeded_hubs', JSON.stringify(newlySeeded));
           } catch (e) {}
           setSelectedHubs([]);
+
+          // Guarantee sync to Supabase venues table from client
+          if (result.venues && result.venues.length > 0) {
+            syncVenuesBatchToSupabase(result.venues);
+          }
         }
       }
     } catch (err: any) {
@@ -724,6 +813,8 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     city: '', 
     state: '', 
     country: '', 
+    address: '',
+    website: '',
     capacity: '', 
     email: '', 
     buyers: '',
@@ -934,6 +1025,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
       city: venue.city || '',
       state: venue.state || venue.state_province || '',
       country: venue.country || 'USA',
+      website: venue.website || '',
       lat: venue.lat !== undefined && venue.lat !== null ? String(venue.lat) : '',
       lng: venue.lng !== undefined && venue.lng !== null ? String(venue.lng) : '',
       buyers: venue.buyers || '',
@@ -966,6 +1058,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
       state: editVenueForm.state,
       state_province: editVenueForm.state,
       country: editVenueForm.country,
+      website: editVenueForm.website,
       lat: editVenueForm.lat ? parseFloat(editVenueForm.lat) : null,
       lng: editVenueForm.lng ? parseFloat(editVenueForm.lng) : null,
       buyers: editVenueForm.buyers,
@@ -1020,6 +1113,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
           city: updatedData.city,
           state_province: updatedData.state_province,
           country: updatedData.country,
+          website: updatedData.website,
           lat: updatedData.lat,
           lng: updatedData.lng,
           buyers: updatedData.buyers,
@@ -1228,22 +1322,26 @@ Representing ${activeBandName}`;
   };
 
   const handleAddVenue = async () => {
-    if (!newVenueForm.name || !newVenueForm.city || !newVenueForm.email) {
-      triggerNotification("Please fill required fields (Name, City, Email).");
+    if (!newVenueForm.name.trim() || !newVenueForm.city.trim()) {
+      triggerNotification("Please fill required fields (Place Name and City).");
       return;
     }
     const venueId = `v_${Date.now()}`;
+    const fullAddress = [newVenueForm.address?.trim(), newVenueForm.city?.trim(), newVenueForm.state?.trim()].filter(Boolean).join(', ');
     const venue = {
       id: venueId,
-      name: newVenueForm.name,
-      city: newVenueForm.city,
-      state: newVenueForm.state || 'N/A',
-      state_province: newVenueForm.state || 'N/A',
-      country: newVenueForm.country || 'USA',
+      name: newVenueForm.name.trim(),
+      city: newVenueForm.city.trim(),
+      state: newVenueForm.state.trim() || 'N/A',
+      state_province: newVenueForm.state.trim() || 'N/A',
+      country: newVenueForm.country.trim() || 'USA',
+      address: newVenueForm.address.trim() || fullAddress,
+      street_address: newVenueForm.address.trim() || '',
+      website: newVenueForm.website.trim() || '',
       place_type: newVenueForm.place_type || 'venue',
       capacity: parseInt(newVenueForm.capacity) || 0,
-      email: newVenueForm.email,
-      buyers: newVenueForm.buyers || (newVenueForm.place_type === 'studio' ? 'Studio Coordinator' : 'Booking Dept.'),
+      email: newVenueForm.email.trim() || '',
+      buyers: newVenueForm.buyers.trim() || (newVenueForm.place_type === 'studio' ? 'Studio Coordinator' : 'Booking Dept.'),
       genre_fit: 85,
       genreFit: 85,
       payout_rating: 0,
@@ -1274,6 +1372,8 @@ Representing ${activeBandName}`;
         await supabase.from('venues').insert([{
           id: venueId,
           name: venue.name,
+          address: venue.address,
+          website: venue.website,
           city: venue.city,
           state_province: venue.state_province,
           country: venue.country,
@@ -1290,7 +1390,18 @@ Representing ${activeBandName}`;
       }
     }
 
-    setNewVenueForm({ name: '', city: '', state: '', country: '', capacity: '', email: '', buyers: '', place_type: 'venue' });
+    setNewVenueForm({ 
+      name: '', 
+      city: '', 
+      state: '', 
+      country: '', 
+      address: '',
+      website: '',
+      capacity: '', 
+      email: '', 
+      buyers: '', 
+      place_type: 'venue' 
+    });
     setIsAddVenueOpen(false);
     triggerNotification(`Added "${venue.name}" to the Black Book.`);
   };
@@ -2265,7 +2376,7 @@ Representing ${activeBandName}`;
                 {/* State, Province & Country Inputs */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="sm:col-span-1">
-                    <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">City</label>
+                    <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">City <span className="text-teal-400">*</span></label>
                     <input type="text" value={newVenueForm.city} onChange={e => setNewVenueForm(p => ({ ...p, city: e.target.value }))} className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-sm focus:outline-none focus:border-[#00ffcc]/50 text-white" placeholder="Chicago" />
                   </div>
                   <div>
@@ -2278,6 +2389,30 @@ Representing ${activeBandName}`;
                   </div>
                 </div>
 
+                {/* Street Address Input */}
+                <div>
+                  <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">Street Address</label>
+                  <input 
+                    type="text" 
+                    value={newVenueForm.address} 
+                    onChange={e => setNewVenueForm(p => ({ ...p, address: e.target.value }))} 
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-sm focus:outline-none focus:border-[#00ffcc]/50 text-white font-mono" 
+                    placeholder="e.g., 2208 Elliston Pl or 1035 N Western Ave" 
+                  />
+                </div>
+
+                {/* Website Input (Optional) */}
+                <div>
+                  <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">Website URL <span className="text-zinc-500 lowercase">(optional)</span></label>
+                  <input 
+                    type="url" 
+                    value={newVenueForm.website} 
+                    onChange={e => setNewVenueForm(p => ({ ...p, website: e.target.value }))} 
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-sm focus:outline-none focus:border-[#00ffcc]/50 text-white font-mono" 
+                    placeholder="https://venue.com" 
+                  />
+                </div>
+
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="block text-[10px] uppercase font-mono text-zinc-400">Max Room Capacity</label>
@@ -2286,11 +2421,11 @@ Representing ${activeBandName}`;
                   <input type="number" value={newVenueForm.capacity} onChange={e => setNewVenueForm(p => ({ ...p, capacity: e.target.value }))} className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-sm focus:outline-none focus:border-[#00ffcc]/50 text-white font-mono" placeholder={newVenueForm.place_type === 'venue' ? '350' : '0'} />
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">Contact Email</label>
+                  <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">Contact Email <span className="text-zinc-500 lowercase">(optional)</span></label>
                   <input type="email" value={newVenueForm.email} onChange={e => setNewVenueForm(p => ({ ...p, email: e.target.value }))} className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-sm focus:outline-none focus:border-[#00ffcc]/50 text-white" placeholder="booking@venue.com" />
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">Contact / Talent Buyer Name</label>
+                  <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">Contact / Talent Buyer Name <span className="text-zinc-500 lowercase">(optional)</span></label>
                   <input type="text" value={newVenueForm.buyers} onChange={e => setNewVenueForm(p => ({ ...p, buyers: e.target.value }))} className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-sm focus:outline-none focus:border-[#00ffcc]/50 text-white" placeholder="Booking Coordinator / Studio Manager" />
                 </div>
               </div>
@@ -2998,8 +3133,19 @@ Representing ${activeBandName}`;
                     type="text"
                     value={editVenueForm.address}
                     onChange={e => setEditVenueForm(p => ({ ...p, address: e.target.value }))}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-sm focus:outline-none focus:border-purple-500/50 text-white"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-sm focus:outline-none focus:border-purple-500/50 text-white font-mono"
                     placeholder="123 Main St"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">Website URL <span className="text-zinc-500 lowercase">(optional)</span></label>
+                  <input
+                    type="url"
+                    value={editVenueForm.website}
+                    onChange={e => setEditVenueForm(p => ({ ...p, website: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-sm focus:outline-none focus:border-purple-500/50 text-white font-mono"
+                    placeholder="https://venue.com"
                   />
                 </div>
 
@@ -3018,7 +3164,7 @@ Representing ${activeBandName}`;
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">Contact Email</label>
+                    <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">Contact Email <span className="text-zinc-500 lowercase">(optional)</span></label>
                     <input
                       type="email"
                       value={editVenueForm.email}
@@ -3030,7 +3176,7 @@ Representing ${activeBandName}`;
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">Talent Buyer / Manager Name</label>
+                  <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1">Talent Buyer / Manager Name <span className="text-zinc-500 lowercase">(optional)</span></label>
                   <input
                     type="text"
                     value={editVenueForm.buyers}

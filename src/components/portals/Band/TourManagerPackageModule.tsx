@@ -44,57 +44,32 @@ import {
   FolderKanban,
   FolderPlus,
   Save,
-  CloudUpload
+  CloudUpload,
+  BookOpen
 } from 'lucide-react';
 import { communityBandManager, CommunityBandRecord } from '../../../lib/communityBands';
-import { tourPackageManager, TourPackageRecord } from '../../../lib/tourPackageManager';
+import {
+  tourPackageManager,
+  TourPackageRecord,
+  TourVehicle,
+  SharedBacklineConfig,
+  TourPackageBand,
+  TourPackageStop,
+  DEFAULT_SEED_VEHICLES,
+  DEFAULT_BACKLINE_CONFIG
+} from '../../../lib/tourPackageManager';
+import { searchBlackBookVenues, isVenueInBlackBook, saveVenueToBlackBook, VenueResult } from '../../../services/venueSearchService';
+import { formatTimeTo12Hour } from '../../../lib/timeUtils';
 import { ItineraryTab } from './tourPackage/ItineraryTab';
 import { LineupBandsTab } from './tourPackage/LineupBandsTab';
 import { DaySheetsTab } from './tourPackage/DaySheetsTab';
 import { SharedBacklineTab } from './tourPackage/SharedBacklineTab';
 import { SettlementTab } from './tourPackage/SettlementTab';
 import { LeakShieldPrivacyTab } from './tourPackage/LeakShieldPrivacyTab';
+import { VehiclesTab } from './tourPackage/VehiclesTab';
+import { SmartVenueScoutModal } from './tourPackage/SmartVenueScoutModal';
 
-export interface TourPackageBand {
-  id: string;
-  name: string;
-  role: 'headliner' | 'direct_support' | 'opener' | 'local_support';
-  setMinutes: number;
-  guarantee: number;
-  guaranteeType: 'fixed' | 'percentage';
-  percentageSplit?: number;
-  contactName: string;
-  contactPhone: string;
-  contactEmail: string;
-  sharedGearNotes: string;
-  membersCount: number;
-  avatarColor: string;
-  avatarUrl?: string;
-  city?: string;
-}
-
-export interface TourPackageStop {
-  id: string;
-  date: string;
-  venueName: string;
-  city: string;
-  state: string;
-  capacity?: number;
-  status: 'confirmed' | 'advancing' | 'pending' | 'settled';
-  loadInTime: string;
-  soundcheckTime: string;
-  doorsTime: string;
-  showStartTime: string;
-  curfewTime: string;
-  venueContactName: string;
-  venueContactPhone: string;
-  venueContactEmail: string;
-  grossDeal: number;
-  merchCutVenuePct: number;
-  parkingNotes: string;
-  hospitalityNotes: string;
-  advancingDone: boolean;
-}
+export type { TourPackageBand, TourPackageStop, TourVehicle, SharedBacklineConfig };
 
 interface TourManagerPackageModuleProps {
   userProfile: any;
@@ -266,7 +241,7 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
     return allTours.find(t => t.id === activeTourId) || allTours[0] || tourPackageManager.getActiveTour();
   }, [allTours, activeTourId]);
 
-  const [activeSubTab, setActiveSubTab] = useState<'itinerary' | 'bands' | 'daysheet' | 'backline' | 'settlement' | 'privacy'>('itinerary');
+  const [activeSubTab, setActiveSubTab] = useState<'itinerary' | 'bands' | 'vehicles' | 'daysheet' | 'backline' | 'settlement' | 'privacy'>('itinerary');
   const [tourTitle, setTourTitle] = useState(currentTour.title);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState('');
@@ -274,6 +249,8 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
   // Tour Package state
   const [bands, setBands] = useState<TourPackageBand[]>(currentTour.bands);
   const [stops, setStops] = useState<TourPackageStop[]>(currentTour.stops);
+  const [vehicles, setVehicles] = useState<TourVehicle[]>(() => currentTour.vehicles || [...DEFAULT_SEED_VEHICLES]);
+  const [backlineConfig, setBacklineConfig] = useState<SharedBacklineConfig>(() => currentTour.backlineConfig || { ...DEFAULT_BACKLINE_CONFIG });
   const [clientBandName, setClientBandName] = useState<string>(currentTour.headlinerClientName);
   const [publicationStatus, setPublicationStatus] = useState<'embargoed_private' | 'confirmed_routing' | 'public_announced'>(currentTour.publicationStatus);
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
@@ -295,9 +272,11 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       publicationStatus,
       embargoUntilDate,
       bands,
-      stops
+      stops,
+      vehicles,
+      backlineConfig
     });
-  }, [activeTourId, tourTitle, clientBandName, publicationStatus, embargoUntilDate, bands, stops]);
+  }, [activeTourId, tourTitle, clientBandName, publicationStatus, embargoUntilDate, bands, stops, vehicles, backlineConfig]);
 
   // Sync state whenever activeTour changes
   useEffect(() => {
@@ -306,6 +285,8 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       setTourTitle(tour.title);
       setBands(tour.bands);
       setStops(tour.stops);
+      setVehicles(tour.vehicles || [...DEFAULT_SEED_VEHICLES]);
+      setBacklineConfig(tour.backlineConfig || { ...DEFAULT_BACKLINE_CONFIG });
       setClientBandName(tour.headlinerClientName);
       setPublicationStatus(tour.publicationStatus);
       setEmbargoUntilDate(tour.embargoUntilDate || '2026-10-01T10:00');
@@ -316,7 +297,9 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
         publicationStatus: tour.publicationStatus,
         embargoUntilDate: tour.embargoUntilDate || '2026-10-01T10:00',
         bands: tour.bands,
-        stops: tour.stops
+        stops: tour.stops,
+        vehicles: tour.vehicles || [...DEFAULT_SEED_VEHICLES],
+        backlineConfig: tour.backlineConfig || { ...DEFAULT_BACKLINE_CONFIG }
       });
       setHasUnsavedChanges(false);
       setLastSavedAt(new Date(tour.updatedAt || Date.now()));
@@ -363,10 +346,12 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       embargoUntilDate: embargoUntilDate,
       bands: bands,
       stops: stops,
+      vehicles: vehicles,
+      backlineConfig: backlineConfig,
       updatedAt: new Date().toISOString()
     };
     tourPackageManager.saveTour(updatedRecord);
-  }, [tourTitle, clientBandName, publicationStatus, embargoUntilDate, bands, stops, activeTourId]);
+  }, [tourTitle, clientBandName, publicationStatus, embargoUntilDate, bands, stops, vehicles, backlineConfig, activeTourId]);
 
   // Manual explicit Save Tour Progress handler (Forces immediate Cloud & Local storage sync)
   const handleManualSaveTour = async (e?: React.MouseEvent | KeyboardEvent) => {
@@ -386,6 +371,8 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       embargoUntilDate: embargoUntilDate,
       bands: bands,
       stops: stops,
+      vehicles: vehicles,
+      backlineConfig: backlineConfig,
       updatedAt: new Date().toISOString()
     };
 
@@ -398,7 +385,9 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
         publicationStatus: saved.publicationStatus,
         embargoUntilDate: saved.embargoUntilDate,
         bands: saved.bands,
-        stops: saved.stops
+        stops: saved.stops,
+        vehicles: saved.vehicles,
+        backlineConfig: saved.backlineConfig
       });
 
       setAllTours(tourPackageManager.getAllTours());
@@ -407,9 +396,14 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       setSaveSuccessAnimation(true);
       setTimeout(() => setSaveSuccessAnimation(false), 2500);
 
+      // Dispatch global event so all map/itinerary modules synchronize
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tourPackageUpdated', { detail: saved }));
+      }
+
       const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      triggerNotification?.(`💾 Tour Progress Saved: "${tourTitle}" (${stops.length} dates, ${bands.length} bands) at ${timeStr}`);
-      addLog?.(`TM Workspace: Saved "${tourTitle}" tour progress (stops: ${stops.length}, bands: ${bands.length})`);
+      triggerNotification?.(`💾 All Tour Progress Saved: "${tourTitle}" (${stops.length} dates, ${bands.length} bands, ${vehicles.length} vehicles) at ${timeStr}`);
+      addLog?.(`TM Workspace: Saved "${tourTitle}" tour progress (stops: ${stops.length}, bands: ${bands.length}, vehicles: ${vehicles.length})`);
     } catch (err: any) {
       triggerNotification?.(`⚠️ Error saving tour progress: ${err?.message || 'Local storage write failed'}`);
     } finally {
@@ -471,6 +465,11 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
   const [newStopContact, setNewStopContact] = useState('');
   const [newStopPhone, setNewStopPhone] = useState('');
   const [newStopParking, setNewStopParking] = useState('');
+  const [newStopCapacity, setNewStopCapacity] = useState(500);
+  const [newStopBlackBookVenueId, setNewStopBlackBookVenueId] = useState<string | undefined>(undefined);
+  const [newStopSaveToBlackBook, setNewStopSaveToBlackBook] = useState(true);
+  const [newStopSearchQuery, setNewStopSearchQuery] = useState('');
+  const [newStopSuggestions, setNewStopSuggestions] = useState<VenueResult[]>([]);
 
   // Get Community Band Profiles
   const communityBands = useMemo(() => {
@@ -709,15 +708,34 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
     addLog?.(`TM Mode: Removed ${name} from tour package.`);
   };
 
-  const handleAddStop = () => {
+  const handleAddStop = async () => {
     if (!newStopVenue.trim() || !newStopCity.trim()) return;
+
+    let linkedBbId = newStopBlackBookVenueId;
+    if (newStopSaveToBlackBook) {
+      const alreadyIn = await isVenueInBlackBook(newStopVenue.trim(), newStopCity.trim());
+      if (!alreadyIn) {
+        const saved = saveVenueToBlackBook({
+          name: newStopVenue.trim(),
+          city: newStopCity.trim(),
+          state: newStopState.trim(),
+          capacity: Number(newStopCapacity) || 500,
+          contactName: newStopContact.trim(),
+          contactPhone: newStopPhone.trim(),
+          parkingNotes: newStopParking.trim()
+        });
+        linkedBbId = saved.id;
+        triggerNotification?.(`Added "${newStopVenue.trim()}" to Black Book Rolodex!`);
+      }
+    }
+
     const newStop: TourPackageStop = {
       id: `pkg-s-${Date.now()}`,
       date: newStopDate || new Date().toISOString().split('T')[0],
       venueName: newStopVenue.trim(),
       city: newStopCity.trim(),
       state: newStopState.trim().toUpperCase() || 'US',
-      capacity: 500,
+      capacity: Number(newStopCapacity) || 500,
       status: 'advancing',
       loadInTime: newStopLoadIn || '15:00',
       soundcheckTime: newStopSoundcheck || '16:30',
@@ -731,7 +749,8 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       merchCutVenuePct: 10,
       parkingNotes: newStopParking.trim() || 'Band vehicle loading zone',
       hospitalityNotes: 'Standard green room rider',
-      advancingDone: false
+      advancingDone: false,
+      blackBookVenueId: linkedBbId
     };
 
     const updated = [...stops, newStop].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -748,6 +767,17 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
     setNewStopContact('');
     setNewStopPhone('');
     setNewStopParking('');
+    setNewStopBlackBookVenueId(undefined);
+    setNewStopSearchQuery('');
+    setNewStopSuggestions([]);
+  };
+
+  const handleAddStopDirect = (newStop: TourPackageStop) => {
+    const updated = [...stops, newStop].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    setStops(updated);
+    setSelectedStopId(newStop.id);
+    triggerNotification?.(`Added ${newStop.venueName} (${newStop.city}) to tour route!`);
+    addLog?.(`TM Mode: Added ${newStop.venueName} routing stop.`);
   };
 
   const handleRemoveStop = (id: string, venue: string) => {
@@ -758,6 +788,68 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
   const handleToggleAdvancing = (id: string) => {
     setStops(stops.map(s => s.id === id ? { ...s, advancingDone: !s.advancingDone } : s));
     triggerNotification?.('Advancing checklist status updated.');
+  };
+
+  // Complete editability handlers
+  const handleUpdateBand = (updatedBand: TourPackageBand) => {
+    setBands(prev => prev.map(b => b.id === updatedBand.id ? updatedBand : b));
+    if (updatedBand.role === 'headliner') {
+      setClientBandName(updatedBand.name);
+    }
+    triggerNotification?.(`Updated details for ${updatedBand.name}.`);
+    addLog?.(`TM Mode: Updated details for ${updatedBand.name}.`);
+  };
+
+  const handleUpdateStop = (updatedStop: TourPackageStop) => {
+    setStops(prev => prev.map(s => s.id === updatedStop.id ? updatedStop : s));
+    triggerNotification?.(`Updated stop details for ${updatedStop.venueName}.`);
+    addLog?.(`TM Mode: Updated stop ${updatedStop.venueName}.`);
+  };
+
+  // Vehicle convoy handlers
+  const handleAddVehicle = (newVeh: Omit<TourVehicle, 'id'>) => {
+    const created: TourVehicle = {
+      ...newVeh,
+      id: `veh-${Date.now()}`
+    };
+    setVehicles(prev => [...prev, created]);
+    triggerNotification?.(`Added ${created.name} to tour fleet.`);
+    addLog?.(`TM Mode: Added vehicle ${created.name}.`);
+  };
+
+  const handleUpdateVehicle = (updatedVeh: TourVehicle) => {
+    setVehicles(prev => prev.map(v => v.id === updatedVeh.id ? updatedVeh : v));
+    triggerNotification?.(`Updated vehicle ${updatedVeh.name}.`);
+    addLog?.(`TM Mode: Updated vehicle ${updatedVeh.name}.`);
+  };
+
+  const handleDeleteVehicle = (id: string, name: string) => {
+    setVehicles(prev => prev.filter(v => v.id !== id));
+    triggerNotification?.(`Removed ${name} from tour fleet.`);
+    addLog?.(`TM Mode: Removed vehicle ${name}.`);
+  };
+
+  // Backline & splits handlers
+  const handleUpdateBacklineConfig = (newCfg: SharedBacklineConfig) => {
+    setBacklineConfig(newCfg);
+    triggerNotification?.('Updated shared backline and cargo trailer setup.');
+    addLog?.(`TM Mode: Updated shared backline config.`);
+  };
+
+  const handleUpdateBandGearNotes = (bandId: string, notes: string) => {
+    setBands(prev => prev.map(b => b.id === bandId ? { ...b, sharedGearNotes: notes } : b));
+    triggerNotification?.('Updated band gear agreement notes.');
+  };
+
+  const handleUpdateBandSplits = (updatedBands: TourPackageBand[]) => {
+    setBands(updatedBands);
+    triggerNotification?.('Updated deals, splits and nightly guarantees.');
+    addLog?.(`TM Mode: Adjusted package splits and guarantees.`);
+  };
+
+  const handleUpdateStopDeal = (stopId: string, grossDeal: number) => {
+    setStops(prev => prev.map(s => s.id === stopId ? { ...s, grossDeal } : s));
+    triggerNotification?.('Updated show gross deal amount.');
   };
 
   const activeStop = stops.find(s => s.id === selectedStopId) || stops[0];
@@ -782,12 +874,12 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       `TOUR MANAGER: ${userProfile?.full_name || userProfile?.name || 'Miguel Goregrinder Medina'} (Lead Production)`,
       `VENUE PM / FOH: ${stop.venueContactName} - ${stop.venueContactPhone}`,
       `--------------------------------------------------`,
-      `⏱️ MASTER PRODUCTION & SET TIMELINE:`,
-      `  • ${stop.loadInTime} - All Tour Vans Load-In & Trailer Unpack`,
-      `  • ${stop.soundcheckTime} - Production & Backline Audio Line Check`,
-      `  • ${stop.doorsTime} - Public Doors Open`,
-      `  • ${stop.showStartTime} - DOWNBEAT: First Band`,
-      `  • ${stop.curfewTime} - Curfew & Stage Lockup`,
+      `⏱️ MASTER PRODUCTION & SET TIMELINE (12H):`,
+      `  • ${formatTimeTo12Hour(stop.loadInTime)} - All Tour Vans Load-In & Trailer Unpack`,
+      `  • ${formatTimeTo12Hour(stop.soundcheckTime)} - Production & Backline Audio Line Check`,
+      `  • ${formatTimeTo12Hour(stop.doorsTime)} - Public Doors Open`,
+      `  • ${formatTimeTo12Hour(stop.showStartTime)} - DOWNBEAT: First Band`,
+      `  • ${formatTimeTo12Hour(stop.curfewTime)} - Curfew & Stage Lockup`,
       `--------------------------------------------------`,
       `🎸 BILLING PACKAGE & SET TIMES:`,
       ...bands.map((b, idx) => `  ${idx + 1}. [${b.role.toUpperCase()}] ${b.name} (${b.setMinutes} MINS) - Rep: ${b.contactName} ${b.contactPhone}`),
@@ -824,298 +916,253 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-amber-500/10 via-amber-600/5 to-transparent blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-80 h-80 bg-gradient-to-tr from-emerald-500/5 to-transparent blur-3xl pointer-events-none" />
 
-      {/* 1. Executive TM Header & Identity Separation Banner */}
-      <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3.5 border-b border-zinc-800/80">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-xs font-black tracking-wider uppercase shadow-[0_0_12px_rgba(245,158,11,0.2)]">
-              <Compass className="w-3.5 h-3.5 text-amber-400 animate-spin" style={{ animationDuration: '20s' }} />
-              Tour Manager Suite Active
-            </span>
-            <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900/90 px-2 py-0.5 rounded border border-zinc-800">
-              <span className="text-zinc-500">Working Identity:</span> <strong className="text-white">{tmIdentityName}</strong>
-            </span>
-            
-            {/* Multi-Tour Switcher Dropdown */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsTourSwitcherOpen(!isTourSwitcherOpen)}
-                className="inline-flex items-center gap-1.5 text-[10px] font-mono text-cyan-400 bg-cyan-950/60 hover:bg-cyan-900/80 px-2.5 py-0.5 rounded border border-cyan-500/40 hover:border-cyan-400 transition-all cursor-pointer group shadow-sm"
-                title="Switch Active Tour Project"
-              >
-                <FolderKanban className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
-                <span className="text-zinc-400">Tours ({allTours.length}):</span>
-                <strong className="text-cyan-300 max-w-[140px] truncate">{tourTitle}</strong>
-                <ChevronDown className="w-3 h-3 text-cyan-400" />
-              </button>
+      {/* 1. Executive TM Header & Controls Full-Width Banner */}
+      <div className="relative z-10 flex flex-col items-center text-center gap-4 pb-4 border-b border-zinc-800/80">
+        {/* Badges Grid: Suite Active and Multi-Tour Switcher */}
+        <div className="w-full max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 mx-auto">
+          {/* Badge 1: Tour Manager Suite Active */}
+          <div className="w-full flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-xs font-black tracking-wider uppercase shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+            <Compass className="w-4 h-4 text-amber-400 animate-spin shrink-0" style={{ animationDuration: '20s' }} />
+            <span>Tour Manager Suite Active</span>
+          </div>
 
-              {/* Tour Switcher Popover Menu */}
-              {isTourSwitcherOpen && (
-                <div className="absolute left-0 top-full mt-1.5 w-72 bg-zinc-900/95 backdrop-blur-md border border-cyan-500/40 rounded-xl shadow-2xl p-2 z-50 animate-in fade-in slide-in-from-top-2">
-                  <div className="flex items-center justify-between px-2 py-1 border-b border-zinc-800 text-[10px] font-mono text-zinc-400">
-                    <span className="font-bold text-zinc-200">ACTIVE TOUR WORKSPACES</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsTourSwitcherOpen(false);
-                        setIsCreateTourModalOpen(true);
-                      }}
-                      className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-bold cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3" /> New Tour
-                    </button>
-                  </div>
-                  <div className="max-h-56 overflow-y-auto space-y-1 py-1.5">
-                    {allTours.map(t => {
-                      const isCurrent = t.id === activeTourId;
-                      return (
-                        <div
-                          key={t.id}
-                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all ${
-                            isCurrent
-                              ? 'bg-cyan-950/70 border border-cyan-500/50 text-white'
-                              : 'bg-zinc-800/40 hover:bg-zinc-800 border border-zinc-700/30 text-zinc-300'
-                          }`}
-                          onClick={() => handleSelectTour(t.id)}
-                        >
-                          <div className="flex flex-col min-w-0 pr-2">
-                            <div className="flex items-center gap-1.5">
-                              {isCurrent && <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />}
-                              <span className="text-xs font-bold font-display truncate text-white">{t.title}</span>
-                            </div>
-                            <span className="text-[9px] font-mono text-zinc-400 truncate">
-                              Client: {t.headlinerClientName} • {t.stops.length} dates • {t.bands.length} bands
-                            </span>
+          {/* Badge 2: Multi-Tour Switcher Dropdown */}
+          <div className="relative w-full">
+            <button
+              type="button"
+              onClick={() => setIsTourSwitcherOpen(!isTourSwitcherOpen)}
+              className="w-full flex items-center justify-between gap-2 text-xs font-mono text-cyan-400 bg-cyan-950/60 hover:bg-cyan-900/80 px-3.5 py-2 rounded-xl border border-cyan-500/40 hover:border-cyan-400 transition-all cursor-pointer group shadow-sm"
+              title="Switch Active Tour Project"
+            >
+              <div className="flex items-center gap-2 truncate min-w-0">
+                <FolderKanban className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform shrink-0" />
+                <span className="text-zinc-400 shrink-0">Tours ({allTours.length}):</span>
+                <strong className="text-cyan-300 truncate">{tourTitle}</strong>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-cyan-400 shrink-0 ml-1" />
+            </button>
+
+            {/* Tour Switcher Popover Menu */}
+            {isTourSwitcherOpen && (
+              <div className="absolute left-0 right-0 top-full mt-1.5 w-full bg-zinc-900/95 backdrop-blur-md border border-cyan-500/40 rounded-xl shadow-2xl p-2 z-50 animate-in fade-in slide-in-from-top-2 text-left">
+                <div className="flex items-center justify-between px-2 py-1 border-b border-zinc-800 text-[10px] font-mono text-zinc-400">
+                  <span className="font-bold text-zinc-200">ACTIVE TOUR WORKSPACES</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTourSwitcherOpen(false);
+                      setIsCreateTourModalOpen(true);
+                    }}
+                    className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-bold cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" /> New Tour
+                  </button>
+                </div>
+                <div className="max-h-56 overflow-y-auto space-y-1 py-1.5">
+                  {allTours.map(t => {
+                    const isCurrent = t.id === activeTourId;
+                    return (
+                      <div
+                        key={t.id}
+                        className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all ${
+                          isCurrent
+                            ? 'bg-cyan-950/70 border border-cyan-500/50 text-white'
+                            : 'bg-zinc-800/40 hover:bg-zinc-800 border border-zinc-700/30 text-zinc-300'
+                        }`}
+                        onClick={() => handleSelectTour(t.id)}
+                      >
+                        <div className="flex flex-col min-w-0 pr-2 text-left">
+                          <div className="flex items-center gap-1.5">
+                            {isCurrent && <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />}
+                            <span className="text-xs font-bold font-display truncate text-white">{t.title}</span>
                           </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {allTours.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteTour(t.id, t.title);
-                                }}
-                                className="p-1 hover:bg-rose-950/60 rounded text-zinc-500 hover:text-rose-400 transition cursor-pointer"
-                                title="Delete tour workspace"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
+                          <span className="text-[9px] font-mono text-zinc-400 truncate">
+                            {t.stops.length} dates • {t.bands.length} bands
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                  <div className="pt-1 border-t border-zinc-800/80 flex items-center justify-between gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleDuplicateCurrentTour();
-                        setIsTourSwitcherOpen(false);
-                      }}
-                      className="w-full text-center py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-mono flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <Copy className="w-3 h-3" /> Duplicate Active Tour
-                    </button>
-                  </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {allTours.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteTour(t.id, t.title);
+                              }}
+                              className="p-1 hover:bg-rose-950/60 rounded text-zinc-500 hover:text-rose-400 transition cursor-pointer"
+                              title="Delete tour workspace"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="pt-1 border-t border-zinc-800/80 flex items-center justify-between gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleDuplicateCurrentTour();
+                      setIsTourSwitcherOpen(false);
+                    }}
+                    className="w-full text-center py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-mono flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Copy className="w-3 h-3" /> Duplicate Active Tour
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Tour Title, Subtitle & Action Controls Row - Centered */}
+        <div className="flex flex-col items-center justify-center text-center gap-3 w-full max-w-3xl mx-auto">
+          <div className="space-y-1.5 flex flex-col items-center justify-center text-center w-full">
+            {/* Editable Tour Title (Centered, no one-off badge) */}
+            <div className="flex items-center justify-center gap-2">
+              {isEditingTitle ? (
+                <div className="flex items-center justify-center gap-1.5">
+                  <input
+                    type="text"
+                    value={tempTitle}
+                    onChange={e => setTempTitle(e.target.value)}
+                    className="bg-zinc-900 border border-amber-500/60 rounded-lg px-3 py-1.5 text-base font-bold text-white font-sans focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-[280px] sm:min-w-[360px] text-center"
+                    placeholder="e.g. West Coast Annihilation Run 2026"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveTitle}
+                    className="p-2 bg-amber-500 text-black rounded-lg hover:bg-amber-400 transition cursor-pointer"
+                    title="Save title"
+                  >
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingTitle(false)}
+                    className="p-2 bg-zinc-800 text-zinc-400 rounded-lg hover:bg-zinc-700 transition cursor-pointer"
+                    title="Cancel"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  className="flex items-center justify-center gap-2.5 group cursor-pointer"
+                  onClick={() => { setTempTitle(tourTitle); setIsEditingTitle(true); }}
+                  title="Click to edit tour title"
+                >
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-black text-white uppercase tracking-tight flex items-center justify-center gap-2 text-center">
+                    <span>{tourTitle}</span>
+                    <Edit3 className="w-4 h-4 text-zinc-500 group-hover:text-amber-400 transition-colors" />
+                  </h2>
                 </div>
               )}
             </div>
+            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed text-center max-w-xl mx-auto">
+              Routing, multi-band billing, shared backline agreements, and unified day sheets for this tour run.
+            </p>
+          </div>
 
-            {/* Interactive Client / Headliner Switcher Button */}
+          {/* Action Controls: Full-Width Save All Progress Bar & Secondary Actions */}
+          <div className="w-full max-w-xl mx-auto flex flex-col items-center gap-2.5 pt-1">
+            {/* Full-Width Save All Progress Bar */}
             <button
               type="button"
-              onClick={() => {
-                setClientTab('community');
-                setIsSelectClientModal(true);
-              }}
-              className="inline-flex items-center gap-1.5 text-[10px] font-mono text-amber-400 bg-amber-950/60 hover:bg-amber-900/80 px-2.5 py-0.5 rounded border border-amber-500/40 hover:border-amber-400 transition-all cursor-pointer group shadow-sm"
-              title="Change Headliner / Managed Client Band"
-            >
-              <Crown className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
-              <span className="text-zinc-400">Headliner / Client:</span>
-              <strong className="text-amber-300 underline underline-offset-2">{clientBandName}</strong>
-              <span className="text-[8.5px] bg-amber-500 text-black font-black px-1.5 py-0.2 rounded uppercase ml-0.5 tracking-wider">
-                Change Client
-              </span>
-            </button>
-
-            {/* Privacy & Confidentiality Status Badge */}
-            <button
-              type="button"
-              onClick={() => setIsPrivacyModalOpen(true)}
-              className={`inline-flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-0.5 rounded border transition-all cursor-pointer shadow-sm ${
-                publicationStatus === 'embargoed_private'
-                  ? 'bg-rose-950/70 border-rose-500/60 text-rose-300 hover:bg-rose-900/80'
-                  : publicationStatus === 'confirmed_routing'
-                  ? 'bg-amber-950/70 border-amber-500/60 text-amber-300 hover:bg-amber-900/80'
-                  : 'bg-emerald-950/70 border-emerald-500/60 text-emerald-300 hover:bg-emerald-900/80'
+              onClick={handleManualSaveTour}
+              disabled={isSaving}
+              className={`w-full py-3 px-5 rounded-xl font-mono font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all shadow-lg cursor-pointer select-none ${
+                isSaving
+                  ? 'bg-amber-600/80 text-white cursor-wait ring-2 ring-amber-400 animate-pulse'
+                  : saveSuccessAnimation
+                  ? 'bg-emerald-600 text-white shadow-[0_0_20px_rgba(16,185,129,0.6)] border border-emerald-400'
+                  : hasUnsavedChanges
+                  ? 'bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-black shadow-[0_0_20px_rgba(245,158,11,0.5)] border border-amber-300 ring-2 ring-amber-400/70 animate-pulse'
+                  : 'bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-300 hover:text-emerald-200 border border-emerald-500/50 hover:border-emerald-400'
               }`}
-              title="Manage Confidentiality, Embargo & Public Announcement"
+              title={
+                hasUnsavedChanges
+                  ? 'Unsaved changes detected across route and package. Click to save everything now (Ctrl+S / Cmd+S)'
+                  : 'All tour progress and routing is saved and synchronized with Cloud & Local storage (Ctrl+S / Cmd+S)'
+              }
             >
-              {publicationStatus === 'embargoed_private' ? (
+              {isSaving ? (
                 <>
-                  <Lock className="w-3.5 h-3.5 text-rose-400" />
-                  <span className="text-rose-400 font-bold uppercase tracking-wider">🔒 PRIVATE &amp; EMBARGOED (LEAK SHIELD ACTIVE)</span>
+                  <RefreshCw className="w-4 h-4 animate-spin text-amber-200 shrink-0" />
+                  <span>Saving All Tour Progress...</span>
                 </>
-              ) : publicationStatus === 'confirmed_routing' ? (
+              ) : saveSuccessAnimation ? (
                 <>
-                  <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="text-amber-300 font-bold uppercase tracking-wider">🟡 INTERNAL CONFIRMED (UNANNOUNCED)</span>
+                  <CheckCircle2 className="w-4 h-4 text-white stroke-[2.5] shrink-0" />
+                  <span>All Progress &amp; Route Saved ✓</span>
+                </>
+              ) : hasUnsavedChanges ? (
+                <>
+                  <Save className="w-4 h-4 text-black stroke-[2.5] shrink-0" />
+                  <span>Save All Progress *</span>
+                  <span className="text-[9px] bg-black text-amber-300 px-1.5 py-0.5 rounded font-black ml-1">
+                    UNSAVED CHANGES
+                  </span>
                 </>
               ) : (
                 <>
-                  <Megaphone className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-emerald-300 font-bold uppercase tracking-wider">🟢 PUBLICLY ANNOUNCED &amp; LIVE</span>
+                  <CloudUpload className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Save All Progress</span>
+                  {lastSavedAt && (
+                    <span className="text-[10px] text-emerald-400/80 font-normal hidden sm:inline ml-1 font-mono">
+                      (Saved at {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                    </span>
+                  )}
                 </>
               )}
-              <span className="text-[8.5px] bg-white/10 px-1 py-0.2 rounded font-sans uppercase font-bold text-zinc-300">
-                Configure
-              </span>
             </button>
-          </div>
 
-          {/* Editable Tour Title */}
-          <div className="flex items-center gap-2 pt-1">
-            {isEditingTitle ? (
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="text"
-                  value={tempTitle}
-                  onChange={e => setTempTitle(e.target.value)}
-                  className="bg-zinc-900 border border-amber-500/60 rounded px-2.5 py-1 text-sm font-bold text-white font-sans focus:outline-none focus:ring-1 focus:ring-amber-400 min-w-[260px]"
-                  placeholder="e.g. West Coast Annihilation Run 2026"
-                  autoFocus
-                />
+            {/* Secondary Controls: Add Package Band & Countdown Card */}
+            <div className="flex items-center justify-center gap-2.5 w-full flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setBandSearchCommunityQuery('');
+                  setIsAddingBandModal(true);
+                }}
+                className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+              >
+                <Users className="w-3.5 h-3.5" />
+                Add Package Band
+              </button>
+              {onSwitchToSingleBandView && (
                 <button
                   type="button"
-                  onClick={handleSaveTitle}
-                  className="p-1.5 bg-amber-500 text-black rounded hover:bg-amber-400 transition cursor-pointer"
-                  title="Save title"
+                  onClick={onSwitchToSingleBandView}
+                  className="px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 font-mono text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  title="Peek at Single Band Countdown view"
                 >
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  Countdown Card
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingTitle(false)}
-                  className="p-1.5 bg-zinc-800 text-zinc-400 rounded hover:bg-zinc-700 transition cursor-pointer"
-                  title="Cancel"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 group cursor-pointer" onClick={() => { setTempTitle(tourTitle); setIsEditingTitle(true); }}>
-                <h2 className="text-lg sm:text-xl font-display font-black text-white uppercase tracking-tight flex items-center gap-2">
-                  <span>{tourTitle}</span>
-                  <Edit3 className="w-3.5 h-3.5 text-zinc-500 group-hover:text-amber-400 transition-colors" />
-                </h2>
-                <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded uppercase">
-                  One-Off Tour Package
-                </span>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-          <p className="text-[11px] text-zinc-400 leading-tight">
-            Routing, multi-band billing, shared backline agreements, and unified day sheets for this tour run.
-          </p>
-        </div>
-
-        {/* Quick Actions & Switcher */}
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {/* Primary Explicit Save Tour Progress Button */}
-          <button
-            type="button"
-            onClick={handleManualSaveTour}
-            disabled={isSaving}
-            className={`px-3 py-1.5 rounded-lg font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md cursor-pointer select-none ${
-              isSaving
-                ? 'bg-amber-600/70 text-white cursor-wait ring-1 ring-amber-400'
-                : saveSuccessAnimation
-                ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] border border-emerald-400'
-                : hasUnsavedChanges
-                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black shadow-[0_0_15px_rgba(245,158,11,0.4)] border border-amber-300 ring-2 ring-amber-400/50 animate-pulse font-black'
-                : 'bg-zinc-900 hover:bg-zinc-800 text-emerald-400 hover:text-emerald-300 border border-emerald-500/40 hover:border-emerald-400'
-            }`}
-            title={
-              hasUnsavedChanges
-                ? 'Unsaved changes detected. Click to save tour progress now (Ctrl+S / Cmd+S)'
-                : 'Tour progress is saved and synchronized with Cloud & Local storage (Ctrl+S / Cmd+S)'
-            }
-          >
-            {isSaving ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-200" />
-                <span>Saving Tour...</span>
-              </>
-            ) : saveSuccessAnimation ? (
-              <>
-                <CheckCircle2 className="w-3.5 h-3.5 text-white stroke-[2.5]" />
-                <span>Progress Saved ✓</span>
-              </>
-            ) : hasUnsavedChanges ? (
-              <>
-                <Save className="w-3.5 h-3.5 text-black stroke-[2.5]" />
-                <span>Save Tour *</span>
-                <span className="text-[8.5px] bg-black text-amber-300 px-1 py-0.2 rounded font-black ml-0.5">
-                  UNSAVED
-                </span>
-              </>
-            ) : (
-              <>
-                <CloudUpload className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Save Progress</span>
-                {lastSavedAt && (
-                  <span className="text-[9px] text-zinc-400 font-normal hidden sm:inline ml-0.5">
-                    ({lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
-                  </span>
-                )}
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsAddingStopModal(true)}
-            className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Tour Stop
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setBandSearchCommunityQuery('');
-              setIsAddingBandModal(true);
-            }}
-            className="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-black font-mono font-bold text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-          >
-            <Users className="w-3.5 h-3.5" />
-            Add Package Band
-          </button>
-          {onSwitchToSingleBandView && (
-            <button
-              type="button"
-              onClick={onSwitchToSingleBandView}
-              className="px-2 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 font-mono text-[9px] uppercase tracking-wider transition-colors cursor-pointer"
-              title="Peek at Single Band Countdown view"
-            >
-              Countdown Card
-            </button>
-          )}
         </div>
       </div>
 
       {/* 2. Key Stats Bar */}
       <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-2 my-3">
-        <div className="bg-[#11131a]/80 border border-zinc-800/80 rounded-xl p-2.5 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-            <Users className="w-4 h-4" />
+        {/* Clickable Bands on Package Tile linked to bands tab */}
+        <div
+          onClick={() => setActiveSubTab('bands')}
+          className="bg-[#11131a]/80 hover:bg-amber-950/30 border border-zinc-800/80 hover:border-amber-500/50 rounded-xl p-2.5 flex items-center gap-2.5 cursor-pointer transition-all group shadow-sm"
+          title="Click to manage Bands on Package"
+        >
+          <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 group-hover:bg-amber-500/20 group-hover:border-amber-500/60 flex items-center justify-center text-amber-400 shrink-0 transition-colors">
+            <Users className="w-4 h-4 group-hover:scale-110 transition-transform" />
           </div>
           <div>
-            <span className="text-[9px] font-mono text-zinc-500 uppercase block leading-none">Bands on Package</span>
-            <span className="text-sm font-mono font-black text-white leading-tight">{totalBandsCount} Bands</span>
+            <span className="text-[9px] font-mono text-zinc-500 uppercase block leading-none flex items-center gap-1 group-hover:text-amber-400 transition-colors">
+              Bands on Package <span className="text-[8px] text-amber-400 font-bold">→</span>
+            </span>
+            <span className="text-sm font-mono font-black text-white group-hover:text-amber-300 leading-tight transition-colors">{totalBandsCount} Bands</span>
           </div>
         </div>
 
@@ -1145,7 +1192,9 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
           </div>
           <div>
             <span className="text-[9px] font-mono text-zinc-500 uppercase block leading-none">Tour Vehicle Convoys</span>
-            <span className="text-sm font-mono font-black text-purple-300 leading-tight">2 Vans + Trailer</span>
+            <span className="text-sm font-mono font-black text-purple-300 leading-tight">
+              {vehicles.length} Vehicles ({vehicles.reduce((sum, v) => sum + (v.capacityPax || 0), 0)} PAX)
+            </span>
           </div>
         </div>
       </div>
@@ -1155,9 +1204,10 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
         {[
           { key: 'itinerary', label: 'Route & Tour Stops', icon: MapPin, count: stops.length },
           { key: 'bands', label: 'Bands on Package', icon: Users, count: bands.length },
-          { key: 'daysheet', label: 'Unified Day Sheet', icon: FileText },
-          { key: 'backline', label: 'Shared Backline & Van', icon: Layers },
+          { key: 'vehicles', label: 'Tour Vehicles & Fleet', icon: Truck, count: vehicles.length },
+          { key: 'backline', label: 'Shared Backline & Trailer', icon: Layers },
           { key: 'settlement', label: 'Nightly Splits & Guarantees', icon: DollarSign },
+          { key: 'daysheet', label: 'Unified Day Sheet', icon: FileText },
           { 
             key: 'privacy', 
             label: publicationStatus === 'public_announced' ? 'Live Announcement' : 'Confidentiality & Leak Shield', 
@@ -1210,6 +1260,9 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
           onCopyDaySheet={handleCopyDaySheet}
           onRemoveStop={handleRemoveStop}
           onToggleAdvancing={handleToggleAdvancing}
+          onUpdateStop={handleUpdateStop}
+          onAddStop={handleAddStopDirect}
+          triggerNotification={triggerNotification}
           onSaveProgress={handleManualSaveTour}
           isSaving={isSaving}
           hasUnsavedChanges={hasUnsavedChanges}
@@ -1223,6 +1276,7 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
         <LineupBandsTab
           bands={bands}
           clientBandName={clientBandName}
+          vehicles={vehicles}
           onOpenSelectClientModal={() => {
             setClientTab('community');
             setIsSelectClientModal(true);
@@ -1234,6 +1288,7 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
           onMoveBand={handleMoveBand}
           onRemoveBand={handleRemoveBand}
           onPromoteToHeadliner={handlePromoteToHeadliner}
+          onUpdateBand={handleUpdateBand}
           onSaveProgress={handleManualSaveTour}
           isSaving={isSaving}
           hasUnsavedChanges={hasUnsavedChanges}
@@ -1241,7 +1296,22 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
         />
       )}
 
-      {/* TAB 3: Master Day Sheet Generator */}
+      {/* TAB 3: Vehicles & Fleet Logistics */}
+      {activeSubTab === 'vehicles' && (
+        <VehiclesTab
+          vehicles={vehicles}
+          bands={bands}
+          onAddVehicle={handleAddVehicle}
+          onUpdateVehicle={handleUpdateVehicle}
+          onDeleteVehicle={handleDeleteVehicle}
+          onSaveProgress={handleManualSaveTour}
+          isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
+          lastSavedAt={lastSavedAt}
+        />
+      )}
+
+      {/* TAB 4: Master Day Sheet Generator */}
       {activeSubTab === 'daysheet' && (
         <DaySheetsTab
           stops={stops}
@@ -1252,11 +1322,14 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
         />
       )}
 
-      {/* TAB 4: Shared Backline & Logistics */}
+      {/* TAB 5: Shared Backline & Logistics */}
       {activeSubTab === 'backline' && (
         <SharedBacklineTab
           bands={bands}
           clientBandName={clientBandName}
+          backlineConfig={backlineConfig}
+          onUpdateBacklineConfig={handleUpdateBacklineConfig}
+          onUpdateBandGearNotes={handleUpdateBandGearNotes}
           onSaveProgress={handleManualSaveTour}
           isSaving={isSaving}
           hasUnsavedChanges={hasUnsavedChanges}
@@ -1264,13 +1337,15 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
         />
       )}
 
-      {/* TAB 5: Settlements & Financial Splits */}
+      {/* TAB 6: Settlements & Financial Splits */}
       {activeSubTab === 'settlement' && (
         <SettlementTab
           bands={bands}
           stops={stops}
           totalPackageGuarantees={totalPackageGuarantees}
           totalGrossPotential={totalGrossPotential}
+          onUpdateBandSplits={handleUpdateBandSplits}
+          onUpdateStopDeal={handleUpdateStopDeal}
           onSaveProgress={handleManualSaveTour}
           isSaving={isSaving}
           hasUnsavedChanges={hasUnsavedChanges}
@@ -1278,7 +1353,7 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
         />
       )}
 
-      {/* TAB 6: Confidentiality, NDA Leak Shield & Public Announcement */}
+      {/* TAB 7: Confidentiality, NDA Leak Shield & Public Announcement */}
       {activeSubTab === 'privacy' && (
         <LeakShieldPrivacyTab
           publicationStatus={publicationStatus}
@@ -1782,6 +1857,72 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
             </div>
 
             <div className="space-y-2.5 text-left text-xs font-mono">
+              {/* Seamless Black Book Lookup Section */}
+              <div className="p-2.5 rounded-xl bg-amber-950/20 border border-amber-500/30 space-y-1.5 text-left">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-mono text-amber-300 font-bold uppercase flex items-center gap-1.5">
+                    <BookOpen className="w-3 h-3 text-amber-400" />
+                    Pick Venue from Black Book
+                  </span>
+                  {newStopBlackBookVenueId && (
+                    <span className="text-[7.5px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-500/40 px-1 py-0.2 rounded font-bold">
+                      ✓ Black Book Linked
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={newStopSearchQuery}
+                    onChange={async (e) => {
+                      const q = e.target.value;
+                      setNewStopSearchQuery(q);
+                      if (q.trim().length > 0) {
+                        try {
+                          const res = await searchBlackBookVenues(q);
+                          setNewStopSuggestions(res);
+                        } catch {
+                          setNewStopSuggestions([]);
+                        }
+                      } else {
+                        setNewStopSuggestions([]);
+                      }
+                    }}
+                    placeholder="Search Black Book (e.g. Echo, Belasco, Catalyst, Neumos)..."
+                    className="w-full px-2.5 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                  {newStopSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-zinc-900 border border-amber-500/50 rounded-xl shadow-2xl p-1.5 z-50 max-h-40 overflow-y-auto space-y-1">
+                      {newStopSuggestions.map(v => (
+                        <div
+                          key={v.id}
+                          onClick={() => {
+                            setNewStopVenue(v.name);
+                            if (v.city) setNewStopCity(v.city);
+                            if (v.state) setNewStopState(v.state);
+                            if (v.capacity) setNewStopCapacity(typeof v.capacity === 'number' ? v.capacity : parseInt(v.capacity) || 500);
+                            setNewStopBlackBookVenueId(v.id);
+                            if (v.fullAddress) setNewStopParking(`Address: ${v.fullAddress}`);
+                            setNewStopSuggestions([]);
+                            setNewStopSearchQuery('');
+                            triggerNotification?.(`Inserted "${v.name}" from Black Book!`);
+                          }}
+                          className="p-1.5 rounded-lg bg-zinc-950 hover:bg-amber-950/50 border border-zinc-800 hover:border-amber-500/40 cursor-pointer flex items-center justify-between transition-colors"
+                        >
+                          <div>
+                            <span className="text-xs font-bold text-white uppercase block">{v.name}</span>
+                            <span className="text-[8.5px] font-mono text-zinc-400">{v.city}{v.state ? `, ${v.state}` : ''} • Cap: {v.capacity || 'N/A'}</span>
+                          </div>
+                          <span className="text-[8.5px] font-mono text-amber-400 uppercase font-bold">
+                            Insert +
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[9px] text-zinc-400 uppercase font-bold block mb-1">Date</label>
@@ -1814,7 +1955,7 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="text-[9px] text-zinc-400 uppercase font-bold block mb-1">City</label>
                   <input
@@ -1832,6 +1973,15 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
                     value={newStopState}
                     onChange={e => setNewStopState(e.target.value)}
                     placeholder="CA"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9px] text-zinc-400 uppercase font-bold block mb-1">Capacity</label>
+                  <input
+                    type="number"
+                    value={newStopCapacity}
+                    onChange={e => setNewStopCapacity(parseInt(e.target.value) || 500)}
                     className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
                   />
                 </div>
@@ -1888,6 +2038,24 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
                     className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
                   />
                 </div>
+              </div>
+
+              {/* Seamless Black Book integration toggle */}
+              <div className="pt-1.5 border-t border-zinc-800/80">
+                <label className="flex items-center gap-2 cursor-pointer select-none group">
+                  <input
+                    type="checkbox"
+                    checked={newStopSaveToBlackBook}
+                    onChange={e => setNewStopSaveToBlackBook(e.target.checked)}
+                    className="w-4 h-4 rounded border-zinc-750 bg-zinc-900 text-amber-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-amber-500"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-[10px] font-mono text-zinc-300 group-hover:text-amber-300 transition-colors">
+                      Auto-sync venue to <strong className="text-amber-400">Black Book Rolodex</strong> if not yet registered
+                    </span>
+                  </div>
+                </label>
               </div>
             </div>
 

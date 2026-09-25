@@ -132,9 +132,9 @@ export const PromoterRegistrationSection: React.FC<PromoterRegistrationSectionPr
   setPromoterCountry,
   promoterTechRider,
   setPromoterTechRider,
-  promoterSecurityMap,
+  promoterSecurityMap = '',
   setPromoterSecurityMap,
-  promoterDeferTechSpecs,
+  promoterDeferTechSpecs = false,
   setPromoterDeferTechSpecs,
   promoterStripeConnected,
   setPromoterStripeConnected,
@@ -579,7 +579,7 @@ export const PromoterRegistrationSection: React.FC<PromoterRegistrationSectionPr
                 type="text" 
                 placeholder="HTTPS://DRIVE.GOOGLE.COM/FILE/... or N/A"
                 value={promoterSecurityMap}
-                onChange={(e) => setPromoterSecurityMap(e.target.value)}
+                onChange={(e) => setPromoterSecurityMap?.(e.target.value)}
                 autoComplete="new-password"
                 data-lpignore="true"
                 className="w-full bg-zinc-950 border border-yellow-500/30 focus:border-yellow-500 text-yellow-500 rounded p-2.5 text-xs font-mono outline-none placeholder-zinc-700"
@@ -590,8 +590,8 @@ export const PromoterRegistrationSection: React.FC<PromoterRegistrationSectionPr
               <label className="w-full p-3 rounded border bg-zinc-950 border-zinc-800 text-zinc-500 flex items-center justify-center gap-2 cursor-pointer hover:border-zinc-700 transition-colors">
                 <input 
                   type="checkbox" 
-                  checked={promoterDeferTechSpecs}
-                  onChange={(e) => setPromoterDeferTechSpecs(e.target.checked)}
+                  checked={Boolean(promoterDeferTechSpecs)}
+                  onChange={(e) => setPromoterDeferTechSpecs?.(e.target.checked)}
                   className="w-3 h-3 accent-yellow-500 rounded border-zinc-700 cursor-pointer"
                 />
                 <span className="text-[10px] font-mono font-bold text-zinc-400">DEFER DETAILED TECHNICAL SPECIFICATIONS</span>

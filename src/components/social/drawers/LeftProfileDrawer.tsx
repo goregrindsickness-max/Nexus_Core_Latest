@@ -290,6 +290,8 @@ export const LeftProfileDrawer: React.FC<LeftProfileDrawerProps> = (props) => {
     setShowAddItemModal = () => {}
   } = props;
 
+  const isPromoter = portalRole === 'promoter' || userProfile?.active_workspace === 'promoter' || userProfile?.account_type === 'promoter';
+
   const [newProdName, setNewProdName] = React.useState('');
   const [newProdPrice, setNewProdPrice] = React.useState('');
   const [newProdDesc, setNewProdDesc] = React.useState('');
@@ -490,26 +492,28 @@ if (!leftDrawerOpen) return null;
                         </button>
 
                         {/* Saved Payment Methods */}
-                        <button 
-                          type="button"
-                          onClick={() => setDrawerCurrentView('payment')} 
-                          className="w-full flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/60 hover:bg-zinc-900/90 border border-zinc-900 hover:border-zinc-800 transition-all duration-200 group cursor-pointer text-left"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 group-hover:border-purple-500/40 group-hover:bg-purple-500/15 group-hover:shadow-[0_0_10px_rgba(168,85,247,0.25)] transition-all shrink-0">
-                              <CreditCard className="w-4 h-4" />
+                        {!isPromoter && (
+                          <button 
+                            type="button"
+                            onClick={() => setDrawerCurrentView('payment')} 
+                            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/60 hover:bg-zinc-900/90 border border-zinc-900 hover:border-zinc-800 transition-all duration-200 group cursor-pointer text-left"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 group-hover:border-purple-500/40 group-hover:bg-purple-500/15 group-hover:shadow-[0_0_10px_rgba(168,85,247,0.25)] transition-all shrink-0">
+                                <CreditCard className="w-4 h-4" />
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors truncate">
+                                  Saved Payment Methods
+                                </span>
+                                <span className="text-[10px] text-zinc-500 group-hover:text-zinc-400 font-mono transition-colors truncate">
+                                  Digital wallets & 1-tap checkout
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors truncate">
-                                Saved Payment Methods
-                              </span>
-                              <span className="text-[10px] text-zinc-500 group-hover:text-zinc-400 font-mono transition-colors truncate">
-                                Digital wallets & 1-tap checkout
-                              </span>
-                            </div>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
-                        </button>
+                            <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                          </button>
+                        )}
 
                         {/* VIP Club Info */}
                         {!isEmbedded && (
@@ -536,7 +540,7 @@ if (!leftDrawerOpen) return null;
                         )}
 
                         {/* My Collections */}
-                        {!isEmbedded && (
+                        {!isEmbedded && !isPromoter && (
                           <button 
                             type="button"
                             onClick={() => setDrawerCurrentView('collections')} 
@@ -607,58 +611,62 @@ if (!leftDrawerOpen) return null;
                         </button>
 
                         {/* Band Archivist */}
-                        <button 
-                          type="button"
-                          onClick={() => setIsCommunityCuratorOpen(true)} 
-                          className="w-full flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/60 hover:bg-zinc-900/90 border border-zinc-900 hover:border-zinc-800 transition-all duration-200 group cursor-pointer text-left"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:border-amber-500/40 group-hover:bg-amber-500/15 group-hover:shadow-[0_0_10px_rgba(245,158,11,0.25)] transition-all shrink-0">
-                              <Disc className="w-4 h-4" />
+                        {!isPromoter && (
+                          <button 
+                            type="button"
+                            onClick={() => setIsCommunityCuratorOpen(true)} 
+                            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/60 hover:bg-zinc-900/90 border border-zinc-900 hover:border-zinc-800 transition-all duration-200 group cursor-pointer text-left"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:border-amber-500/40 group-hover:bg-amber-500/15 group-hover:shadow-[0_0_10px_rgba(245,158,11,0.25)] transition-all shrink-0">
+                                <Disc className="w-4 h-4" />
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors truncate">
+                                  Band Archivist
+                                </span>
+                                <span className="text-[10px] text-zinc-500 group-hover:text-zinc-400 font-mono transition-colors truncate">
+                                  Community archive & discography
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors truncate">
-                                Band Archivist
-                              </span>
-                              <span className="text-[10px] text-zinc-500 group-hover:text-zinc-400 font-mono transition-colors truncate">
-                                Community archive & discography
-                              </span>
-                            </div>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
-                        </button>
+                            <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                          </button>
+                        )}
                       </div>
 
                       {/* Scene Cred Block moved to bottom of root drawer view */}
-                      <div className="mx-1 mt-5 bg-zinc-950/60 border border-zinc-900 p-3.5 rounded-2xl space-y-3 shadow-md">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-[10px] font-black uppercase text-rose-400 tracking-wider font-mono flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-rose-500" /> Scene Cred
-                          </h4>
-                          <span className="bg-rose-500/10 text-rose-400 text-xs font-black px-2.5 py-0.5 rounded-full border border-rose-500/20">{profileSceneCred} PTS</span>
+                      {!isPromoter && (
+                        <div className="mx-1 mt-5 bg-zinc-950/60 border border-zinc-900 p-3.5 rounded-2xl space-y-3 shadow-md">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-[10px] font-black uppercase text-rose-400 tracking-wider font-mono flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-rose-500" /> Scene Cred
+                            </h4>
+                            <span className="bg-rose-500/10 text-rose-400 text-xs font-black px-2.5 py-0.5 rounded-full border border-rose-500/20">{profileSceneCred} PTS</span>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center text-[10px] uppercase font-bold text-zinc-400 border-b border-zinc-900/80 pb-1.5">
+                              <span className="flex items-center gap-1.5"><Ticket className="w-3.5 h-3.5 text-zinc-500" /> Digital Tickets Scanned</span>
+                              <span className="text-white font-mono">{digitalTicketsScanned} (+{digitalTicketsScanned * 20})</span>
+                            </div>
+                            <div className="flex justify-between items-center text-[10px] uppercase font-bold text-zinc-400 border-b border-zinc-900/80 pb-1.5">
+                              <span className="flex items-center gap-1.5"><ShoppingCart className="w-3.5 h-3.5 text-zinc-500" /> Physical Merch Bought</span>
+                              <span className="text-white font-mono">{physicalMerchBought} (+{physicalMerchBought * 50})</span>
+                            </div>
+                            <div className="flex justify-between items-center text-[10px] uppercase font-bold text-zinc-400 border-b border-zinc-900/80 pb-1.5">
+                              <span className="flex items-center gap-1.5"><Music className="w-3.5 h-3.5 text-zinc-500" /> Bands Discovered</span>
+                              <span className="text-white font-mono">{bandsDiscovered} (+{bandsDiscovered * 30})</span>
+                            </div>
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={() => setDrawerCurrentView('vip')}
+                            className="w-full bg-rose-600 hover:bg-rose-500 text-white font-black text-[10px] uppercase tracking-widest py-2 rounded-xl transition-colors cursor-pointer"
+                          >
+                            Unlock VIP Balcony Upgrade
+                          </button>
                         </div>
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center text-[10px] uppercase font-bold text-zinc-400 border-b border-zinc-900/80 pb-1.5">
-                            <span className="flex items-center gap-1.5"><Ticket className="w-3.5 h-3.5 text-zinc-500" /> Digital Tickets Scanned</span>
-                            <span className="text-white font-mono">{digitalTicketsScanned} (+{digitalTicketsScanned * 20})</span>
-                          </div>
-                          <div className="flex justify-between items-center text-[10px] uppercase font-bold text-zinc-400 border-b border-zinc-900/80 pb-1.5">
-                            <span className="flex items-center gap-1.5"><ShoppingCart className="w-3.5 h-3.5 text-zinc-500" /> Physical Merch Bought</span>
-                            <span className="text-white font-mono">{physicalMerchBought} (+{physicalMerchBought * 50})</span>
-                          </div>
-                          <div className="flex justify-between items-center text-[10px] uppercase font-bold text-zinc-400 border-b border-zinc-900/80 pb-1.5">
-                            <span className="flex items-center gap-1.5"><Music className="w-3.5 h-3.5 text-zinc-500" /> Bands Discovered</span>
-                            <span className="text-white font-mono">{bandsDiscovered} (+{bandsDiscovered * 30})</span>
-                          </div>
-                        </div>
-                        <button 
-                          type="button"
-                          onClick={() => setDrawerCurrentView('vip')}
-                          className="w-full bg-rose-600 hover:bg-rose-500 text-white font-black text-[10px] uppercase tracking-widest py-2 rounded-xl transition-colors cursor-pointer"
-                        >
-                          Unlock VIP Balcony Upgrade
-                        </button>
-                      </div>
+                      )}
                     </div>
                   <div className="p-4 border-t border-zinc-900 bg-zinc-950/50 mt-auto shrink-0">
                     <button onClick={() => { setLeftDrawerOpen(false); onLogout?.(); }} className="w-full py-3.5 bg-zinc-900 text-rose-500 text-xs font-black uppercase tracking-wider rounded-lg hover:bg-zinc-800 transition-colors">

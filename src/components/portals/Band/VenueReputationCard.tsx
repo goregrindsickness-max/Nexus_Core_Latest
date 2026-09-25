@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Users, Mail, Star, MessageSquare, Send, Plus, Edit2, ChevronLeft, ChevronRight, AlertOctagon, HelpCircle, Trash2, Mic2, Music, Building2, ChevronDown, ChevronUp } from 'lucide-react';
+import { MapPin, Users, Mail, Star, MessageSquare, Send, Plus, Edit2, ChevronLeft, ChevronRight, AlertOctagon, HelpCircle, Trash2, Mic2, Music, Building2, ChevronDown, ChevronUp, Globe, ExternalLink } from 'lucide-react';
 import { InventoryItem, UserReview } from '../../../types';
 import { getSupabase } from '../../../supabase';
 import TalentBuyerRow from './TalentBuyerRow';
@@ -370,9 +370,30 @@ export default function VenueReputationCard({
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <div className="flex items-center gap-1.5 text-zinc-400 pt-1.5 border-t border-zinc-900/40 mt-1">
-                  <Mail className="w-3.5 h-3.5 text-zinc-500 shrink-0" /> 
-                  <span className="select-all block truncate text-[11px] text-zinc-300 font-mono">{venue.email}</span>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-zinc-400 pt-1.5 border-t border-zinc-900/40 mt-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Mail className="w-3.5 h-3.5 text-zinc-500 shrink-0" /> 
+                    <span className="select-all block truncate text-[11px] text-zinc-300 font-mono">
+                      {venue.email || <span className="text-zinc-550 italic">Inquire on advance</span>}
+                    </span>
+                  </div>
+
+                  {venue.website && (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Globe className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                      <a 
+                        href={venue.website.startsWith('http') ? venue.website : `https://${venue.website}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-[11px] text-teal-400 hover:text-teal-300 hover:underline flex items-center gap-1 font-mono truncate"
+                        title={venue.website}
+                      >
+                        <span className="truncate">{venue.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</span>
+                        <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
 

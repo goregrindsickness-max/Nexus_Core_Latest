@@ -1,6 +1,6 @@
 import { PROMOTER_BILLING_MATRIX } from '../../../config/promoterBilling';
-import React, { useState, useEffect } from 'react';
-import { getSupabase } from '../../../supabase';
+import React, { useState, useEffect, useRef } from 'react';
+import { getSupabase, executeWithSchemaResilience } from '../../../supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import { hasRegisteredWorkspace } from '../../../types';
 const venueBg = "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/High%20energy%20concert%202.png";
@@ -310,8 +310,8 @@ export default function PromoterPortalView({
 
   // Track unread offers count for dynamic Contracts Hub badge
   const [unreadOffersCount, setUnreadOffersCount] = useState<number>(0);
-  const [hasInitializedOffers, setHasInitializedOffers] = useState<boolean>(false);
-  const [prevOffersLength, setPrevOffersLength] = useState<number>(0);
+  const hasInitializedOffersRef = useRef<boolean>(false);
+  const prevOffersLengthRef = useRef<number>(0);
 
   // Swipe dragging state for shows/drafts
   const [draggingShowId, setDraggingShowId] = useState<string | null>(null);
@@ -609,26 +609,28 @@ export default function PromoterPortalView({
   };
 
   useEffect(() => {
-    if (!hasInitializedOffers) {
-      setPrevOffersLength(promoterOffers.length);
+    if (!hasInitializedOffersRef.current) {
+      prevOffersLengthRef.current = promoterOffers.length;
       setUnreadOffersCount(activePortalTab === 'offers' ? 0 : promoterOffers.length);
-      setHasInitializedOffers(true);
+      hasInitializedOffersRef.current = true;
       return;
     }
 
     if (activePortalTab === 'offers') {
       setUnreadOffersCount(0);
-      setPrevOffersLength(promoterOffers.length);
+      prevOffersLengthRef.current = promoterOffers.length;
     } else {
-      if (promoterOffers.length > prevOffersLength) {
-        setUnreadOffersCount(prev => prev + (promoterOffers.length - prevOffersLength));
-        setPrevOffersLength(promoterOffers.length);
-      } else if (promoterOffers.length < prevOffersLength) {
-        setUnreadOffersCount(prev => Math.max(0, prev - (prevOffersLength - promoterOffers.length)));
-        setPrevOffersLength(promoterOffers.length);
+      if (promoterOffers.length > prevOffersLengthRef.current) {
+        const diff = promoterOffers.length - prevOffersLengthRef.current;
+        setUnreadOffersCount(prev => prev + diff);
+        prevOffersLengthRef.current = promoterOffers.length;
+      } else if (promoterOffers.length < prevOffersLengthRef.current) {
+        const diff = prevOffersLengthRef.current - promoterOffers.length;
+        setUnreadOffersCount(prev => Math.max(0, prev - diff));
+        prevOffersLengthRef.current = promoterOffers.length;
       }
     }
-  }, [activePortalTab, promoterOffers.length, prevOffersLength, hasInitializedOffers]);
+  }, [activePortalTab, promoterOffers.length]);
 
   // Scroll to top of the page on view / tab change within Promoter Portal
   useEffect(() => {
@@ -778,23 +780,59 @@ export default function PromoterPortalView({
   const [profileFormName, setProfileFormName] = useState(userProfile?.name || '');
   const [profileFormCompany, setProfileFormCompany] = useState(
     userProfile?.promoter_metadata?.brand_name || 
-    (userProfile?.name ? `${userProfile?.name} Promotions` : 'Subway Bookings')
+    userProfile?.promoter_metadata?.agency_name ||
+    userProfile?.promoter_agency ||
+    userProfile?.promoter_brand ||
+    userProfile?.promoter_name ||
+    'Nexus Live Productions'
   );
-  const [profileFormRegion, setProfileFormRegion] = useState(userProfile?.target_region || 'Texas');
-  const [profileFormAvatar, setProfileFormAvatar] = useState(userProfile?.promoter_logo || userProfile?.avatar_url || '');
-  const [profileFormRole, setProfileFormRole] = useState(userProfile?.role || 'Regional Promoter Agent');
-  const [profileGenreTags, setProfileGenreTags] = useState<string[]>(userProfile?.genre_tags || []);
+  const [profileFormRegion, setProfileFormRegion] = useState(userProfile?.target_region || userProfile?.promoter_metadata?.region || userProfile?.promoter_region || 'Texas');
+  const [profileFormAvatar, setProfileFormAvatar] = useState(userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.avatar_url || '');
+  const [profileFormRole, setProfileFormRole] = useState(userProfile?.promoter_metadata?.title || userProfile?.role || 'Lead Talent Buyer & Production Director');
+  const [profileGenreTags, setProfileGenreTags] = useState<string[]>(userProfile?.promoter_metadata?.genres || userProfile?.genre_tags || []);
 
   // Venue settings tabs controls inside settings modal
   const [settingsTab, setSettingsTab] = useState<'general' | 'home_venue' | 'portfolio'>('general');
 
   // Home Venue State Fields
-  const [homeVenueName, setHomeVenueName] = useState(userProfile?.promoter_metadata?.home_venue?.name || userProfile?.creative_metadata?.home_venue?.name || '');
-  const [homeVenueAddress, setHomeVenueAddress] = useState(userProfile?.promoter_metadata?.home_venue?.address || userProfile?.creative_metadata?.home_venue?.address || '');
-  const [homeVenueCity, setHomeVenueCity] = useState(userProfile?.promoter_metadata?.home_venue?.city || userProfile?.creative_metadata?.home_venue?.city || '');
-  const [homeVenueState, setHomeVenueState] = useState(userProfile?.promoter_metadata?.home_venue?.state_province || userProfile?.creative_metadata?.home_venue?.state_province || '');
-  const [homeVenueCountry, setHomeVenueCountry] = useState(userProfile?.promoter_metadata?.home_venue?.country || userProfile?.creative_metadata?.home_venue?.country || 'USA');
-  const [homeVenueCapacity, setHomeVenueCapacity] = useState(userProfile?.promoter_metadata?.home_venue?.capacity?.toString() || userProfile?.creative_metadata?.home_venue?.capacity?.toString() || '');
+  const [homeVenueName, setHomeVenueName] = useState(
+    userProfile?.promoter_metadata?.home_venue?.name || 
+    userProfile?.promoter_metadata?.brand_name ||
+    userProfile?.promoter_metadata?.agency_name ||
+    userProfile?.promoter_agency ||
+    userProfile?.creative_metadata?.home_venue?.name || 
+    ''
+  );
+  const [homeVenueAddress, setHomeVenueAddress] = useState(
+    userProfile?.promoter_metadata?.home_venue?.address || 
+    userProfile?.promoter_metadata?.street_address ||
+    userProfile?.creative_metadata?.home_venue?.address || 
+    ''
+  );
+  const [homeVenueCity, setHomeVenueCity] = useState(
+    userProfile?.promoter_metadata?.home_venue?.city || 
+    userProfile?.promoter_metadata?.city ||
+    userProfile?.creative_metadata?.home_venue?.city || 
+    ''
+  );
+  const [homeVenueState, setHomeVenueState] = useState(
+    userProfile?.promoter_metadata?.home_venue?.state_province || 
+    userProfile?.promoter_metadata?.state ||
+    userProfile?.creative_metadata?.home_venue?.state_province || 
+    ''
+  );
+  const [homeVenueCountry, setHomeVenueCountry] = useState(
+    userProfile?.promoter_metadata?.home_venue?.country || 
+    userProfile?.promoter_metadata?.country ||
+    userProfile?.creative_metadata?.home_venue?.country || 
+    'USA'
+  );
+  const [homeVenueCapacity, setHomeVenueCapacity] = useState(
+    userProfile?.promoter_metadata?.home_venue?.capacity?.toString() || 
+    userProfile?.promoter_metadata?.capacity?.toString() ||
+    userProfile?.creative_metadata?.home_venue?.capacity?.toString() || 
+    ''
+  );
   const [homeVenueLoadIn, setHomeVenueLoadIn] = useState(userProfile?.promoter_metadata?.home_venue?.load_in_time || userProfile?.creative_metadata?.home_venue?.load_in_time || '16:00');
   const [homeVenueDoors, setHomeVenueDoors] = useState(userProfile?.promoter_metadata?.home_venue?.doors_time || userProfile?.creative_metadata?.home_venue?.doors_time || '19:00');
   const [homeVenueSetTime, setHomeVenueSetTime] = useState(userProfile?.promoter_metadata?.home_venue?.set_time || userProfile?.creative_metadata?.home_venue?.set_time || '21:00');
@@ -806,22 +844,22 @@ export default function PromoterPortalView({
   const [newStageNameHome, setNewStageNameHome] = useState('');
 
   // Additional Extended Venue Facilities/Advanced Schedules/Technical Specs state
-  const [profileFormBookingEmail, setProfileFormBookingEmail] = useState(userProfile?.promoter_metadata?.booking_email || userProfile?.email || '');
+  const [profileFormBookingEmail, setProfileFormBookingEmail] = useState(userProfile?.promoter_metadata?.booking_email || userProfile?.promoter_booking_email || userProfile?.email || '');
   const [venueWifiNetwork, setVenueWifiNetwork] = useState(userProfile?.promoter_metadata?.home_venue?.wifi_network || userProfile?.creative_metadata?.home_venue?.wifi_network || '');
   const [venueWifiPassword, setVenueWifiPassword] = useState(userProfile?.promoter_metadata?.home_venue?.wifi_password || userProfile?.creative_metadata?.home_venue?.wifi_password || '');
   const [venueParking, setVenueParking] = useState(userProfile?.promoter_metadata?.home_venue?.parking_arrangements || userProfile?.creative_metadata?.home_venue?.parking_arrangements || '');
   const [venueDinner, setVenueDinner] = useState(userProfile?.promoter_metadata?.home_venue?.dinner_arrangements || userProfile?.creative_metadata?.home_venue?.dinner_arrangements || 'Buyout for each band member');
   const [venueMerchCall, setVenueMerchCall] = useState(userProfile?.promoter_metadata?.home_venue?.merch_call_time || userProfile?.creative_metadata?.home_venue?.merch_call_time || '17:00');
   const [venueSoundcheck, setVenueSoundcheck] = useState(userProfile?.promoter_metadata?.home_venue?.soundcheck_time || userProfile?.creative_metadata?.home_venue?.soundcheck_time || '18:00');
-  const [venueGearProvided, setVenueGearProvided] = useState(userProfile?.promoter_metadata?.home_venue?.gear_provided || userProfile?.creative_metadata?.home_venue?.gear_provided || '');
-  const [venueAudioRequirements, setVenueAudioRequirements] = useState(userProfile?.promoter_metadata?.home_venue?.audio_requirements || userProfile?.creative_metadata?.home_venue?.audio_requirements || '');
-  const [venueBacklineRequirements, setVenueBacklineRequirements] = useState(userProfile?.promoter_metadata?.home_venue?.backline_requirements || userProfile?.creative_metadata?.home_venue?.backline_requirements || '');
+  const [venueGearProvided, setVenueGearProvided] = useState(userProfile?.promoter_metadata?.home_venue?.gear_provided || userProfile?.promoter_metadata?.tech_rider || userProfile?.creative_metadata?.home_venue?.gear_provided || '');
+  const [venueAudioRequirements, setVenueAudioRequirements] = useState(userProfile?.promoter_metadata?.home_venue?.audio_requirements || userProfile?.promoter_metadata?.tech_rider || userProfile?.creative_metadata?.home_venue?.audio_requirements || '');
+  const [venueBacklineRequirements, setVenueBacklineRequirements] = useState(userProfile?.promoter_metadata?.home_venue?.backline_requirements || userProfile?.promoter_metadata?.security_map || userProfile?.creative_metadata?.home_venue?.backline_requirements || '');
 
   // Expansible genre clusters state (empty means all collapsed by default)
   const [expandedClusters, setExpandedClusters] = useState<string[]>([]);
 
   // Saved multi-venues portfolio list
-  const [savedVenuesList, setSavedVenuesList] = useState<any[]>(userProfile?.creative_metadata?.saved_venues || []);
+  const [savedVenuesList, setSavedVenuesList] = useState<any[]>(userProfile?.promoter_metadata?.saved_venues || userProfile?.creative_metadata?.saved_venues || []);
 
   // Scroll to top of the page when the subscription picker is activated
   useEffect(() => {
@@ -1539,28 +1577,75 @@ export default function PromoterPortalView({
     setProfileFormName(userProfile?.name || '');
     setProfileFormCompany(
       userProfile?.promoter_metadata?.brand_name || 
-      (userProfile?.name ? `${userProfile?.name} Promotions` : 'Subway Bookings')
+      userProfile?.promoter_metadata?.agency_name ||
+      userProfile?.promoter_agency ||
+      userProfile?.promoter_brand ||
+      userProfile?.promoter_name ||
+      'Nexus Live Productions'
     );
-    setProfileFormRegion(userProfile?.target_region || 'Texas');
-    setProfileFormAvatar(userProfile?.promoter_logo || userProfile?.avatar_url || '');
-    setProfileFormRole(userProfile?.role || 'Regional Promoter Agent');
-    setProfileGenreTags(userProfile?.genre_tags || []);
+    setProfileFormRegion(userProfile?.target_region || userProfile?.promoter_metadata?.region || userProfile?.promoter_region || 'Texas');
+    setProfileFormAvatar(userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.avatar_url || '');
+    setProfileFormRole(userProfile?.promoter_metadata?.title || userProfile?.role || 'Lead Talent Buyer & Production Director');
+    setProfileGenreTags(userProfile?.promoter_metadata?.genres || userProfile?.genre_tags || []);
+    setProfileFormBookingEmail(userProfile?.promoter_metadata?.booking_email || userProfile?.promoter_booking_email || userProfile?.email || '');
 
-    setHomeVenueName(userProfile?.creative_metadata?.home_venue?.name || '');
-    setHomeVenueAddress(userProfile?.creative_metadata?.home_venue?.address || '');
-    setHomeVenueCity(userProfile?.creative_metadata?.home_venue?.city || '');
-    setHomeVenueState(userProfile?.creative_metadata?.home_venue?.state_province || '');
-    setHomeVenueCountry(userProfile?.creative_metadata?.home_venue?.country || 'USA');
-    setHomeVenueCapacity(userProfile?.creative_metadata?.home_venue?.capacity?.toString() || '');
-    setHomeVenueLoadIn(userProfile?.creative_metadata?.home_venue?.load_in_time || '16:00');
-    setHomeVenueDoors(userProfile?.creative_metadata?.home_venue?.doors_time || '19:00');
-    setHomeVenueSetTime(userProfile?.creative_metadata?.home_venue?.set_time || '21:00');
-    setHomeVenueCurfew(userProfile?.creative_metadata?.home_venue?.curfew_time || '23:30');
-    setHomeVenueAttendance(userProfile?.creative_metadata?.home_venue?.expected_attendance || '300-700');
-    setHomeVenueAgeRestriction(userProfile?.creative_metadata?.home_venue?.age_restriction || 'All Ages');
-    setHomeVenueNotes(userProfile?.creative_metadata?.home_venue?.additional_notes || '');
-    setHomeVenueStages(userProfile?.creative_metadata?.home_venue?.stages || []);
-    setSavedVenuesList(userProfile?.creative_metadata?.saved_venues || []);
+    setHomeVenueName(
+      userProfile?.promoter_metadata?.home_venue?.name || 
+      userProfile?.promoter_metadata?.brand_name ||
+      userProfile?.promoter_metadata?.agency_name ||
+      userProfile?.promoter_agency ||
+      userProfile?.creative_metadata?.home_venue?.name || 
+      ''
+    );
+    setHomeVenueAddress(
+      userProfile?.promoter_metadata?.home_venue?.address || 
+      userProfile?.promoter_metadata?.street_address ||
+      userProfile?.creative_metadata?.home_venue?.address || 
+      ''
+    );
+    setHomeVenueCity(
+      userProfile?.promoter_metadata?.home_venue?.city || 
+      userProfile?.promoter_metadata?.city ||
+      userProfile?.creative_metadata?.home_venue?.city || 
+      ''
+    );
+    setHomeVenueState(
+      userProfile?.promoter_metadata?.home_venue?.state_province || 
+      userProfile?.promoter_metadata?.state ||
+      userProfile?.creative_metadata?.home_venue?.state_province || 
+      ''
+    );
+    setHomeVenueCountry(
+      userProfile?.promoter_metadata?.home_venue?.country || 
+      userProfile?.promoter_metadata?.country ||
+      userProfile?.creative_metadata?.home_venue?.country || 
+      'USA'
+    );
+    setHomeVenueCapacity(
+      userProfile?.promoter_metadata?.home_venue?.capacity?.toString() || 
+      userProfile?.promoter_metadata?.capacity?.toString() ||
+      userProfile?.creative_metadata?.home_venue?.capacity?.toString() || 
+      ''
+    );
+    setHomeVenueLoadIn(userProfile?.promoter_metadata?.home_venue?.load_in_time || userProfile?.creative_metadata?.home_venue?.load_in_time || '16:00');
+    setHomeVenueDoors(userProfile?.promoter_metadata?.home_venue?.doors_time || userProfile?.creative_metadata?.home_venue?.doors_time || '19:00');
+    setHomeVenueSetTime(userProfile?.promoter_metadata?.home_venue?.set_time || userProfile?.creative_metadata?.home_venue?.set_time || '21:00');
+    setHomeVenueCurfew(userProfile?.promoter_metadata?.home_venue?.curfew_time || userProfile?.creative_metadata?.home_venue?.curfew_time || '23:30');
+    setHomeVenueAttendance(userProfile?.promoter_metadata?.home_venue?.expected_attendance || userProfile?.creative_metadata?.home_venue?.expected_attendance || '300-700');
+    setHomeVenueAgeRestriction(userProfile?.promoter_metadata?.home_venue?.age_restriction || userProfile?.creative_metadata?.home_venue?.age_restriction || 'All Ages');
+    setHomeVenueNotes(userProfile?.promoter_metadata?.home_venue?.additional_notes || userProfile?.creative_metadata?.home_venue?.additional_notes || '');
+    setHomeVenueStages(userProfile?.promoter_metadata?.home_venue?.stages || userProfile?.creative_metadata?.home_venue?.stages || []);
+    setSavedVenuesList(userProfile?.promoter_metadata?.saved_venues || userProfile?.creative_metadata?.saved_venues || []);
+
+    setVenueWifiNetwork(userProfile?.promoter_metadata?.home_venue?.wifi_network || '');
+    setVenueWifiPassword(userProfile?.promoter_metadata?.home_venue?.wifi_password || '');
+    setVenueParking(userProfile?.promoter_metadata?.home_venue?.parking_arrangements || '');
+    setVenueDinner(userProfile?.promoter_metadata?.home_venue?.dinner_arrangements || 'Buyout for each band member');
+    setVenueMerchCall(userProfile?.promoter_metadata?.home_venue?.merch_call_time || '17:00');
+    setVenueSoundcheck(userProfile?.promoter_metadata?.home_venue?.soundcheck_time || '18:00');
+    setVenueGearProvided(userProfile?.promoter_metadata?.home_venue?.gear_provided || userProfile?.promoter_metadata?.tech_rider || '');
+    setVenueAudioRequirements(userProfile?.promoter_metadata?.home_venue?.audio_requirements || userProfile?.promoter_metadata?.tech_rider || '');
+    setVenueBacklineRequirements(userProfile?.promoter_metadata?.home_venue?.backline_requirements || userProfile?.promoter_metadata?.security_map || '');
   }, [userProfile]);
 
   // Local Utility to Compress Images to avoid payload size constraints
@@ -1647,14 +1732,26 @@ export default function PromoterPortalView({
     try {
       const updatedProfile = {
         ...userProfile,
-        name: profileFormName.trim(),
+        name: profileFormCompany.trim() || userProfile.name,
+        promoter_agency: profileFormCompany.trim(),
+        promoter_brand: profileFormCompany.trim(),
+        promoter_name: profileFormCompany.trim(),
+        promoter_logo: profileFormAvatar.trim() || userProfile?.promoter_logo,
+        promoter_region: profileFormRegion.trim(),
         role: profileFormRole.trim(),
         target_region: profileFormRegion.trim(),
-        avatar_url: profileFormAvatar.trim() || undefined,
+        avatar_url: userProfile?.avatar_url || profileFormAvatar.trim() || undefined,
         genre_tags: profileGenreTags,
         promoter_metadata: {
           ...(userProfile?.promoter_metadata || {}),
           brand_name: profileFormCompany.trim(),
+          agency_name: profileFormCompany.trim(),
+          company_name: profileFormCompany.trim(),
+          promoter_name: profileFormCompany.trim(),
+          title: profileFormRole.trim(),
+          region: profileFormRegion.trim(),
+          target_region: profileFormRegion.trim(),
+          logo_url: profileFormAvatar.trim() || userProfile?.promoter_metadata?.logo_url,
           booking_email: profileFormBookingEmail.trim(),
           home_venue: {
             name: homeVenueName.trim(),
@@ -1724,81 +1821,130 @@ export default function PromoterPortalView({
       // Also let's push to Supabase table 'profiles' if getSupabase is available
       const supabase = getSupabase();
       if (supabase && userProfile?.id) {
-        const { error } = await supabase
-          .from('profiles')
-          .upsert({
-            id: userProfile?.id,
-            full_name: profileFormName.trim(),
-            role: profileFormRole.trim(),
+        const promoterId = userProfile?.promoter_id || userProfile?.registered_promoter_id || userProfile?.id;
+        const profilePayload: any = {
+          id: userProfile?.id,
+          role: profileFormRole.trim(),
+          target_region: profileFormRegion.trim(),
+          genre_tags: profileGenreTags,
+          promoter_metadata: {
+            ...(userProfile?.promoter_metadata || {}),
+            brand_name: profileFormCompany.trim(),
+            agency_name: profileFormCompany.trim(),
+            company_name: profileFormCompany.trim(),
+            promoter_name: profileFormCompany.trim(),
+            title: profileFormRole.trim(),
+            region: profileFormRegion.trim(),
             target_region: profileFormRegion.trim(),
-            avatar_url: profileFormAvatar.trim() || null,
-            genre_tags: profileGenreTags,
-            promoter_metadata: {
-              ...(userProfile?.promoter_metadata || {}),
-              brand_name: profileFormCompany.trim(),
-              booking_email: profileFormBookingEmail.trim(),
-              home_venue: {
-                name: homeVenueName.trim(),
-                address: homeVenueAddress.trim(),
-                city: homeVenueCity.trim(),
-                state_province: homeVenueState.trim(),
-                country: homeVenueCountry.trim(),
-                capacity: homeVenueCapacity.trim() || undefined,
-                load_in_time: homeVenueLoadIn,
-                doors_time: homeVenueDoors,
-                set_time: homeVenueSetTime,
-                curfew_time: homeVenueCurfew,
-                expected_attendance: homeVenueAttendance,
-                age_restriction: homeVenueAgeRestriction,
-                additional_notes: homeVenueNotes.trim(),
-                stages: homeVenueStages,
-                wifi_network: venueWifiNetwork.trim(),
-                wifi_password: venueWifiPassword.trim(),
-                parking_arrangements: venueParking.trim(),
-                dinner_arrangements: venueDinner,
-                merch_call_time: venueMerchCall,
-                soundcheck_time: venueSoundcheck,
-                gear_provided: venueGearProvided.trim(),
-                audio_requirements: venueAudioRequirements.trim(),
-                backline_requirements: venueBacklineRequirements.trim()
-              },
-              saved_venues: savedVenuesList
+            booking_email: profileFormBookingEmail.trim(),
+            logo_url: profileFormAvatar.trim() || userProfile?.promoter_metadata?.logo_url || null,
+            home_venue: {
+              name: homeVenueName.trim(),
+              address: homeVenueAddress.trim(),
+              city: homeVenueCity.trim(),
+              state_province: homeVenueState.trim(),
+              country: homeVenueCountry.trim(),
+              capacity: homeVenueCapacity.trim() || undefined,
+              load_in_time: homeVenueLoadIn,
+              doors_time: homeVenueDoors,
+              set_time: homeVenueSetTime,
+              curfew_time: homeVenueCurfew,
+              expected_attendance: homeVenueAttendance,
+              age_restriction: homeVenueAgeRestriction,
+              additional_notes: homeVenueNotes.trim(),
+              stages: homeVenueStages,
+              wifi_network: venueWifiNetwork.trim(),
+              wifi_password: venueWifiPassword.trim(),
+              parking_arrangements: venueParking.trim(),
+              dinner_arrangements: venueDinner,
+              merch_call_time: venueMerchCall,
+              soundcheck_time: venueSoundcheck,
+              gear_provided: venueGearProvided.trim(),
+              audio_requirements: venueAudioRequirements.trim(),
+              backline_requirements: venueBacklineRequirements.trim()
             },
-            creative_metadata: {
-              ...(userProfile?.creative_metadata || {}),
-              booking_email: profileFormBookingEmail.trim(),
-              home_venue: {
-                name: homeVenueName.trim(),
-                address: homeVenueAddress.trim(),
-                city: homeVenueCity.trim(),
-                state_province: homeVenueState.trim(),
-                country: homeVenueCountry.trim(),
-                capacity: homeVenueCapacity.trim() || undefined,
-                load_in_time: homeVenueLoadIn,
-                doors_time: homeVenueDoors,
-                set_time: homeVenueSetTime,
-                curfew_time: homeVenueCurfew,
-                expected_attendance: homeVenueAttendance,
-                age_restriction: homeVenueAgeRestriction,
-                additional_notes: homeVenueNotes.trim(),
-                stages: homeVenueStages,
-                wifi_network: venueWifiNetwork.trim(),
-                wifi_password: venueWifiPassword.trim(),
-                parking_arrangements: venueParking.trim(),
-                dinner_arrangements: venueDinner,
-                merch_call_time: venueMerchCall,
-                soundcheck_time: venueSoundcheck,
-                gear_provided: venueGearProvided.trim(),
-                audio_requirements: venueAudioRequirements.trim(),
-                backline_requirements: venueBacklineRequirements.trim()
-              },
-              saved_venues: savedVenuesList
-            }
-          }, { onConflict: 'id' });
+            saved_venues: savedVenuesList
+          },
+          creative_metadata: {
+            ...(userProfile?.creative_metadata || {}),
+            booking_email: profileFormBookingEmail.trim(),
+            home_venue: {
+              name: homeVenueName.trim(),
+              address: homeVenueAddress.trim(),
+              city: homeVenueCity.trim(),
+              state_province: homeVenueState.trim(),
+              country: homeVenueCountry.trim(),
+              capacity: homeVenueCapacity.trim() || undefined,
+              load_in_time: homeVenueLoadIn,
+              doors_time: homeVenueDoors,
+              set_time: homeVenueSetTime,
+              curfew_time: homeVenueCurfew,
+              expected_attendance: homeVenueAttendance,
+              age_restriction: homeVenueAgeRestriction,
+              additional_notes: homeVenueNotes.trim(),
+              stages: homeVenueStages,
+              wifi_network: venueWifiNetwork.trim(),
+              wifi_password: venueWifiPassword.trim(),
+              parking_arrangements: venueParking.trim(),
+              dinner_arrangements: venueDinner,
+              merch_call_time: venueMerchCall,
+              soundcheck_time: venueSoundcheck,
+              gear_provided: venueGearProvided.trim(),
+              audio_requirements: venueAudioRequirements.trim(),
+              backline_requirements: venueBacklineRequirements.trim()
+            },
+            saved_venues: savedVenuesList
+          }
+        };
+        if (promoterId) {
+          profilePayload.promoter_id = promoterId;
+        }
+
+        const { error } = await executeWithSchemaResilience(
+          async (payload) => supabase.from('profiles').upsert(payload, { onConflict: 'id' }),
+          profilePayload
+        );
 
         if (error) {
-          console.error('[Supabase upsert error]:', error);
-          throw error;
+          console.warn('[Supabase upsert warning]:', error);
+        }
+
+        if (promoterId) {
+          try {
+            await executeWithSchemaResilience(
+              async (payload) => supabase.from('promoters').upsert(payload, { onConflict: 'id' }),
+              {
+                id: promoterId,
+                user_id: userProfile?.id,
+                creator_id: userProfile?.id,
+                owner_id: userProfile?.id,
+                corporate_name: profileFormCompany.trim() || 'Nexus Live Productions',
+                brand_name: profileFormCompany.trim(),
+                agency_name: profileFormCompany.trim(),
+                promoter_name: profileFormCompany.trim(),
+                name: profileFormCompany.trim(),
+                promoter_logo: profileFormAvatar.trim() || userProfile?.promoter_logo || null,
+                logo_url: profileFormAvatar.trim() || userProfile?.promoter_logo || null,
+                region: profileFormRegion.trim(),
+                target_region: profileFormRegion.trim(),
+                booking_email: profileFormBookingEmail.trim(),
+                title: profileFormRole.trim(),
+                home_venue: {
+                  name: homeVenueName.trim(),
+                  address: homeVenueAddress.trim(),
+                  city: homeVenueCity.trim(),
+                  state_province: homeVenueState.trim(),
+                  country: homeVenueCountry.trim(),
+                  capacity: homeVenueCapacity.trim() || undefined,
+                  gear_provided: venueGearProvided.trim(),
+                  audio_requirements: venueAudioRequirements.trim(),
+                  backline_requirements: venueBacklineRequirements.trim()
+                }
+              }
+            );
+          } catch (pErr) {
+            console.warn('[Promoter table secondary upsert skipped/failed]:', pErr);
+          }
         }
       }
 
@@ -3026,13 +3172,13 @@ export default function PromoterPortalView({
               {/* Profile Specifications Info */}
               <div className="min-w-0 flex-1 space-y-1">
                 <h1 className="text-xl sm:text-2xl font-black font-mono uppercase tracking-tight text-white flex items-center justify-center sm:justify-start gap-2">
-                  <span>{userProfile?.name || 'Promoter Agent'}</span>
+                  <span>{userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_metadata?.agency_name || userProfile?.promoter_agency || userProfile?.promoter_brand || userProfile?.promoter_name || 'Nexus Live Productions'}</span>
                 </h1>
                 
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-[10px] sm:text-xs text-zinc-400 font-mono leading-relaxed">
                   <span className="text-[#facc15] uppercase tracking-wider font-extrabold flex items-center gap-1">
                     <Building className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
-                    {userProfile?.promoter_metadata?.brand_name || (userProfile?.name ? `${userProfile?.name} Promotions` : 'Subway Bookings')}
+                    Live Event Booking &amp; Concert Promotions
                   </span>
                   <span className="text-zinc-750">•</span>
                   <span className="flex items-center gap-1">
@@ -3052,8 +3198,8 @@ export default function PromoterPortalView({
                 <div className="pt-2 flex justify-center sm:justify-start">
                   <div className="inline-flex items-center gap-1.5 text-zinc-450 bg-black/40 border border-yellow-500/20 px-2.5 py-1 rounded-lg font-mono text-[9px] uppercase tracking-wider">
                     <span className="text-zinc-550">Active Operator:</span>
-                    <span className="text-white font-bold">({userProfile?.name || 'Guest'})</span>
-                    <span className="text-yellow-400 font-bold">/ {userProfile?.role || 'Operator'}</span>
+                    <span className="text-white font-bold">({userProfile?.full_name || userProfile?.legal_name || userProfile?.name || 'Guest'})</span>
+                    <span className="text-yellow-400 font-bold">/ {userProfile?.promoter_metadata?.title || userProfile?.role || 'Lead Talent Buyer & Production Director'}</span>
                   </div>
                 </div>
               </div>
@@ -3356,7 +3502,7 @@ export default function PromoterPortalView({
               <div className="flex flex-col items-center text-center space-y-3 w-full">
                 {/* Promoter Name: Centered in one single line */}
                 <h1 className="text-2xl sm:text-3xl font-black font-mono uppercase tracking-tight text-white flex items-center justify-center gap-2">
-                  <span>{userProfile?.name || 'Promoter Agent'}</span>
+                  <span>{userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_metadata?.agency_name || userProfile?.promoter_agency || userProfile?.promoter_brand || userProfile?.promoter_name || 'Nexus Live Productions'}</span>
                 </h1>
 
                 {/* Team / Agency, location, and status under that on the same level */}
@@ -3365,7 +3511,7 @@ export default function PromoterPortalView({
                   <div className="text-sm text-zinc-350 font-mono flex items-center justify-center gap-1.5 p-1.5 px-3 bg-[#101319]/80 border border-zinc-900/80 rounded-xl shrink-0">
                     <span className="text-yellow-400 uppercase tracking-wider font-extrabold flex items-center gap-1">
                       <Building className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
-                      {userProfile?.promoter_metadata?.brand_name || (userProfile?.name ? `${userProfile?.name} Promotions` : 'Subway Bookings')}
+                      Live Event Booking &amp; Concert Promotions
                     </span>
                   </div>
 
@@ -3395,8 +3541,8 @@ export default function PromoterPortalView({
                   {/* Active Operator info */}
                   <div className="flex items-center gap-1.5 text-zinc-400 bg-black border border-yellow-500/25 px-3 py-1.5 rounded-xl font-mono text-[10px] uppercase shadow-[0_2px_10px_rgba(234,179,8,0.1)]">
                     <span className="text-zinc-550">Active Operator:</span>
-                    <span className="text-white font-black">({userProfile?.name || 'Guest'})</span>
-                    <span className="text-yellow-400 font-bold">/ {userProfile?.role || 'Operator'}</span>
+                    <span className="text-white font-black">({userProfile?.full_name || userProfile?.legal_name || userProfile?.name || 'Guest'})</span>
+                    <span className="text-yellow-400 font-bold">/ {userProfile?.promoter_metadata?.title || userProfile?.role || 'Lead Talent Buyer & Production Director'}</span>
                   </div>
                 </div>
               </div>

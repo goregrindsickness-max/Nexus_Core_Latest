@@ -301,6 +301,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [promoterState, setPromoterState] = useState('');
   const [promoterCountry, setPromoterCountry] = useState('USA');
   const [promoterTechRider, setPromoterTechRider] = useState('');
+  const [promoterSecurityMap, setPromoterSecurityMap] = useState('');
+  const [promoterDeferTechSpecs, setPromoterDeferTechSpecs] = useState(false);
   const [promoterLogo, setPromoterLogo] = useState('');
   const [promoterCoverImage, setPromoterCoverImage] = useState('');
   const [promoterSectionAOpen, setPromoterSectionAOpen] = useState(true);
@@ -682,17 +684,14 @@ export const LoginView: React.FC<LoginViewProps> = ({
     const hasPromoter = activeUserRoles.includes('PROMOTER');
     const resolvedBandLogo = bandLogoUrl || bandLogo || undefined;
     const resolvedBandBanner = bandBannerUrl || bandBanner || undefined;
-    const uploadedAvatarUrl = avatarUrl || creativeAvatarUrl || bandLogoUrl || labelAvatarUrl || promoterLogoUrl || null;
-    const existingAvatarUrl = profileAvatar || creativeAvatar || bandLogo || labelAvatar || promoterLogo || userProfile?.avatar_url || null;
+    // Personal avatar should ONLY come from personal profile avatar inputs, never overwritten by entity logos (promoter/band/label)
+    const uploadedAvatarUrl = avatarUrl || null;
+    const existingAvatarUrl = (profileAvatar && !profileAvatar.includes('Nexus%20Icon%20Circuits.png')) ? profileAvatar : (userProfile?.avatar_url || null);
     const resolvedAvatar = uploadedAvatarUrl || existingAvatarUrl || undefined;
-    const resolvedBanner = (
-      bannerUrl || profileBanner ||
-      creativeBannerUrl || creativeBanner ||
-      bandBannerUrl || bandBanner ||
-      labelBannerUrl || labelBanner ||
-      promoterCoverUrl || promoterCoverImage ||
-      userProfile?.banner_url || userProfile?.cover_url || undefined
-    );
+
+    const uploadedBannerUrl = bannerUrl || null;
+    const existingBannerUrl = (profileBanner && !profileBanner.includes('Nexus%20Icon%20Circuits.png')) ? profileBanner : (userProfile?.banner_url || userProfile?.cover_url || null);
+    const resolvedBanner = uploadedBannerUrl || existingBannerUrl || undefined;
     const finalProfileId = explicitUserId || ((isUpgradeMode && userProfile?.id) ? userProfile.id : (newUserId || generateUUID()));
     const finalScreenName = screenName.trim() || creativeHandle.trim() || 'user';
     const finalLegalName = legalName.trim() || creativeLegalFullName.trim() || fullName;
@@ -768,10 +767,16 @@ export const LoginView: React.FC<LoginViewProps> = ({
       banner_url: labelBannerUrl || labelBanner || undefined
     } : undefined;
 
+    const promoterAgencyName = promoterAgency.trim() || 'Nexus Live Productions';
     const promoterMetadata = hasPromoter ? {
-      agency_name: promoterAgency.trim(),
-      title: promoterTitle,
+      ...(userProfile?.promoter_metadata || {}),
+      agency_name: promoterAgencyName,
+      brand_name: promoterAgencyName,
+      promoter_name: promoterAgencyName,
+      company_name: promoterAgencyName,
+      title: promoterTitle || 'Lead Talent Buyer & Production Director',
       region: promoterRegion.trim(),
+      target_region: promoterRegion.trim(),
       phone: promoterPhone.trim(),
       admin_email: promoterAdminEmail.trim(),
       booking_email: promoterBookingEmail.trim(),
@@ -789,13 +794,42 @@ export const LoginView: React.FC<LoginViewProps> = ({
       street_address: promoterStreetAddress.trim(),
       city: promoterCity.trim(),
       state: promoterState.trim(),
-      country: promoterCountry,
+      state_province: promoterState.trim(),
+      country: promoterCountry || 'USA',
       tech_rider: promoterTechRider.trim(),
-      logo_url: promoterLogoUrl || promoterLogo || undefined,
-      cover_url: promoterCoverUrl || promoterCoverImage || undefined,
+      security_map: promoterSecurityMap ? promoterSecurityMap.trim() : undefined,
+      defer_tech_specs: promoterDeferTechSpecs,
+      logo_url: promoterLogoUrl || promoterLogo || userProfile?.promoter_logo || (userProfile?.promoter_metadata as any)?.logo_url || undefined,
+      cover_url: promoterCoverUrl || promoterCoverImage || userProfile?.promoter_cover_image || (userProfile?.promoter_metadata as any)?.cover_url || undefined,
+      banner_url: promoterCoverUrl || promoterCoverImage || userProfile?.promoter_cover_image || (userProfile?.promoter_metadata as any)?.banner_url || undefined,
       stripe_connected: promoterStripeConnected,
-      paypal_connected: promoterPaypalConnected
-    } : undefined;
+      paypal_connected: promoterPaypalConnected,
+      home_venue: {
+        ...(userProfile?.promoter_metadata?.home_venue || {}),
+        name: promoterAgencyName,
+        address: promoterStreetAddress.trim(),
+        city: promoterCity.trim(),
+        state_province: promoterState.trim(),
+        country: promoterCountry || 'USA',
+        capacity: promoterCapacity ? (Number(promoterCapacity) || promoterCapacity) : undefined,
+        load_in_time: userProfile?.promoter_metadata?.home_venue?.load_in_time || '16:00',
+        doors_time: userProfile?.promoter_metadata?.home_venue?.doors_time || '19:00',
+        set_time: userProfile?.promoter_metadata?.home_venue?.set_time || '21:00',
+        curfew_time: userProfile?.promoter_metadata?.home_venue?.curfew_time || '23:30',
+        expected_attendance: (Number(promoterCapacity) > 700 ? '700+' : Number(promoterCapacity) > 300 ? '300-700' : Number(promoterCapacity) > 100 ? '100-300' : '+100') as any,
+        age_restriction: userProfile?.promoter_metadata?.home_venue?.age_restriction || 'All Ages',
+        additional_notes: `Venue Class: ${promoterVenueClass || 'General'}. Pipeline: ${promoterPipeline || 'subscription'}`,
+        gear_provided: promoterTechRider.trim() || userProfile?.promoter_metadata?.home_venue?.gear_provided || '',
+        audio_requirements: promoterTechRider.trim() || userProfile?.promoter_metadata?.home_venue?.audio_requirements || '',
+        backline_requirements: promoterSecurityMap ? promoterSecurityMap.trim() : (userProfile?.promoter_metadata?.home_venue?.backline_requirements || ''),
+        wifi_network: userProfile?.promoter_metadata?.home_venue?.wifi_network || '',
+        wifi_password: userProfile?.promoter_metadata?.home_venue?.wifi_password || '',
+        soundcheck_time: userProfile?.promoter_metadata?.home_venue?.soundcheck_time || '18:00',
+        merch_call_time: userProfile?.promoter_metadata?.home_venue?.merch_call_time || '17:00',
+        stages: userProfile?.promoter_metadata?.home_venue?.stages || []
+      },
+      saved_venues: userProfile?.promoter_metadata?.saved_venues || []
+    } : (userProfile?.promoter_metadata || undefined);
 
     const creativeLocationParts = [creativeCity.trim(), creativeState.trim(), creativeCountry.trim()].filter(Boolean);
     const creativeFormattedLocation = creativeLocationParts.join(', ');
@@ -874,17 +908,27 @@ export const LoginView: React.FC<LoginViewProps> = ({
       ...(isUpgradeMode ? userProfile : {}),
       id: finalProfileId,
       full_name: isUpgradeMode ? (userProfile?.full_name || legalName.trim() || fullName.trim() || 'New User') : (legalName.trim() || fullName.trim() || 'New User'),
-      name: isUpgradeMode ? (userProfile?.name || userProfile?.full_name || fullName.trim() || finalScreenName.trim() || 'Operator') : (
-        fullName.trim() || finalScreenName.trim() || (hasLabel ? labelCompanyName.trim() : hasPromoter ? promoterAgency.trim() : hasCreative ? (creativeBusinessName.trim() || creativeHandle.trim()) : 'Operator')
-      ),
+      name: (hasPromoter && promoterAgencyName)
+        ? promoterAgencyName
+        : (hasLabel && labelCompanyName.trim())
+          ? labelCompanyName.trim()
+          : (hasCreative && (creativeBusinessName.trim() || creativeHandle.trim()))
+            ? (creativeBusinessName.trim() || creativeHandle.trim())
+            : (hasBand && bandName.trim())
+              ? bandName.trim()
+              : isUpgradeMode
+                ? (userProfile?.name || userProfile?.full_name || fullName.trim() || finalScreenName.trim() || 'Operator')
+                : (finalScreenName.trim() || fullName.trim() || 'Operator'),
       email: signupEmail.trim() || 'operator@nexus.core',
       pin: signUpUnlockPin.trim() || signUpPassword.trim() || '0000',
-      avatar_url: resolvedAvatar || undefined,
-      banner_url: resolvedBanner,
-      cover_url: resolvedBanner,
+      avatar_url: resolvedAvatar || (isUpgradeMode ? userProfile?.avatar_url : undefined),
+      banner_url: resolvedBanner || (isUpgradeMode ? userProfile?.banner_url : undefined),
+      cover_url: resolvedBanner || (isUpgradeMode ? userProfile?.cover_url : undefined),
       bandName: hasBand ? (bandName.trim() || userProfile?.bandName || userProfile?.band_name) : (userProfile?.bandName || userProfile?.band_name || undefined),
       band_name: hasBand ? (bandName.trim() || userProfile?.band_name || userProfile?.bandName) : (userProfile?.band_name || userProfile?.bandName || undefined),
       band_id: hasBand ? activeBandIdToUse : (activeBandIdToUse || userProfile?.band_id || undefined),
+      band_logo: hasBand ? resolvedBandLogo : (userProfile?.band_logo || (userProfile?.band_metadata as any)?.logo_url || undefined),
+      band_banner: hasBand ? resolvedBandBanner : (userProfile?.band_banner || (userProfile?.band_metadata as any)?.banner_url || undefined),
       account_type: isWorkspaceRegistration 
         ? 'industry pro'
         : (accountTypeToggle === 'Industry Pro' ? 'pro' : 'fan'),
@@ -928,10 +972,18 @@ export const LoginView: React.FC<LoginViewProps> = ({
       // JSONB Metadata Objects to guarantee zero data loss and clean column isolation
       label_metadata: labelMetadata,
       promoter_metadata: promoterMetadata,
-      band_metadata: bandMetadata,
+      band_metadata: hasBand ? bandMetadata : (userProfile?.band_metadata || undefined),
       creative_metadata: creativeMetadata,
       label_id: hasLabel ? (registeredLabelId || userProfile?.label_id) : (userProfile?.label_id || undefined),
       promoter_id: hasPromoter ? (registeredPromoterId || userProfile?.promoter_id) : (userProfile?.promoter_id || undefined),
+      promoter_agency: hasPromoter ? promoterAgencyName : (userProfile?.promoter_agency || undefined),
+      promoter_brand: hasPromoter ? promoterAgencyName : (userProfile?.promoter_brand || undefined),
+      promoter_name: hasPromoter ? promoterAgencyName : (userProfile?.promoter_name || undefined),
+      agency_name: hasPromoter ? promoterAgencyName : (userProfile?.agency_name || undefined),
+      promoter_logo: hasPromoter ? (promoterLogoUrl || promoterLogo || userProfile?.promoter_logo) : (userProfile?.promoter_logo || undefined),
+      promoter_cover_image: hasPromoter ? (promoterCoverUrl || promoterCoverImage || userProfile?.promoter_cover_image) : (userProfile?.promoter_cover_image || undefined),
+      target_region: hasPromoter ? (promoterRegion.trim() || userProfile?.target_region) : (userProfile?.target_region || undefined),
+      promoter_region: hasPromoter ? (promoterRegion.trim() || userProfile?.promoter_region) : (userProfile?.promoter_region || undefined),
       creative_id: hasCreative ? (registeredCreativeId || userProfile?.creative_id) : (userProfile?.creative_id || undefined),
       creative_name: hasCreative ? (creativeBusinessName.trim() || creativeHandle.trim() || userProfile?.creative_name) : (userProfile?.creative_name || undefined),
       creative_business_name: hasCreative ? (creativeBusinessName.trim() || userProfile?.creative_business_name) : (userProfile?.creative_business_name || undefined),
@@ -1068,6 +1120,65 @@ export const LoginView: React.FC<LoginViewProps> = ({
     };
 
     return sanitizeCreativePayload(cleanCreativePayload);
+  };
+
+  const buildPromoterObject = (explicitPromoterId?: string, logoUrlOverride?: string, bannerUrlOverride?: string, explicitUserId?: string) => {
+    const hasPromoter = activeUserRoles.includes('PROMOTER');
+    if (!hasPromoter) return undefined;
+    const finalProfileId = explicitUserId || ((isUpgradeMode && userProfile?.id) ? userProfile.id : (newUserId || generateUUID()));
+    const idToUse = explicitPromoterId || registeredPromoterId || (userProfile?.promoter_id) || generateUUID();
+    const pName = promoterAgency.trim() || 'Nexus Live Productions';
+    const resolvedLogo = logoUrlOverride || promoterLogo || (userProfile?.promoter_logo) || (userProfile?.promoter_metadata as any)?.logo_url || undefined;
+    const resolvedBanner = bannerUrlOverride || promoterCoverImage || (userProfile?.promoter_cover_image) || (userProfile?.promoter_metadata as any)?.cover_url || undefined;
+
+    return {
+      id: idToUse,
+      user_id: finalProfileId,
+      creator_id: finalProfileId,
+      owner_id: finalProfileId,
+      corporate_name: pName,
+      brand_name: pName,
+      agency_name: pName,
+      promoter_name: pName,
+      name: pName,
+      promoter_logo: resolvedLogo,
+      logo_url: resolvedLogo,
+      promoter_cover_image: resolvedBanner,
+      cover_url: resolvedBanner,
+      banner_url: resolvedBanner,
+      title: promoterTitle || 'Lead Talent Buyer & Production Director',
+      region: promoterRegion.trim() || 'Texas',
+      target_region: promoterRegion.trim() || 'Texas',
+      phone: promoterPhone.trim() || undefined,
+      admin_email: promoterAdminEmail.trim() || undefined,
+      booking_email: promoterBookingEmail.trim() || undefined,
+      venue_class: promoterVenueClass || undefined,
+      capacity: promoterCapacity ? (Number(promoterCapacity) || promoterCapacity) : undefined,
+      currency: promoterCurrency || 'USD',
+      instagram: promoterInstagram.trim() || undefined,
+      twitter: promoterTwitter.trim() || undefined,
+      website: promoterWebsite.trim() || undefined,
+      genres: promoterGenres || [],
+      street_address: promoterStreetAddress.trim() || undefined,
+      city: promoterCity.trim() || undefined,
+      state: promoterState.trim() || undefined,
+      state_province: promoterState.trim() || undefined,
+      country: promoterCountry || 'USA',
+      tech_rider: promoterTechRider.trim() || undefined,
+      security_map: promoterSecurityMap ? promoterSecurityMap.trim() : undefined,
+      defer_tech_specs: promoterDeferTechSpecs,
+      home_venue: {
+        name: pName,
+        address: promoterStreetAddress.trim(),
+        city: promoterCity.trim(),
+        state_province: promoterState.trim(),
+        country: promoterCountry || 'USA',
+        capacity: promoterCapacity ? (Number(promoterCapacity) || promoterCapacity) : undefined,
+        gear_provided: promoterTechRider.trim(),
+        audio_requirements: promoterTechRider.trim(),
+        backline_requirements: promoterSecurityMap ? promoterSecurityMap.trim() : ''
+      }
+    };
   };
 
   // Image File Handling
@@ -1304,6 +1415,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       }
       const initialBand = buildBandObject(undefined, undefined, newBandId, newProfileId);
       const initialCreative = buildCreativeObject(newCreativeId, undefined, undefined, newProfileId);
+      const initialPromoter = buildPromoterObject(newPromoterId, undefined, undefined, newProfileId);
 
       if (supabase && newProfileId) {
         setStatusMessage('Establishing secure database credentials...');
@@ -1325,6 +1437,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
           const creativeRes = await executeWithSchemaResilience(async (payload) => supabase.from('creatives').upsert(payload), initialCreative);
           if (creativeRes?.error) {
             console.warn('Creative secondary table registration warning (bypassed):', creativeRes.error);
+          }
+        }
+        if (hasPromoter && initialPromoter) {
+          const promoterRes = await executeWithSchemaResilience(async (payload) => supabase.from('promoters').upsert(payload), initialPromoter);
+          if (promoterRes?.error) {
+            console.warn('Promoter secondary table registration warning (bypassed):', promoterRes.error);
           }
         }
       }
@@ -1552,24 +1670,15 @@ export const LoginView: React.FC<LoginViewProps> = ({
         }
       }
 
+      const { data: updatedProfile } = await supabase.from('profiles').select('*').eq('id', newUserId).maybeSingle();
+
+      // Only use entity visual as personal avatar if no personal avatar exists at all and a personal visual was not set
       if (!finalAvatarUrl) {
-        finalAvatarUrl = (
-          processedCreativeAvatar ||
-          processedBandLogo ||
-          processedLabelAvatar ||
-          processedPromoterLogo ||
-          finalAvatarUrl
-        );
+        finalAvatarUrl = userProfile?.avatar_url || updatedProfile?.avatar_url || (processedBandLogo ? undefined : undefined);
       }
 
       if (!finalBannerUrl) {
-        finalBannerUrl = (
-          processedCreativeBanner ||
-          processedBandBanner ||
-          processedLabelBanner ||
-          processedPromoterCover ||
-          finalBannerUrl
-        );
+        finalBannerUrl = userProfile?.banner_url || userProfile?.cover_url || updatedProfile?.banner_url || undefined;
       }
 
       const freshProfileObj = buildProfileObject(
@@ -1586,8 +1695,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
         activeBandId,
         newUserId
       );
-
-      const { data: updatedProfile } = await supabase.from('profiles').select('*').eq('id', newUserId).maybeSingle();
       
       const profileToUse: any = {
         ...(updatedProfile || {}),
@@ -1595,55 +1702,43 @@ export const LoginView: React.FC<LoginViewProps> = ({
         account_type: isWorkspaceRegistration ? 'industry pro' : (accountTypeToggle === 'Industry Pro' ? 'industry pro' : 'fan')
       };
 
-      const uploadedFinalAvatar = (
-    finalAvatarUrl ||
-    processedCreativeAvatar ||
-    processedBandLogo ||
-    processedLabelAvatar ||
-    processedPromoterLogo ||
-    null
-  );
+      // Personal avatar must NEVER be overwritten by promoter logo
+      const uploadedFinalAvatar = finalAvatarUrl || null;
+      const existingFinalAvatar = (
+        freshProfileObj.avatar_url ||
+        updatedProfile?.avatar_url ||
+        updatedProfile?.avatar ||
+        userProfile?.avatar_url ||
+        null
+      );
 
-  const existingFinalAvatar = (
-    freshProfileObj.avatar_url ||
-    updatedProfile?.avatar_url ||
-    updatedProfile?.avatar ||
-    null
-  );
+      const resolvedFinalAvatar = uploadedFinalAvatar || existingFinalAvatar || null;
 
-  // 1. Fall back to null instead of undefined
-  const resolvedFinalAvatar = uploadedFinalAvatar || existingFinalAvatar || null;
+      const uploadedFinalCover = finalBannerUrl || null;
+      const existingFinalCover = (
+        freshProfileObj.cover_url ||
+        freshProfileObj.banner_url ||
+        updatedProfile?.cover_url ||
+        updatedProfile?.banner_url ||
+        userProfile?.banner_url ||
+        userProfile?.cover_url ||
+        null
+      );
 
-  const uploadedFinalCover = (
-    finalBannerUrl ||
-    processedCreativeBanner ||
-    processedBandBanner ||
-    processedLabelBanner ||
-    processedPromoterCover ||
-    null
-  );
+      const resolvedFinalCover = uploadedFinalCover || existingFinalCover || null;
 
-  const existingFinalCover = (
-    freshProfileObj.cover_url ||
-    freshProfileObj.banner_url ||
-    updatedProfile?.cover_url ||
-    updatedProfile?.banner_url ||
-    null
-  );
+      if (resolvedFinalAvatar) {
+        profileToUse.avatar_url = resolvedFinalAvatar;
+        profileToUse.avatar = resolvedFinalAvatar;
+        profileToUse.profile_image = resolvedFinalAvatar;
+      }
 
-  // 2. Fall back to null instead of undefined
-  const resolvedFinalCover = uploadedFinalCover || existingFinalCover || null;
-
-  // 3. Directly assign them to profileToUse without the conditional 'if' checks
-  // This ensures they overwrite any nulls and actually send to Supabase
-  profileToUse.avatar_url = resolvedFinalAvatar;
-  profileToUse.avatar = resolvedFinalAvatar;
-  profileToUse.profile_image = resolvedFinalAvatar;
-
-  profileToUse.banner_url = resolvedFinalCover;
-  profileToUse.cover_url = resolvedFinalCover;
-  profileToUse.cover_image = resolvedFinalCover;
-  profileToUse.banner = resolvedFinalCover;
+      if (resolvedFinalCover) {
+        profileToUse.banner_url = resolvedFinalCover;
+        profileToUse.cover_url = resolvedFinalCover;
+        profileToUse.cover_image = resolvedFinalCover;
+        profileToUse.banner = resolvedFinalCover;
+      }
 
       if (hasCreative) {
         profileToUse.creative_id = activeCreativeId || registeredCreativeId || newUserId;
@@ -1671,6 +1766,50 @@ export const LoginView: React.FC<LoginViewProps> = ({
         };
       }
 
+      if (hasPromoter) {
+        const activePromoterId = registeredPromoterId || profileToUse.promoter_id || newUserId;
+        profileToUse.promoter_id = activePromoterId;
+        const pName = promoterAgency.trim() || profileToUse.promoter_agency || profileToUse.promoter_brand || profileToUse.promoter_name || 'Nexus Live Productions';
+        profileToUse.promoter_agency = pName;
+        profileToUse.promoter_brand = pName;
+        profileToUse.promoter_name = pName;
+        profileToUse.agency_name = pName;
+        if (processedPromoterLogo) profileToUse.promoter_logo = processedPromoterLogo;
+        if (processedPromoterCover) profileToUse.promoter_cover_image = processedPromoterCover;
+        profileToUse.target_region = promoterRegion.trim() || profileToUse.target_region || 'Texas';
+        profileToUse.promoter_region = promoterRegion.trim() || profileToUse.promoter_region || 'Texas';
+        profileToUse.promoter_metadata = {
+          ...(userProfile?.promoter_metadata || {}),
+          ...(profileToUse.promoter_metadata || {}),
+          brand_name: pName,
+          agency_name: pName,
+          company_name: pName,
+          promoter_name: pName,
+          title: promoterTitle || profileToUse.promoter_metadata?.title || 'Lead Talent Buyer & Production Director',
+          region: promoterRegion.trim() || profileToUse.promoter_metadata?.region || 'Texas',
+          target_region: promoterRegion.trim() || profileToUse.promoter_metadata?.target_region || 'Texas',
+          phone: promoterPhone.trim() || profileToUse.promoter_metadata?.phone,
+          admin_email: promoterAdminEmail.trim() || profileToUse.promoter_metadata?.admin_email,
+          booking_email: promoterBookingEmail.trim() || profileToUse.promoter_metadata?.booking_email,
+          logo_url: processedPromoterLogo || profileToUse.promoter_logo || profileToUse.promoter_metadata?.logo_url,
+          cover_url: processedPromoterCover || profileToUse.promoter_cover_image || profileToUse.promoter_metadata?.cover_url,
+          banner_url: processedPromoterCover || profileToUse.promoter_cover_image || profileToUse.promoter_metadata?.banner_url,
+          home_venue: {
+            ...(userProfile?.promoter_metadata?.home_venue || {}),
+            ...(profileToUse.promoter_metadata?.home_venue || {}),
+            name: pName,
+            address: promoterStreetAddress.trim() || profileToUse.promoter_metadata?.home_venue?.address || '',
+            city: promoterCity.trim() || profileToUse.promoter_metadata?.home_venue?.city || '',
+            state_province: promoterState.trim() || profileToUse.promoter_metadata?.home_venue?.state_province || '',
+            country: promoterCountry || profileToUse.promoter_metadata?.home_venue?.country || 'USA',
+            capacity: promoterCapacity ? (Number(promoterCapacity) || promoterCapacity) : profileToUse.promoter_metadata?.home_venue?.capacity,
+            gear_provided: promoterTechRider.trim() || profileToUse.promoter_metadata?.home_venue?.gear_provided || '',
+            audio_requirements: promoterTechRider.trim() || profileToUse.promoter_metadata?.home_venue?.audio_requirements || '',
+            backline_requirements: promoterSecurityMap ? promoterSecurityMap.trim() : (profileToUse.promoter_metadata?.home_venue?.backline_requirements || '')
+          }
+        };
+      }
+
       const activeBandIdToKeep = (hasBand && activeBandId) ? activeBandId : (updatedProfile?.band_id || userProfile?.band_id || freshProfileObj.band_id);
       const activeBandNameToKeep = (hasBand && bandName.trim()) ? bandName.trim() : (updatedProfile?.band_name || updatedProfile?.bandName || userProfile?.band_name || userProfile?.bandName || freshProfileObj.band_name || freshProfileObj.bandName);
 
@@ -1681,6 +1820,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
           profileToUse.bandName = activeBandNameToKeep;
         }
       }
+
+      // Preserve band metadata & visuals so promoter onboarding never overwrites them
+      profileToUse.band_metadata = (hasBand && freshProfileObj.band_metadata) ? freshProfileObj.band_metadata : (userProfile?.band_metadata || updatedProfile?.band_metadata || freshProfileObj.band_metadata);
+      profileToUse.band_logo = (hasBand && processedBandLogo) ? processedBandLogo : (userProfile?.band_logo || updatedProfile?.band_logo || (userProfile?.band_metadata as any)?.logo_url);
+      profileToUse.band_banner = (hasBand && processedBandBanner) ? processedBandBanner : (userProfile?.band_banner || updatedProfile?.band_banner || (userProfile?.band_metadata as any)?.banner_url);
 
       const isProAccount = profileToUse.account_type === 'industry pro' || profileToUse.account_type === 'pro' || isWorkspaceRegistration || accountTypeToggle === 'Industry Pro';
 
@@ -1709,6 +1853,15 @@ export const LoginView: React.FC<LoginViewProps> = ({
       console.log('Final Payload Sent to DB:', JSON.stringify(profileToUse, null, 2));
       if (supabase && newUserId) {
         await executeSanitizedProfileUpsert(supabase, profileToUse);
+        if (hasPromoter) {
+          const finalPromoterObj = buildPromoterObject(profileToUse.promoter_id, processedPromoterLogo, processedPromoterCover, newUserId);
+          if (finalPromoterObj) {
+            const promoterRes = await executeWithSchemaResilience(async (payload) => supabase.from('promoters').upsert(payload), finalPromoterObj);
+            if (promoterRes?.error) {
+              console.warn('Promoter secondary table visuals update warning (bypassed):', promoterRes.error);
+            }
+          }
+        }
       }
 
       const finalBandObj = hasBand ? buildBandObject(processedBandLogo, processedBandBanner, activeBandId, newUserId) : undefined;
@@ -1762,6 +1915,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
       const supabase = getSupabase();
       if (supabase) {
         await executeSanitizedProfileUpsert(supabase, stagedSignupData.newProfile);
+        const finalPromoterObj = buildPromoterObject(stagedSignupData.newProfile.promoter_id, undefined, undefined, stagedSignupData.newProfile.id);
+        if (finalPromoterObj) {
+          await executeWithSchemaResilience(async (payload) => supabase.from('promoters').upsert(payload), finalPromoterObj);
+        }
       }
       setShowPromoterCheckoutModal(false);
       onLogin(stagedSignupData.newProfile, stagedSignupData.newBand, stagedSignupData.newBandId);
@@ -1777,6 +1934,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
     const supabase = getSupabase();
     if (supabase) {
       await executeSanitizedProfileUpsert(supabase, stagedSignupData.newProfile);
+      const finalPromoterObj = buildPromoterObject(stagedSignupData.newProfile.promoter_id, undefined, undefined, stagedSignupData.newProfile.id);
+      if (finalPromoterObj) {
+        await executeWithSchemaResilience(async (payload) => supabase.from('promoters').upsert(payload), finalPromoterObj);
+      }
     }
     setShowPromoterCheckoutModal(false);
     onLogin(stagedSignupData.newProfile, stagedSignupData.newBand, stagedSignupData.newBandId);
@@ -2104,6 +2265,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
                           setPromoterCountry={setPromoterCountry}
                           promoterTechRider={promoterTechRider}
                           setPromoterTechRider={setPromoterTechRider}
+                          promoterSecurityMap={promoterSecurityMap}
+                          setPromoterSecurityMap={setPromoterSecurityMap}
+                          promoterDeferTechSpecs={promoterDeferTechSpecs}
+                          setPromoterDeferTechSpecs={setPromoterDeferTechSpecs}
                           promoterLogo={promoterLogo}
                           setPromoterLogo={setPromoterLogo}
                           promoterCoverImage={promoterCoverImage}

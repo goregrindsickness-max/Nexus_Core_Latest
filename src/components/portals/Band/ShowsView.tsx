@@ -42,7 +42,12 @@ import {
   Unlink,
   Share2,
   Key,
-  Settings
+  Settings,
+  Layers,
+  Eye,
+  EyeOff,
+  Building2,
+  BookOpen
 } from 'lucide-react';
 
 export interface ShowWeatherWarning {
@@ -236,6 +241,9 @@ import DaySheetPrintView from './DaySheetPrintView';
 import { FieldIntel } from './FieldIntel';
 import CoOpRouteStagingView from './CoOpRouteStagingView';
 import PostShowReview from './PostShowReview';
+import { tourPackageManager, TourPackageRecord, TourPackageStop } from '../../../lib/tourPackageManager';
+import { saveVenueToBlackBook, isVenueInBlackBook } from '../../../services/venueSearchService';
+import { resolveLocationCoordinates, getProceduralLatLng } from '../../../lib/geoResolution';
 
 const concertBg = "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/High%20energy%20concert%202.png";
 const darkMapAsset = "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Dark%20World%20Map.png";
@@ -288,108 +296,40 @@ interface ShowsViewProps {
   activeClearanceLevel?: number;
 }
 
-// Map helper to map common cities / venues to SVG coordinates (0 - 800 width, 0 - 450 height)
-const CITY_COORDINATES: Record<string, { x: number; y: number; label: string }> = {
-  'Denison': { x: 395, y: 325, label: 'Denison, TX' },
-  'LA': { x: 120, y: 310, label: 'Los Angeles' },
-  'SF': { x: 80, y: 240, label: 'San Francisco' },
-  'TX': { x: 380, y: 360, label: 'Austin/Texas' },
-  'IL': { x: 540, y: 155, label: 'Chicago' },
-  'WI': { x: 530, y: 130, label: 'Cudahy/WI' },
-  'IN': { x: 560, y: 170, label: 'Fort Wayne/IN' },
-  'CO': { x: 280, y: 210, label: 'Denver' },
-  'MI': { x: 590, y: 150, label: 'Detroit' },
-  'NY': { x: 710, y: 140, label: 'New York' },
-  'Seattle': { x: 100, y: 70, label: 'Seattle' },
-  'Portland': { x: 95, y: 100, label: 'Portland' }
-};
+// Tour layer palette for distinguishing individual tours on Mapbox
+export const TOUR_LAYER_PALETTE = [
+  { hex: '#f59e0b', ring: 'rgba(245, 158, 11, 0.45)', name: 'Amber Glow' },
+  { hex: '#ec4899', ring: 'rgba(236, 72, 153, 0.45)', name: 'Neon Fuchsia' },
+  { hex: '#8b5cf6', ring: 'rgba(139, 92, 246, 0.45)', name: 'Electric Purple' },
+  { hex: '#10b981', ring: 'rgba(16, 185, 129, 0.45)', name: 'Emerald Spark' },
+  { hex: '#0ea5e9', ring: 'rgba(14, 165, 233, 0.45)', name: 'Sky Cyan' },
+  { hex: '#f97316', ring: 'rgba(249, 115, 22, 0.45)', name: 'Solar Flare' }
+];
 
-// Map helper to map common cities/venues to precise global GIS Geo Coordinate pairs [lng, lat]
-const CITY_GEOLOCATIONS: Record<string, { lng: number; lat: number; label: string }> = {
-  'Denison': { lng: -96.5367, lat: 33.7557, label: 'Denison, TX, USA' },
-  'LA': { lng: -118.2437, lat: 34.0522, label: 'Los Angeles, USA' },
-  'SF': { lng: -122.4194, lat: 37.7749, label: 'San Francisco, USA' },
-  'Texas': { lng: -97.7431, lat: 30.2672, label: 'Austin, TX, USA' },
-  'Austin': { lng: -97.7431, lat: 30.2672, label: 'Austin, TX, USA' },
-  'TX': { lng: -97.7431, lat: 30.2672, label: 'Austin, TX, USA' },
-  'Chicago': { lng: -87.6298, lat: 41.8781, label: 'Chicago, IL, USA' },
-  'IL': { lng: -87.6298, lat: 41.8781, label: 'Chicago, IL, USA' },
-  'WI': { lng: -87.8612, lat: 42.9556, label: 'Cudahy, WI, USA' },
-  'Cudahy': { lng: -87.8612, lat: 42.9556, label: 'Cudahy, WI, USA' },
-  'IN': { lng: -85.1394, lat: 41.0793, label: 'Fort Wayne, IN, USA' },
-  'Fort Wayne': { lng: -85.1394, lat: 41.0793, label: 'Fort Wayne, IN, USA' },
-  'CO': { lng: -104.9903, lat: 39.7392, label: 'Denver, CO, USA' },
-  'Denver': { lng: -104.9903, lat: 39.7392, label: 'Denver, CO, USA' },
-  'MI': { lng: -83.0458, lat: 42.3314, label: 'Detroit, MI, USA' },
-  'Detroit': { lng: -83.0458, lat: 42.3314, label: 'Detroit, MI, USA' },
-  'NY': { lng: -74.0060, lat: 40.7128, label: 'New York, NY, USA' },
-  'New York': { lng: -74.0060, lat: 40.7128, label: 'New York, NY, USA' },
-  'Seattle': { lng: -122.3321, lat: 47.6062, label: 'Seattle, WA, USA' },
-  'Portland': { lng: -122.6765, lat: 45.5231, label: 'Portland, OR, USA' },
-  
-  // International tour stops
-  'London': { lng: -0.1278, lat: 51.5074, label: 'London, UK' },
-  'Paris': { lng: 2.3522, lat: 48.8566, label: 'Paris, FR' },
-  'Berlin': { lng: 13.4050, lat: 52.5200, label: 'Berlin, DE' },
-  'Tokyo': { lng: 139.6503, lat: 35.6762, label: 'Tokyo, JP' },
-  'Sydney': { lng: 151.2093, lat: -33.8688, label: 'Sydney, AU' },
-  'Toronto': { lng: -79.3832, lat: 43.6532, label: 'Toronto, CA' },
-  'Montreal': { lng: -73.5673, lat: 45.5017, label: 'Montreal, CA' },
-  'Vancouver': { lng: -123.1207, lat: 49.2827, label: 'Vancouver, CA' },
-  'Mumbai': { lng: 72.8777, lat: 19.0760, label: 'Mumbai, IN' },
-  'Rio': { lng: -43.1729, lat: -22.9068, label: 'Rio de Janeiro, BR' },
-  'Mexico City': { lng: -99.1332, lat: 19.4326, label: 'Mexico City, MX' },
-  'Melbourne': { lng: 144.9631, lat: -37.8136, label: 'Melbourne, AU' },
-  'Amsterdam': { lng: 4.8952, lat: 52.3702, label: 'Amsterdam, NL' }
-};
-
-// Generative procedural coord helper so custom or international entries are DETERMINISTICALLY mapped 
-function getProceduralLatLng(str: string): { lng: number; lat: number } {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  // Generates lng between -120 and -75 (North America focus by default instead of positive / African longitudes!)
-  const l = -120 + (Math.abs(hash) % 45);
-  // Generates lat between 28 and 48 
-  const t = 28 + (Math.abs(hash >> 3) % 20);
-  return { lng: l, lat: t };
+export function findTourStopGeoLocation(stop: TourPackageStop, index: number = 0): { lng: number; lat: number } {
+  return resolveLocationCoordinates({
+    city: stop.city,
+    state: stop.state,
+    venueName: stop.venueName,
+    venueLat: stop.venue_lat,
+    venueLng: stop.venue_lng,
+    fallbackKey: `${stop.city || ''} ${stop.venueName || stop.id}`,
+    stopIndex: index
+  });
 }
 
-function findShowGeoLocation(show: Show): { lng: number; lat: number } {
-  // First priority: check if show.venue_lat and show.venue_lng are provided
-  if (typeof show.venue_lat === 'number' && typeof show.venue_lng === 'number' && show.venue_lat !== 0 && show.venue_lng !== 0) {
-    return { lng: show.venue_lng, lat: show.venue_lat };
-  }
-
-  // Combine venue details to ensure robust query matching
-  const textElements = [
-    show.festival_name,
-    show.name,
-    show.city,
-    show.state_province,
-    show.country
-  ].filter(Boolean);
-
-  const text = textElements.join(' ').toLowerCase();
-
-  for (const [key, geo] of Object.entries(CITY_GEOLOCATIONS)) {
-    if (text.includes(key.toLowerCase())) {
-      return { lng: geo.lng, lat: geo.lat };
-    }
-  }
-  
-  // Look for any raw coordinates in double format e.g. "45.10,-75.30"
-  const geoMatch = show.name.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
-  if (geoMatch) {
-    const parsedLat = parseFloat(geoMatch[1]);
-    const parsedLng = parseFloat(geoMatch[2]);
-    if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
-      return { lng: parsedLng, lat: parsedLat };
-    }
-  }
-
-  return getProceduralLatLng(show.name || show.id);
+export function findShowGeoLocation(show: Show, index: number = 0): { lng: number; lat: number } {
+  return resolveLocationCoordinates({
+    city: show.city,
+    state: show.state_province,
+    country: show.country,
+    venueName: show.name,
+    festivalName: show.festival_name,
+    venueLat: show.venue_lat,
+    venueLng: show.venue_lng,
+    fallbackKey: `${show.city || ''} ${show.name || show.id}`,
+    stopIndex: index
+  });
 }
 
 const getShowTypeDetails = (stop: Show) => {
@@ -543,6 +483,41 @@ export default function ShowsView({
   const [showTokenConfigModal, setShowTokenConfigModal] = useState<boolean>(false);
   const [tokenInputVal, setTokenInputVal] = useState<string>('');
   const [mapError, setMapError] = useState(false);
+
+  // Tour Package Layers & Separate Tour Management State
+  const [allTourPackages, setAllTourPackages] = useState<TourPackageRecord[]>(() => tourPackageManager.getAllTours());
+  const [selectedTourId, setSelectedTourId] = useState<string | null>(null);
+  const [showPersonalShowsLayer, setShowPersonalShowsLayer] = useState<boolean>(true);
+  const [activeTourLayerIds, setActiveTourLayerIds] = useState<Set<string>>(() => new Set(tourPackageManager.getAllTours().map(t => t.id)));
+  const [isLayersPanelOpen, setIsLayersPanelOpen] = useState<boolean>(false);
+  const [isMapLoaded, setIsMapLoaded] = useState<boolean>(false);
+  const [selectedTourStopPopup, setSelectedTourStopPopup] = useState<{
+    tour: TourPackageRecord;
+    stop: TourPackageStop;
+    color: { hex: string; ring: string; name: string };
+  } | null>(null);
+
+  // Tour markers ref separate from personal markers
+  const tourMarkersRef = useRef<Record<string, mapboxgl.Marker>>({});
+
+  // Sync allTourPackages whenever tourManager fires events
+  useEffect(() => {
+    const handleUpdate = () => {
+      const fresh = tourPackageManager.getAllTours();
+      setAllTourPackages(fresh);
+      setActiveTourLayerIds(prev => {
+        const next = new Set(prev);
+        fresh.forEach(t => next.add(t.id));
+        return next;
+      });
+    };
+    window.addEventListener('tour_manager_packages_updated', handleUpdate);
+    window.addEventListener('tour_manager_package_saved', handleUpdate);
+    return () => {
+      window.removeEventListener('tour_manager_packages_updated', handleUpdate);
+      window.removeEventListener('tour_manager_package_saved', handleUpdate);
+    };
+  }, []);
 
   const handleSaveMapboxToken = (newToken: string) => {
     const trimmed = newToken.trim();
@@ -718,7 +693,7 @@ export default function ShowsView({
   // Compile active show list with precise GIS longitude and lat pairs
   const showsWithGeoCoords = useMemo(() => {
     return shows.map((show, idx) => {
-      const geo = findShowGeoLocation(show);
+      const geo = findShowGeoLocation(show, idx);
       return {
         ...show,
         lng: geo.lng,
@@ -808,28 +783,41 @@ export default function ShowsView({
         resizeObserver.observe(mapContainerRef.current);
       }
 
-      // Force resize calculation on map load
+      // Force resize calculation on map load and flag ready
       map.on('load', () => {
         if (isMounted) {
           map.resize();
+          setIsMapLoaded(true);
+        }
+      });
+
+      map.on('style.load', () => {
+        if (isMounted) {
+          setIsMapLoaded(true);
         }
       });
 
       // Progressive fallback timeouts for mobile rendering layout passes
-      const t1 = setTimeout(() => { if (isMounted && mapRef.current) mapRef.current.resize(); }, 150);
-      const t2 = setTimeout(() => { if (isMounted && mapRef.current) mapRef.current.resize(); }, 500);
-      const t3 = setTimeout(() => { if (isMounted && mapRef.current) mapRef.current.resize(); }, 1200);
+      const t1 = setTimeout(() => { if (isMounted && mapRef.current) { mapRef.current.resize(); setIsMapLoaded(true); } }, 150);
+      const t2 = setTimeout(() => { if (isMounted && mapRef.current) { mapRef.current.resize(); setIsMapLoaded(true); } }, 500);
+      const t3 = setTimeout(() => { if (isMounted && mapRef.current) { mapRef.current.resize(); setIsMapLoaded(true); } }, 1200);
 
       addLog('Initialized Mapbox Interactive Tour Hub.');
 
       return () => {
         isMounted = false;
+        setIsMapLoaded(false);
         clearTimeout(t1);
         clearTimeout(t2);
         clearTimeout(t3);
         if (resizeObserver) {
           resizeObserver.disconnect();
         }
+        // Clean up markers
+        Object.values(markersRef.current).forEach(m => m.remove());
+        markersRef.current = {};
+        Object.values(tourMarkersRef.current).forEach(m => m.remove());
+        tourMarkersRef.current = {};
         try {
           map.remove();
         } catch (_) {}
@@ -841,120 +829,293 @@ export default function ShowsView({
     }
   }, [activeMapboxToken, mapboxStyleUrl, mapError]);
 
-  // Marker and route updating effect
+  // Marker and route updating effect (Handles personal shows + separate layers for each individual tour)
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !isMapLoaded) return;
 
-    // Clear removed markers
-    const currentShowIds = new Set(showsWithGeoCoords.map(s => s.id));
-    Object.keys(markersRef.current).forEach(id => {
-      if (!currentShowIds.has(id)) {
+    // 1. MANAGE PERSONAL BAND SHOWS LAYER
+    if (!showPersonalShowsLayer) {
+      // Clear all personal markers if personal layer is toggled off
+      Object.keys(markersRef.current).forEach(id => {
         markersRef.current[id].remove();
         delete markersRef.current[id];
-      }
-    });
-
-    // Add/Update current markers
-    showsWithGeoCoords.forEach(show => {
-      const isSelected = selectedShowId === show.id;
-      const isClosed = show.status === 'Closed';
-      const colorClass = isClosed ? '#c084fc' : '#00ffcc';
-
-      if (markersRef.current[show.id]) {
-        const markerElement = markersRef.current[show.id].getElement();
-        if (markerElement) {
-          markerElement.style.border = isSelected ? '2.5px solid #ffffff' : `1.5px solid ${colorClass}`;
-          markerElement.style.boxShadow = isSelected ? '0 0 14px #00ffcc' : 'none';
-          markerElement.style.transform = isSelected ? 'scale(1.25)' : 'scale(1)';
-        }
-      } else {
-        const el = document.createElement('div');
-        el.className = 'custom-mapbox-marker group cursor-pointer relative';
-        el.style.width = '15px';
-        el.style.height = '15px';
-        el.style.borderRadius = '50%';
-        el.style.backgroundColor = colorClass;
-        el.style.border = isSelected ? '2.5px solid #ffffff' : `1.5px solid ${colorClass}`;
-        el.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-        el.style.boxShadow = isSelected ? '0 0 14px #00ffcc' : 'none';
-
-        if (!isClosed) {
-          const pulse = document.createElement('div');
-          pulse.className = 'absolute -inset-1.5 rounded-full bg-[#00ffcc] opacity-35 animate-ping';
-          pulse.style.pointerEvents = 'none';
-          el.appendChild(pulse);
-        }
-
-        const tooltip = document.createElement('div');
-        tooltip.className = 'absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/85 text-[9px] font-mono text-white px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-zinc-800 pointer-events-none uppercase tracking-wider font-semibold z-50';
-        tooltip.innerText = show.city ? `${show.city}${show.state_province ? `, ${show.state_province}` : ''}${show.country ? ` (${show.country})` : ''}` : show.name.split(',')[0];
-        el.appendChild(tooltip);
-
-        el.addEventListener('click', (e) => {
-          e.stopPropagation();
-          handleSelectShow(show.id);
+      });
+      // Clear personal route line
+      const source = map.getSource('tour-route') as mapboxgl.GeoJSONSource | undefined;
+      if (source) {
+        source.setData({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: [] }
         });
-
-        const newMarker = new mapboxgl.Marker({ element: el })
-          .setLngLat([show.lng, show.lat])
-          .addTo(map);
-
-        markersRef.current[show.id] = newMarker;
       }
-    });
+    } else {
+      // Clear removed personal markers
+      const currentShowIds = new Set(showsWithGeoCoords.map(s => s.id));
+      Object.keys(markersRef.current).forEach(id => {
+        if (!currentShowIds.has(id)) {
+          markersRef.current[id].remove();
+          delete markersRef.current[id];
+        }
+      });
 
-    // Draw lines connecting markers in chronological order
-    const updateRoutes = () => {
-      const sortedStops = [...showsWithGeoCoords]
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .map(s => [s.lng, s.lat]);
+      // Add/Update current personal markers
+      showsWithGeoCoords.forEach(show => {
+        const isSelected = selectedShowId === show.id;
+        const isClosed = show.status === 'Closed';
+        const colorClass = isClosed ? '#c084fc' : '#00ffcc';
 
-      const routeSourceId = 'tour-route';
-      const routeLayerId = 'tour-route-line';
+        if (markersRef.current[show.id]) {
+          const markerElement = markersRef.current[show.id].getElement();
+          if (markerElement) {
+            markerElement.style.border = isSelected ? '3px solid #ffffff' : `2px solid ${colorClass}`;
+            markerElement.style.boxShadow = isSelected ? '0 0 16px #00ffcc, 0 0 30px rgba(0,255,204,0.4)' : `0 0 10px ${colorClass}`;
+            markerElement.style.transform = isSelected ? 'scale(1.25)' : 'scale(1)';
+            markerElement.style.zIndex = isSelected ? '30' : '15';
+          }
+        } else {
+          const el = document.createElement('div');
+          el.className = 'custom-mapbox-marker group cursor-pointer relative';
+          el.style.width = '16px';
+          el.style.height = '16px';
+          el.style.borderRadius = '50%';
+          el.style.backgroundColor = colorClass;
+          el.style.border = isSelected ? '3px solid #ffffff' : `2px solid ${colorClass}`;
+          el.style.transition = 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
+          el.style.boxShadow = isSelected ? '0 0 16px #00ffcc, 0 0 30px rgba(0,255,204,0.4)' : `0 0 10px ${colorClass}`;
+          el.style.cursor = 'pointer';
+          el.style.zIndex = isSelected ? '30' : '15';
 
-      const geoData: any = {
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: sortedStops
+          if (!isClosed) {
+            const pulse = document.createElement('div');
+            pulse.className = 'absolute -inset-1.5 rounded-full bg-[#00ffcc] opacity-40 animate-ping';
+            pulse.style.pointerEvents = 'none';
+            el.appendChild(pulse);
+          }
+
+          const tooltip = document.createElement('div');
+          tooltip.className = 'absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/90 text-[9.5px] font-mono text-white px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-zinc-750 pointer-events-none uppercase tracking-wider font-semibold z-50 shadow-2xl';
+          tooltip.innerText = `[Personal] ${show.city ? `${show.city}${show.state_province ? `, ${show.state_province}` : ''}${show.country ? ` (${show.country})` : ''}` : show.name.split(',')[0]}`;
+          el.appendChild(tooltip);
+
+          el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setSelectedTourStopPopup(null);
+            handleSelectShow(show.id);
+          });
+
+          const newMarker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+            .setLngLat([show.lng, show.lat])
+            .addTo(map);
+
+          markersRef.current[show.id] = newMarker;
+        }
+      });
+
+      // Draw lines connecting personal markers in chronological order
+      const updateRoutes = () => {
+        const sortedStops = [...showsWithGeoCoords]
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .map(s => [s.lng, s.lat]);
+
+        const routeSourceId = 'tour-route';
+        const routeLayerId = 'tour-route-line';
+
+        const geoData: any = {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: sortedStops.length >= 2 ? sortedStops : []
+          }
+        };
+
+        const source = map.getSource(routeSourceId) as mapboxgl.GeoJSONSource | undefined;
+        if (source) {
+          source.setData(geoData);
+        } else {
+          try {
+            map.addSource(routeSourceId, {
+              type: 'geojson',
+              data: geoData
+            });
+          } catch (_) {}
+        }
+
+        if (!map.getLayer(routeLayerId) && map.getSource(routeSourceId)) {
+          try {
+            map.addLayer({
+              id: routeLayerId,
+              type: 'line',
+              source: routeSourceId,
+              layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+              },
+              paint: {
+                'line-color': '#00ffcc',
+                'line-width': 3,
+                'line-opacity': 0.85,
+                'line-dasharray': [2, 2]
+              }
+            });
+          } catch (_) {}
         }
       };
 
-      const source = map.getSource(routeSourceId) as mapboxgl.GeoJSONSource | undefined;
-      if (source) {
-        source.setData(geoData);
+      if (map.isStyleLoaded()) {
+        updateRoutes();
       } else {
-        map.addSource(routeSourceId, {
-          type: 'geojson',
-          data: geoData
-        });
-
-        map.addLayer({
-          id: routeLayerId,
-          type: 'line',
-          source: routeSourceId,
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': '#00ffcc',
-            'line-width': 1.5,
-            'line-opacity': 0.45,
-            'line-dasharray': [2, 2]
-          }
-        });
+        map.once('style.load', updateRoutes);
       }
-    };
-
-    if (map.isStyleLoaded()) {
-      updateRoutes();
-    } else {
-      map.on('style.load', updateRoutes);
     }
-  }, [showsWithGeoCoords, selectedShowId]);
+
+    // 2. MANAGE INDIVIDUAL TOUR LAYERS (Separate layers for each individual tour)
+    const validTourMarkerKeys = new Set<string>();
+
+    allTourPackages.forEach((tour, tourIdx) => {
+      const isTourActive = activeTourLayerIds.has(tour.id);
+      const tourColor = TOUR_LAYER_PALETTE[tourIdx % TOUR_LAYER_PALETTE.length];
+      const routeSourceId = `tour-pkg-route-${tour.id}`;
+      const routeLayerId = `tour-pkg-route-line-${tour.id}`;
+
+      if (!isTourActive) {
+        // Clear route line for this inactive tour
+        const source = map.getSource(routeSourceId) as mapboxgl.GeoJSONSource | undefined;
+        if (source) {
+          source.setData({
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: [] }
+          });
+        }
+        return;
+      }
+
+      // Compute geo coords for all stops of this tour
+      const tourStopsWithGeo = (tour.stops || []).map((stop, stopIdx) => {
+        const geo = findTourStopGeoLocation(stop, stopIdx);
+        return {
+          ...stop,
+          lng: geo.lng,
+          lat: geo.lat
+        };
+      });
+
+      // Render each stop marker for this individual tour
+      tourStopsWithGeo.forEach(stop => {
+        const markerKey = `tour-${tour.id}-${stop.id}`;
+        validTourMarkerKeys.add(markerKey);
+
+        if (tourMarkersRef.current[markerKey]) {
+          const el = tourMarkersRef.current[markerKey].getElement();
+          if (el) {
+            el.style.backgroundColor = tourColor.hex;
+            el.style.boxShadow = `0 0 12px ${tourColor.hex}`;
+          }
+        } else {
+          const el = document.createElement('div');
+          el.className = 'custom-tour-mapbox-marker group cursor-pointer relative';
+          el.style.width = '15px';
+          el.style.height = '15px';
+          el.style.borderRadius = '50%';
+          el.style.backgroundColor = tourColor.hex;
+          el.style.border = '2.5px solid #ffffff';
+          el.style.boxShadow = `0 0 12px ${tourColor.hex}, 0 0 20px rgba(0,0,0,0.9)`;
+          el.style.transition = 'all 0.25s ease';
+          el.style.cursor = 'pointer';
+          el.style.zIndex = '20';
+
+          const pulse = document.createElement('div');
+          pulse.className = 'absolute -inset-1 rounded-full animate-ping';
+          pulse.style.backgroundColor = tourColor.hex;
+          pulse.style.opacity = '0.4';
+          pulse.style.pointerEvents = 'none';
+          el.appendChild(pulse);
+
+          const tooltip = document.createElement('div');
+          tooltip.className = 'absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/95 text-[9.5px] font-mono text-white px-2.5 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-zinc-700 pointer-events-none z-50 shadow-2xl';
+          tooltip.innerHTML = `<span style="color:${tourColor.hex};font-weight:bold;">[${tour.title}]</span> ${stop.venueName} • ${stop.city}${stop.state ? `, ${stop.state}` : ''} <span style="opacity:0.7">(${stop.date})</span>`;
+          el.appendChild(tooltip);
+
+          el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setSelectedTourId(tour.id);
+            setSelectedTourStopPopup({ tour, stop, color: tourColor });
+          });
+
+          const newMarker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+            .setLngLat([stop.lng, stop.lat])
+            .addTo(map);
+
+          tourMarkersRef.current[markerKey] = newMarker;
+        }
+      });
+
+      // Connect stops in chronological order with this tour's distinct colored route line
+      const updateTourRoute = () => {
+        const sortedTourCoords = [...tourStopsWithGeo]
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .map(s => [s.lng, s.lat]);
+
+        const geoData: any = {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: sortedTourCoords.length >= 2 ? sortedTourCoords : []
+          }
+        };
+
+        const source = map.getSource(routeSourceId) as mapboxgl.GeoJSONSource | undefined;
+        if (source) {
+          source.setData(geoData);
+        } else {
+          try {
+            map.addSource(routeSourceId, {
+              type: 'geojson',
+              data: geoData
+            });
+          } catch (_) {}
+        }
+
+        if (!map.getLayer(routeLayerId) && map.getSource(routeSourceId)) {
+          try {
+            map.addLayer({
+              id: routeLayerId,
+              type: 'line',
+              source: routeSourceId,
+              layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+              },
+              paint: {
+                'line-color': tourColor.hex,
+                'line-width': 3,
+                'line-opacity': 0.9,
+                'line-dasharray': [2.5, 2]
+              }
+            });
+          } catch (_) {}
+        }
+      };
+
+      if (map.isStyleLoaded()) {
+        updateTourRoute();
+      } else {
+        map.once('style.load', updateTourRoute);
+      }
+    });
+
+    // Remove any tour markers no longer in validTourMarkerKeys
+    Object.keys(tourMarkersRef.current).forEach(key => {
+      if (!validTourMarkerKeys.has(key)) {
+        tourMarkersRef.current[key].remove();
+        delete tourMarkersRef.current[key];
+      }
+    });
+  }, [isMapLoaded, showsWithGeoCoords, selectedShowId, showPersonalShowsLayer, allTourPackages, activeTourLayerIds, selectedTourId]);
 
   // Smooth FlyTo fly transition when stop is selected from the listing calendar system
   useEffect(() => {
@@ -973,41 +1134,15 @@ export default function ShowsView({
   // Determine coordinates for each show in list to support SVG map fallback beautifully
   const showsWithCoords = useMemo(() => {
     return shows.map((show, idx) => {
-      // Analyze text to find matches for coordinates
-      let foundCoord = { x: 300, y: 200 }; // Default center fallback
-      
-      const venueText = [
-        show.festival_name,
-        show.name,
-        show.city,
-        show.state_province,
-        show.country
-      ].filter(Boolean).join(' ').toLowerCase();
-
-      let matchedKey = '';
-
-      for (const key of Object.keys(CITY_COORDINATES)) {
-        if (venueText.includes(key.toLowerCase())) {
-          foundCoord = CITY_COORDINATES[key];
-          matchedKey = key;
-          break;
-        }
-      }
-
-      // If no exact keyword match, procedurally generate based on index to spread out dots naturally
-      if (!matchedKey) {
-        const seedValue = (idx * 79) % 360;
-        const rad = (seedValue * Math.PI) / 180;
-        // Float CA/TX area
-        const rx = 350 + Math.cos(rad) * 150;
-        const ry = 220 + Math.sin(rad) * 100;
-        foundCoord = { x: rx, y: ry };
-      }
+      const geo = findShowGeoLocation(show, idx);
+      // Scale to SVG 800x450: US longitude -125 to -66, latitude 24 to 50
+      const x = Math.max(50, Math.min(750, ((geo.lng + 125) / 59) * 700 + 50));
+      const y = Math.max(30, Math.min(410, ((50 - geo.lat) / 26) * 380 + 30));
 
       return {
         ...show,
-        x: foundCoord.x,
-        y: foundCoord.y,
+        x,
+        y,
         label: show.name.split(',')[0]
       };
     });
@@ -1019,6 +1154,96 @@ export default function ShowsView({
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map(s => ({ x: s.x, y: s.y, id: s.id, name: s.festival_name || s.name }));
   }, [showsWithCoords]);
+
+  // Derived tour coordinates for vector SVG fallback map
+  const activeToursWithSvgCoords = useMemo(() => {
+    return allTourPackages
+      .map((tour, tourIdx) => {
+        if (!activeTourLayerIds.has(tour.id)) return null;
+        const color = TOUR_LAYER_PALETTE[tourIdx % TOUR_LAYER_PALETTE.length];
+        const stopsWithCoords = (tour.stops || []).map((stop, stopIdx) => {
+          const geo = findTourStopGeoLocation(stop, stopIdx);
+          // Scale to SVG 800x450: US longitude -125 to -66, latitude 24 to 50
+          const x = Math.max(50, Math.min(750, ((geo.lng + 125) / 59) * 700 + 50));
+          const y = Math.max(30, Math.min(410, ((50 - geo.lat) / 26) * 380 + 30));
+          return {
+            ...stop,
+            x,
+            y
+          };
+        }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        return {
+          tour,
+          color,
+          stops: stopsWithCoords
+        };
+      })
+      .filter(Boolean) as {
+        tour: TourPackageRecord;
+        color: typeof TOUR_LAYER_PALETTE[0];
+        stops: (TourPackageStop & { x: number; y: number })[];
+      }[];
+  }, [allTourPackages, activeTourLayerIds]);
+
+  // Track saved Black Book venues in popup
+  const [savedVenuesToBb, setSavedVenuesToBb] = useState<Record<string, boolean>>({});
+
+  const handleSaveVenueFromTourStop = async (venueName: string, city: string, state?: string, cap?: number) => {
+    if (!venueName) return;
+    saveVenueToBlackBook({
+      name: venueName,
+      city: city || '',
+      state: state || '',
+      capacity: cap || 500
+    });
+    setSavedVenuesToBb(prev => ({ ...prev, [venueName.toLowerCase()]: true }));
+    triggerNotification(`Saved "${venueName}" into Black Book Rolodex!`);
+  };
+
+  const handleFocusTour = (tour: TourPackageRecord) => {
+    setSelectedTourId(tour.id);
+    if (!activeTourLayerIds.has(tour.id)) {
+      setActiveTourLayerIds(prev => new Set(prev).add(tour.id));
+    }
+    if (!mapRef.current) return;
+    const stopsGeo = (tour.stops || []).map((st, sIdx) => findTourStopGeoLocation(st, sIdx));
+    if (stopsGeo.length === 0) return;
+    if (stopsGeo.length === 1) {
+      mapRef.current.flyTo({
+        center: [stopsGeo[0].lng, stopsGeo[0].lat],
+        zoom: 7,
+        duration: 1500
+      });
+      return;
+    }
+    const bounds = new mapboxgl.LngLatBounds();
+    stopsGeo.forEach(pt => bounds.extend([pt.lng, pt.lat]));
+    mapRef.current.fitBounds(bounds, {
+      padding: 60,
+      duration: 1500
+    });
+  };
+
+  const handleFocusPersonalShows = () => {
+    setSelectedTourId(null);
+    setShowPersonalShowsLayer(true);
+    if (!mapRef.current || showsWithGeoCoords.length === 0) return;
+    if (showsWithGeoCoords.length === 1) {
+      mapRef.current.flyTo({
+        center: [showsWithGeoCoords[0].lng, showsWithGeoCoords[0].lat],
+        zoom: 7,
+        duration: 1500
+      });
+      return;
+    }
+    const bounds = new mapboxgl.LngLatBounds();
+    showsWithGeoCoords.forEach(pt => bounds.extend([pt.lng, pt.lat]));
+    mapRef.current.fitBounds(bounds, {
+      padding: 60,
+      duration: 1500
+    });
+  };
 
   // Handle selected show from calendar or map click
   const handleSelectShow = (id: string) => {
@@ -1392,6 +1617,311 @@ export default function ShowsView({
     return result;
   }, [shows, searchQuery, filterTab, sortBy]);
 
+  const activeSelectedTour = useMemo(() => {
+    if (selectedTourId) {
+      return allTourPackages.find(t => t.id === selectedTourId) || null;
+    }
+    return allTourPackages[0] || null;
+  }, [selectedTourId, allTourPackages]);
+
+  const displayedTourHeaderTitle = activeSelectedTour?.title || (bandName ? `${bandName} Tour 2026` : 'Virulent Excision Tour 2026');
+
+  // Mapbox Live / Vector status badge in the upper-left corner of the map canvas
+  const renderMapCornerStatusBadge = () => (
+    <div className="absolute top-3 left-3 z-30 flex items-center gap-1.5 px-2.5 py-1 bg-[#0b0d14]/90 backdrop-blur-md rounded-lg border border-zinc-800 text-[8.5px] font-mono text-zinc-300 shadow-xl pointer-events-auto">
+      <span className={`w-2 h-2 rounded-full ${activeMapboxToken && !mapError ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`} />
+      <span className="font-bold text-zinc-200">{activeMapboxToken && !mapError ? 'MAPBOX GL' : 'VECTOR MAP'}</span>
+      {activeMapboxToken && !mapError && (
+        <span className="text-[7.5px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800 font-black">LIVE</span>
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          setTokenInputVal(activeMapboxToken);
+          setShowTokenConfigModal(true);
+        }}
+        title="Configure Mapbox Token"
+        className="ml-0.5 text-zinc-500 hover:text-[#00ffcc] transition cursor-pointer p-0.5"
+      >
+        <Key className="w-3 h-3" />
+      </button>
+    </div>
+  );
+
+  // Simplified map header banner placed directly above the map (Centered tour title + Lock/Unlock button)
+  const renderMapHeaderTile = () => {
+    return (
+      <div className="w-full max-w-lg mx-auto bg-[#0b0d14]/95 border border-zinc-800 backdrop-blur-md rounded-2xl px-5 py-3 flex flex-col items-center justify-center text-center gap-2.5 shadow-xl mb-3">
+        {/* Centered Large Tour Title */}
+        <div className="flex items-center justify-center gap-2 min-w-0">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#00ffcc] animate-pulse shrink-0 shadow-[0_0_10px_#00ffcc]" />
+          <span className="text-base sm:text-lg md:text-xl font-display font-black uppercase text-white tracking-wider text-center">
+            {displayedTourHeaderTitle}
+          </span>
+        </div>
+
+        {/* Lock / Unlock Map Button */}
+        <button 
+          type="button"
+          onClick={() => setIsMapLocked(!isMapLocked)}
+          className={`font-mono text-[9px] sm:text-[10px] uppercase tracking-widest font-black transition-all cursor-pointer px-4 py-1.5 rounded-lg border flex items-center justify-center gap-1.5 shadow-sm ${
+            isMapLocked 
+              ? 'bg-zinc-900/90 text-zinc-300 hover:text-white border-zinc-700' 
+              : 'bg-emerald-950/60 text-emerald-300 hover:text-emerald-200 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
+          }`}
+        >
+          {isMapLocked ? '🔒 UNLOCK MAP' : '🔓 LOCK MAP'}
+        </button>
+      </div>
+    );
+  };
+
+  // Tour Layers Control Bar placed directly underneath the map in the center
+  const renderTourLayersBottomPanel = () => {
+    return (
+      <div className="w-full bg-[#0b0d14]/95 border border-zinc-800/90 backdrop-blur-md rounded-xl p-3 shadow-xl mt-2.5">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pb-2.5 border-b border-zinc-800/80">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-amber-400" />
+            <span className="text-xs font-display font-black uppercase text-white tracking-wider">
+              Tour Layers &amp; Routing
+            </span>
+            <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-700 text-zinc-300">
+              {(showPersonalShowsLayer ? 1 : 0) + activeTourLayerIds.size} Active Layers
+            </span>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setShowPersonalShowsLayer(true);
+                setActiveTourLayerIds(new Set(allTourPackages.map(t => t.id)));
+              }}
+              className="px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-[8.5px] font-mono uppercase font-bold border border-zinc-700 transition cursor-pointer"
+            >
+              Show All
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowPersonalShowsLayer(false);
+                setActiveTourLayerIds(new Set());
+              }}
+              className="px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-[8.5px] font-mono uppercase font-bold border border-zinc-800 transition cursor-pointer"
+            >
+              Hide All
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowPersonalShowsLayer(true);
+                setActiveTourLayerIds(new Set(allTourPackages.map(t => t.id)));
+                setSelectedTourId(null);
+                handleFocusPersonalShows();
+              }}
+              className="px-2 py-0.5 rounded bg-amber-950/50 hover:bg-amber-900/60 text-amber-300 text-[8.5px] font-mono uppercase font-bold border border-amber-500/30 transition cursor-pointer"
+            >
+              Reset View
+            </button>
+          </div>
+        </div>
+
+        {/* Horizontal Centered Tour Layer Pills */}
+        <div className="flex flex-wrap items-center justify-center gap-2 pt-2.5">
+          {/* Personal Band Dates Layer Pill */}
+          <div
+            onClick={() => {
+              setSelectedTourId(null);
+              handleFocusPersonalShows();
+            }}
+            className={`px-3 py-1.5 rounded-lg border transition-all flex items-center gap-2.5 cursor-pointer ${
+              showPersonalShowsLayer
+                ? (!selectedTourId ? 'bg-cyan-950/50 border-[#00ffcc] shadow-[0_0_10px_rgba(0,255,204,0.25)]' : 'bg-zinc-900/90 border-zinc-700')
+                : 'bg-zinc-950/60 border-zinc-850 opacity-50 hover:opacity-80'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={showPersonalShowsLayer}
+              onChange={(e) => {
+                e.stopPropagation();
+                setShowPersonalShowsLayer(e.target.checked);
+              }}
+              className="w-3.5 h-3.5 rounded border-cyan-500 bg-zinc-950 text-cyan-400 accent-[#00ffcc] cursor-pointer"
+            />
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#00ffcc] inline-block shadow-[0_0_6px_#00ffcc]" />
+              <span className="text-xs font-mono font-bold text-white">
+                Personal Shows
+              </span>
+              <span className="text-[9px] font-mono text-cyan-300 bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800">
+                {shows.length} stops
+              </span>
+            </div>
+          </div>
+
+          {/* Individual Tour Package Layers */}
+          {allTourPackages.map((tour, idx) => {
+            const isChecked = activeTourLayerIds.has(tour.id);
+            const isFocused = selectedTourId === tour.id;
+            const tourColor = TOUR_LAYER_PALETTE[idx % TOUR_LAYER_PALETTE.length];
+
+            return (
+              <div
+                key={`bottom-tour-layer-${tour.id}`}
+                onClick={() => {
+                  setSelectedTourId(tour.id);
+                  if (!activeTourLayerIds.has(tour.id)) {
+                    setActiveTourLayerIds(prev => new Set(prev).add(tour.id));
+                  }
+                  handleFocusTour(tour);
+                }}
+                className={`px-3 py-1.5 rounded-lg border transition-all flex items-center gap-2.5 cursor-pointer ${
+                  isChecked
+                    ? (isFocused ? 'bg-zinc-900 border-white shadow-[0_0_12px_rgba(255,255,255,0.3)]' : 'bg-zinc-900/90 border-zinc-700')
+                    : 'bg-zinc-950/60 border-zinc-850 opacity-50 hover:opacity-80'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    setActiveTourLayerIds(prev => {
+                      const next = new Set(prev);
+                      if (e.target.checked) next.add(tour.id);
+                      else next.delete(tour.id);
+                      return next;
+                    });
+                  }}
+                  className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-950 cursor-pointer accent-amber-500"
+                />
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full inline-block shrink-0"
+                    style={{
+                      backgroundColor: tourColor.hex,
+                      boxShadow: isChecked ? `0 0 8px ${tourColor.hex}` : 'none'
+                    }}
+                  />
+                  <span className="text-xs font-mono font-bold text-white truncate max-w-[140px] sm:max-w-[200px]">
+                    {tour.title}
+                  </span>
+                  <span
+                    className="text-[9px] font-mono px-1.5 py-0.2 rounded font-bold"
+                    style={{
+                      backgroundColor: `${tourColor.hex}22`,
+                      color: tourColor.hex,
+                      border: `1px solid ${tourColor.hex}44`
+                    }}
+                  >
+                    {tour.stops?.length || 0} stops
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // Tour Stop Popup Modal overlay when any tour stop marker is clicked
+  const renderTourStopPopupOverlay = () => {
+    if (!selectedTourStopPopup) return null;
+    const { tour, stop, color } = selectedTourStopPopup;
+    const isVenueSaved = savedVenuesToBb[stop.venueName.toLowerCase()];
+
+    return (
+      <div className="absolute bottom-3 left-2 right-2 md:bottom-4 md:left-4 md:right-4 z-40 bg-[#0e1118]/95 backdrop-blur-xl border border-zinc-700 shadow-2xl rounded-xl p-3 animate-in fade-in duration-200">
+        <div className="flex items-start justify-between gap-2 pb-2 border-b border-zinc-800">
+          <div>
+            <div className="flex items-center gap-2">
+              <span
+                className="text-[8px] font-mono px-2 py-0.5 rounded font-black uppercase text-black"
+                style={{ backgroundColor: color.hex }}
+              >
+                Tour: {tour.title}
+              </span>
+              <span className="text-[9px] font-mono text-zinc-400">
+                Client: {tour.headlinerClientName || 'Package'}
+              </span>
+            </div>
+            <h4 className="text-sm font-bold text-white font-mono uppercase mt-1 flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5" style={{ color: color.hex }} />
+              {stop.venueName}
+              <span className="text-zinc-400 font-normal">
+                ({stop.city}{stop.state ? `, ${stop.state}` : ''})
+              </span>
+            </h4>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSelectedTourStopPopup(null)}
+            className="p-1 text-zinc-400 hover:text-white rounded hover:bg-zinc-800 transition cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-[10px] font-mono text-zinc-300">
+          <div>
+            <span className="text-zinc-500 uppercase text-[8px] block">Show Date</span>
+            <span className="font-bold text-white">{stop.date}</span>
+          </div>
+          <div>
+            <span className="text-zinc-500 uppercase text-[8px] block">Capacity</span>
+            <span className="font-bold text-white">{stop.capacity || 500} Cap</span>
+          </div>
+          <div>
+            <span className="text-zinc-500 uppercase text-[8px] block">Gross Deal</span>
+            <span className="font-bold text-emerald-400">
+              {stop.grossDeal ? `$${stop.grossDeal.toLocaleString()}` : 'Guaranteed'}
+            </span>
+          </div>
+          <div>
+            <span className="text-zinc-500 uppercase text-[8px] block">Advancing</span>
+            <span className="font-bold text-amber-400 uppercase">
+              {stop.advancingStatus || 'In Progress'}
+            </span>
+          </div>
+        </div>
+
+        {/* Action row with Seamless Black Book Integration */}
+        <div className="mt-2.5 pt-2 border-t border-zinc-850 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => handleSaveVenueFromTourStop(stop.venueName, stop.city, stop.state, stop.capacity)}
+            className={`px-2.5 py-1 rounded-lg font-mono text-[9px] uppercase font-bold flex items-center gap-1.5 transition ${
+              isVenueSaved
+                ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/50'
+                : 'bg-amber-950/60 hover:bg-amber-900 text-amber-300 border border-amber-500/40 cursor-pointer'
+            }`}
+          >
+            <BookOpen className="w-3 h-3 text-amber-400" />
+            <span>{isVenueSaved ? '✓ Added to Black Book' : 'Add Venue to Black Book'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (mapRef.current) {
+                const geo = findTourStopGeoLocation(stop);
+                mapRef.current.flyTo({ center: [geo.lng, geo.lat], zoom: 8, duration: 1200 });
+              }
+            }}
+            className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-[9px] uppercase font-bold transition cursor-pointer"
+          >
+            Zoom In
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const expandedShow = useMemo(() => shows.find(s => s.id === expandedShowId), [shows, expandedShowId]);
   if (expandedShow) {
     return (
@@ -1431,210 +1961,228 @@ export default function ShowsView({
 
   if (onlyMap) {
     return (
-      <div 
-        className="bg-[#0b0d13] border-2 border-[#1f2330] rounded-xl overflow-hidden relative shadow-lg" 
-        style={{ height: '380px', width: '100%', minHeight: '380px' }}
-        id="shows-coordinate-map"
-      >
-        
-        {/* Gesture Lock Overlay */}
-        {isMapLocked && (
-          <div className="absolute inset-0 z-10 bg-transparent" />
-        )}
+      <div className="w-full flex flex-col items-center">
+        {/* Interactive Mapbox Wide Slim Banner Directly Above Map */}
+        {renderMapHeaderTile()}
 
-        {activeMapboxToken && !mapError ? (
-          // Active Mapbox viewport container
-          <div 
-            ref={mapContainerRef} 
-            className="absolute inset-0 w-full h-full z-0" 
-            style={{ height: '380px', width: '100%', minHeight: '380px' }}
-          />
-        ) : (
-          // Falling back to vector layout with background Dark Map overlay if Mapbox token is absent
-          <>
-            <div className="absolute inset-0 bg-[radial-gradient(#1f242e_1px,transparent_1px)] [background-size:16px_16px] opacity-25 pointer-events-none" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/60 pointer-events-none" />
-            
-            {/* Embedded SVG coordinates map overlay inside container */}
-            <svg 
-              viewBox={`0 0 ${svgWidth} ${svgHeight}`} 
-              className="absolute inset-0 w-full h-full drop-shadow-2xl select-none z-10"
-              preserveAspectRatio="xMidYMid slice"
-            >
-              <image 
-                href={darkMapAsset} 
-                width={svgWidth} 
-                height={svgHeight} 
+        <div 
+          className="bg-[#0b0d13] border-2 border-[#1f2330] rounded-xl overflow-hidden relative shadow-lg w-full" 
+          style={{ height: '380px', minHeight: '380px' }}
+          id="shows-coordinate-map"
+        >
+          {/* Mapbox GL Status Badge in Upper-Left Corner of the Map */}
+          {renderMapCornerStatusBadge()}
+
+          {/* Gesture Lock Overlay */}
+          {isMapLocked && (
+            <div className="absolute inset-0 z-10 bg-transparent" />
+          )}
+
+          {activeMapboxToken && !mapError ? (
+            // Active Mapbox viewport container
+            <div 
+              ref={mapContainerRef} 
+              className="absolute inset-0 w-full h-full z-0" 
+              style={{ height: '380px', width: '100%', minHeight: '380px' }}
+            />
+          ) : (
+            // Falling back to vector layout with background Dark Map overlay if Mapbox token is absent
+            <>
+              <div className="absolute inset-0 bg-[radial-gradient(#1f242e_1px,transparent_1px)] [background-size:16px_16px] opacity-25 pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/60 pointer-events-none" />
+              
+              {/* Embedded SVG coordinates map overlay inside container */}
+              <svg 
+                viewBox={`0 0 ${svgWidth} ${svgHeight}`} 
+                className="absolute inset-0 w-full h-full drop-shadow-2xl select-none z-10"
                 preserveAspectRatio="xMidYMid slice"
-                className="opacity-75 mix-blend-lighten select-none pointer-events-none" 
-              />
-                {/* Glowing neon paths mapping chronological stops connection */}
-                {chronologicalShowCoords.length > 1 && (
-                  <polyline
-                    points={chronologicalShowCoords.map(coord => `${coord.x},${coord.y}`).join(' ')}
-                    fill="none"
-                    className="stroke-[#00ffcc]/35 stroke-[1.5px]"
-                    strokeDasharray="2 4"
-                  />
-                )}
+              >
+                <image 
+                  href={darkMapAsset} 
+                  width={svgWidth} 
+                  height={svgHeight} 
+                  preserveAspectRatio="xMidYMid slice"
+                  className="opacity-75 mix-blend-lighten select-none pointer-events-none" 
+                />
+                  {/* Glowing neon paths mapping personal chronological stops connection (Isolated personal layer) */}
+                  {showPersonalShowsLayer && chronologicalShowCoords.length > 1 && (
+                    <polyline
+                      points={chronologicalShowCoords.map(coord => `${coord.x},${coord.y}`).join(' ')}
+                      fill="none"
+                      className="stroke-[#00ffcc]/35 stroke-[1.5px]"
+                      strokeDasharray="2 4"
+                    />
+                  )}
 
-                {/* Glowing animated path overlay connecting dots */}
-                {chronologicalShowCoords.length > 1 && (
-                  <polyline
-                    points={chronologicalShowCoords.map(coord => `${coord.x},${coord.y}`).join(' ')}
-                    fill="none"
-                    className="stroke-[#00ffcc] stroke-[1px] opacity-60"
-                    strokeDasharray="180"
-                    strokeDashoffset="180"
-                    style={{
-                      strokeDasharray: 500,
-                      strokeDashoffset: 500,
-                      animation: 'dash 14s linear infinite'
-                    }}
-                  />
-                )}
+                  {/* Glowing animated path overlay connecting personal dots */}
+                  {showPersonalShowsLayer && chronologicalShowCoords.length > 1 && (
+                    <polyline
+                      points={chronologicalShowCoords.map(coord => `${coord.x},${coord.y}`).join(' ')}
+                      fill="none"
+                      className="stroke-[#00ffcc] stroke-[1px] opacity-60"
+                      strokeDasharray="180"
+                      strokeDashoffset="180"
+                      style={{
+                        strokeDasharray: 500,
+                        strokeDashoffset: 500,
+                        animation: 'dash 14s linear infinite'
+                      }}
+                    />
+                  )}
 
-                {/* Show stop coordinate points */}
-                {showsWithCoords.map((show, swcIdx) => {
-                  const isActive = selectedShowId === show.id;
-                  const isClosed = show.status === 'Closed';
-                  const colorClass = isClosed ? '#c084fc' : '#00ffcc'; // Purple for closed, teal for active
-                  
-                  return (
-                    <g 
-                      key={show.id ? `coord-${show.id}-${swcIdx}` : `coord-${swcIdx}`} 
-                      className="cursor-pointer group"
-                      onClick={() => handleSelectShow(show.id)}
-                    >
-                      <circle
-                        cx={show.x}
-                        cy={show.y}
-                        r={isActive ? "10" : "6"}
-                        fill="transparent"
-                        stroke={colorClass}
-                        strokeWidth="1.5"
-                        className="group-hover:scale-125 transition-transform duration-300"
-                      />
-                      
-                      {/* Glowing pulsing dot for active stops */}
-                      {!isClosed && (
+                  {/* Personal show stop coordinate points */}
+                  {showPersonalShowsLayer && showsWithCoords.map((show, swcIdx) => {
+                    const isActive = selectedShowId === show.id;
+                    const isClosed = show.status === 'Closed';
+                    const colorClass = isClosed ? '#c084fc' : '#00ffcc'; // Purple for closed, teal for active
+                    
+                    return (
+                      <g 
+                        key={show.id ? `coord-${show.id}-${swcIdx}` : `coord-${swcIdx}`} 
+                        className="cursor-pointer group"
+                        onClick={() => {
+                          setSelectedTourStopPopup(null);
+                          handleSelectShow(show.id);
+                        }}
+                      >
                         <circle
                           cx={show.x}
                           cy={show.y}
-                          r="12"
+                          r={isActive ? "10" : "6"}
                           fill="transparent"
-                          stroke="#00ffcc"
-                          strokeWidth="1"
-                          className="animate-ping opacity-25"
+                          stroke={colorClass}
+                          strokeWidth="1.5"
+                          className="group-hover:scale-125 transition-transform duration-300"
+                        />
+                        
+                        {/* Glowing pulsing dot for active stops */}
+                        {!isClosed && (
+                          <circle
+                            cx={show.x}
+                            cy={show.y}
+                            r="12"
+                            fill="transparent"
+                            stroke="#00ffcc"
+                            strokeWidth="1"
+                            className="animate-ping opacity-25"
+                          />
+                        )}
+
+                        <circle
+                          cx={show.x}
+                          cy={show.y}
+                          r={isActive ? "5" : "3.5"}
+                          fill={colorClass}
+                          className="transition-all duration-300"
+                        />
+                        
+                        {/* Label tag mapping text labels */}
+                        <text
+                          x={show.x}
+                          y={show.y - (isActive ? 14 : 10)}
+                          textAnchor="middle"
+                          fill={isActive ? "#00ffcc" : "#9ca3af"}
+                          fontSize={isActive ? "11px" : "8px"}
+                          fontWeight={isActive ? "bold" : "600"}
+                          fontFamily="monospace"
+                          className="bg-black text-[9px] filter drop-shadow-md drop-shadow-[#000000_1px_1px]"
+                        >
+                          {show.label}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Separate SVG Layers for Each Individual Tour Package */}
+                  {activeToursWithSvgCoords.map((tourItem) => (
+                    <g key={`tour-svg-layer-${tourItem.tour.id}`}>
+                      {/* Tour Route Polyline */}
+                      {tourItem.stops.length > 1 && (
+                        <polyline
+                          points={tourItem.stops.map(st => `${st.x},${st.y}`).join(' ')}
+                          fill="none"
+                          stroke={tourItem.color.hex}
+                          strokeWidth="2.5"
+                          strokeDasharray="6 4"
+                          strokeOpacity="0.9"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
                         />
                       )}
 
-                      <circle
-                        cx={show.x}
-                        cy={show.y}
-                        r={isActive ? "5" : "3.5"}
-                        fill={colorClass}
-                        className="transition-all duration-300"
-                      />
-                      
-                      {/* Label tag mapping text labels */}
-                      <text
-                        x={show.x}
-                        y={show.y - (isActive ? 14 : 10)}
-                        textAnchor="middle"
-                        fill={isActive ? "#00ffcc" : "#9ca3af"}
-                        fontSize={isActive ? "11px" : "8px"}
-                        fontWeight={isActive ? "bold" : "600"}
-                        fontFamily="monospace"
-                        className="bg-black text-[9px] filter drop-shadow-md drop-shadow-[#000000_1px_1px]"
-                      >
-                        {show.label}
-                      </text>
+                      {/* Tour Stops Circles */}
+                      {tourItem.stops.map((stop) => (
+                        <g
+                          key={`tour-svg-stop-${tourItem.tour.id}-${stop.id}`}
+                          className="cursor-pointer group"
+                          onClick={() => {
+                            setSelectedTourId(tourItem.tour.id);
+                            setSelectedTourStopPopup({ tour: tourItem.tour, stop, color: tourItem.color });
+                          }}
+                        >
+                          <circle
+                            cx={stop.x}
+                            cy={stop.y}
+                            r="8"
+                            fill="transparent"
+                            stroke={tourItem.color.hex}
+                            strokeWidth="1.5"
+                            className="group-hover:scale-125 transition-transform"
+                          />
+                          <circle
+                            cx={stop.x}
+                            cy={stop.y}
+                            r="4"
+                            fill={tourItem.color.hex}
+                          />
+                          <text
+                            x={stop.x}
+                            y={stop.y - 10}
+                            textAnchor="middle"
+                            fill={tourItem.color.hex}
+                            fontSize="8px"
+                            fontWeight="bold"
+                            fontFamily="monospace"
+                            className="bg-black text-[8px] filter drop-shadow-md drop-shadow-[#000000_1px_1px]"
+                          >
+                            {stop.city}
+                          </text>
+                        </g>
+                      ))}
                     </g>
-                  );
-                })}
-              </svg>
-          </>
-        )}
-        
-        {/* Title Tag overlay */}
-        <div className="absolute top-2 left-2 md:top-4 md:left-4 z-20 bg-black/75 backdrop-blur-md border border-zinc-800 rounded-lg p-2 md:p-2.5 max-w-[200px] md:max-w-[240px]">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[9px] font-mono uppercase text-[#00ffcc] tracking-wider block font-black truncate">{bandName || "Void Walkers"} Tour '26</span>
-            <button
-              onClick={() => {
-                setTokenInputVal(activeMapboxToken);
-                setShowTokenConfigModal(true);
-              }}
-              title="Configure Mapbox Token"
-              className="text-zinc-400 hover:text-[#00ffcc] p-0.5 rounded hover:bg-zinc-800 transition-colors shrink-0"
-            >
-              <Key className="w-3 h-3" />
-            </button>
-          </div>
-          <h3 className="text-xs font-semibold tracking-wide text-[#ffffff] font-display mt-0.5 flex items-center justify-between">
-            <span>Interactive Mapbox</span>
-            {activeMapboxToken && !mapError && (
-              <span className="text-[7.5px] font-mono text-emerald-400 bg-emerald-950/60 px-1 py-0.2 rounded border border-emerald-800">LIVE</span>
-            )}
-          </h3>
-          <p className="text-[8px] font-mono text-zinc-400 mt-1 hidden sm:block">
-            {activeMapboxToken 
-              ? `Displaying ${shows.length} global stops with live Fly-to zoom control!`
-              : (
-                <span className="cursor-pointer hover:underline text-[#00ffcc]" onClick={() => { setTokenInputVal(activeMapboxToken); setShowTokenConfigModal(true); }}>
-                  Click to configure Mapbox Token for interactive 3D map.
-                </span>
-              )
-            }
-          </p>
+                  ))}
+                </svg>
+            </>
+          )}
 
-          {/* Incorporated Active & Settled stops list/legend with count */}
-          <div className="mt-2 pt-2 border-t border-zinc-800/60 flex flex-col gap-1 text-[8px] sm:text-[9px] font-mono text-zinc-300">
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00ffcc] inline-block animate-pulse shrink-0" />
-              <span>Active: <strong className="text-[#00ffcc]">{shows.filter(s => s.status !== 'Closed').length}</strong></span>
+          {/* Tour Stop Card Popup Modal */}
+          {renderTourStopPopupOverlay()}
+
+          {/* Active tour detail readout footer */}
+          {selectedShowId && !selectedTourStopPopup && (
+            <div className="absolute bottom-4 left-2 right-2 md:left-4 md:right-4 z-20 bg-black/85 backdrop-blur-md px-3 py-1.5 border border-zinc-800 rounded-lg flex justify-between items-center text-[10px] md:text-xs shadow-xl animate-fade-in">
+              {(() => {
+                const selectedShow = shows.find(s => s.id === selectedShowId);
+                if (!selectedShow) return null;
+                return (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-3.5 h-3.5 text-[#00ffcc] shrink-0" />
+                      <span className="font-mono text-zinc-200 font-bold truncate max-w-[140px] sm:max-w-xs">{selectedShow.festival_name ? `${selectedShow.festival_name} • ` : ''}{selectedShow.name}</span>
+                    </div>
+                    <div className="flex gap-2 md:gap-3 font-mono text-[9px] md:text-[10px] text-zinc-400 font-bold ml-2 shrink-0">
+                      <span>Date: <span className="text-white">{selectedShow.date}</span></span>
+                      {selectedShow.revenue && <span>Gross: <span className="text-emerald-400">${selectedShow.revenue}</span></span>}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#c084fc] inline-block shrink-0" />
-              <span>Settled: <strong className="text-[#c084fc]">{shows.filter(s => s.status === 'Closed').length}</strong></span>
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Gesture Lock Toggle */}
-        <button 
-          onClick={() => setIsMapLocked(!isMapLocked)}
-          className={`absolute bottom-2 right-2 md:top-[88px] md:right-4 md:bottom-auto md:left-auto z-20 font-mono text-[8px] sm:text-[9px] uppercase tracking-widest font-black transition-all cursor-pointer bg-black/85 backdrop-blur-md shadow-xl px-2 py-1.5 rounded-none border border-emerald-500 hover:border-emerald-400 ${
-            isMapLocked 
-              ? 'text-zinc-400 hover:text-white hover:bg-emerald-950/20 shadow-[0_0_8px_rgba(16,185,129,0.1)]' 
-              : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
-          }`}
-        >
-          {isMapLocked ? 'Tap to Unlock' : 'Tap to Lock'}
-        </button>
-
-        {/* Active tour detail readout footer */}
-        {selectedShowId && (
-          <div className="absolute bottom-14 left-2 right-2 md:bottom-4 md:left-4 md:right-4 z-20 bg-black/85 backdrop-blur-md px-3 py-1.5 border border-zinc-800 rounded-lg flex justify-between items-center text-[10px] md:text-xs shadow-xl animate-fade-in">
-            {(() => {
-              const selectedShow = shows.find(s => s.id === selectedShowId);
-              if (!selectedShow) return null;
-              return (
-                <>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-[#00ffcc] shrink-0" />
-                    <span className="font-mono text-zinc-200 font-bold truncate max-w-[140px] sm:max-w-xs">{selectedShow.festival_name ? `${selectedShow.festival_name} • ` : ''}{selectedShow.name}</span>
-                  </div>
-                  <div className="flex gap-2 md:gap-3 font-mono text-[9px] md:text-[10px] text-zinc-400 font-bold ml-2 shrink-0">
-                    <span>Date: <span className="text-white">{selectedShow.date}</span></span>
-                    {selectedShow.revenue && <span>Gross: <span className="text-emerald-400">${selectedShow.revenue}</span></span>}
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        )}
+        {/* Tour Layers Control Panel Directly Underneath Map in Center */}
+        {renderTourLayersBottomPanel()}
       </div>
     );
   }
@@ -2019,210 +2567,226 @@ export default function ShowsView({
 
       {/* TOP COMPONENT: DESIGNER INTERACTIVE ROUTING MAP */}
       {!hideMap && (
-        <div 
-          className="bg-[#0b0d13] border-2 border-[#1f2330] rounded-xl overflow-hidden relative shadow-lg" 
-          style={{ height: '380px', width: '100%', minHeight: '380px' }}
-          id="shows-coordinate-map"
-        >
-          
-          {/* Gesture Lock Overlay */}
-          {isMapLocked && (
-            <div className="absolute inset-0 z-10 bg-transparent" />
-          )}
+        <div className="w-full flex flex-col items-center" id="shows-coordinate-map-section">
+          {/* Interactive Mapbox Wide Slim Banner Directly Above Map */}
+          {renderMapHeaderTile()}
 
-          {activeMapboxToken && !mapError ? (
-            // Active Mapbox viewport container
-            <div 
-              ref={mapContainerRef} 
-              className="absolute inset-0 w-full h-full z-0" 
-              style={{ height: '380px', width: '100%', minHeight: '380px' }}
-            />
-          ) : (
-            // Falling back to vector layout with background Dark Map overlay if Mapbox token is absent
-            <>
-              <div className="absolute inset-0 bg-[radial-gradient(#1f242e_1px,transparent_1px)] [background-size:16px_16px] opacity-25 pointer-events-none" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/60 pointer-events-none" />
-              
-              {/* Embedded SVG coordinates map overlay inside container */}
-              <svg 
-                viewBox={`0 0 ${svgWidth} ${svgHeight}`} 
-                className="absolute inset-0 w-full h-full drop-shadow-2xl select-none z-10"
-                preserveAspectRatio="xMidYMid slice"
-              >
-                <image 
-                  href={darkMapAsset} 
-                  width={svgWidth} 
-                  height={svgHeight} 
+          <div 
+            className="bg-[#0b0d13] border-2 border-[#1f2330] rounded-xl overflow-hidden relative shadow-lg w-full" 
+            style={{ height: '380px', minHeight: '380px' }}
+            id="shows-coordinate-map"
+          >
+            {/* Mapbox GL Status Badge in Upper-Left Corner of the Map */}
+            {renderMapCornerStatusBadge()}
+
+            {/* Gesture Lock Overlay */}
+            {isMapLocked && (
+              <div className="absolute inset-0 z-10 bg-transparent" />
+            )}
+
+            {activeMapboxToken && !mapError ? (
+              // Active Mapbox viewport container
+              <div 
+                ref={mapContainerRef} 
+                className="absolute inset-0 w-full h-full z-0" 
+                style={{ height: '380px', width: '100%', minHeight: '380px' }}
+              />
+            ) : (
+              // Falling back to vector layout with background Dark Map overlay if Mapbox token is absent
+              <>
+                <div className="absolute inset-0 bg-[radial-gradient(#1f242e_1px,transparent_1px)] [background-size:16px_16px] opacity-25 pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/60 pointer-events-none" />
+                
+                {/* Embedded SVG coordinates map overlay inside container */}
+                <svg 
+                  viewBox={`0 0 ${svgWidth} ${svgHeight}`} 
+                  className="absolute inset-0 w-full h-full drop-shadow-2xl select-none z-10"
                   preserveAspectRatio="xMidYMid slice"
-                  className="opacity-75 mix-blend-lighten select-none pointer-events-none" 
-                />
-                  {/* Glowing neon paths mapping chronological stops connection */}
-                  {chronologicalShowCoords.length > 1 && (
-                    <polyline
-                      points={chronologicalShowCoords.map(coord => `${coord.x},${coord.y}`).join(' ')}
-                      fill="none"
-                      className="stroke-[#00ffcc]/35 stroke-[1.5px]"
-                      strokeDasharray="2 4"
-                    />
-                  )}
+                >
+                  <image 
+                    href={darkMapAsset} 
+                    width={svgWidth} 
+                    height={svgHeight} 
+                    preserveAspectRatio="xMidYMid slice"
+                    className="opacity-75 mix-blend-lighten select-none pointer-events-none" 
+                  />
+                    {/* Glowing neon paths mapping personal chronological stops connection (Isolated personal layer) */}
+                    {showPersonalShowsLayer && chronologicalShowCoords.length > 1 && (
+                      <polyline
+                        points={chronologicalShowCoords.map(coord => `${coord.x},${coord.y}`).join(' ')}
+                        fill="none"
+                        className="stroke-[#00ffcc]/35 stroke-[1.5px]"
+                        strokeDasharray="2 4"
+                      />
+                    )}
 
-                  {/* Glowing animated path overlay connecting dots */}
-                  {chronologicalShowCoords.length > 1 && (
-                    <polyline
-                      points={chronologicalShowCoords.map(coord => `${coord.x},${coord.y}`).join(' ')}
-                      fill="none"
-                      className="stroke-[#00ffcc] stroke-[1px] opacity-60"
-                      strokeDasharray="180"
-                      strokeDashoffset="180"
-                      style={{
-                        strokeDasharray: 500,
-                        strokeDashoffset: 500,
-                        animation: 'dash 14s linear infinite'
-                      }}
-                    />
-                  )}
+                    {/* Glowing animated path overlay connecting personal dots */}
+                    {showPersonalShowsLayer && chronologicalShowCoords.length > 1 && (
+                      <polyline
+                        points={chronologicalShowCoords.map(coord => `${coord.x},${coord.y}`).join(' ')}
+                        fill="none"
+                        className="stroke-[#00ffcc] stroke-[1px] opacity-60"
+                        strokeDasharray="180"
+                        strokeDashoffset="180"
+                        style={{
+                          strokeDasharray: 500,
+                          strokeDashoffset: 500,
+                          animation: 'dash 14s linear infinite'
+                        }}
+                      />
+                    )}
 
-                  {/* Show stop coordinate points */}
-                  {showsWithCoords.map((show, swcIdx) => {
-                    const isActive = selectedShowId === show.id;
-                    const isClosed = show.status === 'Closed';
-                    const colorClass = isClosed ? '#c084fc' : '#00ffcc'; // Purple for closed, teal for active
-                    
-                    return (
-                      <g 
-                        key={show.id ? `coord2-${show.id}-${swcIdx}` : `coord2-${swcIdx}`} 
-                        className="cursor-pointer group"
-                        onClick={() => handleSelectShow(show.id)}
-                      >
-                        <circle
-                          cx={show.x}
-                          cy={show.y}
-                          r={isActive ? "10" : "6"}
-                          fill="transparent"
-                          stroke={colorClass}
-                          strokeWidth="1.5"
-                          className="group-hover:scale-125 transition-transform duration-300"
-                        />
-                        
-                        {/* Glowing pulsing dot for active stops */}
-                        {!isClosed && (
+                    {/* Personal show stop coordinate points */}
+                    {showPersonalShowsLayer && showsWithCoords.map((show, swcIdx) => {
+                      const isActive = selectedShowId === show.id;
+                      const isClosed = show.status === 'Closed';
+                      const colorClass = isClosed ? '#c084fc' : '#00ffcc'; // Purple for closed, teal for active
+                      
+                      return (
+                        <g 
+                          key={show.id ? `coord2-${show.id}-${swcIdx}` : `coord2-${swcIdx}`} 
+                          className="cursor-pointer group"
+                          onClick={() => {
+                            setSelectedTourStopPopup(null);
+                            handleSelectShow(show.id);
+                          }}
+                        >
                           <circle
                             cx={show.x}
                             cy={show.y}
-                            r="12"
+                            r={isActive ? "10" : "6"}
                             fill="transparent"
-                            stroke="#00ffcc"
-                            strokeWidth="1"
-                            className="animate-ping opacity-25"
+                            stroke={colorClass}
+                            strokeWidth="1.5"
+                            className="group-hover:scale-125 transition-transform duration-300"
+                          />
+                          
+                          {/* Glowing pulsing dot for active stops */}
+                          {!isClosed && (
+                            <circle
+                              cx={show.x}
+                              cy={show.y}
+                              r="12"
+                              fill="transparent"
+                              stroke="#00ffcc"
+                              strokeWidth="1"
+                              className="animate-ping opacity-25"
+                            />
+                          )}
+
+                          <circle
+                            cx={show.x}
+                            cy={show.y}
+                            r={isActive ? "5" : "3.5"}
+                            fill={colorClass}
+                            className="transition-all duration-300"
+                          />
+                          
+                          {/* Label tag mapping text labels */}
+                          <text
+                            x={show.x}
+                            y={show.y - (isActive ? 14 : 10)}
+                            textAnchor="middle"
+                            fill={isActive ? "#00ffcc" : "#9ca3af"}
+                            fontSize={isActive ? "11px" : "8px"}
+                            fontWeight={isActive ? "bold" : "600"}
+                            fontFamily="monospace"
+                            className="bg-black text-[9px] filter drop-shadow-md drop-shadow-[#000000_1px_1px]"
+                          >
+                            {show.label}
+                          </text>
+                        </g>
+                      );
+                    })}
+
+                    {/* Separate SVG Layers for Each Individual Tour Package */}
+                    {activeToursWithSvgCoords.map((tourItem) => (
+                      <g key={`tour-svg-layer2-${tourItem.tour.id}`}>
+                        {/* Tour Route Polyline */}
+                        {tourItem.stops.length > 1 && (
+                          <polyline
+                            points={tourItem.stops.map(st => `${st.x},${st.y}`).join(' ')}
+                            fill="none"
+                            stroke={tourItem.color.hex}
+                            strokeWidth="1.5"
+                            strokeDasharray="3 3"
+                            strokeOpacity="0.75"
                           />
                         )}
 
-                        <circle
-                          cx={show.x}
-                          cy={show.y}
-                          r={isActive ? "5" : "3.5"}
-                          fill={colorClass}
-                          className="transition-all duration-300"
-                        />
-                        
-                        {/* Label tag mapping text labels */}
-                        <text
-                          x={show.x}
-                          y={show.y - (isActive ? 14 : 10)}
-                          textAnchor="middle"
-                          fill={isActive ? "#00ffcc" : "#9ca3af"}
-                          fontSize={isActive ? "11px" : "8px"}
-                          fontWeight={isActive ? "bold" : "600"}
-                          fontFamily="monospace"
-                          className="bg-black text-[9px] filter drop-shadow-md drop-shadow-[#000000_1px_1px]"
-                        >
-                          {show.label}
-                        </text>
+                        {/* Tour Stops Circles */}
+                        {tourItem.stops.map((stop) => (
+                          <g
+                            key={`tour-svg-stop2-${tourItem.tour.id}-${stop.id}`}
+                            className="cursor-pointer group"
+                            onClick={() => {
+                              setSelectedTourId(tourItem.tour.id);
+                              setSelectedTourStopPopup({ tour: tourItem.tour, stop, color: tourItem.color });
+                            }}
+                          >
+                            <circle
+                              cx={stop.x}
+                              cy={stop.y}
+                              r="8"
+                              fill="transparent"
+                              stroke={tourItem.color.hex}
+                              strokeWidth="1.5"
+                              className="group-hover:scale-125 transition-transform"
+                            />
+                            <circle
+                              cx={stop.x}
+                              cy={stop.y}
+                              r="4"
+                              fill={tourItem.color.hex}
+                            />
+                            <text
+                              x={stop.x}
+                              y={stop.y - 10}
+                              textAnchor="middle"
+                              fill={tourItem.color.hex}
+                              fontSize="8px"
+                              fontWeight="bold"
+                              fontFamily="monospace"
+                              className="bg-black text-[8px] filter drop-shadow-md drop-shadow-[#000000_1px_1px]"
+                            >
+                              {stop.city}
+                            </text>
+                          </g>
+                        ))}
                       </g>
-                    );
-                  })}
-                </svg>
-            </>
-          )}
-          
-          {/* Title Tag overlay */}
-          <div className="absolute top-2 left-2 md:top-4 md:left-4 z-20 bg-black/75 backdrop-blur-md border border-zinc-800 rounded-lg p-2 md:p-2.5 max-w-[200px] md:max-w-[240px]">
-            <div className="flex items-center justify-between gap-1">
-              <span className="text-[9px] font-mono uppercase text-[#00ffcc] tracking-wider block font-black truncate">{bandName || "Void Walkers"} Tour '26</span>
-              <button
-                onClick={() => {
-                  setTokenInputVal(activeMapboxToken);
-                  setShowTokenConfigModal(true);
-                }}
-                title="Configure Mapbox Token"
-                className="text-zinc-400 hover:text-[#00ffcc] p-0.5 rounded hover:bg-zinc-800 transition-colors shrink-0"
-              >
-                <Key className="w-3 h-3" />
-              </button>
-            </div>
-            <h3 className="text-xs font-semibold tracking-wide text-[#ffffff] font-display mt-0.5 flex items-center justify-between">
-              <span>Interactive Mapbox</span>
-              {activeMapboxToken && !mapError && (
-                <span className="text-[7.5px] font-mono text-emerald-400 bg-emerald-950/60 px-1 py-0.2 rounded border border-emerald-800">LIVE</span>
-              )}
-            </h3>
-            <p className="text-[8px] font-mono text-zinc-400 mt-1 hidden sm:block">
-              {activeMapboxToken 
-                ? `Displaying ${shows.length} global stops with live Fly-to zoom control!`
-                : (
-                  <span className="cursor-pointer hover:underline text-[#00ffcc]" onClick={() => { setTokenInputVal(activeMapboxToken); setShowTokenConfigModal(true); }}>
-                    Click to configure Mapbox Token for interactive 3D map.
-                  </span>
-                )
-              }
-            </p>
+                    ))}
+                  </svg>
+              </>
+            )}
 
-            {/* Incorporated Active & Settled stops list/legend with count */}
-            <div className="mt-2 pt-2 border-t border-zinc-800/60 flex flex-col gap-1 text-[8px] sm:text-[9px] font-mono text-zinc-300">
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#00ffcc] inline-block animate-pulse shrink-0" />
-                <span>Active: <strong className="text-[#00ffcc]">{shows.filter(s => s.status !== 'Closed').length}</strong></span>
+            {/* Tour Stop Card Popup Modal */}
+            {renderTourStopPopupOverlay()}
+
+            {/* Active tour detail readout footer */}
+            {selectedShowId && !selectedTourStopPopup && (
+              <div className="absolute bottom-4 left-2 right-2 md:left-4 md:right-4 z-20 bg-black/85 backdrop-blur-md px-3 py-1.5 border border-zinc-800 rounded-lg flex justify-between items-center text-[10px] md:text-xs shadow-xl animate-fade-in">
+                {(() => {
+                  const selectedShow = shows.find(s => s.id === selectedShowId);
+                  if (!selectedShow) return null;
+                  return (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-3.5 h-3.5 text-[#00ffcc] shrink-0" />
+                        <span className="font-mono text-zinc-200 font-bold truncate max-w-[140px] sm:max-w-xs">{selectedShow.festival_name ? `${selectedShow.festival_name} • ` : ''}{selectedShow.name}</span>
+                      </div>
+                      <div className="flex gap-2 md:gap-3 font-mono text-[9px] md:text-[10px] text-zinc-400 font-bold ml-2 shrink-0">
+                        <span>Date: <span className="text-white">{selectedShow.date}</span></span>
+                        {selectedShow.revenue && <span>Gross: <span className="text-emerald-400">${selectedShow.revenue}</span></span>}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#c084fc] inline-block shrink-0" />
-                <span>Settled: <strong className="text-[#c084fc]">{shows.filter(s => s.status === 'Closed').length}</strong></span>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* Gesture Lock Toggle */}
-          <button 
-            onClick={() => setIsMapLocked(!isMapLocked)}
-            className={`absolute bottom-2 right-2 md:top-[88px] md:right-4 md:bottom-auto md:left-auto z-20 font-mono text-[8px] sm:text-[9px] uppercase tracking-widest font-black transition-all cursor-pointer bg-black/85 backdrop-blur-md shadow-xl px-2 py-1.5 rounded-none border border-emerald-500 hover:border-emerald-400 ${
-              isMapLocked 
-                ? 'text-zinc-400 hover:text-white hover:bg-emerald-950/20 shadow-[0_0_8px_rgba(16,185,129,0.1)]' 
-                : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
-            }`}
-          >
-            {isMapLocked ? 'Tap to Unlock' : 'Tap to Lock'}
-          </button>
-
-          {/* Active tour detail readout footer */}
-          {selectedShowId && (
-            <div className="absolute bottom-14 left-2 right-2 md:bottom-4 md:left-4 md:right-4 z-20 bg-black/85 backdrop-blur-md px-3 py-1.5 border border-zinc-800 rounded-lg flex justify-between items-center text-[10px] md:text-xs shadow-xl animate-fade-in">
-              {(() => {
-                const selectedShow = shows.find(s => s.id === selectedShowId);
-                if (!selectedShow) return null;
-                return (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-[#00ffcc] shrink-0" />
-                      <span className="font-mono text-zinc-200 font-bold truncate max-w-[140px] sm:max-w-xs">{selectedShow.festival_name ? `${selectedShow.festival_name} • ` : ''}{selectedShow.name}</span>
-                    </div>
-                    <div className="flex gap-2 md:gap-3 font-mono text-[9px] md:text-[10px] text-zinc-400 font-bold ml-2 shrink-0">
-                      <span>Date: <span className="text-white">{selectedShow.date}</span></span>
-                      {selectedShow.revenue && <span>Gross: <span className="text-emerald-400">${selectedShow.revenue}</span></span>}
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          )}
+          {/* Tour Layers Control Panel Directly Underneath Map in Center */}
+          {renderTourLayersBottomPanel()}
         </div>
       )}
 

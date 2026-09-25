@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, Band, Offer, Show, hasRegisteredWorkspace } from '../../../types';
 import { Power, Globe, Users, User, DollarSign, Database, Activity, RefreshCw, Settings, X, Home, Lock, Sparkles, Layers, LogOut, Bell, Building, MapPin, MessageSquare, ArrowLeft, Send, CheckSquare, Check, Plus, AlertTriangle, TrendingUp, Shield, BarChart3, Radio, Heart, MessageCircle, Play, Pause, Square, SkipBack, SkipForward, Disc, Volume2, Truck, Tag, Edit, Trash2, Upload, ShoppingBag, ShoppingCart, CreditCard, Calendar, ArrowRightLeft, Package, Box, Banknote, ChevronDown, Calculator, Palette, Info, Search, Pin, Flame, Rocket, ThumbsUp, Menu, Briefcase, Star, Mail, ExternalLink, ChevronUp, Camera, Zap, Edit3, ChevronLeft, ChevronRight, Music, Maximize } from 'lucide-react';
 import MarqueeText from '../../MarqueeText';
-import { getSupabase, uploadBase64ToStorage } from '../../../supabase';
+import { getSupabase, uploadBase64ToStorage, executeWithSchemaResilience } from '../../../supabase';
 import { MASTER_GENRES } from '../../../constants/genres';
 
 import PromoterSettingsTab from './PromoterSettingsTab';
@@ -931,7 +931,16 @@ export default function PromoterDashboardViewV2({
             }));
             const supabase = getSupabase();
             if (supabase && userProfile?.id) {
-              await supabase.from('profiles').update({ promoter_logo: publicUrl }).eq('id', userProfile.id);
+              await executeWithSchemaResilience(
+                async (payload) => supabase.from('profiles').update(payload).eq('id', userProfile.id),
+                {
+                  promoter_metadata: {
+                    ...(userProfile?.promoter_metadata || {}),
+                    promoter_logo: publicUrl,
+                    logo_url: publicUrl
+                  }
+                }
+              );
             }
             safeTriggerNotification('✓ Profile photo updated.');
           } catch (err) {
@@ -962,7 +971,17 @@ export default function PromoterDashboardViewV2({
             }));
             const supabase = getSupabase();
             if (supabase && userProfile?.id) {
-              await supabase.from('profiles').update({ promoter_cover_image: publicUrl }).eq('id', userProfile.id);
+              await executeWithSchemaResilience(
+                async (payload) => supabase.from('profiles').update(payload).eq('id', userProfile.id),
+                {
+                  promoter_metadata: {
+                    ...(userProfile?.promoter_metadata || {}),
+                    promoter_cover_image: publicUrl,
+                    cover_url: publicUrl,
+                    banner_url: publicUrl
+                  }
+                }
+              );
             }
             safeTriggerNotification('✓ Banner background updated.');
           } catch (err) {
@@ -1015,14 +1034,13 @@ export default function PromoterDashboardViewV2({
     const supabase = getSupabase();
     if (supabase && userProfile?.id) {
       try {
-        await supabase
-          .from('profiles')
-          .update({
-            name: displayName,
-            promoter_logo: avatarUrl,
+        await executeWithSchemaResilience(
+          async (payload) => supabase.from('profiles').update(payload).eq('id', userProfile.id),
+          {
+            full_name: displayName,
             promoter_metadata: updatedMetadata
-          })
-          .eq('id', userProfile.id);
+          }
+        );
         console.log('✓ Successfully synced promoter specifications with Supabase ledger.');
       } catch (err) {
         console.error('Failed to update Supabase promoter profile metadata:', err);
@@ -1832,20 +1850,20 @@ export default function PromoterDashboardViewV2({
                 className="flex flex-col items-center justify-center w-full py-2 group relative transition-colors cursor-pointer"
               >
                 {isActive && (
-                  <div className="absolute inset-0 bg-lime-500/10 blur-xl rounded-full w-10 h-10 mx-auto -z-10 animate-pulse" />
+                  <div className="absolute inset-0 bg-yellow-500/10 blur-xl rounded-full w-10 h-10 mx-auto -z-10 animate-pulse" />
                 )}
                 <IconComponent className={`w-5 h-5 mb-1 transition-all ${
                   isActive
-                    ? 'text-lime-500 drop-shadow-[0_0_8px_rgba(217,70,239,0.8)] scale-110'
+                    ? 'text-yellow-400 drop-shadow-[0_0_8px_rgba(234,179,8,0.8)] scale-110'
                     : 'text-zinc-500 group-hover:text-zinc-300'
                 }`} />
                 <span className={`text-[8.5px] font-bold tracking-wider uppercase transition-colors ${
-                  isActive ? 'text-lime-500 font-black' : 'text-zinc-500 group-hover:text-zinc-300'
+                  isActive ? 'text-yellow-400 font-black' : 'text-zinc-500 group-hover:text-zinc-300'
                 }`}>
                   {item.label}
                 </span>
                 {isActive && (
-                  <div className="w-8 h-[3px] bg-lime-500 shadow-[0_0_12px_rgba(217,70,239,0.8)] rounded-t-full absolute bottom-0" />
+                  <div className="w-8 h-[3px] bg-yellow-400 shadow-[0_0_12px_rgba(234,179,8,0.8)] rounded-t-full absolute bottom-0" />
                 )}
               </button>
             );
@@ -1861,13 +1879,13 @@ export default function PromoterDashboardViewV2({
           <div className="min-w-0 max-w-[calc(100%-140px)] flex-grow">
             <MarqueeText 
               text={(userProfile.promoter_metadata?.business_name) || 'PROMOTER HQ'}
-              className="font-display font-black tracking-wider text-lime-500 drop-shadow-[0_0_10px_rgba(217,70,239,0.65)] uppercase font-sans text-[18px]"
+              className="font-display font-black tracking-wider text-yellow-400 drop-shadow-[0_0_10px_rgba(234,179,8,0.65)] uppercase font-sans text-[18px]"
             />
           </div>
           
           <div className="flex items-center gap-2 shrink-0">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-lime-500/20 bg-lime-950/15 text-lime-400 text-[8.5px] font-bold uppercase tracking-wider font-mono shadow-[0_0_12px_rgba(217,70,239,0.15)] select-none">
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-lime-500 shadow-[0_0_8px_#ccff00]" />
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-yellow-500/20 bg-yellow-950/15 text-yellow-400 text-[8.5px] font-bold uppercase tracking-wider font-mono shadow-[0_0_12px_rgba(234,179,8,0.15)] select-none">
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-yellow-400 shadow-[0_0_8px_#facc15]" />
               <span>LIVE CLOUD SYNC</span>
             </div>
           </div>

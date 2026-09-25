@@ -867,6 +867,7 @@ export default function App() {
     const handleProfileUpdate = (e: any) => {
       if (e.detail) {
         setUserProfile(e.detail);
+        if (activeTab === 'social') return;
         const ws = e.detail.active_workspace || e.detail.account_type;
         if (ws === 'band') {
           setActiveTab('home-v2');
@@ -884,7 +885,7 @@ export default function App() {
     };
     window.addEventListener('nexus_core_user_profile_updated', handleProfileUpdate);
     return () => window.removeEventListener('nexus_core_user_profile_updated', handleProfileUpdate);
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     const handleRegisterWorkspace = (e: any) => {
@@ -3872,6 +3873,39 @@ list.push({
                       id: customProfile.band_id || selectBandId || customBand?.id || generateUUID(),
                       name: customProfile.band_name || customProfile.bandName || customBand?.name || 'Band Workspace'
                     }]);
+                  }
+                }
+
+                const hasUnlockedPromoterWorkspace = Boolean(
+                  customProfile.promoter_id ||
+                  customProfile.promoter_agency ||
+                  customProfile.promoter_brand ||
+                  customProfile.promoter_name ||
+                  customProfile.promoter_metadata?.brand_name ||
+                  customProfile.promoter_metadata?.agency_name ||
+                  hasRegisteredWorkspace(customProfile, 'promoter')
+                );
+
+                if (hasUnlockedPromoterWorkspace) {
+                  const pName = customProfile.promoter_metadata?.brand_name || customProfile.promoter_metadata?.agency_name || customProfile.promoter_agency || customProfile.promoter_brand || customProfile.promoter_name || 'Nexus Live Productions';
+                  const pId = customProfile.promoter_id || (customProfile.promoter_metadata as any)?.id || customProfile.id;
+                  customProfile.promoter_id = pId;
+                  customProfile.promoter_agency = pName;
+                  customProfile.promoter_brand = pName;
+                  customProfile.promoter_name = pName;
+                  if (!hasRegisteredWorkspace(customProfile, 'promoter')) {
+                    customProfile.registered_workspaces = normalizeRegisteredWorkspaces(customProfile.registered_workspaces, [{
+                      type: 'promoter',
+                      id: pId,
+                      name: pName
+                    }]);
+                  }
+                }
+
+                if (isMiguelNameOrProfile(customProfile)) {
+                  const veLogo = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396';
+                  if (!customProfile.band_logo || customProfile.band_logo === customProfile.promoter_logo) {
+                    customProfile.band_logo = veLogo;
                   }
                 }
 

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { getSupabase } from '../../../supabase';
 import { showsStore } from '../../../utils/indexedDB';
+import { resolveLocationCoordinates } from '../../../lib/geoResolution';
 
 export interface EventsDirectoryModalProps {
   isOpen: boolean;
@@ -51,47 +52,6 @@ export interface EventsDirectoryModalProps {
   onSelectEvent?: (evt: any) => void;
   onOpenEventPage?: (evt: any) => void;
 }
-
-const CITY_GEOLOCATIONS: Record<string, { lng: number; lat: number }> = {
-  'denison': { lng: -96.5367, lat: 33.7557 },
-  'los angeles': { lng: -118.2437, lat: 34.0522 },
-  'la': { lng: -118.2437, lat: 34.0522 },
-  'san francisco': { lng: -122.4194, lat: 37.7749 },
-  'sf': { lng: -122.4194, lat: 37.7749 },
-  'oakland': { lng: -122.2711, lat: 37.8044 },
-  'austin': { lng: -97.7431, lat: 30.2672 },
-  'dallas': { lng: -96.7970, lat: 32.7767 },
-  'houston': { lng: -95.3698, lat: 29.7604 },
-  'san antonio': { lng: -98.4936, lat: 29.4241 },
-  'chicago': { lng: -87.6298, lat: 41.8781 },
-  'cudahy': { lng: -87.8612, lat: 42.9556 },
-  'milwaukee': { lng: -87.9065, lat: 43.0389 },
-  'fort wayne': { lng: -85.1394, lat: 41.0793 },
-  'indianapolis': { lng: -86.1581, lat: 39.7684 },
-  'denver': { lng: -104.9903, lat: 39.7392 },
-  'detroit': { lng: -83.0458, lat: 42.3314 },
-  'new york': { lng: -74.0060, lat: 40.7128 },
-  'nyc': { lng: -74.0060, lat: 40.7128 },
-  'brooklyn': { lng: -73.9442, lat: 40.6782 },
-  'philadelphia': { lng: -75.1652, lat: 39.9526 },
-  'boston': { lng: -71.0589, lat: 42.3601 },
-  'seattle': { lng: -122.3321, lat: 47.6062 },
-  'portland': { lng: -122.6765, lat: 45.5231 },
-  'phoenix': { lng: -112.0740, lat: 33.4484 },
-  'san diego': { lng: -117.1611, lat: 32.7157 },
-  'atlanta': { lng: -84.3880, lat: 33.7490 },
-  'nashville': { lng: -86.7816, lat: 36.1627 },
-  'minneapolis': { lng: -93.2650, lat: 44.9778 },
-  'las vegas': { lng: -115.1398, lat: 36.1699 },
-  'tampa': { lng: -82.4572, lat: 27.9506 },
-  'miami': { lng: -80.1918, lat: 25.7617 },
-  'toronto': { lng: -79.3832, lat: 43.6532 },
-  'montreal': { lng: -73.5673, lat: 45.5017 },
-  'vancouver': { lng: -123.1207, lat: 49.2827 },
-  'london': { lng: -0.1278, lat: 51.5074 },
-  'berlin': { lng: 13.4050, lat: 52.5200 },
-  'tokyo': { lng: 139.6503, lat: 35.6762 },
-};
 
 /**
  * Normalizes any show table row into a standardized Event Directory gig object
@@ -173,18 +133,22 @@ export const normalizeShowToEventDirectoryItem = (show: any, idx: number = 0) =>
   const flyerUrl = show.flyerUrl || show.flyer_url || show.image || show.thumbnail || show.image_url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80';
   const genre = show.genre || (show.micro_genres && show.micro_genres.length > 0 ? show.micro_genres.join(' / ') : 'Extreme Metal / Touring Route');
 
-  // Derive coordinates
+  // Derive coordinates accurately
   let lat = show.venue_lat || show.lat;
   let lng = show.venue_lng || show.lng;
   if (!lat || !lng) {
-    const cityKey = Object.keys(CITY_GEOLOCATIONS).find(k => (rawCity || '').toLowerCase().includes(k.toLowerCase()));
-    if (cityKey && CITY_GEOLOCATIONS[cityKey]) {
-      lat = CITY_GEOLOCATIONS[cityKey].lat;
-      lng = CITY_GEOLOCATIONS[cityKey].lng;
-    } else {
-      lat = 34.0 + (idx % 8) * 0.12;
-      lng = -118.2 - (idx % 8) * 0.14;
-    }
+    const geo = resolveLocationCoordinates({
+      city: rawCity || show.city,
+      state: show.state_province || show.state,
+      venueName: venue,
+      festivalName: show.festival_name,
+      venueLat: show.venue_lat || show.lat,
+      venueLng: show.venue_lng || show.lng,
+      fallbackKey: `${rawCity || ''} ${venue || ''} ${show.id || idx}`,
+      stopIndex: idx
+    });
+    lat = geo.lat;
+    lng = geo.lng;
   }
 
   return {

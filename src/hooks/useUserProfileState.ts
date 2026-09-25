@@ -32,7 +32,7 @@ export function useUserProfileState({
       return userProfile?.creative_metadata?.business_name || userProfile?.creative_name || 'Pro Creative';
     }
     if (portalRole === 'promoter') {
-      return userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_brand || 'Pro Promoter';
+      return userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_metadata?.agency_name || userProfile?.promoter_agency || userProfile?.promoter_brand || userProfile?.promoter_name || 'Nexus Live Productions';
     }
     if (portalRole === 'label') {
       return userProfile?.label_company_name || 'Pro Label';
@@ -66,7 +66,7 @@ export function useUserProfileState({
       return rawC.replace(/^@+/, '').replace(/\s+/g, '_');
     }
     if (portalRole === 'promoter') {
-      const rawP = userProfile?.promoter_handle || userProfile?.promoter_metadata?.brand_name || 'promoter_pro';
+      const rawP = userProfile?.promoter_handle || userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_metadata?.agency_name || userProfile?.promoter_agency || userProfile?.promoter_name || 'nexus_live_productions';
       return rawP.replace(/^@+/, '').replace(/\s+/g, '_');
     }
     if (portalRole === 'label') {
@@ -280,7 +280,7 @@ export function useUserProfileState({
     } else if (portalRole === 'creative') {
       name = userProfile?.creative_metadata?.business_name || userProfile?.creative_name || 'Pro Creative';
     } else if (portalRole === 'promoter') {
-      name = userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_brand || 'Pro Promoter';
+      name = userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_metadata?.agency_name || userProfile?.promoter_agency || userProfile?.promoter_brand || userProfile?.promoter_name || 'Nexus Live Productions';
     } else if (portalRole === 'label') {
       name = userProfile?.label_company_name || 'Pro Label';
     } else if (portalRole === 'fan_only') {
@@ -306,7 +306,7 @@ export function useUserProfileState({
       const rawC = userProfile?.creative_handle || userProfile?.creative_metadata?.business_name || 'creative_pro';
       handle = rawC.replace(/^@+/, '').replace(/\s+/g, '_');
     } else if (portalRole === 'promoter') {
-      const rawP = userProfile?.promoter_handle || userProfile?.promoter_metadata?.brand_name || 'promoter_pro';
+      const rawP = userProfile?.promoter_handle || userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_metadata?.agency_name || userProfile?.promoter_agency || userProfile?.promoter_name || 'nexus_live_productions';
       handle = rawP.replace(/^@+/, '').replace(/\s+/g, '_');
     } else if (portalRole === 'label') {
       const rawL = userProfile?.label_url_slug || userProfile?.label_company_name || 'label_pro';
@@ -544,7 +544,8 @@ export function useUserProfileState({
           if (promoterId) {
             const promoterPayload = {
               id: promoterId,
-              brand_name: profileFullLegalName,
+              corporate_name: profileFullLegalName || userProfile?.corporate_name || userProfile?.name || 'Nexus Live Productions',
+              brand_name: profileFullLegalName || userProfile?.corporate_name || userProfile?.name || 'Nexus Live Productions',
               promoter_logo: profileAvatarUrl,
               promoter_cover_image: profileCoverUrl,
               bio: profileBlurb,

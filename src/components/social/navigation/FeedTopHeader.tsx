@@ -31,6 +31,7 @@ import {
   resolveEffectiveCover
 } from '../../../utils/bandProfileUtils';
 import { BandWorkspaceNavBanner } from './BandWorkspaceNavBanner';
+import { PromoterWorkspaceNavBanner } from './PromoterWorkspaceNavBanner';
 
 export interface FeedTopHeaderProps {
   isEmbedded?: boolean;
@@ -198,7 +199,7 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
           {!isEmbedded && (
             <div className="text-right mr-1">
               <p className={`text-[9px] font-mono font-bold uppercase tracking-wider leading-none mb-1 ${
-                portalRole === 'fan_only' ? 'text-cyan-400' : 'text-[#9d4edf]'
+                portalRole === 'fan_only' ? 'text-cyan-400' : portalRole === 'promoter' ? 'text-yellow-400' : 'text-[#9d4edf]'
               }`}>
                 {portalRole === 'fan_only'
                   ? 'FAN ZONE'
@@ -224,6 +225,8 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
               className={`relative rounded-full overflow-hidden transition-all duration-300 p-0.5 border-2 ${
                 portalRole === 'fan_only'
                   ? 'border-cyan-400/80 shadow-[0_0_15px_rgba(34,211,238,0.5)]'
+                  : portalRole === 'promoter'
+                  ? 'border-yellow-400/80 shadow-[0_0_15px_rgba(234,179,8,0.7)]'
                   : 'border-[#6601BB] shadow-[0_0_15px_rgba(102,1,187,0.7)]'
               }`}
               title="Switch Workspace / Profile"
@@ -568,7 +571,7 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                             }}
                             className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all ${
                               isActive
-                                ? 'bg-[#291244] border border-[#6601BB] text-white shadow-md'
+                                ? 'bg-yellow-950/40 border border-yellow-500 text-white shadow-md'
                                 : !promoterAllowed
                                 ? 'bg-amber-950/20 border border-amber-500/30 hover:border-amber-500/60 text-amber-200'
                                 : 'hover:bg-zinc-900/80 text-zinc-400 border border-transparent'
@@ -577,14 +580,14 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                             <div className="flex items-center gap-2 min-w-0">
                               <span className={`text-sm ${!isActive && !promoterAllowed ? 'opacity-80' : ''}`}>🏟️</span>
                               <div className="text-left min-w-0">
-                                <div className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 ${isActive ? 'text-[#a268ff]' : (promoterAllowed ? 'text-zinc-300' : 'text-amber-300')}`}>
+                                <div className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 ${isActive ? 'text-yellow-400' : (promoterAllowed ? 'text-zinc-300' : 'text-amber-300')}`}>
                                   VENUE PROMOTER {!promoterAllowed && <Lock className="w-3 h-3 text-amber-400" strokeWidth={2.5} />}
                                 </div>
                                 <div className={`text-[9px] font-mono leading-none mt-0.5 ${isActive ? 'text-zinc-300' : (!promoterAllowed ? 'text-amber-400/80 font-semibold' : 'text-zinc-500')}`}>{isActive ? 'Active Environment' : (!promoterAllowed ? 'LOCKED • Tap to Register' : 'Switch Workspace')}</div>
                               </div>
                             </div>
                             {isActive ? (
-                              <div className="w-1.5 h-1.5 rounded-full bg-[#a268ff] shadow-[0_0_8px_rgba(162,104,255,0.8)] shrink-0" />
+                              <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 shadow-[0_0_8px_rgba(234,179,8,0.8)] shrink-0" />
                             ) : !promoterAllowed && (
                               <div className="w-5 h-5 rounded-full bg-amber-950/60 border border-amber-500/40 flex items-center justify-center shrink-0">
                                 <Lock className="w-3 h-3 text-amber-400" strokeWidth={2.5} />
@@ -794,6 +797,17 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
         />
       )}
 
+      {/* Promoter Workspace Navigation Bar - Only for Promoter workspace */}
+      {portalRole === 'promoter' && (
+        <PromoterWorkspaceNavBanner
+          userProfile={userProfile}
+          onNavigateToTab={onNavigateToTab}
+          setActiveTab={setActiveTab}
+          triggerNotification={triggerNotification}
+          portalRole={portalRole}
+        />
+      )}
+
       {/* Primary Global Navigation Bar / Sub-Navigation Bar & Universal Search (Hidden in Clips tab for immersive fullscreen video, and in Messages/Inbox tab) */}
       {activeTab !== 'reels' && activeTab !== 'messages' && (
         <div className="flex flex-col border-t border-zinc-900/80 bg-[#0c0e12]">
@@ -823,27 +837,27 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                   {/* Icon */}
                   <div className={`relative flex items-center justify-center transition-colors ${
                     isActive 
-                      ? portalRole === 'fan_only' ? 'text-cyan-400' : 'text-[#9d4edf]' 
+                      ? portalRole === 'fan_only' ? 'text-cyan-400' : portalRole === 'promoter' ? 'text-yellow-400' : 'text-[#9d4edf]' 
                       : 'text-zinc-500 group-hover:text-zinc-300'
                   }`}>
                     <item.icon className="w-[22px] h-[22px]" strokeWidth={1.5} />
                     {item.badge && unreadNotifsCount > 0 && (
                       <span className={`absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-lg ${
-                        portalRole === 'fan_only' ? 'bg-cyan-500' : 'bg-[#6601BB]'
+                        portalRole === 'fan_only' ? 'bg-cyan-500' : portalRole === 'promoter' ? 'bg-yellow-500 text-black' : 'bg-[#6601BB]'
                       }`}>
                         {unreadNotifsCount}
                       </span>
                     )}
                     {item.id === 'notices' && unreadNotifsCount > 0 && (
                       <span className={`absolute -top-1.5 -right-1.5 w-2 h-2 rounded-full animate-ping ${
-                        portalRole === 'fan_only' ? 'bg-cyan-500' : 'bg-[#6601BB]'
+                        portalRole === 'fan_only' ? 'bg-cyan-500' : portalRole === 'promoter' ? 'bg-yellow-400' : 'bg-[#6601BB]'
                       }`} />
                     )}
                   </div>
                   {/* Label */}
                   <span className={`text-[9px] font-black uppercase tracking-[0.1em] transition-colors ${
                     isActive 
-                      ? portalRole === 'fan_only' ? 'text-cyan-400' : 'text-[#9d4edf]'
+                      ? portalRole === 'fan_only' ? 'text-cyan-400' : portalRole === 'promoter' ? 'text-yellow-400' : 'text-[#9d4edf]'
                       : 'text-zinc-500 group-hover:text-zinc-300'
                   }`}>
                     {item.label}
@@ -853,7 +867,11 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                     <motion.div
                       layoutId="socialNavIndicator"
                       className={`absolute -bottom-[3px] left-1 right-1 h-[2px] rounded-t-full ${
-                        portalRole === 'fan_only' ? 'bg-cyan-400 shadow-[0_-2px_8px_rgba(34,211,238,0.5)]' : 'bg-[#6601BB] shadow-[0_-2px_8px_rgba(102,1,187,0.8)]'
+                        portalRole === 'fan_only' 
+                          ? 'bg-cyan-400 shadow-[0_-2px_8px_rgba(34,211,238,0.5)]' 
+                          : portalRole === 'promoter'
+                          ? 'bg-yellow-400 shadow-[0_-2px_8px_rgba(234,179,8,0.8)]'
+                          : 'bg-[#6601BB] shadow-[0_-2px_8px_rgba(102,1,187,0.8)]'
                       }`}
                     />
                   )}
@@ -905,6 +923,8 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                           isSelected
                             ? portalRole === 'fan_only'
                               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/70 shadow-[0_0_12px_rgba(34,211,238,0.35)]'
+                              : portalRole === 'promoter'
+                              ? 'bg-yellow-500/25 text-yellow-300 border border-yellow-400/80 shadow-[0_0_12px_rgba(234,179,8,0.4)]'
                               : 'bg-[#6601BB]/30 text-[#e9d5ff] border border-[#a855f7]/70 shadow-[0_0_12px_rgba(168,85,247,0.35)]'
                             : 'bg-zinc-900/90 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border border-zinc-800/80'
                         }`}

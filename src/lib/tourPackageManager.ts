@@ -1,6 +1,79 @@
 // Tour Package Sync & Multi-Tour Management Module
 import { supabase } from './supabaseClient';
-import { TourPackageBand, TourPackageStop } from '../components/portals/Band/TourManagerPackageModule';
+
+export interface TourVehicle {
+  id: string;
+  name: string; // e.g. "Lead Tour Sleeper Bus (Prevost H3)", "16ft Dual-Axle Cargo Trailer", "Support Band Mercedes Sprinter 3500"
+  type: 'sleeper_bus' | 'sprinter' | 'passenger_van' | 'cargo_trailer' | 'box_truck' | 'car';
+  licensePlate?: string;
+  driverName?: string;
+  driverPhone?: string;
+  assignedBands?: string[]; // IDs or names of bands traveling in this vehicle
+  capacityPax?: number;
+  cargoNotes?: string;
+  shorePowerReq?: string;
+  status?: 'active' | 'in_repair' | 'backup';
+  notes?: string;
+}
+
+export interface SharedBacklineConfig {
+  drumKitNotes: string;
+  drumProviderBandId?: string;
+  drumSupportRules?: string;
+  bassRigNotes: string;
+  bassProviderBandId?: string;
+  bassSupportRules?: string;
+  trailerNotes: string;
+  guitarCabNotes?: string;
+  paMonitorsNotes?: string;
+  stagePlotNotes?: string;
+}
+
+export interface TourPackageBand {
+  id: string;
+  name: string;
+  role: 'headliner' | 'direct_support' | 'opener' | 'local_support';
+  setMinutes: number;
+  guarantee: number;
+  guaranteeType: 'fixed' | 'percentage';
+  percentageSplit?: number;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string;
+  sharedGearNotes: string;
+  membersCount: number;
+  avatarColor: string;
+  avatarUrl?: string;
+  city?: string;
+  assignedVehicleId?: string;
+}
+
+export interface TourPackageStop {
+  id: string;
+  date: string;
+  venueName: string;
+  city: string;
+  state: string;
+  capacity?: number;
+  status: 'confirmed' | 'advancing' | 'pending' | 'settled';
+  loadInTime: string;
+  soundcheckTime: string;
+  doorsTime: string;
+  showStartTime: string;
+  curfewTime: string;
+  venueContactName: string;
+  venueContactPhone: string;
+  venueContactEmail: string;
+  grossDeal: number;
+  merchCutVenuePct: number;
+  parkingNotes: string;
+  hospitalityNotes: string;
+  advancingDone: boolean;
+  advancingStatus?: string;
+  blackBookVenueId?: string;
+  venue_lat?: number;
+  venue_lng?: number;
+}
 
 export interface TourPackageRecord {
   id: string;
@@ -10,6 +83,8 @@ export interface TourPackageRecord {
   embargoUntilDate: string;
   bands: TourPackageBand[];
   stops: TourPackageStop[];
+  vehicles: TourVehicle[];
+  backlineConfig: SharedBacklineConfig;
   backlineNotes?: {
     drumKitNotes?: string;
     bassRigNotes?: string;
@@ -21,6 +96,64 @@ export interface TourPackageRecord {
 
 const LOCAL_STORAGE_KEY_ALL_TOURS = 'tm_all_tour_packages_v2';
 const LOCAL_STORAGE_KEY_ACTIVE_TOUR_ID = 'tm_active_tour_package_id_v2';
+
+export const DEFAULT_BACKLINE_CONFIG: SharedBacklineConfig = {
+  drumKitNotes: 'Pearl Reference 5-piece Drum Kit provided by Headliner (22" Kick, 10"/12"/14" Toms, DW heavy-duty hardware). Support acts supply snare, cymbals, kick pedal, and throne.',
+  drumProviderBandId: 'pkg-b1',
+  drumSupportRules: 'No moving rack locks. 15-minute stage turnaround between sets.',
+  bassRigNotes: 'Ampeg SVT-CL + 8x10 Stage Rig provided. All bassists patch direct preamp pedals (Darkglass / SansAmp) with DI output to FOH.',
+  bassProviderBandId: 'pkg-b1',
+  bassSupportRules: 'Direct balanced XLR out required.',
+  trailerNotes: '6x12 Dual-Axle Cargo Trailer: Row 1 = Headliner fly-rigs & drum vault; Row 2 = Support guitar cabs; Row 3 = Merch bins & soft luggage.',
+  guitarCabNotes: 'Headliner and Direct Support share 2x 4x12 Marshall/Mesa stage cabs. Openers bring compact heads or modelers.',
+  paMonitorsNotes: 'In-Ear Monitor transmitters racked in Trailer Rack A. Coordinated wireless frequencies per venue sweep.',
+  stagePlotNotes: 'Standard 4-piece heavy package setup with dual guitar stage left/right and centered bass wedge.'
+};
+
+export const DEFAULT_SEED_VEHICLES: TourVehicle[] = [
+  {
+    id: 'veh-1',
+    name: 'Lead Sleeper Bus (Prevost H3-45)',
+    type: 'sleeper_bus',
+    licensePlate: 'OH-TOUR-88',
+    driverName: 'Ray Delgado',
+    driverPhone: '(555) 391-0492',
+    assignedBands: ['Sanguisugabogg', '200 Stab Wounds'],
+    capacityPax: 12,
+    cargoNotes: 'Tows 16ft heavy cargo trailer. Shore power 50A hookup required.',
+    shorePowerReq: '50A 240V Shore Power Drop',
+    status: 'active',
+    notes: 'Primary crew & artist sleeper bus. Driver sleeper bunk #1.'
+  },
+  {
+    id: 'veh-2',
+    name: '16ft Dual-Axle Cargo Trailer',
+    type: 'cargo_trailer',
+    licensePlate: 'OH-TR-9941',
+    driverName: 'Ray Delgado (Towed)',
+    driverPhone: '(555) 391-0492',
+    assignedBands: ['All Package Bands'],
+    capacityPax: 0,
+    cargoNotes: 'Heavy stage backline, drum cases, 8x10 bass cab, merch master bins.',
+    shorePowerReq: 'None',
+    status: 'active',
+    notes: 'Ramp door loading. Padlocked hitch lock #4820.'
+  },
+  {
+    id: 'veh-3',
+    name: 'Support Band Sprinter 2500 High-Roof',
+    type: 'sprinter',
+    licensePlate: 'NV-SPR-441',
+    driverName: 'Marcus Vance',
+    driverPhone: '(555) 620-4491',
+    assignedBands: ['Cerebral Incubation'],
+    capacityPax: 7,
+    cargoNotes: 'Rear partition holds personal cymbals, pedalboards, merch totes.',
+    shorePowerReq: '15A standard 110V for trickle charge',
+    status: 'active',
+    notes: 'Secondary convoy runner van.'
+  }
+];
 
 // Built-in starter tours for seamless multi-tour workflow
 export const SEED_TOURS: TourPackageRecord[] = [
@@ -148,6 +281,8 @@ export const SEED_TOURS: TourPackageRecord[] = [
         advancingDone: true
       }
     ],
+    vehicles: DEFAULT_SEED_VEHICLES,
+    backlineConfig: DEFAULT_BACKLINE_CONFIG,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   },
@@ -215,6 +350,28 @@ export const SEED_TOURS: TourPackageRecord[] = [
         advancingDone: true
       }
     ],
+    vehicles: [
+      {
+        id: 'veh-eu1',
+        name: 'Euro-Touring 9-Seater Sprinter',
+        type: 'sprinter',
+        licensePlate: 'B-EX-9920',
+        driverName: 'Hans Becker',
+        driverPhone: '+49 171 4920 182',
+        assignedBands: ['Virulent Excision', 'Defeated Sanity'],
+        capacityPax: 9,
+        cargoNotes: 'Extended cargo bay with fly-rigs and European 230V cabs.',
+        shorePowerReq: 'CEE 16A Blue 230V Plug',
+        status: 'active',
+        notes: 'Equipped with European toll transponders.'
+      }
+    ],
+    backlineConfig: {
+      ...DEFAULT_BACKLINE_CONFIG,
+      drumKitNotes: 'Turock House Kit (Tama Starclassic 22/10/12/16) used for backline. Bands bring own breakables.',
+      bassRigNotes: 'Ampeg SVT-CL 8x10 provided by venue.',
+      trailerNotes: 'All flight cases loaded in rear van compartment.'
+    },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   }
@@ -224,11 +381,34 @@ class TourPackageManagerService {
   private memoryTours: TourPackageRecord[] = [];
   private activeTourId: string = 'tour-pkg-fall-2026';
   private hasInitialized: boolean = false;
-  private isCloudSyncAvailable: boolean = true;
   private syncDebounceTimers: Map<string, any> = new Map();
 
   constructor() {
     this.init();
+  }
+
+  private normalizeTour(raw: any): TourPackageRecord {
+    const dataObj = raw.data || raw.payload || {};
+    return {
+      id: raw.id || dataObj.id || `tour-${Date.now()}`,
+      title: raw.title || dataObj.title || 'Tour Package Workspace',
+      headlinerClientName: raw.headlinerClientName || raw.headliner_client_name || dataObj.headlinerClientName || dataObj.headliner_client_name || 'Headliner Band',
+      publicationStatus: raw.publicationStatus || raw.publication_status || dataObj.publicationStatus || dataObj.publication_status || 'embargoed_private',
+      embargoUntilDate: raw.embargoUntilDate || raw.embargo_until_date || dataObj.embargoUntilDate || dataObj.embargo_until_date || new Date().toISOString().slice(0, 16),
+      bands: Array.isArray(raw.bands) ? raw.bands : (Array.isArray(dataObj.bands) ? dataObj.bands : []),
+      stops: Array.isArray(raw.stops) ? raw.stops : (Array.isArray(dataObj.stops) ? dataObj.stops : []),
+      vehicles: Array.isArray(raw.vehicles) && raw.vehicles.length > 0 
+        ? raw.vehicles 
+        : (Array.isArray(dataObj.vehicles) && dataObj.vehicles.length > 0 ? dataObj.vehicles : [...DEFAULT_SEED_VEHICLES]),
+      backlineConfig: raw.backlineConfig || raw.backline_config || dataObj.backlineConfig || dataObj.backline_config || {
+        ...DEFAULT_BACKLINE_CONFIG,
+        drumKitNotes: raw.backlineNotes?.drumKitNotes || dataObj.backlineNotes?.drumKitNotes || DEFAULT_BACKLINE_CONFIG.drumKitNotes,
+        bassRigNotes: raw.backlineNotes?.bassRigNotes || dataObj.backlineNotes?.bassRigNotes || DEFAULT_BACKLINE_CONFIG.bassRigNotes,
+        trailerNotes: raw.backlineNotes?.trailerNotes || dataObj.backlineNotes?.trailerNotes || DEFAULT_BACKLINE_CONFIG.trailerNotes
+      },
+      createdAt: raw.createdAt || raw.created_at || dataObj.createdAt || dataObj.created_at || new Date().toISOString(),
+      updatedAt: raw.updatedAt || raw.updated_at || dataObj.updatedAt || dataObj.updated_at || new Date().toISOString()
+    };
   }
 
   private init() {
@@ -236,9 +416,15 @@ class TourPackageManagerService {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_TOURS);
       if (stored) {
-        this.memoryTours = JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.memoryTours = parsed.map(t => this.normalizeTour(t));
+        } else {
+          this.memoryTours = SEED_TOURS.map(t => this.normalizeTour(t));
+          this.saveToLocal();
+        }
       } else {
-        this.memoryTours = [...SEED_TOURS];
+        this.memoryTours = SEED_TOURS.map(t => this.normalizeTour(t));
         this.saveToLocal();
       }
 
@@ -249,7 +435,7 @@ class TourPackageManagerService {
         this.activeTourId = this.memoryTours[0].id;
       }
     } catch {
-      this.memoryTours = [...SEED_TOURS];
+      this.memoryTours = SEED_TOURS.map(t => this.normalizeTour(t));
     }
     this.hasInitialized = true;
   }
@@ -276,10 +462,10 @@ class TourPackageManagerService {
   }
 
   public async saveTour(tour: TourPackageRecord, immediateSync = false): Promise<TourPackageRecord> {
-    const updatedTour: TourPackageRecord = {
+    const updatedTour: TourPackageRecord = this.normalizeTour({
       ...tour,
       updatedAt: new Date().toISOString()
-    };
+    });
 
     const index = this.memoryTours.findIndex(t => t.id === tour.id);
     if (index >= 0) {
@@ -337,6 +523,8 @@ class TourPackageManagerService {
         }
       ],
       stops: [],
+      vehicles: [...DEFAULT_SEED_VEHICLES],
+      backlineConfig: { ...DEFAULT_BACKLINE_CONFIG },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -385,7 +573,7 @@ class TourPackageManagerService {
     return true;
   }
 
-  // Cloud Database Sync Methods
+  // Cloud Database Sync Methods (Two-way timestamp-aware reconciliation)
   public async pullFromCloud(): Promise<TourPackageRecord[]> {
     try {
       const { data, error } = await supabase
@@ -394,27 +582,61 @@ class TourPackageManagerService {
         .order('updated_at', { ascending: false });
 
       if (error) {
-        // Table might not exist yet; gracefully fallback to local cache
+        // Table may be offline or initializing - return safe local memory
         return this.memoryTours;
       }
 
       if (data && data.length > 0) {
-        const cloudTours: TourPackageRecord[] = data.map(item => ({
-          id: item.id,
-          title: item.title,
-          headlinerClientName: item.headliner_client_name || item.headlinerClientName,
-          publicationStatus: item.publication_status || item.publicationStatus || 'embargoed_private',
-          embargoUntilDate: item.embargo_until_date || item.embargoUntilDate || '',
-          bands: item.bands || [],
-          stops: item.stops || [],
-          createdAt: item.created_at || new Date().toISOString(),
-          updatedAt: item.updated_at || new Date().toISOString()
-        }));
+        const cloudTours: TourPackageRecord[] = data.map(item => this.normalizeTour(item));
+        let hasChanges = false;
 
-        this.memoryTours = cloudTours;
-        this.saveToLocal();
-        this.notifyChanges();
-        return cloudTours;
+        const mergedMap = new Map<string, TourPackageRecord>();
+        // First populate with current local tours
+        for (const local of this.memoryTours) {
+          mergedMap.set(local.id, local);
+        }
+
+        // Reconcile with cloud tours based on timestamps
+        for (const cloud of cloudTours) {
+          const local = mergedMap.get(cloud.id);
+          if (!local) {
+            // New tour from cloud
+            mergedMap.set(cloud.id, cloud);
+            hasChanges = true;
+          } else {
+            const cloudTime = new Date(cloud.updatedAt || 0).getTime();
+            const localTime = new Date(local.updatedAt || 0).getTime();
+
+            if (cloudTime > localTime + 1000) {
+              // Cloud version is strictly newer
+              mergedMap.set(cloud.id, cloud);
+              hasChanges = true;
+            } else if (localTime > cloudTime + 1000) {
+              // Local version has newer edits - push to cloud in background
+              this.syncToCloud(local);
+            }
+          }
+        }
+
+        // Check for local-only tours that need to be pushed to cloud
+        for (const local of this.memoryTours) {
+          if (!cloudTours.some(c => c.id === local.id)) {
+            this.syncToCloud(local);
+          }
+        }
+
+        if (hasChanges) {
+          this.memoryTours = Array.from(mergedMap.values());
+          this.saveToLocal();
+          this.notifyChanges();
+        }
+
+        return this.memoryTours;
+      } else if (this.memoryTours.length > 0) {
+        // Cloud table is empty: seed cloud with current local tours
+        for (const local of this.memoryTours) {
+          this.syncToCloud(local);
+        }
       }
     } catch {
       // Offline safe fallback
@@ -424,7 +646,7 @@ class TourPackageManagerService {
 
   private async syncToCloud(tour: TourPackageRecord) {
     try {
-      const payload = {
+      const fullPayload = {
         id: tour.id,
         title: tour.title,
         headliner_client_name: tour.headlinerClientName,
@@ -432,19 +654,30 @@ class TourPackageManagerService {
         embargo_until_date: tour.embargoUntilDate,
         bands: tour.bands,
         stops: tour.stops,
-        updated_at: new Date().toISOString()
+        vehicles: tour.vehicles,
+        backline_config: tour.backlineConfig,
+        data: tour, // JSONB fallback
+        payload: tour, // Alternative JSONB column
+        updated_at: tour.updatedAt || new Date().toISOString()
       };
 
       const { error } = await supabase
         .from('tour_packages')
-        .upsert(payload, { onConflict: 'id' });
+        .upsert(fullPayload, { onConflict: 'id' });
 
       if (error) {
-        // Silently log; offline local storage preserves work uninterrupted
-        console.info('[TourPackageManager] Local persistence active; Supabase sync cached.');
+        // Fallback: try minimal upsert without relational extra columns if schema differs
+        await supabase
+          .from('tour_packages')
+          .upsert({
+            id: tour.id,
+            title: tour.title,
+            data: tour,
+            updated_at: tour.updatedAt || new Date().toISOString()
+          }, { onConflict: 'id' });
       }
-    } catch (e) {
-      console.info('[TourPackageManager] Supabase offline fallback active.');
+    } catch {
+      // Supabase offline fallback active
     }
   }
 

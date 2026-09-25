@@ -376,9 +376,9 @@ export function getRegisteredWorkspaceRefs(
       } else if (type === 'label' && (profile.label_id || profile.label_company_name)) {
         id = profile.label_id || id;
         name = profile.label_company_name || name;
-      } else if (type === 'promoter' && (profile.promoter_id || profile.promoter_agency || profile.promoter_title)) {
+      } else if (type === 'promoter') {
         id = profile.promoter_id || id;
-        name = profile.promoter_agency || profile.promoter_title || name;
+        name = profile.promoter_agency || profile.promoter_brand || profile.promoter_name || profile.agency_name || profile.promoter_metadata?.brand_name || profile.promoter_metadata?.agency_name || profile.promoter_title || name;
       }
     }
 
@@ -408,6 +408,16 @@ export interface UserProfile {
   band_id?: string;
   creative_id?: string;
   promoter_id?: string;
+  promoter_agency?: string;
+  promoter_brand?: string;
+  promoter_name?: string;
+  agency_name?: string;
+  promoter_logo?: string;
+  promoter_cover_image?: string;
+  promoter_region?: string;
+  band_logo?: string;
+  band_banner?: string;
+  band_metadata?: any;
   label_id?: string;
   account_type?: string; // 'fan' | 'industry pro'
   active_workspace?: string; // 'fan' | 'band' | 'promoter' | 'creative' | 'label' etc.
@@ -475,9 +485,8 @@ export interface UserProfile {
   creative_avatar?: string;
   creative_banner?: string;
   creative_name?: string;
-  promoter_logo?: string;
-  promoter_cover_image?: string;
-  promoter_name?: string;
+  promoter_booking_email?: string;
+  registered_promoter_id?: string;
   
   // Label-specific fields
   label_avatar?: string;
