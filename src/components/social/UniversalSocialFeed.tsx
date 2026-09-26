@@ -27,7 +27,13 @@ import {
   resolveBandBio,
   resolveBandLocation,
   resolveEffectiveAvatar,
-  resolveEffectiveCover
+  resolveEffectiveCover,
+  resolvePromoterName,
+  resolvePromoterHandle,
+  resolvePromoterLogo,
+  resolvePromoterCover,
+  resolvePromoterBio,
+  resolvePromoterLocation
 } from '../../utils/bandProfileUtils';
 import {
   loadDiscoverProfilesCache,
@@ -2000,32 +2006,32 @@ export function UniversalSocialFeed({
         // Professional portals
         defaultName = portalRole === 'band' ? resolveBandName(resolvedActiveBand || activeBand, userProfile)
           : portalRole === 'creative' ? (userProfile?.creative_metadata?.business_name || 'Pro Creative')
-          : portalRole === 'promoter' ? (userProfile?.promoter_metadata?.brand_name || 'Pro Promoter')
+          : portalRole === 'promoter' ? resolvePromoterName(userProfile)
           : portalRole === 'label' ? (userProfile?.label_company_name || 'Pro Label')
           : (userProfile?.full_name || userProfile?.legal_name || userProfile?.name || 'Pro Account');
 
         defaultHandle = portalRole === 'band' ? resolveBandHandle(resolvedActiveBand || activeBand, userProfile)
           : portalRole === 'creative' ? (userProfile?.creative_metadata?.business_name?.replace(/\s+/g, '') || 'creative_pro')
-          : portalRole === 'promoter' ? (userProfile?.promoter_metadata?.brand_name?.replace(/\s+/g, '') || 'promoter_pro')
+          : portalRole === 'promoter' ? resolvePromoterHandle(userProfile)
           : portalRole === 'label' ? (userProfile?.label_url_slug || 'label_pro')
           : (userProfile?.console_handle || userProfile?.handle || 'pro_account');
 
         defaultAvatar = portalRole === 'band' ? resolveBandLogo(resolvedActiveBand || activeBand, userProfile)
           : portalRole === 'label' ? (userProfile?.label_avatar || null)
           : portalRole === 'creative' ? (userProfile?.creative_avatar || null)
-          : portalRole === 'promoter' ? ((userProfile as any)?.promoter_logo || null)
+          : portalRole === 'promoter' ? resolvePromoterLogo(userProfile)
           : (userProfile?.avatar_url || null);
 
         defaultCover = portalRole === 'band' ? resolveBandCover(resolvedActiveBand || activeBand, userProfile)
           : portalRole === 'label' ? (userProfile?.label_banner || null)
           : portalRole === 'creative' ? (userProfile?.creative_banner || null)
-          : portalRole === 'promoter' ? ((userProfile as any)?.promoter_cover_image || null)
+          : portalRole === 'promoter' ? resolvePromoterCover(userProfile)
           : (userProfile?.banner_url || null);
 
         defaultLocation = portalRole === 'band' ? resolveBandLocation(resolvedActiveBand || activeBand, userProfile)
           : portalRole === 'label' && userProfile?.label_headquarters ? userProfile.label_headquarters 
           : portalRole === 'creative' && userProfile?.creative_metadata?.base_location ? userProfile.creative_metadata.base_location
-          : portalRole === 'promoter' && (userProfile as any)?.promoter_city ? `${(userProfile as any).promoter_city}, ${(userProfile as any).promoter_state}`
+          : portalRole === 'promoter' ? resolvePromoterLocation(userProfile)
           : (signupLocation || userProfile?.location_code || userProfile?.city_state || 'Detroit, MI');
       }
 
@@ -3893,7 +3899,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
       ? (portalRole === 'band' ? (activeBand?.name || userProfile?.bandName || profileFullLegalName)
          : portalRole === 'fan_only' ? (profileFullLegalName || userProfile?.full_name || userProfile?.name)
          : portalRole === 'creative' ? (userProfile?.creative_metadata?.business_name || profileFullLegalName || 'Pro Creative')
-         : portalRole === 'promoter' ? (userProfile?.promoter_metadata?.brand_name || profileFullLegalName || 'Pro Promoter')
+         : portalRole === 'promoter' ? (resolvePromoterName(userProfile) || profileFullLegalName || 'Pro Promoter')
          : portalRole === 'label' ? (userProfile?.label_company_name || profileFullLegalName || 'Pro Label')
          : (profileFullLegalName || userProfile?.legal_name || userProfile?.full_name || userProfile?.name))
       : (userParam.name === 'GoregrindSlayer' ? 'Tyler Slamson' :
@@ -3907,7 +3913,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
       ? (portalRole === 'band' ? (profileHandle || (activeBand?.name || '').replace(/\s+/g, ''))
          : portalRole === 'fan_only' ? (profileHandle || userProfile?.fan_handle || 'listener')
          : portalRole === 'creative' ? (profileHandle || 'creative_pro')
-         : portalRole === 'promoter' ? (profileHandle || 'promoter_pro')
+         : portalRole === 'promoter' ? (profileHandle || resolvePromoterHandle(userProfile) || 'promoter_pro')
          : portalRole === 'label' ? (profileHandle || userProfile?.label_url_slug || 'label_pro')
          : (profileHandle || userProfile?.console_handle || userProfile?.handle))
       : (userParam.name === 'GoregrindSlayer' ? 'GoregrindSlayer' :
@@ -5042,6 +5048,8 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
             onOpenShowCreator={() => { setEditingCommunityShow(null); setIsCommunityShowModalOpen(true); }}
             onEditShow={(gig) => { setEditingCommunityShow(gig); setIsCommunityShowModalOpen(true); }}
             onDeleteGig={handleDeleteUpcomingShowPermanently}
+            portalRole={portalRole}
+            userProfile={userProfile}
           />
         )}
       </div>

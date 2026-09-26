@@ -14,7 +14,9 @@ import {
   resolveBandBio,
   resolveBandLocation,
   resolveEffectiveAvatar,
-  resolveEffectiveCover
+  resolveEffectiveCover,
+  resolvePromoterName,
+  resolvePromoterHandle
 } from "../../../utils/bandProfileUtils";
 import {
   getStoredWallets,
@@ -404,7 +406,7 @@ if (!leftDrawerOpen) return null;
               <div className="flex items-center gap-4 relative z-10">
                 {(() => {
                   const effectiveAvatar = resolveEffectiveAvatar(portalRole || 'industry_pro', activeBand, userProfile, profileAvatarUrl);
-                  const effectiveName = portalRole === 'band' ? resolveBandName(activeBand, userProfile) : ((portalRole as any) === 'label' ? (userProfile?.label_company_name || 'Pro Label') : (profileFullLegalName || 'User'));
+                  const effectiveName = portalRole === 'band' ? resolveBandName(activeBand, userProfile) : portalRole === 'promoter' ? resolvePromoterName(userProfile) : ((portalRole as any) === 'label' ? (userProfile?.label_company_name || 'Pro Label') : (profileFullLegalName || 'User'));
                   return effectiveAvatar ? (
                     <img src={effectiveAvatar} className="w-14 h-14 rounded-full object-cover border border-rose-500/40 shrink-0 shadow-lg" alt="Profile" />
                   ) : (
@@ -420,9 +422,11 @@ if (!leftDrawerOpen) return null;
                         ? (userProfile?.label_company_name || 'Pro Label') 
                         : (portalRole === 'band'
                             ? resolveBandName(activeBand, userProfile)
-                            : (['creative', 'promoter'].includes(portalRole) || isEmbedded
-                                ? (profileFullLegalName || (profileHandle ? `@${profileHandle.replace(/^@+/, '')}` : 'Workspace'))
-                                : (profileHandle ? `@${profileHandle.replace(/^@+/, '')}` : (profileFullLegalName || 'Guest'))))
+                            : portalRole === 'promoter'
+                                ? resolvePromoterName(userProfile)
+                                : (['creative'].includes(portalRole) || isEmbedded
+                                    ? (profileFullLegalName || (profileHandle ? `@${profileHandle.replace(/^@+/, '')}` : 'Workspace'))
+                                    : (profileHandle ? `@${profileHandle.replace(/^@+/, '')}` : (profileFullLegalName || 'Guest'))))
                       }
                     </h2>
                     {isEmbedded && (
@@ -437,7 +441,7 @@ if (!leftDrawerOpen) return null;
                       : (portalRole === 'band'
                           ? `@${resolveBandHandle(activeBand, userProfile)} • BAND ACCOUNT`
                           : (['creative', 'promoter'].includes(portalRole) || isEmbedded
-                              ? `@${(profileHandle || 'pro').replace(/^@+/, '')} • ${portalRole.toUpperCase()} ACCOUNT`
+                              ? `@${(portalRole === 'promoter' ? resolvePromoterHandle(userProfile) : profileHandle || 'pro').replace(/^@+/, '')} • ${portalRole.toUpperCase()} ACCOUNT`
                               : (profileFullLegalName || `@${(profileHandle || 'user').replace(/^@+/, '')}`)))
                     }
                   </p>

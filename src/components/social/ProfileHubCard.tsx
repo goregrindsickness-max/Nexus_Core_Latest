@@ -96,7 +96,7 @@ export const ProfileHubCard: React.FC<ProfileHubCardProps> = ({
         {/* Profile Content Container */}
         <div className="relative z-10 p-5 flex flex-col items-center text-center space-y-3">
           {/* Profile Avatar Overlap - Enlarged */}
-          <div className={`w-[92px] h-[92px] rounded-full bg-zinc-950 overflow-hidden flex items-center justify-center font-black ${currentTheme.textClass} text-2xl shrink-0 transition-transform duration-300 group-hover:scale-105 ${getRoleBorderAndGlowClass(portalRole, userProfile)}`}>
+          <div className={`w-[92px] h-[92px] rounded-full bg-zinc-950 overflow-hidden flex items-center justify-center font-black ${currentTheme.textClass} text-2xl shrink-0 transition-transform duration-300 group-hover:scale-105 ${getRoleBorderAndGlowClass(userProfile?.active_workspace === 'band' ? 'band' : (portalRole || userProfile?.active_workspace), userProfile)}`}>
             {effectiveAvatar ? (
               <img src={effectiveAvatar} className="w-full h-full object-cover" alt="Profile" />
             ) : (

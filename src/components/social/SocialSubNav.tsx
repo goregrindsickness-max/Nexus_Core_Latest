@@ -15,6 +15,7 @@ interface SocialSubNavProps {
   setActiveTab: (tab: string) => void;
   onOpenNotices?: () => void;
   noticesCount?: number;
+  portalRole?: string;
 }
 
 export const SocialSubNav: React.FC<SocialSubNavProps> = ({
@@ -22,6 +23,7 @@ export const SocialSubNav: React.FC<SocialSubNavProps> = ({
   setActiveTab,
   onOpenNotices,
   noticesCount = 0,
+  portalRole = 'band',
 }) => {
   const { totalUnreadCount, refetch } = useChats();
 
@@ -78,7 +80,9 @@ export const SocialSubNav: React.FC<SocialSubNavProps> = ({
                 }`}
               />
               {hasBadge && (
-                <span className="absolute -top-1 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-violet-600 px-1 text-[9px] font-bold text-white shadow-lg ring-2 ring-black animate-pulse">
+                <span className={`absolute -top-1 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black shadow-lg ring-2 ring-black animate-pulse ${
+                  portalRole === 'band' ? 'bg-[#39ff14] text-black shadow-[0_0_8px_#39ff14]' : portalRole === 'promoter' ? 'bg-yellow-400 text-black' : portalRole === 'fan_only' ? 'bg-cyan-400 text-black' : portalRole === 'label' ? 'bg-orange-500 text-black' : 'bg-[#00ffcc] text-black'
+                }`}>
                   {item.badge! > 99 ? '99+' : item.badge}
                 </span>
               )}

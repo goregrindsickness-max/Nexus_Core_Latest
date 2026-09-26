@@ -34,7 +34,7 @@ export const royalBlueTheme = {
 
 export const fanTheme = royalBlueTheme;
 
-export function getSocialTheme(portalRole: string, isProfessional: boolean) {
+export function getSocialTheme(portalRole: string, isProfessional: boolean, userProfile?: any) {
   const activeRoleTheme = {
     ...roleTheme,
     fan: royalBlueTheme,
@@ -42,7 +42,11 @@ export function getSocialTheme(portalRole: string, isProfessional: boolean) {
     industry_pro: proTheme
   };
 
-  const normRole = (portalRole === 'fan' || portalRole === 'fan_only') ? 'fan_only' : portalRole;
+  const rawRole = (portalRole === 'industry_pro' && userProfile?.active_workspace)
+    ? userProfile.active_workspace
+    : portalRole;
+
+  const normRole = (rawRole === 'fan' || rawRole === 'fan_only') ? 'fan_only' : rawRole;
 
   const currentTheme = normRole === 'fan_only' 
     ? royalBlueTheme 

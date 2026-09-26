@@ -107,6 +107,88 @@ export const resolveBandLocation = (activeBand: any, userProfile: any): string =
   return 'Denison, TX, USA';
 };
 
+export const resolvePromoterName = (userProfile: any): string => {
+  const pm = userProfile?.promoter_metadata;
+  return (
+    pm?.brand_name ||
+    pm?.agency_name ||
+    pm?.entity_name ||
+    userProfile?.promoter_agency ||
+    userProfile?.promoter_brand ||
+    userProfile?.promoter_name ||
+    userProfile?.entity_name ||
+    userProfile?.corporate_name ||
+    userProfile?.full_name ||
+    userProfile?.legal_name ||
+    userProfile?.display_name ||
+    (userProfile?.name && userProfile?.name !== 'New User' && userProfile?.name !== 'User' ? userProfile.name : null) ||
+    'Nexus Live Productions'
+  );
+};
+
+export const resolvePromoterHandle = (userProfile: any): string => {
+  const nameCandidate = resolvePromoterName(userProfile);
+  const raw =
+    userProfile?.promoter_handle ||
+    userProfile?.promoter_metadata?.brand_name ||
+    userProfile?.promoter_metadata?.agency_name ||
+    userProfile?.promoter_agency ||
+    userProfile?.promoter_brand ||
+    userProfile?.promoter_name ||
+    userProfile?.console_handle ||
+    (nameCandidate ? nameCandidate.replace(/\s+/g, '_').toLowerCase() : 'nexus_live_productions');
+  return raw.replace(/^@+/, '').replace(/\s+/g, '_');
+};
+
+export const resolvePromoterLogo = (userProfile: any): string => {
+  const pm = userProfile?.promoter_metadata;
+  return (
+    (userProfile as any)?.promoter_logo ||
+    pm?.logo_url ||
+    pm?.avatar_url ||
+    userProfile?.avatar_url ||
+    userProfile?.avatar ||
+    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
+  );
+};
+
+export const resolvePromoterCover = (userProfile: any): string | null => {
+  const pm = userProfile?.promoter_metadata;
+  return (
+    (userProfile as any)?.promoter_cover_image ||
+    pm?.banner_url ||
+    pm?.cover_url ||
+    userProfile?.banner_url ||
+    null
+  );
+};
+
+export const resolvePromoterBio = (userProfile: any): string => {
+  const pm = userProfile?.promoter_metadata;
+  return (
+    pm?.bio ||
+    userProfile?.promoter_bio ||
+    userProfile?.bio ||
+    userProfile?.profileBlurb ||
+    'Concert promoter and event organizer on Nexus.'
+  );
+};
+
+export const resolvePromoterLocation = (userProfile: any): string => {
+  const pm = userProfile?.promoter_metadata;
+  let loc = pm?.city || (userProfile as any)?.promoter_city || userProfile?.city || '';
+  const state = pm?.state || (userProfile as any)?.promoter_state || userProfile?.state_province || userProfile?.state || '';
+
+  if (loc && state) {
+    if (loc.toLowerCase().includes(state.toLowerCase())) {
+      return loc;
+    }
+    return `${loc}, ${state}`;
+  }
+  if (loc) return loc;
+  return userProfile?.location_code || userProfile?.city_state || 'Chicago, IL';
+};
+
 export const resolveEffectiveAvatar = (portalRole: string, activeBand: any, userProfile: any, profileAvatarUrl?: string | null): string => {
   if (portalRole === 'band') {
     return resolveBandLogo(activeBand, userProfile);
@@ -118,7 +200,7 @@ export const resolveEffectiveAvatar = (portalRole: string, activeBand: any, user
     return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
   }
   if (portalRole === 'promoter') {
-    return (userProfile as any)?.promoter_logo || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+    return resolvePromoterLogo(userProfile);
   }
   return profileAvatarUrl || userProfile?.avatar_url || userProfile?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
 };
@@ -134,7 +216,7 @@ export const resolveEffectiveCover = (portalRole: string, activeBand: any, userP
     return userProfile?.creative_banner || userProfile?.banner_url || null;
   }
   if (portalRole === 'promoter') {
-    return (userProfile as any)?.promoter_cover_image || null;
+    return resolvePromoterCover(userProfile);
   }
   return profileCoverUrl || userProfile?.banner_url || null;
 };

@@ -38,6 +38,8 @@ export interface SubViewControlPanelsProps {
   onOpenShowCreator?: () => void;
   onEditShow?: (gig: LiveTonightGig) => void;
   onDeleteGig?: (gig: LiveTonightGig) => void;
+  portalRole?: string;
+  userProfile?: any;
 }
 
 export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
@@ -56,7 +58,10 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
   onOpenShowCreator,
   onEditShow,
   onDeleteGig,
+  portalRole = 'band',
+  userProfile,
 }) => {
+  const isBand = portalRole === 'band' || userProfile?.active_workspace === 'band';
   const uniqueLiveEvents = useMemo(() => {
     if (!liveEvents || !Array.isArray(liveEvents)) return [];
     const seenIds = new Set<string>();
@@ -91,12 +96,28 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
           <div className="flex items-center gap-2">
             <div
               className={`w-2 h-2 rounded-full ${
-                isLiveTonightOpen ? 'bg-rose-500 animate-pulse' : 'bg-zinc-600'
+                isLiveTonightOpen
+                  ? isBand
+                    ? 'bg-[#39ff14] shadow-[0_0_8px_#39ff14] animate-pulse'
+                    : portalRole === 'promoter'
+                    ? 'bg-yellow-400 animate-pulse'
+                    : portalRole === 'fan_only'
+                    ? 'bg-cyan-400 animate-pulse'
+                    : 'bg-emerald-400 animate-pulse'
+                  : 'bg-zinc-600'
               }`}
             />
             <span
               className={`text-[10px] font-black uppercase tracking-widest ${
-                isLiveTonightOpen ? 'text-rose-400' : 'text-zinc-500'
+                isLiveTonightOpen
+                  ? isBand
+                    ? 'text-[#39ff14]'
+                    : portalRole === 'promoter'
+                    ? 'text-yellow-400'
+                    : portalRole === 'fan_only'
+                    ? 'text-cyan-400'
+                    : 'text-emerald-400'
+                  : 'text-zinc-500'
               }`}
             >
               Upcoming Shows & Tours Near You
@@ -153,7 +174,9 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                 <div
                   key={`gig-${gig.id}-${idx}`}
                   className={`shrink-0 bg-[#0a0c10] border rounded-xl px-3 py-2 flex items-center gap-3 shadow-lg shadow-black/50 transition-all group cursor-pointer ${
-                    gig.isFollowed 
+                    isBand
+                      ? 'border-[#39ff14]/60 hover:border-[#39ff14] bg-gradient-to-r from-[#39ff14]/10 to-[#0a0c10] shadow-[0_0_12px_rgba(57,255,20,0.15)]'
+                      : gig.isFollowed 
                       ? 'border-amber-500/50 hover:border-amber-400/80 bg-gradient-to-r from-amber-950/20 to-[#0a0c10]' 
                       : 'border-zinc-800 hover:border-zinc-700'
                   }`}
@@ -161,7 +184,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                 >
                   <div className="space-y-0.5 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <div className="text-xs font-black text-white uppercase tracking-wide group-hover:text-rose-400 transition-colors truncate max-w-[130px] sm:max-w-[170px]">
+                      <div className={`text-xs font-black text-white uppercase tracking-wide ${isBand ? 'group-hover:text-[#39ff14]' : 'group-hover:text-rose-400'} transition-colors truncate max-w-[130px] sm:max-w-[170px]`}>
                         {gig.headliner}
                       </div>
 
@@ -176,7 +199,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                       {gig.date && (
                         <span className={`text-[8.5px] font-mono font-bold px-1.5 py-0.2 rounded border ${
                           isTonight 
-                            ? 'bg-rose-950/70 border-rose-500/50 text-rose-300 animate-pulse' 
+                            ? isBand ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 animate-pulse' : 'bg-rose-950/70 border-rose-500/50 text-rose-300 animate-pulse' 
                             : isTomorrow
                             ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
                             : 'bg-zinc-900 border-zinc-800 text-zinc-300'
@@ -188,7 +211,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
 
                     {/* Venue & Location */}
                     <div className="text-[9px] text-zinc-400 flex items-center gap-1 font-mono truncate">
-                      <MapPin className="w-2.5 h-2.5 text-rose-500 shrink-0" /> 
+                      <MapPin className={`w-2.5 h-2.5 ${isBand ? 'text-[#39ff14]' : 'text-rose-500'} shrink-0`} /> 
                       <span className="truncate max-w-[130px] sm:max-w-[160px]">{gig.venue}{gig.city ? ` • ${gig.city}` : ''}</span>
                       {gig.distance && (
                         <span className="text-[#00ffcc] shrink-0">({gig.distance})</span>

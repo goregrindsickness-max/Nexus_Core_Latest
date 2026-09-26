@@ -188,7 +188,7 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
           >
             <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
             {unreadNotificationsCount > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse ring-2 ring-black" />
+              <span className={`absolute top-1 right-1 w-2 h-2 rounded-full animate-pulse ring-2 ring-black ${userProfile?.active_workspace === 'band' ? 'bg-[#00ffcc]' : 'bg-red-500'}`} />
             )}
           </button>
 
@@ -207,7 +207,11 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
           <div className="relative">
             <button
               onClick={() => setRoleMenuOpen(!roleMenuOpen)}
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center font-black text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all active:scale-95 overflow-hidden shadow-md cursor-pointer hover:border-emerald-400 ml-1"
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-zinc-900 flex items-center justify-center font-black text-white focus:outline-none transition-all active:scale-95 overflow-hidden shadow-md cursor-pointer ml-1 ${
+                userProfile?.active_workspace === 'band' 
+                  ? 'border-2 border-[#39ff14] shadow-[0_0_12px_rgba(57,255,20,0.8)]' 
+                  : 'border border-zinc-700 hover:border-emerald-400 focus:ring-2 focus:ring-emerald-500'
+              }`}
             >
               {(() => {
                 const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';

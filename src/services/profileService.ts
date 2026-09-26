@@ -147,6 +147,19 @@ export function normalizeLoadedProfile(data: any): any {
     }
   }
 
+  // Ensure promoter_metadata is synthesized and fully populated for promoter profiles
+  if (!normalized.promoter_metadata || typeof normalized.promoter_metadata !== 'object') {
+    normalized.promoter_metadata = {};
+  }
+  const pm = normalized.promoter_metadata;
+  pm.brand_name = pm.brand_name || pm.agency_name || pm.entity_name || normalized.promoter_agency || normalized.promoter_brand || normalized.promoter_name || normalized.entity_name || normalized.corporate_name || normalized.full_name || normalized.name;
+  pm.agency_name = pm.agency_name || pm.brand_name;
+  pm.city = pm.city || normalized.promoter_city || normalized.city;
+  pm.state = pm.state || normalized.promoter_state || normalized.state_province || normalized.state;
+  pm.logo_url = pm.logo_url || pm.avatar_url || normalized.promoter_logo || normalized.avatar_url;
+  pm.banner_url = pm.banner_url || pm.cover_url || normalized.promoter_cover_image || normalized.banner_url;
+  pm.bio = pm.bio || normalized.promoter_bio || normalized.bio || normalized.profileBlurb;
+
   const possibleCustomFields = [
     'pin',
     'location_code',

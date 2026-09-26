@@ -38,6 +38,8 @@ export interface SceneRadioPlayerProps {
   selectedChatId?: string | null;
   traysHiddenOnMobile?: boolean;
   triggerNotification?: (msg: string) => void;
+  portalRole?: string;
+  userProfile?: any;
 }
 
 // Helper to choose a completely random genre on initial mount
@@ -64,7 +66,10 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
   selectedChatId = null,
   traysHiddenOnMobile = false,
   triggerNotification,
+  portalRole = 'band',
+  userProfile,
 }) => {
+  const isBandWorkspace = portalRole === 'band' || userProfile?.active_workspace === 'band';
   const [internalShowSceneRadio, setInternalShowSceneRadio] = useState(true);
   const showSceneRadio = externalShowSceneRadio !== undefined ? externalShowSceneRadio : internalShowSceneRadio;
   const setShowSceneRadio = externalSetShowSceneRadio || setInternalShowSceneRadio;
@@ -1020,13 +1025,21 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                       <button
                         onClick={togglePlayPause}
                         disabled={playlistVideos.length === 0}
-                        className="w-10 h-10 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-lg shadow-rose-950/60 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95 cursor-pointer disabled:opacity-50 ${
+                          isBandWorkspace
+                            ? 'bg-[#39ff14] hover:bg-[#28d00d] text-black shadow-lg shadow-[#39ff14]/30'
+                            : portalRole === 'promoter'
+                            ? 'bg-yellow-400 hover:bg-yellow-300 text-black shadow-lg shadow-yellow-500/30'
+                            : portalRole === 'fan_only'
+                            ? 'bg-cyan-400 hover:bg-cyan-300 text-black shadow-lg shadow-cyan-500/30'
+                            : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/60'
+                        }`}
                         title={sceneRadioPlaying ? "Pause" : "Play"}
                       >
                         {sceneRadioPlaying ? (
-                          <Pause className="w-4 h-4 fill-white" />
+                          <Pause className={`w-4 h-4 ${isBandWorkspace || portalRole === 'promoter' || portalRole === 'fan_only' ? 'fill-black text-black' : 'fill-white text-white'}`} />
                         ) : (
-                          <Play className="w-4 h-4 fill-white ml-0.5" />
+                          <Play className={`w-4 h-4 ml-0.5 ${isBandWorkspace || portalRole === 'promoter' || portalRole === 'fan_only' ? 'fill-black text-black' : 'fill-white text-white'}`} />
                         )}
                       </button>
                       <button
@@ -1191,7 +1204,15 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
             {/* Live Progress Bar on Top Border of Docked Footer */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-zinc-900/90 overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-rose-600 via-rose-500 to-rose-400 transition-all duration-300"
+                className={`h-full transition-all duration-300 ${
+                  isBandWorkspace
+                    ? 'bg-gradient-to-r from-[#39ff14] via-[#00ffcc] to-emerald-400'
+                    : portalRole === 'promoter'
+                    ? 'bg-gradient-to-r from-yellow-500 via-amber-400 to-yellow-300'
+                    : portalRole === 'fan_only'
+                    ? 'bg-gradient-to-r from-cyan-500 via-sky-400 to-blue-400'
+                    : 'bg-gradient-to-r from-rose-600 via-rose-500 to-rose-400'
+                }`}
                 style={{
                   width: duration > 0 ? `${Math.min(100, Math.max(0, (currentTime / duration) * 100))}%` : (sceneRadioPlaying ? '100%' : '0%')
                 }}
@@ -1220,7 +1241,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                     );
                   }
                   return (
-                    <Disc className={`w-4 h-4 text-rose-500 ${sceneRadioPlaying ? 'animate-spin' : ''}`} />
+                    <Disc className={`w-4 h-4 ${isBandWorkspace ? 'text-[#39ff14]' : portalRole === 'promoter' ? 'text-yellow-400' : portalRole === 'fan_only' ? 'text-cyan-400' : 'text-rose-500'} ${sceneRadioPlaying ? 'animate-spin' : ''}`} />
                   );
                 })()}
               </div>
@@ -1228,8 +1249,12 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
               {/* Title & Channel Marquee */}
               <div className="min-w-0 flex flex-col justify-center">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping shrink-0" />
-                  <span className="text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-wider text-rose-400 font-mono truncate">
+                  <span className={`w-1.5 h-1.5 rounded-full animate-ping shrink-0 ${
+                    isBandWorkspace ? 'bg-[#39ff14]' : portalRole === 'promoter' ? 'bg-yellow-400' : portalRole === 'fan_only' ? 'bg-cyan-400' : 'bg-rose-500'
+                  }`} />
+                  <span className={`text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-wider font-mono truncate ${
+                    isBandWorkspace ? 'text-[#39ff14]' : portalRole === 'promoter' ? 'text-yellow-400' : portalRole === 'fan_only' ? 'text-cyan-400' : 'text-rose-400'
+                  }`}>
                     SCENE RADIO • {RADIO_PLAYLISTS[selectedRadioGenre].name} {duration > 0 && `[${formatTime(currentTime)} / ${formatTime(duration)}]`}
                   </span>
                 </div>
@@ -1285,13 +1310,21 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                   e.stopPropagation();
                   togglePlayPause();
                 }}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-md shadow-rose-950/60 transition-all active:scale-95 cursor-pointer"
+                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all active:scale-95 cursor-pointer ${
+                  isBandWorkspace
+                    ? 'bg-[#39ff14] hover:bg-[#28d00d] text-black shadow-md shadow-[#39ff14]/30'
+                    : portalRole === 'promoter'
+                    ? 'bg-yellow-400 hover:bg-yellow-300 text-black shadow-md shadow-yellow-500/30'
+                    : portalRole === 'fan_only'
+                    ? 'bg-cyan-400 hover:bg-cyan-300 text-black shadow-md shadow-cyan-500/30'
+                    : 'bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-950/60'
+                }`}
                 title={sceneRadioPlaying ? "Pause" : "Play"}
               >
                 {sceneRadioPlaying ? (
-                  <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-white" />
+                  <Pause className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isBandWorkspace || portalRole === 'promoter' || portalRole === 'fan_only' ? 'fill-black text-black' : 'fill-white text-white'}`} />
                 ) : (
-                  <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-white ml-0.5" />
+                  <Play className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5 ${isBandWorkspace || portalRole === 'promoter' || portalRole === 'fan_only' ? 'fill-black text-black' : 'fill-white text-white'}`} />
                 )}
               </button>
 

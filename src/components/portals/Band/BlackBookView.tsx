@@ -7,7 +7,7 @@ import { getSupabase } from '../../../supabase';
 import { handleSendMessage as sendDbMessage } from '../../../store/useChatStore';
 import VenueReputationCard from './VenueReputationCard';
 import { seedVenuesForCities, classifyPlace, isIrrelevantPlace } from '../../../services/musicBrainzSeederService';
-import { getAllBlackBookVenues } from '../../../services/venueSearchService';
+import { getAllBlackBookVenues, BUILT_IN_BLACK_BOOK_VENUES } from '../../../services/venueSearchService';
 
 /**
  * Detect if an existing place record appears to be closed, defunct, or former
@@ -325,9 +325,10 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     }
   }, [activeBandName]);
 
-  // MusicBrainz Hub Seeding State
+  // MusicBrainz Hub Seeding & Supabase Sync State
   const [isSeederModalOpen, setIsSeederModalOpen] = useState(false);
   const [isSeedingActive, setIsSeedingActive] = useState(false);
+  const [isPushingToSupabase, setIsPushingToSupabase] = useState(false);
   const [seedingLogs, setSeedingLogs] = useState<string[]>([]);
   const [seedingProgress, setSeedingProgress] = useState(0);
   const [seededHubs, setSeededHubs] = useState<string[]>(() => {
@@ -815,6 +816,136 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
       triggerNotification("⚠️ Seeding completed with warnings.");
     } finally {
       setIsSeedingActive(false);
+    }
+  };
+
+  /**
+   * Temporary utility button handler:
+   * Pushes all currently seeded hubs and venues (local state + built-in directory)
+   * into the Supabase 'venues' table.
+   */
+  const handlePushAllHubsToSupabase = async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      triggerNotification("⚠️ Supabase client is not connected.");
+      return;
+    }
+
+    setIsPushingToSupabase(true);
+    triggerNotification("🚀 Starting batch sync of all seeded hubs to Supabase 'venues' table...");
+
+    try {
+      // Map built-in directory venues
+      const builtInMapped = BUILT_IN_BLACK_BOOK_VENUES.map(v => ({
+        id: v.id,
+        name: v.name,
+        address: v.fullAddress || v.streetAddress || '',
+        city: v.city || 'Unknown',
+        state_province: v.state || 'USA',
+        country: v.country || 'USA',
+        capacity: typeof v.capacity === 'number' ? v.capacity : parseInt(v.capacity as any, 10) || 500,
+        place_type: 'venue',
+        email: v.contactEmail || (v as any).email || '',
+        buyers: v.contactName || (v as any).buyers || 'Local Booking Coordinator',
+        genre_fit: v.genreFit || 90,
+        payout_rating: v.payoutRating || 4.8,
+        load_in_rating: v.loadInRating || 4.5,
+        source: 'blackbook_builtin',
+        intel_entries: [v.parkingNotes, v.notes].filter(Boolean)
+      }));
+
+      const combinedToPush = [...localVenues, ...builtInMapped];
+
+      // Deduplicate by Name + City
+      const uniqueMap = new Map<string, any>();
+      combinedToPush.forEach(v => {
+        if (!v?.name) return;
+        const cleanName = v.name.trim();
+        const cleanCity = (v.city || '').trim();
+        const key = `${cleanName.toLowerCase()}_${cleanCity.toLowerCase()}`;
+        if (!uniqueMap.has(key)) {
+          uniqueMap.set(key, v);
+        }
+      });
+
+      const uniqueList = Array.from(uniqueMap.values());
+      let successCount = 0;
+      let errorCount = 0;
+
+      // Batch push in chunks of 20
+      const chunkSize = 20;
+      for (let i = 0; i < uniqueList.length; i += chunkSize) {
+        const chunk = uniqueList.slice(i, i + chunkSize);
+
+        const payloads = chunk.map(v => {
+          const safeId = v.id && !String(v.id).startsWith('v_0.')
+            ? String(v.id)
+            : `hub_${v.name.replace(/\W+/g, '_').toLowerCase()}_${(v.city || '').replace(/\W+/g, '_').toLowerCase()}`;
+
+          return {
+            id: safeId,
+            name: v.name,
+            address: v.address || v.fullAddress || v.streetAddress || null,
+            city: v.city || 'Unknown',
+            state_province: v.state_province || v.state || 'USA',
+            country: v.country || 'USA',
+            place_type: v.place_type || 'venue',
+            capacity: typeof v.capacity === 'number' ? v.capacity : (parseInt(v.capacity, 10) || null),
+            email: v.email || null,
+            buyers: v.buyers || 'Local Booking Coordinator',
+            genre_fit: typeof v.genreFit === 'number' ? v.genreFit : (v.genre_fit || 85),
+            payout_rating: typeof v.payoutRating === 'number' ? v.payoutRating : (v.payout_rating || 4.5),
+            load_in_rating: typeof v.loadInRating === 'number' ? v.loadInRating : (v.load_in_rating || 4.0),
+            lat: typeof v.lat === 'number' ? v.lat : null,
+            lng: typeof v.lng === 'number' ? v.lng : null,
+            source: v.source || 'blackbook_seeded',
+            intel_entries: Array.isArray(v.intelEntries) ? v.intelEntries : (Array.isArray(v.intel_entries) ? v.intel_entries : [])
+          };
+        });
+
+        // Attempt 1: Extended schema upsert
+        const { error: fullErr } = await supabase.from('venues').upsert(payloads, { onConflict: 'id' });
+
+        if (!fullErr) {
+          successCount += chunk.length;
+        } else {
+          // Attempt 2: Base schema fallback
+          const basePayloads = payloads.map(v => ({
+            id: v.id,
+            name: v.name,
+            city: v.city,
+            state_province: v.state_province,
+            country: v.country,
+            capacity: v.capacity,
+            email: v.email,
+            buyers: v.buyers,
+            genre_fit: v.genre_fit,
+            payout_rating: v.payout_rating,
+            load_in_rating: v.load_in_rating,
+            intel_entries: v.intel_entries
+          }));
+
+          const { error: baseErr } = await supabase.from('venues').upsert(basePayloads, { onConflict: 'id' });
+
+          if (!baseErr) {
+            successCount += chunk.length;
+          } else {
+            console.warn('Batch venue push chunk error:', baseErr.message);
+            errorCount += chunk.length;
+          }
+        }
+      }
+
+      if (errorCount === 0) {
+        triggerNotification(`✅ Successfully pushed ${successCount} seeded hubs to Supabase 'venues' table!`);
+      } else {
+        triggerNotification(`⚡ Pushed ${successCount} hubs to Supabase (${errorCount} failed or restricted).`);
+      }
+    } catch (err: any) {
+      console.error('Error pushing hubs to Supabase:', err);
+      triggerNotification(`❌ Error pushing hubs to Supabase: ${err?.message || err}`);
+    } finally {
+      setIsPushingToSupabase(false);
     }
   };
   const [searchTerm, setSearchTerm] = useState('');
@@ -1555,7 +1686,7 @@ Representing ${activeBandName}`;
         {/* Action Button, Subcategory Tabs & Search Bar */}
         {activeTab === 'directory' && (
           <div className="mt-4 flex flex-col gap-3 w-full">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 onClick={() => setIsAddVenueOpen(true)}
                 className="w-full bg-transparent border-2 border-[#00ffcc] text-[#00ffcc] hover:bg-[#00ffcc]/10 py-2.5 rounded-lg flex items-center justify-center font-bold tracking-widest uppercase transition-colors font-mono cursor-pointer shadow-[0_0_15px_rgba(0,255,204,0.15)] text-xs"
@@ -1569,6 +1700,16 @@ Representing ${activeBandName}`;
               >
                 <Sparkles className="w-4 h-4 mr-1.5 text-teal-400 group-hover:rotate-12 transition-transform shrink-0" />
                 <span className="truncate">Seed Tour Hubs</span>
+              </button>
+              <button
+                type="button"
+                onClick={handlePushAllHubsToSupabase}
+                disabled={isPushingToSupabase}
+                className="w-full bg-gradient-to-r from-amber-950/70 via-purple-950/60 to-amber-950/70 border-2 border-amber-400 text-amber-300 hover:from-amber-900/80 hover:to-purple-900/80 py-2.5 rounded-lg flex items-center justify-center font-bold tracking-widest uppercase transition-all font-mono cursor-pointer shadow-[0_0_20px_rgba(245,158,11,0.3)] text-xs group truncate px-2 disabled:opacity-50"
+                title="Temporary action: Push all currently seeded hubs and venues to Supabase 'venues' table"
+              >
+                <Database className={`w-4 h-4 mr-1.5 text-amber-400 shrink-0 ${isPushingToSupabase ? 'animate-spin' : 'group-hover:scale-110 transition-transform'}`} />
+                <span className="truncate">{isPushingToSupabase ? 'Pushing Hubs...' : '⚡ Push Hubs to Supabase'}</span>
               </button>
             </div>
 
@@ -3004,15 +3145,27 @@ Representing ${activeBandName}`;
               </div>
 
               {/* Modal Footer Actions */}
-              <div className="p-5 border-t border-teal-500/20 bg-[#080a0d] flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsSeederModalOpen(false)}
-                  disabled={isSeedingActive}
-                  className="px-4 py-3 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-300 rounded-xl text-xs font-mono font-bold uppercase transition-colors"
-                >
-                  Close
-                </button>
+              <div className="p-5 border-t border-teal-500/20 bg-[#080a0d] flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setIsSeederModalOpen(false)}
+                    disabled={isSeedingActive}
+                    className="px-4 py-3 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-300 rounded-xl text-xs font-mono font-bold uppercase transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePushAllHubsToSupabase}
+                    disabled={isPushingToSupabase || isSeedingActive}
+                    className="px-4 py-3 bg-gradient-to-r from-amber-950/80 via-purple-950/70 to-amber-950/80 border border-amber-400/60 text-amber-300 hover:border-amber-300 rounded-xl font-bold font-mono tracking-wider uppercase text-xs transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    title="Push all currently loaded & built-in hubs to Supabase 'venues' table"
+                  >
+                    <Database className={`w-4 h-4 text-amber-400 ${isPushingToSupabase ? 'animate-spin' : ''}`} />
+                    <span>{isPushingToSupabase ? 'Pushing...' : 'Push Hubs to Supabase'}</span>
+                  </button>
+                </div>
                 <button
                   type="button"
                   onClick={handleRunVenueSeeder}

@@ -59,24 +59,22 @@ export function useSocialPortalRole({ initialRole, userProfile }: UseSocialPorta
   }, [userProfile, portalRole]);
 
   const { activeRoleTheme, currentTheme } = useMemo(() => {
-    return getSocialTheme(portalRole, isProfessional);
-  }, [portalRole, isProfessional]);
+    return getSocialTheme(portalRole, isProfessional, userProfile);
+  }, [portalRole, isProfessional, userProfile]);
 
   const dataTheme = useMemo(() => {
-    return portalRole === 'label'
-      ? 'label'
-      : portalRole === 'promoter'
-      ? 'promoter'
-      : portalRole === 'band'
-      ? 'band'
-      : portalRole === 'fan_only'
-      ? 'fan-only'
-      : portalRole === 'industry_pro'
+    const activeWs = userProfile?.active_workspace;
+    if (portalRole === 'band' || activeWs === 'band') return 'band';
+    if (portalRole === 'promoter' || activeWs === 'promoter') return 'promoter';
+    if (portalRole === 'creative' || activeWs === 'creative') return 'creative';
+    if (portalRole === 'label' || activeWs === 'label') return 'label';
+    if (portalRole === 'fan_only' || activeWs === 'fan_only') return 'fan-only';
+    return portalRole === 'industry_pro'
       ? isProfessional
         ? 'pro-violet'
         : 'fan-blue'
       : 'pro-violet';
-  }, [portalRole, isProfessional]);
+  }, [portalRole, isProfessional, userProfile?.active_workspace]);
 
   const switchRole = useCallback((newRole: PortalRoleType) => {
     setActiveRole(newRole);

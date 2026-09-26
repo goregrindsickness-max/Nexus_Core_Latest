@@ -317,6 +317,8 @@ export const FeedSideDrawers: React.FC<FeedSideDrawersProps> = ({
         selectedChatId={selectedChatId}
         traysHiddenOnMobile={traysHiddenOnMobile}
         triggerNotification={triggerNotification}
+        portalRole={portalRole}
+        userProfile={userProfile}
       />
 
       {/* Floating Left Handle - Pull to open User/Profile settings */}
@@ -324,10 +326,20 @@ export const FeedSideDrawers: React.FC<FeedSideDrawersProps> = ({
         <>
           <button
             onClick={() => setLeftDrawerOpen(true)}
-            className="fixed left-0 top-[55%] z-30 bg-zinc-900/90 hover:bg-rose-950/90 border border-l-0 border-zinc-800 hover:border-rose-500/50 rounded-r-xl py-4 px-1.5 shadow-[2px_0_12px_rgba(0,0,0,0.7)] flex flex-col items-center gap-2 group transition-all duration-300"
-            title="Open Fan Profile & Settings"
+            className={`fixed left-0 top-[55%] z-30 bg-zinc-900/90 border border-l-0 border-zinc-800 rounded-r-xl py-4 px-1.5 shadow-[2px_0_12px_rgba(0,0,0,0.7)] flex flex-col items-center gap-2 group transition-all duration-300 ${
+              portalRole === 'band'
+                ? 'hover:bg-emerald-950/90 hover:border-emerald-500/50'
+                : portalRole === 'promoter'
+                ? 'hover:bg-yellow-950/90 hover:border-yellow-500/50'
+                : portalRole === 'fan_only'
+                ? 'hover:bg-cyan-950/90 hover:border-cyan-500/50'
+                : 'hover:bg-rose-950/90 hover:border-rose-500/50'
+            }`}
+            title="Open Profile & Settings"
           >
-            <User className="w-4 h-4 text-rose-500 group-hover:scale-110 transition-transform" />
+            <User className={`w-4 h-4 group-hover:scale-110 transition-transform ${
+              portalRole === 'band' ? 'text-[#39ff14]' : portalRole === 'promoter' ? 'text-yellow-400' : portalRole === 'fan_only' ? 'text-cyan-400' : 'text-rose-500'
+            }`} />
             <span className="text-[8px] font-black uppercase text-zinc-400 group-hover:text-white tracking-widest [writing-mode:vertical-lr] select-none">PROFILE</span>
             <Settings className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300 group-hover:rotate-45 transition-all mt-0.5" />
           </button>
@@ -335,18 +347,32 @@ export const FeedSideDrawers: React.FC<FeedSideDrawersProps> = ({
           {/* Floating Right Handle - Pull to open Notifications */}
           <button
             onClick={() => setRightDrawerOpen(true)}
-            className="fixed right-0 top-[55%] z-30 bg-zinc-900/95 hover:bg-rose-950/95 border border-r-0 border-zinc-800 hover:border-rose-500/50 rounded-l-xl py-4 px-1.5 shadow-[-4px_0_20px_rgba(244,63,94,0.15)] flex flex-col items-center gap-1.5 group transition-all duration-300"
+            className={`fixed right-0 top-[55%] z-30 bg-zinc-900/95 border border-r-0 border-zinc-800 rounded-l-xl py-4 px-1.5 flex flex-col items-center gap-1.5 group transition-all duration-300 ${
+              portalRole === 'band'
+                ? 'hover:bg-emerald-950/95 hover:border-emerald-500/50 shadow-[-4px_0_20px_rgba(57,255,20,0.2)]'
+                : portalRole === 'promoter'
+                ? 'hover:bg-yellow-950/95 hover:border-yellow-500/50 shadow-[-4px_0_20px_rgba(234,179,8,0.2)]'
+                : portalRole === 'fan_only'
+                ? 'hover:bg-cyan-950/95 hover:border-cyan-500/50 shadow-[-4px_0_20px_rgba(34,211,238,0.2)]'
+                : 'hover:bg-rose-950/95 hover:border-rose-500/50 shadow-[-4px_0_20px_rgba(244,63,94,0.15)]'
+            }`}
             title="Open Notifications"
           >
             <div className="relative">
-              <Bell className="w-4 h-4 text-rose-500 group-hover:scale-115 transition-transform" />
+              <Bell className={`w-4 h-4 group-hover:scale-115 transition-transform ${
+                portalRole === 'band' ? 'text-[#39ff14]' : portalRole === 'promoter' ? 'text-yellow-400' : portalRole === 'fan_only' ? 'text-cyan-400' : 'text-rose-500'
+              }`} />
               {unreadNotifsCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-600 border border-zinc-950 shadow-[0_0_8px_#f43f5e] animate-ping" />
+                <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-zinc-950 animate-ping ${
+                  portalRole === 'band' ? 'bg-[#39ff14] shadow-[0_0_8px_#39ff14]' : portalRole === 'promoter' ? 'bg-yellow-400 shadow-[0_0_8px_#eab308]' : portalRole === 'fan_only' ? 'bg-cyan-400 shadow-[0_0_8px_#22d3ee]' : 'bg-rose-600 shadow-[0_0_8px_#f43f5e]'
+                }`} />
               )}
             </div>
             <span className="text-[8px] font-black uppercase text-zinc-400 group-hover:text-white tracking-widest [writing-mode:vertical-lr] select-none">NOTICES</span>
             {unreadNotifsCount > 0 && (
-              <span className="bg-rose-600 text-[8px] font-black text-white px-1.5 py-0.5 rounded-md mt-1 scale-90 border border-rose-500/40">
+              <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md mt-1 scale-90 border ${
+                portalRole === 'band' ? 'bg-[#39ff14] text-black border-[#39ff14]' : portalRole === 'promoter' ? 'bg-yellow-400 text-black border-yellow-300' : portalRole === 'fan_only' ? 'bg-cyan-400 text-black border-cyan-300' : 'bg-rose-600 text-white border-rose-500/40'
+              }`}>
                 {unreadNotifsCount}
               </span>
             )}

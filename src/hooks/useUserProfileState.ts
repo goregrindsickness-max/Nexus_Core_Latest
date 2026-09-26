@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { profileStore } from '../utils/indexedDB';
 import { getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, sanitizeCreativePayload, formatCreativePayload, extractGlobalProfilePayload, sanitizeBandPayload } from '../supabase';
-import { resolveBandLogo, resolveBandCover, resolveBandHandle, resolveBandName, resolveBandBio, resolveBandLocation } from '../utils/bandProfileUtils';
+import { resolveBandLogo, resolveBandCover, resolveBandHandle, resolveBandName, resolveBandBio, resolveBandLocation, resolvePromoterName, resolvePromoterHandle, resolvePromoterLogo, resolvePromoterCover, resolvePromoterBio, resolvePromoterLocation } from '../utils/bandProfileUtils';
 
 export interface UseUserProfileStateProps {
   portalRole: string;
@@ -32,7 +32,7 @@ export function useUserProfileState({
       return userProfile?.creative_metadata?.business_name || userProfile?.creative_name || 'Pro Creative';
     }
     if (portalRole === 'promoter') {
-      return userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_metadata?.agency_name || userProfile?.promoter_agency || userProfile?.promoter_brand || userProfile?.promoter_name || 'Nexus Live Productions';
+      return resolvePromoterName(userProfile);
     }
     if (portalRole === 'label') {
       return userProfile?.label_company_name || 'Pro Label';
@@ -66,8 +66,7 @@ export function useUserProfileState({
       return rawC.replace(/^@+/, '').replace(/\s+/g, '_');
     }
     if (portalRole === 'promoter') {
-      const rawP = userProfile?.promoter_handle || userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_metadata?.agency_name || userProfile?.promoter_agency || userProfile?.promoter_name || 'nexus_live_productions';
-      return rawP.replace(/^@+/, '').replace(/\s+/g, '_');
+      return resolvePromoterHandle(userProfile);
     }
     if (portalRole === 'label') {
       const rawL = userProfile?.label_url_slug || userProfile?.label_company_name || 'label_pro';
@@ -105,8 +104,8 @@ export function useUserProfileState({
     if (portalRole === 'creative' && userProfile?.creative_metadata?.city) {
       return userProfile.creative_metadata.city;
     }
-    if (portalRole === 'promoter' && userProfile?.promoter_metadata?.city) {
-      return userProfile.promoter_metadata.city;
+    if (portalRole === 'promoter') {
+      return resolvePromoterLocation(userProfile);
     }
     const signupLocation = (userProfile?.city && userProfile?.state_province) ? `${userProfile.city}, ${userProfile.state_province}` : null;
     if (portalRole === 'fan_only') return signupLocation || userProfile?.city_state || userProfile?.location_code || 'Denison, TX';
@@ -280,7 +279,7 @@ export function useUserProfileState({
     } else if (portalRole === 'creative') {
       name = userProfile?.creative_metadata?.business_name || userProfile?.creative_name || 'Pro Creative';
     } else if (portalRole === 'promoter') {
-      name = userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_metadata?.agency_name || userProfile?.promoter_agency || userProfile?.promoter_brand || userProfile?.promoter_name || 'Nexus Live Productions';
+      name = resolvePromoterName(userProfile);
     } else if (portalRole === 'label') {
       name = userProfile?.label_company_name || 'Pro Label';
     } else if (portalRole === 'fan_only') {
@@ -306,8 +305,7 @@ export function useUserProfileState({
       const rawC = userProfile?.creative_handle || userProfile?.creative_metadata?.business_name || 'creative_pro';
       handle = rawC.replace(/^@+/, '').replace(/\s+/g, '_');
     } else if (portalRole === 'promoter') {
-      const rawP = userProfile?.promoter_handle || userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_metadata?.agency_name || userProfile?.promoter_agency || userProfile?.promoter_name || 'nexus_live_productions';
-      handle = rawP.replace(/^@+/, '').replace(/\s+/g, '_');
+      handle = resolvePromoterHandle(userProfile);
     } else if (portalRole === 'label') {
       const rawL = userProfile?.label_url_slug || userProfile?.label_company_name || 'label_pro';
       handle = rawL.replace(/^@+/, '').replace(/\s+/g, '_');
@@ -351,6 +349,14 @@ export function useUserProfileState({
     if (portalRole === 'label') return ['Record Label'];
     return ['Purely a Supporter'];
   });
+
+  useEffect(() => {
+    if (portalRole === 'band') setProfileSceneRoles(['Artist']);
+    else if (portalRole === 'creative') setProfileSceneRoles(['Creative']);
+    else if (portalRole === 'promoter') setProfileSceneRoles(['Promoter']);
+    else if (portalRole === 'label') setProfileSceneRoles(['Record Label']);
+    else setProfileSceneRoles(['Purely a Supporter']);
+  }, [portalRole]);
 
   const [profileBlurb, setProfileBlurb] = useState(() => {
     if (portalRole === 'band') {
