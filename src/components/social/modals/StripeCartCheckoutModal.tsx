@@ -57,7 +57,7 @@ export function StripeCartCheckoutModal({
     };
     window.addEventListener('nexus-wallets-changed', handleWalletsUpdate);
     return () => window.removeEventListener('nexus-wallets-changed', handleWalletsUpdate);
-  }, [userProfile]);
+  }, [userProfile?.id]);
 
   // Shipping Configuration
   const [useWalletAddress, setUseWalletAddress] = useState<boolean>(true);

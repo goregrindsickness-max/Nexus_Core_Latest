@@ -335,6 +335,122 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                           return;
                         }
 
+                        if (portalRole === 'promoter') {
+                          const promoterName = (userProfile as any)?.promoter_metadata?.brand_name || (userProfile as any)?.promoter_metadata?.agency_name || (userProfile as any)?.promoter_agency || 'Nexus Live Productions';
+                          const promoterLogo = (userProfile as any)?.promoter_logo || (userProfile as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
+                          const promoterCover = (userProfile as any)?.promoter_cover_image || (userProfile as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
+                          const promoterBio = (userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || 'Promoter & booking management for underground extreme music festivals and venue tours across North America.';
+
+                          const detailPayload = {
+                            id: (userProfile as any)?.promoter_id || userProfile?.id || 'promoter:nexuslive',
+                            name: promoterName,
+                            legalName: promoterName,
+                            handle: '@NexusLive',
+                            console_handle: '@NexusLive',
+                            username: '@NexusLive',
+                            avatar: promoterLogo,
+                            avatar_url: promoterLogo,
+                            logo: promoterLogo,
+                            logo_url: promoterLogo,
+                            promoter_logo: promoterLogo,
+                            banner: promoterCover,
+                            banner_url: promoterCover,
+                            cover: promoterCover,
+                            cover_url: promoterCover,
+                            promoter_cover_image: promoterCover,
+                            location: userProfile?.city ? `${userProfile.city}, ${userProfile.state || 'TX'}` : 'Denison, TX',
+                            role: 'Event Promoter',
+                            account_type: 'promoter',
+                            type: 'promoter',
+                            isPersonal: false,
+                            isPromoterProfile: true,
+                            isBandProfile: false,
+                            isYou: true,
+                            badges: ['🎪 Event Promoter', '⚡ Nexus Live'],
+                            customBadges: ['🎪 Event Promoter', '⚡ Nexus Live'],
+                            bio: promoterBio,
+                            promoter_metadata: (userProfile as any)?.promoter_metadata || {}
+                          };
+                          window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
+                          triggerNotification?.("⚡ Opening Promoter Public Profile...");
+                          return;
+                        }
+
+                        if (portalRole === 'creative') {
+                          const creativeName = (userProfile as any)?.creative_metadata?.business_name || (userProfile as any)?.creative_name || userProfile?.name || 'Vortex Graphics';
+                          const creativeAvatar = (userProfile as any)?.creative_avatar || (userProfile as any)?.creative_metadata?.avatar_url || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
+                          const creativeBanner = (userProfile as any)?.creative_banner || (userProfile as any)?.creative_metadata?.banner_url || userProfile?.banner_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200';
+                          const creativeBio = (userProfile as any)?.creative_metadata?.bio || userProfile?.bio || 'Professional creative specialist on the Nexus network.';
+                          const creativeHandle = (userProfile as any)?.creative_handle || userProfile?.console_handle || 'vortexgraphics';
+
+                          const detailPayload = {
+                            id: (userProfile as any)?.creative_id || userProfile?.id || 'creative:vortex',
+                            name: creativeName,
+                            legalName: userProfile?.full_name || userProfile?.name,
+                            business_name: creativeName,
+                            handle: creativeHandle.startsWith('@') ? creativeHandle : `@${creativeHandle}`,
+                            console_handle: creativeHandle.startsWith('@') ? creativeHandle : `@${creativeHandle}`,
+                            username: creativeHandle.startsWith('@') ? creativeHandle : `@${creativeHandle}`,
+                            avatar: creativeAvatar,
+                            avatar_url: creativeAvatar,
+                            banner: creativeBanner,
+                            banner_url: creativeBanner,
+                            cover_url: creativeBanner,
+                            location: userProfile?.location || 'USA / Global',
+                            role: 'Creative',
+                            account_type: 'creative',
+                            type: 'creative',
+                            isPersonal: false,
+                            isCreativeProfile: true,
+                            isBandProfile: false,
+                            isYou: true,
+                            badges: ['🛠️ Creative Pro', '🎨 Designer'],
+                            customBadges: ['🛠️ Creative Pro', '🎨 Designer'],
+                            bio: creativeBio,
+                            creative_metadata: (userProfile as any)?.creative_metadata || {}
+                          };
+                          window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
+                          triggerNotification?.("⚡ Opening Creative Public Profile...");
+                          return;
+                        }
+
+                        if (portalRole === 'label') {
+                          const labelName = (userProfile as any)?.label_name || (userProfile as any)?.label_metadata?.label_name || 'Rotten Music Records';
+                          const labelAvatar = (userProfile as any)?.label_avatar || (userProfile as any)?.label_metadata?.logo_url || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=150';
+                          const labelBanner = (userProfile as any)?.label_banner || (userProfile as any)?.label_metadata?.banner_url || userProfile?.banner_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=1200';
+                          const labelBio = (userProfile as any)?.label_metadata?.bio || userProfile?.bio || 'Independent record label dedicated to underground extreme metal releases.';
+                          const labelHandle = (userProfile as any)?.label_handle || '@rottenmusic';
+
+                          const detailPayload = {
+                            id: (userProfile as any)?.label_id || userProfile?.id || 'label:rotten',
+                            name: labelName,
+                            legalName: labelName,
+                            handle: labelHandle.startsWith('@') ? labelHandle : `@${labelHandle}`,
+                            console_handle: labelHandle.startsWith('@') ? labelHandle : `@${labelHandle}`,
+                            username: labelHandle.startsWith('@') ? labelHandle : `@${labelHandle}`,
+                            avatar: labelAvatar,
+                            avatar_url: labelAvatar,
+                            banner: labelBanner,
+                            banner_url: labelBanner,
+                            cover_url: labelBanner,
+                            location: userProfile?.location || 'USA / Global',
+                            role: 'Record Label',
+                            account_type: 'label',
+                            type: 'label',
+                            isPersonal: false,
+                            isLabelProfile: true,
+                            isBandProfile: false,
+                            isYou: true,
+                            badges: ['💿 Record Label'],
+                            customBadges: ['💿 Record Label'],
+                            bio: labelBio,
+                            label_metadata: (userProfile as any)?.label_metadata || {}
+                          };
+                          window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
+                          triggerNotification?.("⚡ Opening Label Public Profile...");
+                          return;
+                        }
+
                         const personalHandle = userProfile?.console_handle && !userProfile.console_handle.toLowerCase().includes('virulent') && userProfile.console_handle !== '@user' && userProfile.console_handle !== 'user'
                           ? (userProfile.console_handle.startsWith('@') ? userProfile.console_handle : `@${userProfile.console_handle}`)
                           : '@bdmCEO';
@@ -369,7 +485,7 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                       className="w-full flex items-center justify-center gap-1.5 bg-[#3b0b6c] hover:bg-[#4c0d8a] text-white py-1.5 rounded-lg text-[10px] font-bold tracking-widest uppercase transition-colors mb-2 shadow-md shadow-purple-900/20 cursor-pointer"
                     >
                       <User className="w-3 h-3" strokeWidth={2.5} />
-                      {portalRole === 'band' ? 'VIEW BAND PROFILE' : 'VIEW MY PROFILE'}
+                      {portalRole === 'band' ? 'VIEW BAND PROFILE' : portalRole === 'promoter' ? 'VIEW PROMOTER PROFILE' : portalRole === 'creative' ? 'VIEW CREATIVE PROFILE' : portalRole === 'label' ? 'VIEW LABEL PROFILE' : 'VIEW MY PROFILE'}
                     </button>
 
                     <div className="text-[8px] font-mono font-bold text-zinc-500 uppercase tracking-widest mb-1 px-1">

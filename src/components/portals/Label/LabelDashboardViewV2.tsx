@@ -4411,7 +4411,7 @@ export default function LabelDashboardViewV2({
                             <div className="relative aspect-square bg-zinc-900 w-full flex items-center justify-center p-4">
                               <Disc className="w-16 h-16 text-zinc-800" />
                               <div className="absolute top-2 right-2 bg-black/80 backdrop-blur-md rounded-lg px-2.5 py-1 z-10 border border-zinc-800/50">
-                                <span className="text-[#00ffcc] font-black font-sans tracking-tight">${(release.price ?? 0).toFixed(0)}</span>
+                                <span className="text-[#00ffcc] font-black font-sans tracking-tight">${Number(release.price || 0).toFixed(0)}</span>
                               </div>
                             </div>
                             <div className="p-3">
@@ -4448,7 +4448,7 @@ export default function LabelDashboardViewV2({
                                 {apparel.type === 'T-Shirt' ? <Layers size={48} /> : apparel.type === 'Hoodie' ? <Users size={48} /> : apparel.type === 'Cap' ? <Shield size={48} /> : <Tag size={48} />}
                               </div>
                               <div className="absolute top-2 right-2 bg-black/80 backdrop-blur-md rounded-lg px-2.5 py-1 z-10 border border-zinc-800/50">
-                                <span className="text-[#00ffcc] font-black font-sans tracking-tight">${(apparel.price ?? 0).toFixed(0)}</span>
+                                <span className="text-[#00ffcc] font-black font-sans tracking-tight">${Number(apparel.price || 0).toFixed(0)}</span>
                               </div>
                             </div>
                             <div className="p-3">

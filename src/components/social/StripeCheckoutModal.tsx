@@ -186,7 +186,7 @@ export function StripeCheckoutModal({
     };
     window.addEventListener('nexus-wallets-changed', handleWalletsUpdate);
     return () => window.removeEventListener('nexus-wallets-changed', handleWalletsUpdate);
-  }, [userProfile]);
+  }, [userProfile?.id]);
 
   // Stripe Client Secret for Live Element if available
   const [clientSecret, setClientSecret] = useState<string | null>(null);

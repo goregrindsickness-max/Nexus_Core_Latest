@@ -507,6 +507,35 @@ export function AppNavigationBar({
                               handle: (updated as any)?.creative_handle || updated?.console_handle || 'vortexgraphics',
                               console_handle: (updated as any)?.creative_handle || updated?.console_handle || 'vortexgraphics',
                               creative_metadata: (updated as any)?.creative_metadata || {}
+                            } : isPromoterAcc ? {
+                              id: (updated as any)?.promoter_id || updated?.id || 'promoter:nexuslive',
+                              name: (updated as any)?.promoter_metadata?.brand_name || (updated as any)?.promoter_metadata?.agency_name || (updated as any)?.promoter_agency || 'Nexus Live Productions',
+                              legalName: (updated as any)?.promoter_metadata?.brand_name || (updated as any)?.promoter_agency || 'Nexus Live Productions',
+                              handle: '@NexusLive',
+                              console_handle: '@NexusLive',
+                              username: '@NexusLive',
+                              avatar: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601',
+                              avatar_url: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601',
+                              logo: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601',
+                              logo_url: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601',
+                              promoter_logo: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601',
+                              banner: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635',
+                              banner_url: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635',
+                              cover: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635',
+                              cover_url: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635',
+                              promoter_cover_image: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635',
+                              location: updated?.city ? `${updated.city}, ${(updated as any)?.state || 'TX'}` : 'Denison, TX',
+                              role: 'Event Promoter',
+                              type: 'promoter',
+                              account_type: 'promoter',
+                              isPromoterProfile: true,
+                              isPersonal: false,
+                              isBandProfile: false,
+                              isYou: true,
+                              badges: ['🎪 Event Promoter', '⚡ Nexus Live'],
+                              customBadges: ['🎪 Event Promoter', '⚡ Nexus Live'],
+                              bio: (updated as any)?.promoter_metadata?.bio || (updated as any)?.promoter_bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || 'Promoter & booking management for underground extreme music festivals and venue tours across North America.',
+                              promoter_metadata: (updated as any)?.promoter_metadata || {}
                             } : {
                               id: updated?.id || null,
                               name: updated?.name || updated?.full_name || 'Miguel Goregrinder Medina',
@@ -545,7 +574,7 @@ export function AppNavigationBar({
                       className="w-full flex items-center gap-3 px-3 py-2 rounded font-medium text-xs font-mono tracking-wide transition-all duration-150 cursor-pointer text-left text-zinc-400 hover:text-emerald-300 hover:bg-emerald-950/15"
                     >
                       <User className="w-4 h-4 text-emerald-500" />
-                      <span>View My Profile</span>
+                      <span>{userProfile?.active_workspace === 'band' ? 'View Band Profile' : 'View My Profile'}</span>
                     </button>
                     <button
                       onClick={() => {

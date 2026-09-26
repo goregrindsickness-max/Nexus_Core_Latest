@@ -1017,43 +1017,6 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         return true;
       });
 
-      // Ensure the official Bandcamp transmission is present on Miguel / Virulent Excision's public profile card
-      const isTargetMiguelOrVE = targetName.includes('virulent') || targetName.includes('miguel') || targetName.includes('goregrinder') || selectedUserProfile?.isYou || (selectedUserProfile?.band_name && String(selectedUserProfile.band_name).toLowerCase().includes('virulent'));
-      const hasBandcampPost = deduplicatedPosts.some(p => p.bandcampUrl || p.bandcampData || (p.media_url && typeof p.media_url === 'string' && p.media_url.includes('bandcamp.com')) || (p.content && typeof p.content === 'string' && p.content.includes('bandcamp.com')));
-
-      if (isTargetMiguelOrVE && !hasBandcampPost) {
-        deduplicatedPosts.unshift({
-          id: 'post_ve_official_bandcamp_transmission',
-          profile_id: targetId,
-          author_id: targetId,
-          user_id: targetId,
-          content: "🩸 NEW TRANSMISSION: 'Symbiotic Voracity' is now streaming directly on our embedded Bandcamp player! Audition the audio master below or support the release.",
-          media_url: 'https://virulentexcision.bandcamp.com/track/symbiotic-voracity',
-          images: [],
-          created_at: new Date(Date.now() - 3600000).toISOString(),
-          author: {
-            name: selectedProfileName || 'Virulent Excision',
-            avatar: selectedUserProfile?.avatar || selectedUserProfile?.logo_url || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Virulent%20Excision%20-%20Symbiotic%20Voracity%20Longsleeve.jpeg',
-            role: 'Band',
-            full_name: 'Virulent Excision',
-            workspace_type: 'band'
-          },
-          workspace_type: 'band',
-          type: 'post',
-          tag: 'BANDCAMP TRANSMISSION',
-          reactions_count: 24,
-          bandcampUrl: 'https://peaceville.bandcamp.com/album/severed-survival',
-          bandcampData: {
-            title: 'Symbiotic Voracity',
-            artist: 'Virulent Excision',
-            itemType: 'track',
-            pageUrl: 'https://peaceville.bandcamp.com/album/severed-survival',
-            embedUrl: 'https://bandcamp.com/EmbeddedPlayer/album=271926639/size=large/bgcol=000000/linkcol=06b6d4/tracklist=false/artwork=small/transparent=true/',
-            artwork: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Virulent%20Excision%20-%20Symbiotic%20Voracity%20Longsleeve.jpeg'
-          }
-        });
-      }
-
       setPosts(deduplicatedPosts);
     } catch (err: any) {
       console.error('Error loading timeline posts:', err);
@@ -1407,15 +1370,6 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                       post={post}
                       compact={true}
                       variant="timeline"
-                      embedUrl={
-                        post.bandcampUrl || 
-                        post.bandcamp_url || 
-                        post.bandcampData?.pageUrl || 
-                        post.bandcampData?.embedUrl || 
-                        (post.media_url && typeof post.media_url === 'string' && post.media_url.includes('bandcamp.com') ? post.media_url : null) || 
-                        (post.mediaUrl && typeof post.mediaUrl === 'string' && post.mediaUrl.includes('bandcamp.com') ? post.mediaUrl : null) ||
-                        (post.content && typeof post.content === 'string' && post.content.match(/https?:\/\/[^\s]+bandcamp\.com[^\s]*/)?.[0])
-                      }
                     />
                   </div>
                 )}

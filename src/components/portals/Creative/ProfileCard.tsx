@@ -1388,7 +1388,12 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                 {(() => {
                   const isTargetSelf = Boolean(
                     effTarget?.isYou ||
-                    (userProfile?.id && effTarget?.id && String(effTarget.id) === String(userProfile.id))
+                    baseTarget?.isYou ||
+                    selectedUserProfile?.isYou ||
+                    (userProfile?.id && effTarget?.id && String(effTarget.id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+                    (userProfile?.id && baseTarget?.id && String(baseTarget.id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+                    (userProfile?.email && effTarget?.email && String(effTarget.email).toLowerCase() === String(userProfile.email).toLowerCase()) ||
+                    (userProfile?.email && baseTarget?.email && String(baseTarget.email).toLowerCase() === String(userProfile.email).toLowerCase())
                   );
                   const registeredWorkspaces = isTargetSelf
                     ? (userProfile?.registered_workspaces || effTarget?.registered_workspaces || userProfile?.allowed_workspaces || effTarget?.allowed_workspaces || effTarget?.workspaces || [])
@@ -1438,17 +1443,19 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     (targetRole && targetRole.toLowerCase() === 'band')
                   );
 
-                  const isEffTargetMiguel = isMiguelNameOrProfile(effTarget) || (isTargetSelf && isMiguelNameOrProfile(userProfile));
+                  const isEffTargetMiguel = isMiguelNameOrProfile(effTarget) || isMiguelNameOrProfile(baseTarget) || isMiguelNameOrProfile(selectedUserProfile) || (isTargetSelf && isMiguelNameOrProfile(userProfile)) || isMiguelNameOrProfile(userProfile);
                   const targetBandId = isEffTargetMiguel ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (effTarget?.band_id || (isTargetSelf ? userProfile?.band_id : null));
                   let matchingBandProfile: any = null;
 
                   if (isEffTargetMiguel) {
-                    matchingBandProfile = allProfiles.find((p: any) => {
+                    matchingBandProfile = Array.isArray(allProfiles) ? allProfiles.find((p: any) => {
+                      const isBandType = p.type === 'band' || p.isBandProfile || p.category === 'bands' || (p.role && p.role.toLowerCase() === 'band') || (p.portalRole && p.portalRole.toLowerCase() === 'band');
+                      if (!isBandType) return false;
                       const pId = String(p.id || '').toLowerCase().trim();
                       const rawId = String(p.raw_id || p.band_id || '').toLowerCase().trim();
                       const cleanName = (p.name || p.band_name || '').toLowerCase().trim();
                       return pId === 'cbddb810-259b-4230-9968-3d402dfdb872' || pId === 'real-b-cbddb810-259b-4230-9968-3d402dfdb872' || rawId === 'cbddb810-259b-4230-9968-3d402dfdb872' || cleanName === 'virulent excision';
-                    });
+                    }) : null;
                   } else if (targetBandId) {
                     matchingBandProfile = allProfiles.find((p: any) => {
                       if (isCommunityBandRecord(p.id) || isCommunityBandRecord(p.name) || isCommunityBandRecord(p.band_name) || (p.name && p.name.toLowerCase().includes('necroticgorebeast'))) return false;
@@ -1507,7 +1514,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                    const hasBand = !isCurrentProfileBand && hasBandWorkspace;
 
-                   const promoterRefLogo = effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null);
+                   const promoterRefLogo = effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null);
 
                    const isLogoPromoterLogo = (candidateLogo?: string | null) => {
                      if (!candidateLogo) return false;
@@ -1516,7 +1523,37 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                      if (effTarget?.promoter_metadata?.logo_url && candidateLogo === effTarget.promoter_metadata.logo_url) return true;
                      if (userProfile?.promoter_logo && candidateLogo === userProfile.promoter_logo) return true;
                      if (userProfile?.promoter_metadata?.logo_url && candidateLogo === userProfile.promoter_metadata.logo_url) return true;
+                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_promoter_logo') === candidateLogo) return true;
                      return false;
+                   };
+
+                   const isPersonalOrOtherAvatar = (candidateLogo?: string | null) => {
+                     if (!candidateLogo) return false;
+                     if (effTarget?.avatar && candidateLogo === effTarget.avatar) return true;
+                     if (effTarget?.avatar_url && candidateLogo === effTarget.avatar_url) return true;
+                     if (baseTarget?.avatar && candidateLogo === baseTarget.avatar) return true;
+                     if (baseTarget?.avatar_url && candidateLogo === baseTarget.avatar_url) return true;
+                     if (userProfile?.avatar && candidateLogo === userProfile.avatar) return true;
+                     if (userProfile?.avatar_url && candidateLogo === userProfile.avatar_url) return true;
+                     if (selectedUserProfile?.avatar && candidateLogo === selectedUserProfile.avatar) return true;
+                     if (selectedUserProfile?.avatar_url && candidateLogo === selectedUserProfile.avatar_url) return true;
+                     if (userProfile?.creative_avatar && candidateLogo === userProfile.creative_avatar) return true;
+                     if (userProfile?.label_avatar && candidateLogo === userProfile.label_avatar) return true;
+                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_user_avatar') === candidateLogo) return true;
+                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_creative_avatar') === candidateLogo) return true;
+                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_label_avatar') === candidateLogo) return true;
+                     return false;
+                   };
+
+                   const isValidBandLogo = (candidateLogo?: string | null) => {
+                     if (!candidateLogo || typeof candidateLogo !== 'string') return false;
+                     if (candidateLogo.trim() === '') return false;
+                     if (candidateLogo.includes('unsplash')) return false;
+                     if (candidateLogo.startsWith('data:image')) return false;
+                     if (candidateLogo.includes('default') || candidateLogo.includes('photo-')) return false;
+                     if (isLogoPromoterLogo(candidateLogo)) return false;
+                     if (isPersonalOrOtherAvatar(candidateLogo)) return false;
+                     return true;
                    };
 
                    if (hasBand) {
@@ -1526,20 +1563,25 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     const veLogo = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396';
                     const veBanner = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-cover_1787467851123.jpg?t=1787467851123';
                     
+                    const savedCoreBandLogo = (typeof window !== 'undefined') ? (
+                      localStorage.getItem('nexus_core_band_logo_cbddb810-259b-4230-9968-3d402dfdb872') ||
+                      localStorage.getItem('nexus_band_logo_cbddb810-259b-4230-9968-3d402dfdb872') ||
+                      (targetBandId ? localStorage.getItem(`nexus_core_band_logo_${targetBandId}`) : null)
+                    ) : null;
+
                     const candidateBandLogo = (
-                      (lbd?.logo_url && !lbd.logo_url.includes('unsplash') && !isLogoPromoterLogo(lbd.logo_url) ? lbd.logo_url : null) ||
-                      (isTargetSelf && localSavedBand?.logo_url && !isLogoPromoterLogo(localSavedBand.logo_url) ? localSavedBand.logo_url : null) ||
-                      (isTargetSelf && userProfile?.band_metadata?.logo_url && !isLogoPromoterLogo(userProfile.band_metadata.logo_url) ? userProfile.band_metadata.logo_url : null) ||
-                      (isTargetSelf && userProfile?.band_logo && !isLogoPromoterLogo(userProfile.band_logo) ? userProfile.band_logo : null) ||
-                      (lbd?.avatar_url && !lbd.avatar_url.includes('unsplash') && !isLogoPromoterLogo(lbd.avatar_url) ? lbd.avatar_url : null) ||
-                      (lbd?.avatar && !lbd.avatar.includes('unsplash') && !isLogoPromoterLogo(lbd.avatar) ? lbd.avatar : null) ||
-                      (isTargetSelf && localSavedBand?.avatar_url && !isLogoPromoterLogo(localSavedBand.avatar_url) ? localSavedBand.avatar_url : null) ||
-                      (lbd?.logo_url && !isLogoPromoterLogo(lbd.logo_url) ? lbd.logo_url : null) ||
+                      (savedCoreBandLogo && isValidBandLogo(savedCoreBandLogo) ? savedCoreBandLogo : null) ||
+                      (isTargetSelf && userProfile?.band_logo && isValidBandLogo(userProfile.band_logo) ? userProfile.band_logo : null) ||
+                      (isTargetSelf && userProfile?.band_metadata?.logo_url && isValidBandLogo(userProfile.band_metadata.logo_url) ? userProfile.band_metadata.logo_url : null) ||
+                      (isTargetSelf && localSavedBand?.logo_url && isValidBandLogo(localSavedBand.logo_url) ? localSavedBand.logo_url : null) ||
+                      (lbd?.logo_url && isValidBandLogo(lbd.logo_url) ? lbd.logo_url : null) ||
+                      (lbd?.avatar_url && isValidBandLogo(lbd.avatar_url) ? lbd.avatar_url : null) ||
+                      (lbd?.avatar && isValidBandLogo(lbd.avatar) ? lbd.avatar : null) ||
                       null
                     );
 
                     const logo = isVirulentExcision
-                      ? (candidateBandLogo && !candidateBandLogo.includes('unsplash') ? candidateBandLogo : veLogo)
+                      ? ((candidateBandLogo && isValidBandLogo(candidateBandLogo) && (candidateBandLogo.includes('band-logo') || candidateBandLogo.includes('cbddb810') || candidateBandLogo.includes('virulent'))) ? candidateBandLogo : veLogo)
                       : (candidateBandLogo || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=300');
                     const subtitle = isVirulentExcision
                       ? 'Brutal Death Metal • Slamming BDM • Death Metal'
@@ -1985,10 +2027,21 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                        onChange={(e) => {
                          const val = e.target.value.slice(0, 500);
                          setProfileBlurb(val);
-                         setSelectedUserProfile((prev: any) => prev ? { ...prev, bio: val, profileBlurb: val } : null);
-                         if (setUserProfile) { queueMicrotask(() => { setUserProfile((pPrev: any) => pPrev ? { ...pPrev, bio: val } : null); }); }
+                         setSelectedUserProfile((prev: any) => prev ? { ...prev, bio: val, creative_bio: val, profileBlurb: val } : null);
+                         if (setUserProfile) {
+                           queueMicrotask(() => {
+                             setUserProfile((pPrev: any) => pPrev ? {
+                               ...pPrev,
+                               creative_bio: val,
+                               creative_metadata: {
+                                 ...(pPrev.creative_metadata || {}),
+                                 bio: val
+                               }
+                             } : null);
+                           });
+                         }
                          try {
-                           localStorage.setItem('nexus_user_bio', val);
+                           localStorage.setItem('nexus_creative_bio', val);
                          } catch(err){}
                        }}
                        onBlur={() => {

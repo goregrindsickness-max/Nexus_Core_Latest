@@ -185,6 +185,42 @@ export function sanitizeShowForDb(show: any): any {
 }
 
 /**
+ * Strips properties from an ArchiveShow that are not present in the
+ * 'archive_shows' Postgres table schema, preventing column not found errors.
+ */
+export function sanitizeArchiveShowForDb(item: any): any {
+  const allowedKeys = [
+    'id',
+    'user_id',
+    'promoter_id',
+    'year',
+    'title',
+    'type',
+    'date',
+    'venue',
+    'city',
+    'lineup',
+    'attendance',
+    'milestone',
+    'historical_notes',
+    'notes',
+    'flyer_url',
+    'photo_count',
+    'is_deleted',
+    'created_at',
+    'updated_at'
+  ];
+
+  const dbItem: any = {};
+  for (const key of allowedKeys) {
+    if (item[key] !== undefined) {
+      dbItem[key] = item[key];
+    }
+  }
+  return dbItem;
+}
+
+/**
  * Generates a valid RFC4122 v4 UUID.
  * Compatible with PostgreSQL UUID column constraints.
  */

@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Check, Pencil, X, ArrowLeft, Edit2, AlertTriangle, Briefcase, Plus, Ticket, MapPin, Disc, Tag, Pause, Play, Search, Volume2, ChevronDown, Music, Download, PlayCircle, ShoppingCart, SkipBack, Square, SkipForward, UserCheck, UserPlus, MessageSquare, Shield, ShoppingBag, Calendar, Award, Network, Activity, Camera, ArrowUpRight, FileUp, Users, CheckCircle, Flame, Shirt, Building2 } from 'lucide-react';
+import { Check, Pencil, X, ArrowLeft, Edit2, AlertTriangle, Briefcase, Plus, Ticket, MapPin, Disc, Tag, Pause, Play, Search, Volume2, ChevronDown, Music, Download, PlayCircle, ShoppingCart, SkipBack, Square, SkipForward, UserCheck, UserPlus, MessageSquare, Shield, ShoppingBag, Calendar, Award, Network, Activity, Camera, ArrowUpRight, FileUp, Users, CheckCircle, Flame, Shirt, Building2, Radio, History, Archive } from 'lucide-react';
 import { hasRegisteredWorkspace } from '../../../types';
 import { getProfileGlowInfo } from '../../../utils/profileGlow';
 import { formatLocationDisplay } from '../../../constants/location';
@@ -12,6 +12,9 @@ import { isCommunityBandRecord } from '../../../lib/seedBandsData';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
 import MarqueeText from '../../MarqueeText';
 import BandBookingModal from '../../social/modals/BandBookingModal';
+import SubmitBandToPromoterModal from '../../social/modals/SubmitBandToPromoterModal';
+import PromoterEventsModal from '../../social/modals/PromoterEventsModal';
+import PromoterArchivesModal from '../../social/modals/PromoterArchivesModal';
 import { SonicFootprint, ListenerMetric, calculateListenerMetrics } from '../../profile/SonicFootprint';
 import { TimelineTab } from '../../profile/TimelineTab';
 import { BandcampEmbedCard } from '../../social/embeds/BandcampEmbedCard';
@@ -119,13 +122,259 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 }) => {
   const [liveRoutingStats, setLiveRoutingStats] = React.useState<{ toursCount: number; showsCount: number }>({ toursCount: 0, showsCount: 0 });
   const [showBandBookingModal, setShowBandBookingModal] = React.useState(false);
+  const [showSubmitBandModal, setShowSubmitBandModal] = React.useState(false);
+  const [showEventsModal, setShowEventsModal] = React.useState(false);
+  const [showArchivesModal, setShowArchivesModal] = React.useState(false);
   const [isIsolatedStorefrontOpen, setIsIsolatedStorefrontOpen] = React.useState(false);
   const [storefrontPromoterData, setStorefrontPromoterData] = React.useState<any>(null);
   const [fetchedBandData, setFetchedBandData] = React.useState<any>(null);
   const [linkedBandData, setLinkedBandData] = React.useState<any>(null);
   const [fetchedProfileData, setFetchedProfileData] = React.useState<any>(null);
   const [isEditingBio, setIsEditingBio] = React.useState(false);
+  const [promoterBioText, setPromoterBioText] = React.useState<string>(() => {
+    const defaultPromoterBio = 'Promoter & booking management for underground extreme music festivals and venue tours across North America.';
+    const personalBio = (userProfile as any)?.bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_bio') : null);
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null;
+    if (stored && stored !== personalBio) return stored;
+    const fromProfile = selectedUserProfile?.promoter_metadata?.bio || selectedUserProfile?.promoter_bio || (userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio;
+    if (fromProfile && fromProfile !== personalBio) return fromProfile;
+    return defaultPromoterBio;
+  });
+
+  React.useEffect(() => {
+    const personalBio = (userProfile as any)?.bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_bio') : null);
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null;
+    if (stored && stored !== personalBio) {
+      setPromoterBioText(stored);
+      return;
+    }
+    const fromProfile = selectedUserProfile?.promoter_metadata?.bio || selectedUserProfile?.promoter_bio || (userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio;
+    if (fromProfile && fromProfile !== personalBio) {
+      setPromoterBioText(fromProfile);
+    }
+  }, [selectedUserProfile?.promoter_metadata?.bio, selectedUserProfile?.promoter_bio, userProfile?.promoter_metadata?.bio, userProfile?.promoter_bio]);
   const [isEditingTopSong, setIsEditingTopSong] = React.useState(false);
+
+  const initialAnthemUrl = (selectedUserProfile?.top_song_url || selectedUserProfile?.featured_youtube_url || selectedUserProfile?.promoter_metadata?.top_song_url || selectedUserProfile?.promoter_metadata?.featured_video_url || (userProfile as any)?.promoter_metadata?.top_song_url || (userProfile as any)?.promoter_metadata?.featured_video_url || (userProfile as any)?.top_song_url || (userProfile as any)?.featured_youtube_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_url') : '') || '') as string;
+  const initialAnthemArtist = (selectedUserProfile?.top_song_artist || selectedUserProfile?.promoter_metadata?.top_song_artist || (userProfile as any)?.promoter_metadata?.top_song_artist || profileTopSongArtist || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_artist') : '') || '') as string;
+  const initialAnthemTitle = (selectedUserProfile?.top_song_title || selectedUserProfile?.promoter_metadata?.top_song_title || (userProfile as any)?.promoter_metadata?.top_song_title || profileTopSongTitle || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_title') : '') || '') as string;
+
+  const [localAnthemArtist, setLocalAnthemArtist] = React.useState(initialAnthemArtist);
+  const [localAnthemTitle, setLocalAnthemTitle] = React.useState(initialAnthemTitle);
+  const [localAnthemUrl, setLocalAnthemUrl] = React.useState(initialAnthemUrl);
+
+  React.useEffect(() => {
+    const url = selectedUserProfile?.top_song_url || selectedUserProfile?.featured_youtube_url || selectedUserProfile?.promoter_metadata?.top_song_url || selectedUserProfile?.promoter_metadata?.featured_video_url || (userProfile as any)?.promoter_metadata?.top_song_url || (userProfile as any)?.top_song_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_url') : '') || '';
+    const artist = selectedUserProfile?.top_song_artist || selectedUserProfile?.promoter_metadata?.top_song_artist || (userProfile as any)?.promoter_metadata?.top_song_artist || profileTopSongArtist || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_artist') : '') || '';
+    const title = selectedUserProfile?.top_song_title || selectedUserProfile?.promoter_metadata?.top_song_title || (userProfile as any)?.promoter_metadata?.top_song_title || profileTopSongTitle || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_title') : '') || '';
+    if (url) setLocalAnthemUrl(url);
+    if (artist) setLocalAnthemArtist(artist);
+    if (title) setLocalAnthemTitle(title);
+  }, [selectedUserProfile?.top_song_url, selectedUserProfile?.featured_youtube_url, selectedUserProfile?.top_song_artist, selectedUserProfile?.top_song_title, profileTopSongArtist, profileTopSongTitle]);
+
+  const handleAnthemUrlChange = (val: string) => {
+    setLocalAnthemUrl(val);
+    if (setProfileTopSongUrl) setProfileTopSongUrl(val);
+    setSelectedUserProfile((prev: any) => prev ? {
+      ...prev,
+      top_song_url: val,
+      featured_youtube_url: val,
+      promoter_metadata: {
+        ...(prev?.promoter_metadata || {}),
+        top_song_url: val,
+        featured_video_url: val,
+      }
+    } : null);
+    setFetchedProfileData((prev: any) => prev ? {
+      ...prev,
+      top_song_url: val,
+      featured_youtube_url: val
+    } : null);
+    if (setUserProfile) {
+      queueMicrotask(() => {
+        setUserProfile((pPrev: any) => pPrev ? {
+          ...pPrev,
+          top_song_url: val,
+          featured_youtube_url: val,
+          promoter_metadata: {
+            ...(pPrev?.promoter_metadata || {}),
+            top_song_url: val,
+            featured_video_url: val,
+          }
+        } : null);
+      });
+    }
+  };
+
+  const handleAnthemArtistChange = (artist: string) => {
+    setLocalAnthemArtist(artist);
+    if (setProfileTopSongArtist) setProfileTopSongArtist(artist);
+    const fullTitle = artist && localAnthemTitle ? `${artist} - ${localAnthemTitle}` : (artist || localAnthemTitle || 'None Selected');
+    if (setProfileFavoriteSong) setProfileFavoriteSong(fullTitle);
+    setSelectedUserProfile((prev: any) => prev ? {
+      ...prev,
+      favoriteSong: fullTitle,
+      top_song_artist: artist,
+      top_song_title: localAnthemTitle || fullTitle,
+      promoter_metadata: {
+        ...(prev?.promoter_metadata || {}),
+        top_song_artist: artist,
+        top_song_title: localAnthemTitle || fullTitle
+      }
+    } : null);
+    setFetchedProfileData((prev: any) => prev ? {
+      ...prev,
+      top_song_artist: artist,
+      favoriteSong: fullTitle
+    } : null);
+    if (setUserProfile) {
+      queueMicrotask(() => {
+        setUserProfile((pPrev: any) => pPrev ? {
+          ...pPrev,
+          favoriteSong: fullTitle,
+          top_song_artist: artist,
+          top_song_title: localAnthemTitle || fullTitle,
+          promoter_metadata: {
+            ...(pPrev?.promoter_metadata || {}),
+            top_song_artist: artist,
+            top_song_title: localAnthemTitle || fullTitle
+          }
+        } : null);
+      });
+    }
+  };
+
+  const handleAnthemTitleChange = (title: string) => {
+    setLocalAnthemTitle(title);
+    if (setProfileTopSongTitle) setProfileTopSongTitle(title);
+    const fullTitle = localAnthemArtist && title ? `${localAnthemArtist} - ${title}` : (localAnthemArtist || title || 'None Selected');
+    if (setProfileFavoriteSong) setProfileFavoriteSong(fullTitle);
+    setSelectedUserProfile((prev: any) => prev ? {
+      ...prev,
+      favoriteSong: fullTitle,
+      top_song_artist: localAnthemArtist,
+      top_song_title: title,
+      promoter_metadata: {
+        ...(prev?.promoter_metadata || {}),
+        top_song_artist: localAnthemArtist,
+        top_song_title: title
+      }
+    } : null);
+    setFetchedProfileData((prev: any) => prev ? {
+      ...prev,
+      top_song_title: title,
+      favoriteSong: fullTitle
+    } : null);
+    if (setUserProfile) {
+      queueMicrotask(() => {
+        setUserProfile((pPrev: any) => pPrev ? {
+          ...pPrev,
+          favoriteSong: fullTitle,
+          top_song_artist: localAnthemArtist,
+          top_song_title: title,
+          promoter_metadata: {
+            ...(pPrev?.promoter_metadata || {}),
+            top_song_artist: localAnthemArtist,
+            top_song_title: title
+          }
+        } : null);
+      });
+    }
+  };
+
+  const handleSaveAnthem = () => {
+    const url = (localAnthemUrl || '').trim();
+    const artist = (localAnthemArtist || '').trim();
+    const title = (localAnthemTitle || '').trim();
+    const fullTitle = artist && title ? `${artist} - ${title}` : (artist || title || 'None Selected');
+
+    setLocalAnthemUrl(url);
+    setLocalAnthemArtist(artist);
+    setLocalAnthemTitle(title);
+    if (setProfileTopSongUrl) setProfileTopSongUrl(url);
+    if (setProfileTopSongArtist) setProfileTopSongArtist(artist);
+    if (setProfileTopSongTitle) setProfileTopSongTitle(title);
+    if (setProfileFavoriteSong) setProfileFavoriteSong(fullTitle);
+
+    setSelectedUserProfile((prev: any) => prev ? {
+      ...prev,
+      top_song_url: url,
+      featured_youtube_url: url,
+      top_song_artist: artist,
+      top_song_title: title,
+      favoriteSong: fullTitle,
+      promoter_metadata: {
+        ...(prev?.promoter_metadata || {}),
+        top_song_url: url,
+        featured_video_url: url,
+        top_song_artist: artist,
+        top_song_title: title
+      }
+    } : null);
+
+    setFetchedProfileData((prev: any) => prev ? {
+      ...prev,
+      top_song_url: url,
+      featured_youtube_url: url,
+      top_song_artist: artist,
+      top_song_title: title,
+      favoriteSong: fullTitle
+    } : null);
+
+    if (setUserProfile) {
+      setUserProfile((prev: any) => prev ? {
+        ...prev,
+        top_song_url: url,
+        featured_youtube_url: url,
+        top_song_artist: artist,
+        top_song_title: title,
+        favoriteSong: fullTitle,
+        promoter_metadata: {
+          ...(prev?.promoter_metadata || {}),
+          top_song_url: url,
+          featured_video_url: url,
+          top_song_artist: artist,
+          top_song_title: title
+        }
+      } : null);
+    }
+
+    try {
+      localStorage.setItem('nexus_promoter_top_song_url', url);
+      localStorage.setItem('nexus_promoter_top_song_artist', artist);
+      localStorage.setItem('nexus_promoter_top_song_title', title);
+      localStorage.setItem('nexus_favorite_song', fullTitle);
+      const targetId = selectedUserProfile?.id || userProfile?.id;
+      if (targetId) {
+        localStorage.setItem(`nexus_top_song_url_${targetId}`, url);
+      }
+    } catch (e) {}
+
+    if (supabase && userProfile?.id) {
+      const promoterId = userProfile?.promoter_id || userProfile?.registered_promoter_id;
+      if (promoterId) {
+        supabase.from('promoters').update({
+          top_song_url: url,
+          featured_youtube_url: url,
+          top_song_title: title,
+          top_song_artist: artist
+        }).eq('id', promoterId).then(() => {}).catch(() => {});
+      }
+      supabase.from('profiles').update({
+        top_song_url: url,
+        featured_youtube_url: url,
+        top_song_title: title,
+        top_song_artist: artist,
+        favoriteSong: fullTitle
+      }).eq('id', userProfile.id).then(() => {}).catch(() => {});
+    }
+
+    if (saveProfileData) {
+      saveProfileData(true);
+    }
+    setIsEditingTopSong(false);
+    triggerNotification?.("💾 Featured video & anthem updated.");
+  };
   const [isEditingTicker, setIsEditingTicker] = React.useState(false);
   const [tickerUpdateText, setTickerUpdateText] = React.useState<string>(() => {
     const targetId = selectedUserProfile?.id || 'guest';
@@ -506,12 +755,25 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
   const resolvedPromoterCover = userProfile?.promoter_cover_image || fetchedProfileData?.promoter_cover_image || fetchedProfileData?.cover_url || baseTarget?.promoter_cover_image || baseTarget?.cover_url || baseTarget?.banner_url || userProfile?.cover_url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80';
 
+  const resolvedPromoterLogo = (
+    baseTarget?.promoter_logo ||
+    baseTarget?.logo_url ||
+    baseTarget?.logo ||
+    (isTargetExplicitSelf ? (userProfile?.promoter_logo || (userProfile?.promoter_metadata as any)?.logo_url) : null) ||
+    (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) ||
+    fetchedProfileData?.promoter_logo ||
+    'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601'
+  );
+
   const effTarget = {
     ...baseTarget,
     portalRole: 'promoter',
     account_type: 'promoter',
     console_handle: '@NexusLive',
     handle: '@NexusLive',
+    avatar: resolvedPromoterLogo,
+    avatar_url: resolvedPromoterLogo,
+    promoter_logo: resolvedPromoterLogo,
     cover_url: resolvedPromoterCover,
     banner_url: resolvedPromoterCover,
     banner: resolvedPromoterCover,
@@ -530,19 +792,19 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         : ((baseTarget?.isYou || selectedUserProfile?.isYou || (userProfile?.id && (baseTarget?.id === userProfile.id || selectedUserProfile?.id === userProfile.id)))
             ? (profileBlurb || (userProfile as any)?.bio || baseTarget?.bio || '')
             : (baseTarget?.bio || '')),
-      avatar: fetchedProfileData.avatar_url || fetchedProfileData.avatar || baseTarget.avatar,
-      avatar_url: fetchedProfileData.avatar_url || fetchedProfileData.avatar || baseTarget.avatar_url,
-      top_song_url: fetchedProfileData.top_song_url !== undefined && fetchedProfileData.top_song_url !== null && fetchedProfileData.top_song_url !== '' ? fetchedProfileData.top_song_url : baseTarget?.top_song_url,
-      top_song_title: fetchedProfileData.top_song_title || fetchedProfileData.favoriteSong || baseTarget?.top_song_title || baseTarget?.favoriteSong,
-      favoriteSong: fetchedProfileData.favoriteSong || fetchedProfileData.top_song_title || baseTarget?.favoriteSong || baseTarget?.top_song_title,
-      top_song_artist: fetchedProfileData.top_song_artist || baseTarget?.top_song_artist,
-      featured_youtube_url: fetchedProfileData.featured_youtube_url || fetchedProfileData.top_song_url || baseTarget?.featured_youtube_url,
+      avatar: resolvedPromoterLogo || fetchedProfileData.avatar_url || fetchedProfileData.avatar || baseTarget.avatar,
+      avatar_url: resolvedPromoterLogo || fetchedProfileData.avatar_url || fetchedProfileData.avatar || baseTarget.avatar_url,
+      top_song_url: (selectedUserProfile?.isYou || baseTarget?.isYou) ? (localAnthemUrl || fetchedProfileData.top_song_url || baseTarget?.top_song_url) : (fetchedProfileData.top_song_url !== undefined && fetchedProfileData.top_song_url !== null && fetchedProfileData.top_song_url !== '' ? fetchedProfileData.top_song_url : baseTarget?.top_song_url),
+      top_song_title: (selectedUserProfile?.isYou || baseTarget?.isYou) ? (localAnthemTitle || fetchedProfileData.top_song_title || baseTarget?.top_song_title) : (fetchedProfileData.top_song_title || fetchedProfileData.favoriteSong || baseTarget?.top_song_title || baseTarget?.favoriteSong),
+      favoriteSong: (selectedUserProfile?.isYou || baseTarget?.isYou) ? (localAnthemTitle ? (localAnthemArtist ? `${localAnthemArtist} - ${localAnthemTitle}` : localAnthemTitle) : fetchedProfileData.favoriteSong || baseTarget?.favoriteSong) : (fetchedProfileData.favoriteSong || fetchedProfileData.top_song_title || baseTarget?.favoriteSong || baseTarget?.top_song_title),
+      top_song_artist: (selectedUserProfile?.isYou || baseTarget?.isYou) ? (localAnthemArtist || fetchedProfileData.top_song_artist || baseTarget?.top_song_artist) : (fetchedProfileData.top_song_artist || baseTarget?.top_song_artist),
+      featured_youtube_url: (selectedUserProfile?.isYou || baseTarget?.isYou) ? (localAnthemUrl || fetchedProfileData.featured_youtube_url || fetchedProfileData.top_song_url || baseTarget?.featured_youtube_url) : (fetchedProfileData.featured_youtube_url || fetchedProfileData.top_song_url || baseTarget?.featured_youtube_url),
     } : {}),
     ...(bData ? {
       name: bData.band_name || bData.name || baseTarget.name,
       band_name: bData.band_name || bData.name || baseTarget.band_name,
-      avatar: bData.logo_url || bData.avatar_url || baseTarget.avatar || baseTarget.avatar_url,
-      avatar_url: bData.logo_url || bData.avatar_url || baseTarget.avatar_url || baseTarget.avatar,
+      avatar: resolvedPromoterLogo || bData.logo_url || bData.avatar_url || baseTarget.avatar,
+      avatar_url: resolvedPromoterLogo || bData.logo_url || bData.avatar_url || baseTarget.avatar_url,
       genre: bData.genre || baseTarget.genre,
       genre_tags: bData.genre_tags || (bData.genre ? [bData.genre] : baseTarget.genre_tags),
       lineup: bData.lineup || baseTarget.lineup,
@@ -690,15 +952,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      const avatarImg = selectedUserProfile.avatar || effTarget.avatar_url;
+                      const avatarImg = resolvedPromoterLogo || effTarget.avatar || effTarget.avatar_url || selectedUserProfile.avatar;
                       triggerPictureViewer?.({
                         photoId: `avatar_${effTarget.id || selectedUserProfile.id || 'avatar'}`,
                         profileId: effTarget.id || selectedUserProfile.id,
-                        username: selectedUserProfile.name || 'User',
+                        username: effTarget.name || selectedUserProfile.name || 'Nexus Live Productions',
                         avatarUrl: typeof avatarImg === 'string' ? avatarImg : undefined,
                         imageUrl: typeof avatarImg === 'string' ? avatarImg : undefined,
-                        title: 'Profile Avatar Picture',
-                        caption: `Profile avatar picture of @${selectedUserProfile.name}`
+                        title: 'Promoter Logo',
+                        caption: `Official logo of ${effTarget.name || 'Nexus Live Productions'}`
                       });
                     }}
                   >
@@ -708,10 +970,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         borderColor: '#09090b'
                       }}
                     >
-                      {selectedUserProfile.avatar && (selectedUserProfile.avatar.startsWith('http') || selectedUserProfile.avatar.startsWith('data:image') || selectedUserProfile.avatar.startsWith('/')) ? (
-                        <img src={selectedUserProfile.avatar} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                      {(resolvedPromoterLogo || effTarget.avatar || effTarget.avatar_url) ? (
+                        <img 
+                          src={resolvedPromoterLogo || effTarget.avatar || effTarget.avatar_url} 
+                          className="w-full h-full object-cover" 
+                          alt="Promoter Logo" 
+                          referrerPolicy="no-referrer" 
+                        />
                       ) : (
-                        <span className="font-bold">{selectedUserProfile.avatar || (effTarget.name || 'P').slice(0, 2).toUpperCase()}</span>
+                        <span className="font-bold">{(effTarget.name || 'P').slice(0, 2).toUpperCase()}</span>
                       )}
                       
                       {selectedUserProfile.isYou && (
@@ -1011,60 +1278,35 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           <MessageSquare className="w-3.5 h-3.5" /> Message
                         </button>
 
-                        {/* 3. Join Team Button */}
-                        {showJoinTeam && (() => {
-                          const isPending = bandJoinRequests?.some((r: any) => r.band_name === selectedUserProfile.name && r.user_email === userProfile?.email && r.status === 'pending');
-                          if (isPending) {
-                            return (
-                              <button className="w-full py-2.5 px-3 bg-zinc-900 border border-zinc-700 text-zinc-500 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 uppercase font-mono cursor-not-allowed">
-                                <UserPlus className="w-3.5 h-3.5" /> Pending
-                              </button>
-                            );
-                          }
-                          return (
-                            <button
-                              onClick={() => {
-                                const newReq = {
-                                  id: `join_req_${Date.now()}`,
-                                  band_id: 'unknown_band_id',
-                                  band_name: selectedUserProfile.name,
-                                  user_id: userProfile?.id || `user_${Date.now()}`,
-                                  user_name: userProfile?.name || 'Unknown User',
-                                  user_email: userProfile?.email || 'unknown@example.com',
-                                  role_requested: userProfile?.role || 'Crew',
-                                  status: 'pending',
-                                  created_at: new Date().toISOString()
-                                };
-                                if (setBandJoinRequests) {
-                                  queueMicrotask(() => { setBandJoinRequests((prev: any) => [...(prev || []), newReq]); });
-                                  triggerNotification?.(`✉️ Sent request to join ${selectedUserProfile.name}!`);
-                                }
-                              }}
-                              className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-colors uppercase font-mono shadow-md"
-                            >
-                              <UserPlus className="w-3.5 h-3.5" /> Join Team
-                            </button>
-                          );
-                        })()}
+                        {/* 3. EVENTS Button (Upcoming shows, tours, festivals) */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setShowEventsModal(true);
+                            triggerNotification?.("⚡ Loading upcoming events & festival schedule...");
+                          }}
+                          className="w-full py-2.5 px-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-[0_0_15px_rgba(234,179,8,0.25)] hover:shadow-[0_0_20px_rgba(234,179,8,0.4)] cursor-pointer active:scale-95 border border-yellow-300/40"
+                          title="Upcoming shows, tours, and festivals"
+                        >
+                          <Calendar className="w-3.5 h-3.5 text-black" /> EVENTS
+                        </button>
 
-                        {/* 4. Storefront Button */}
-                        {showStorefront && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              const targetData = effTarget || selectedUserProfile;
-                              const targetName = effTarget?.name || selectedUserProfile?.name || 'Store';
-                              setStorefrontPromoterData(targetData);
-                              setIsIsolatedStorefrontOpen(true);
-                              triggerNotification?.(`🛒 Opening ${targetName}'s Official Storefront...`);
-                            }}
-                            className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-500 text-white text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-colors uppercase font-mono shadow-md cursor-pointer"
-                          >
-                            <ShoppingCart className="w-3.5 h-3.5" /> Storefront
-                          </button>
-                        )}
+                        {/* 4. ARCHIVES Button (All past shows & historic festivals) */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setShowArchivesModal(true);
+                            triggerNotification?.("📜 Accessing promoter historical show archives...");
+                          }}
+                          className="w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-yellow-500/40 text-yellow-400 hover:text-yellow-300 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-md cursor-pointer active:scale-95"
+                          title="All past shows and historic festival archives"
+                        >
+                          <History className="w-3.5 h-3.5 text-yellow-400" /> ARCHIVES
+                        </button>
                       </div>
                     );
                   })()}
@@ -1152,7 +1394,12 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                 {(() => {
                   const isTargetSelf = Boolean(
                     effTarget?.isYou ||
-                    (userProfile?.id && effTarget?.id && String(effTarget.id) === String(userProfile.id))
+                    baseTarget?.isYou ||
+                    selectedUserProfile?.isYou ||
+                    (userProfile?.id && effTarget?.id && String(effTarget.id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+                    (userProfile?.id && baseTarget?.id && String(baseTarget.id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+                    (userProfile?.email && effTarget?.email && String(effTarget.email).toLowerCase() === String(userProfile.email).toLowerCase()) ||
+                    (userProfile?.email && baseTarget?.email && String(baseTarget.email).toLowerCase() === String(userProfile.email).toLowerCase())
                   );
                   const registeredWorkspaces = isTargetSelf
                     ? (userProfile?.registered_workspaces || effTarget?.registered_workspaces || userProfile?.allowed_workspaces || effTarget?.allowed_workspaces || effTarget?.workspaces || [])
@@ -1202,17 +1449,19 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     (targetRole && targetRole.toLowerCase() === 'band')
                   );
 
-                  const isEffTargetMiguel = isMiguelNameOrProfile(effTarget) || (isTargetSelf && isMiguelNameOrProfile(userProfile));
+                  const isEffTargetMiguel = isMiguelNameOrProfile(effTarget) || isMiguelNameOrProfile(baseTarget) || isMiguelNameOrProfile(selectedUserProfile) || (isTargetSelf && isMiguelNameOrProfile(userProfile)) || isMiguelNameOrProfile(userProfile);
                   const targetBandId = isEffTargetMiguel ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (effTarget?.band_id || (isTargetSelf ? userProfile?.band_id : null));
                   let matchingBandProfile: any = null;
 
                   if (isEffTargetMiguel) {
-                    matchingBandProfile = allProfiles.find((p: any) => {
+                    matchingBandProfile = Array.isArray(allProfiles) ? allProfiles.find((p: any) => {
+                      const isBandType = p.type === 'band' || p.isBandProfile || p.category === 'bands' || (p.role && p.role.toLowerCase() === 'band') || (p.portalRole && p.portalRole.toLowerCase() === 'band');
+                      if (!isBandType) return false;
                       const pId = String(p.id || '').toLowerCase().trim();
                       const rawId = String(p.raw_id || p.band_id || '').toLowerCase().trim();
                       const cleanName = (p.name || p.band_name || '').toLowerCase().trim();
                       return pId === 'cbddb810-259b-4230-9968-3d402dfdb872' || pId === 'real-b-cbddb810-259b-4230-9968-3d402dfdb872' || rawId === 'cbddb810-259b-4230-9968-3d402dfdb872' || cleanName === 'virulent excision';
-                    });
+                    }) : null;
                   } else if (targetBandId) {
                     matchingBandProfile = allProfiles.find((p: any) => {
                       if (isCommunityBandRecord(p.id) || isCommunityBandRecord(p.name) || isCommunityBandRecord(p.band_name) || (p.name && p.name.toLowerCase().includes('necroticgorebeast'))) return false;
@@ -1269,7 +1518,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                    const hasBand = !isCurrentProfileBand && hasBandWorkspace;
 
-                   const promoterRefLogo = effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null);
+                   const promoterRefLogo = effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null);
 
                    const isLogoPromoterLogo = (candidateLogo?: string | null) => {
                      if (!candidateLogo) return false;
@@ -1278,7 +1527,37 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                      if (effTarget?.promoter_metadata?.logo_url && candidateLogo === effTarget.promoter_metadata.logo_url) return true;
                      if (userProfile?.promoter_logo && candidateLogo === userProfile.promoter_logo) return true;
                      if (userProfile?.promoter_metadata?.logo_url && candidateLogo === userProfile.promoter_metadata.logo_url) return true;
+                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_promoter_logo') === candidateLogo) return true;
                      return false;
+                   };
+
+                   const isPersonalOrOtherAvatar = (candidateLogo?: string | null) => {
+                     if (!candidateLogo) return false;
+                     if (effTarget?.avatar && candidateLogo === effTarget.avatar) return true;
+                     if (effTarget?.avatar_url && candidateLogo === effTarget.avatar_url) return true;
+                     if (baseTarget?.avatar && candidateLogo === baseTarget.avatar) return true;
+                     if (baseTarget?.avatar_url && candidateLogo === baseTarget.avatar_url) return true;
+                     if (userProfile?.avatar && candidateLogo === userProfile.avatar) return true;
+                     if (userProfile?.avatar_url && candidateLogo === userProfile.avatar_url) return true;
+                     if (selectedUserProfile?.avatar && candidateLogo === selectedUserProfile.avatar) return true;
+                     if (selectedUserProfile?.avatar_url && candidateLogo === selectedUserProfile.avatar_url) return true;
+                     if (userProfile?.creative_avatar && candidateLogo === userProfile.creative_avatar) return true;
+                     if (userProfile?.label_avatar && candidateLogo === userProfile.label_avatar) return true;
+                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_user_avatar') === candidateLogo) return true;
+                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_creative_avatar') === candidateLogo) return true;
+                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_label_avatar') === candidateLogo) return true;
+                     return false;
+                   };
+
+                   const isValidBandLogo = (candidateLogo?: string | null) => {
+                     if (!candidateLogo || typeof candidateLogo !== 'string') return false;
+                     if (candidateLogo.trim() === '') return false;
+                     if (candidateLogo.includes('unsplash')) return false;
+                     if (candidateLogo.startsWith('data:image')) return false;
+                     if (candidateLogo.includes('default') || candidateLogo.includes('photo-')) return false;
+                     if (isLogoPromoterLogo(candidateLogo)) return false;
+                     if (isPersonalOrOtherAvatar(candidateLogo)) return false;
+                     return true;
                    };
 
                    if (hasBand) {
@@ -1288,20 +1567,25 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     const veLogo = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396';
                     const veBanner = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-cover_1787467851123.jpg?t=1787467851123';
                     
+                    const savedCoreBandLogo = (typeof window !== 'undefined') ? (
+                      localStorage.getItem('nexus_core_band_logo_cbddb810-259b-4230-9968-3d402dfdb872') ||
+                      localStorage.getItem('nexus_band_logo_cbddb810-259b-4230-9968-3d402dfdb872') ||
+                      (targetBandId ? localStorage.getItem(`nexus_core_band_logo_${targetBandId}`) : null)
+                    ) : null;
+
                     const candidateBandLogo = (
-                      (lbd?.logo_url && !lbd.logo_url.includes('unsplash') && !isLogoPromoterLogo(lbd.logo_url) ? lbd.logo_url : null) ||
-                      (isTargetSelf && localSavedBand?.logo_url && !isLogoPromoterLogo(localSavedBand.logo_url) ? localSavedBand.logo_url : null) ||
-                      (isTargetSelf && userProfile?.band_metadata?.logo_url && !isLogoPromoterLogo(userProfile.band_metadata.logo_url) ? userProfile.band_metadata.logo_url : null) ||
-                      (isTargetSelf && userProfile?.band_logo && !isLogoPromoterLogo(userProfile.band_logo) ? userProfile.band_logo : null) ||
-                      (lbd?.avatar_url && !lbd.avatar_url.includes('unsplash') && !isLogoPromoterLogo(lbd.avatar_url) ? lbd.avatar_url : null) ||
-                      (lbd?.avatar && !lbd.avatar.includes('unsplash') && !isLogoPromoterLogo(lbd.avatar) ? lbd.avatar : null) ||
-                      (isTargetSelf && localSavedBand?.avatar_url && !isLogoPromoterLogo(localSavedBand.avatar_url) ? localSavedBand.avatar_url : null) ||
-                      (lbd?.logo_url && !isLogoPromoterLogo(lbd.logo_url) ? lbd.logo_url : null) ||
+                      (savedCoreBandLogo && isValidBandLogo(savedCoreBandLogo) ? savedCoreBandLogo : null) ||
+                      (isTargetSelf && userProfile?.band_logo && isValidBandLogo(userProfile.band_logo) ? userProfile.band_logo : null) ||
+                      (isTargetSelf && userProfile?.band_metadata?.logo_url && isValidBandLogo(userProfile.band_metadata.logo_url) ? userProfile.band_metadata.logo_url : null) ||
+                      (isTargetSelf && localSavedBand?.logo_url && isValidBandLogo(localSavedBand.logo_url) ? localSavedBand.logo_url : null) ||
+                      (lbd?.logo_url && isValidBandLogo(lbd.logo_url) ? lbd.logo_url : null) ||
+                      (lbd?.avatar_url && isValidBandLogo(lbd.avatar_url) ? lbd.avatar_url : null) ||
+                      (lbd?.avatar && isValidBandLogo(lbd.avatar) ? lbd.avatar : null) ||
                       null
                     );
 
                     const logo = isVirulentExcision
-                      ? (candidateBandLogo && !candidateBandLogo.includes('unsplash') ? candidateBandLogo : veLogo)
+                      ? ((candidateBandLogo && isValidBandLogo(candidateBandLogo) && (candidateBandLogo.includes('band-logo') || candidateBandLogo.includes('cbddb810') || candidateBandLogo.includes('virulent'))) ? candidateBandLogo : veLogo)
                       : (candidateBandLogo || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=300');
                     const subtitle = isVirulentExcision
                       ? 'Brutal Death Metal • Slamming BDM • Death Metal'
@@ -1730,15 +2014,31 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                    <div className="mt-3 bg-zinc-950/20 border border-zinc-900 rounded-xl p-3 relative">
                      <div className="flex items-center justify-between mb-1.5">
                        <label className="text-[10px] uppercase font-bold text-[#39ff14] font-mono tracking-wider flex items-center gap-1">
-                         ✍️ EDIT BIO
+                         ✍️ EDIT PROMOTER BIO
                        </label>
                        <div className="flex items-center gap-2">
-                         <span className="text-[9px] font-mono text-zinc-500 font-bold">{(profileBlurb || '').length}/500</span>
+                         <span className="text-[9px] font-mono text-zinc-500 font-bold">{(promoterBioText || '').length}/500</span>
                          <button
                            onClick={() => {
-                             saveProfileData(true);
                              setIsEditingBio(false);
-                             triggerNotification?.("💾 Bio updated in your node matrix.");
+                             const cleanVal = (promoterBioText || '').trim();
+                             try {
+                               localStorage.setItem('nexus_promoter_bio', cleanVal);
+                             } catch(e) {}
+                             const supabase = getSupabase();
+                             if (supabase && userProfile?.id) {
+                               const promoterId = userProfile?.promoter_id || userProfile?.registered_promoter_id || userProfile?.id;
+                               if (promoterId) {
+                                 supabase.from('promoters').update({ bio: cleanVal, description: cleanVal }).eq('id', promoterId).then();
+                               }
+                               supabase.from('profiles').update({
+                                 promoter_metadata: {
+                                   ...(userProfile?.promoter_metadata || {}),
+                                   bio: cleanVal
+                                 }
+                               }).eq('id', userProfile.id).then();
+                             }
+                             triggerNotification?.("💾 Promoter bio updated in your node matrix.");
                            }}
                            className="px-2 py-0.5 bg-[#39ff14]/10 hover:bg-[#39ff14]/20 border border-[#39ff14]/40 text-[#39ff14] text-[9.5px] font-mono font-bold rounded flex items-center gap-1 transition-all cursor-pointer"
                          >
@@ -1748,20 +2048,44 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                      </div>
                      <textarea
                        maxLength={500}
-                       value={profileBlurb}
+                       value={promoterBioText}
                        onChange={(e) => {
                          const val = e.target.value.slice(0, 500);
-                         setProfileBlurb(val);
-                         setSelectedUserProfile((prev: any) => prev ? { ...prev, bio: val, profileBlurb: val } : null);
-                         if (setUserProfile) { queueMicrotask(() => { setUserProfile((pPrev: any) => pPrev ? { ...pPrev, bio: val } : null); }); }
+                         setPromoterBioText(val);
+                         setSelectedUserProfile((prev: any) => prev ? { ...prev, promoter_bio: val, promoter_metadata: { ...(prev.promoter_metadata || {}), bio: val } } : null);
+                         if (setUserProfile) {
+                           queueMicrotask(() => {
+                             setUserProfile((pPrev: any) => pPrev ? {
+                               ...pPrev,
+                               promoter_bio: val,
+                               promoter_metadata: {
+                                 ...(pPrev.promoter_metadata || {}),
+                                 bio: val
+                                }
+                             } : null);
+                           });
+                         }
                          try {
-                           localStorage.setItem('nexus_user_bio', val);
+                           localStorage.setItem('nexus_promoter_bio', val);
                          } catch(err){}
                        }}
                        onBlur={() => {
-                         saveProfileData(true);
+                         const cleanVal = (promoterBioText || '').trim();
+                         const supabase = getSupabase();
+                         if (supabase && userProfile?.id) {
+                           const promoterId = userProfile?.promoter_id || userProfile?.registered_promoter_id || userProfile?.id;
+                           if (promoterId) {
+                             supabase.from('promoters').update({ bio: cleanVal, description: cleanVal }).eq('id', promoterId).then();
+                           }
+                           supabase.from('profiles').update({
+                             promoter_metadata: {
+                               ...(userProfile?.promoter_metadata || {}),
+                               bio: cleanVal
+                             }
+                           }).eq('id', userProfile.id).then();
+                         }
                        }}
-                       placeholder={(selectedUserProfile?.role || '').toLowerCase().includes('label') ? "We are a record label navigating the Nexus." : "Currently navigating the Nexus."}
+                       placeholder="Promoter & booking management for underground extreme music festivals and venue tours across North America."
                        className="w-full bg-black/60 border border-zinc-850 hover:border-[#39ff14]/30 focus:border-[#39ff14]/60 rounded-lg p-2.5 text-xs text-zinc-200 leading-relaxed focus:outline-none focus:ring-1 focus:ring-[#39ff14]/20 font-mono italic"
                        rows={3}
                        autoFocus
@@ -1771,7 +2095,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                    <div className="mt-3 space-y-1">
                      <div className="flex items-center justify-between px-0.5">
                        <span className="text-[10px] font-bold text-zinc-400 font-mono tracking-wider uppercase flex items-center gap-1">
-                         📖 BIO
+                         📖 PROMOTER BIO
                        </span>
                        {selectedUserProfile.isYou && (
                          <button
@@ -1791,13 +2115,23 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                            baseTarget?.isYou ||
                            (userProfile?.id && (selectedUserProfile?.id === userProfile.id || effTarget?.id === userProfile.id || baseTarget?.id === userProfile.id))
                          );
-                         if (isOwner) {
-                           const b = (profileBlurb || effTarget?.bio || (userProfile as any)?.bio || '').trim();
-                           return b ? `"${b}"` : '"Click edit to add your bio."';
-                         } else {
-                           const b = (fetchedProfileData?.bio || effTarget?.bio || baseTarget?.bio || '').trim();
-                           return b ? `"${b}"` : '"no bio written yet"';
+                         const defaultPromoterBio = 'Promoter & booking management for underground extreme music festivals and venue tours across North America.';
+                         const personalBio = (userProfile as any)?.bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_bio') : null) || 'Extreme metal musician, archivist, and underground pit warrior.';
+
+                         let b = (
+                           promoterBioText ||
+                           (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) ||
+                           effTarget?.promoter_metadata?.bio ||
+                           effTarget?.promoter_bio ||
+                           (userProfile as any)?.promoter_metadata?.bio ||
+                           (userProfile as any)?.promoter_bio ||
+                           ''
+                         ).trim();
+
+                         if (!b || b === personalBio) {
+                           b = defaultPromoterBio;
                          }
+                         return `"${b}"`;
                        })()}
                      </div>
                    </div>
@@ -1806,10 +2140,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                    {/* Glowing Scrolling Marquee Text Box for Live Updates */}
                   <div className="mt-3.5 space-y-1">
                     <div className="flex items-center justify-between px-0.5">
-                      <span className="text-[10px] font-bold text-cyan-400 font-mono tracking-wider uppercase flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-yellow-400 font-mono tracking-wider uppercase flex items-center gap-1.5">
                         <span className="relative flex h-2 w-2 shrink-0">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
                         </span>
                         📢 LIVE UPDATE
                       </span>
@@ -1818,17 +2152,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           type="button"
                           onClick={() => setIsEditingTicker(true)}
                           title="Edit Marquee Update"
-                          className="px-2 py-0.5 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-800/60 text-cyan-300 hover:text-white rounded-md transition-all shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-semibold group"
+                          className="px-2 py-0.5 bg-yellow-950/60 hover:bg-yellow-900/80 border border-yellow-800/60 text-yellow-300 hover:text-white rounded-md transition-all shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-semibold group"
                         >
-                          <Pencil className="w-3 h-3 text-cyan-400 group-hover:text-cyan-300" /> Edit Update
+                          <Pencil className="w-3 h-3 text-yellow-400 group-hover:text-yellow-300" /> Edit Update
                         </button>
                       )}
                     </div>
 
                     {isEditingTicker ? (
-                      <div className="bg-zinc-950/90 border border-cyan-500/50 rounded-xl p-3 space-y-2 shadow-[0_0_15px_rgba(6,182,212,0.15)] relative">
+                      <div className="bg-zinc-950/90 border border-yellow-500/50 rounded-xl p-3 space-y-2 shadow-[0_0_15px_rgba(234,179,8,0.15)] relative">
                         <div className="flex items-center justify-between">
-                          <span className="text-[9.5px] font-mono text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                          <span className="text-[9.5px] font-mono text-yellow-400 font-bold uppercase tracking-wider flex items-center gap-1">
                             ✍️ EDIT TICKER
                           </span>
                           <div className="flex items-center gap-2">
@@ -1838,7 +2172,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             <button
                               type="button"
                               onClick={() => handleSaveTickerUpdate(tickerUpdateText)}
-                              className="px-2.5 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-cyan-300 hover:text-cyan-200 text-[9.5px] font-mono font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                              className="px-2.5 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-400/50 text-yellow-300 hover:text-yellow-200 text-[9.5px] font-mono font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer"
                             >
                               <Check className="w-3 h-3" /> Save
                             </button>
@@ -1856,21 +2190,21 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           value={tickerUpdateText}
                           onChange={(e) => setTickerUpdateText(e.target.value.slice(0, 200))}
                           placeholder="Post a quick live update, gig news, tape drop, or announcement (max 200 chars)..."
-                          className="w-full bg-black/80 border border-zinc-800 focus:border-cyan-400 rounded-lg p-2.5 text-xs text-cyan-200 font-mono tracking-wide focus:outline-none focus:ring-1 focus:ring-cyan-400/30 resize-none"
+                          className="w-full bg-black/80 border border-zinc-800 focus:border-yellow-400 rounded-lg p-2.5 text-xs text-yellow-200 font-mono tracking-wide focus:outline-none focus:ring-1 focus:ring-yellow-400/30 resize-none"
                           rows={2.5}
                           autoFocus
                         />
                       </div>
                     ) : (
-                      <div className="flex items-center border rounded-xl overflow-hidden bg-cyan-950/20 border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.15)] py-2.5 px-1 relative group/marquee cursor-default">
+                      <div className="flex items-center border rounded-xl overflow-hidden bg-yellow-950/20 border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.15)] py-2.5 px-1 relative group/marquee cursor-default">
                         <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
                         <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
                         <div className="w-full relative flex items-center overflow-hidden">
                           <div className="flex whitespace-nowrap animate-[marquee_28s_linear_infinite] group-hover/marquee:[animation-play-state:paused] items-center">
-                            <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-cyan-300 px-6 drop-shadow-[0_0_6px_rgba(6,182,212,0.6)] flex items-center gap-2">
+                            <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-yellow-300 px-6 drop-shadow-[0_0_6px_rgba(234,179,8,0.6)] flex items-center gap-2">
                               ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
                             </span>
-                            <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-cyan-300 px-6 drop-shadow-[0_0_6px_rgba(6,182,212,0.6)] flex items-center gap-2">
+                            <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-yellow-300 px-6 drop-shadow-[0_0_6px_rgba(234,179,8,0.6)] flex items-center gap-2">
                               ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
                             </span>
                           </div>
@@ -1885,10 +2219,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   const followingVal = liveProfileStats?.following !== undefined ? liveProfileStats.following : (effTarget.followingCount !== undefined ? effTarget.followingCount : (effTarget.following || 0));
 
                   return (
-                    <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-3 mt-4 transition-all duration-200 hover:border-violet-500/40 shadow-inner">
+                    <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-3 mt-4 transition-all duration-200 hover:border-yellow-500/40 shadow-inner">
                       <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-900/80 px-1">
                         <span className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                          <Activity className="w-3 h-3 text-violet-400 animate-pulse" />
+                          <Activity className="w-3 h-3 text-yellow-400 animate-pulse" />
                           Network Telemetry
                         </span>
                         <span className="text-[8px] font-mono text-emerald-400 bg-emerald-950/50 border border-emerald-800/50 px-1.5 py-0.5 rounded-full flex items-center gap-1">
@@ -1900,32 +2234,32 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       <div className="grid grid-cols-2 gap-2 text-center">
                         <div 
                           onClick={() => setViewingFollowersOrFollowing?.('followers')}
-                          className="rounded-lg p-2 transition-all border border-zinc-900/60 bg-zinc-900/40 flex flex-col items-center justify-center hover:bg-violet-950/40 cursor-pointer group/stat hover:border-violet-700/40 hover:shadow-lg hover:shadow-violet-950/30"
+                          className="rounded-lg p-2 transition-all border border-zinc-900/60 bg-zinc-900/40 flex flex-col items-center justify-center hover:bg-yellow-950/40 cursor-pointer group/stat hover:border-yellow-700/40 hover:shadow-lg hover:shadow-yellow-950/30"
                         >
-                          <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono uppercase tracking-wider group-hover/stat:text-violet-300 transition-colors">
-                            <Users className="w-3.5 h-3.5 text-violet-400 group-hover/stat:scale-110 transition-transform" />
+                          <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono uppercase tracking-wider group-hover/stat:text-yellow-300 transition-colors">
+                            <Users className="w-3.5 h-3.5 text-yellow-400 group-hover/stat:scale-110 transition-transform" />
                             Followers
                           </div>
-                          <div className="text-base font-black text-white font-mono mt-1 group-hover/stat:text-violet-200 group-hover/stat:scale-105 transition-all">
+                          <div className="text-base font-black text-white font-mono mt-1 group-hover/stat:text-yellow-200 group-hover/stat:scale-105 transition-all">
                             {followersVal.toLocaleString()}
                           </div>
-                          <div className="text-[8px] text-zinc-500 font-mono uppercase tracking-tight mt-1 group-hover/stat:text-violet-400 flex items-center gap-0.5 transition-colors">
+                          <div className="text-[8px] text-zinc-500 font-mono uppercase tracking-tight mt-1 group-hover/stat:text-yellow-400 flex items-center gap-0.5 transition-colors">
                             View Roster <ArrowUpRight className="w-2.5 h-2.5 opacity-60 group-hover/stat:opacity-100 group-hover/stat:translate-x-0.5 transition-all" />
                           </div>
                         </div>
 
                         <div 
                           onClick={() => setViewingFollowersOrFollowing?.('following')}
-                          className="rounded-lg p-2 transition-all border border-zinc-900/60 bg-zinc-900/40 flex flex-col items-center justify-center hover:bg-violet-950/40 cursor-pointer group/stat hover:border-violet-700/40 hover:shadow-lg hover:shadow-violet-950/30"
+                          className="rounded-lg p-2 transition-all border border-zinc-900/60 bg-zinc-900/40 flex flex-col items-center justify-center hover:bg-yellow-950/40 cursor-pointer group/stat hover:border-yellow-700/40 hover:shadow-lg hover:shadow-yellow-950/30"
                         >
-                          <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono uppercase tracking-wider group-hover/stat:text-violet-300 transition-colors">
-                            <UserCheck className="w-3.5 h-3.5 text-violet-400 group-hover/stat:scale-110 transition-transform" />
+                          <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono uppercase tracking-wider group-hover/stat:text-yellow-300 transition-colors">
+                            <UserCheck className="w-3.5 h-3.5 text-yellow-400 group-hover/stat:scale-110 transition-transform" />
                             Following
                           </div>
-                          <div className="text-base font-black text-white font-mono mt-1 group-hover/stat:text-violet-200 group-hover/stat:scale-105 transition-all">
+                          <div className="text-base font-black text-white font-mono mt-1 group-hover/stat:text-yellow-200 group-hover/stat:scale-105 transition-all">
                             {followingVal.toLocaleString()}
                           </div>
-                          <div className="text-[8px] text-zinc-500 font-mono uppercase tracking-tight mt-1 group-hover/stat:text-violet-400 flex items-center gap-0.5 transition-colors">
+                          <div className="text-[8px] text-zinc-500 font-mono uppercase tracking-tight mt-1 group-hover/stat:text-yellow-400 flex items-center gap-0.5 transition-colors">
                             View List <ArrowUpRight className="w-2.5 h-2.5 opacity-60 group-hover/stat:opacity-100 group-hover/stat:translate-x-0.5 transition-all" />
                           </div>
                         </div>
@@ -1934,7 +2268,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   );
                 })()}
 
-                {/* Unlimited "My Favorite Genres" Badge Section for Fan Only and Industry Pro Profiles */}
+                {/* Genres We Book Section for Promoter Profiles */}
                 {(() => {
                   const targetRoleStr = (effTarget?.portalRole || effTarget?.role || effTarget?.account_type || '').toLowerCase();
                   const isTargetBand = !!(
@@ -1943,7 +2277,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     ((targetRoleStr.includes('artist') || targetRoleStr.includes('band')) && !effTarget?.isPersonal && effTarget?.type !== 'user' && !targetRoleStr.includes('industry') && !targetRoleStr.includes('creative') && !targetRoleStr.includes('pro'))
                   );
 
-                  // Band profiles do NOT render 'My Favorite Genres' badge block here
+                  // Band profiles do NOT render badge block here
                   if (isTargetBand) return null;
 
                   let rawList: string[] = [];
@@ -1984,14 +2318,12 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   const allGenres = Array.from(new Set(rawList.filter(Boolean)));
                   if (allGenres.length === 0) return null;
 
-                  const isFanOnly = (targetRoleStr.includes('fan') || targetRoleStr.includes('listener') || effTarget?.name === 'Fan Listener') && !effTarget?.isBandProfile && !isTargetBand;
-
                   return (
-                    <div className="mt-3 bg-zinc-950/80 border border-zinc-900 rounded-xl p-3">
+                    <div className="mt-3 bg-zinc-950/80 border border-zinc-900 hover:border-yellow-500/30 rounded-xl p-3 transition-colors">
                       <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono mb-2 flex items-center justify-between">
                         <span className="flex items-center gap-1.5">
-                          <Tag className={`w-3.5 h-3.5 ${isFanOnly ? 'text-blue-400' : 'text-violet-400'}`} />
-                          <span>My Genres</span>
+                          <Tag className="w-3.5 h-3.5 text-yellow-400" />
+                          <span>Genres We Book</span>
                         </span>
                         <span className="text-[9px] text-zinc-500 font-mono font-medium">
                           {allGenres.length} {allGenres.length === 1 ? 'Genre' : 'Genres'}
@@ -2001,11 +2333,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         {allGenres.map((genre, idx) => (
                           <span
                             key={`promoter-profile-item-${idx}`}
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] leading-tight font-mono font-bold tracking-tight border transition-all shadow-sm ${
-                              isFanOnly
-                                ? 'bg-blue-950/40 border-blue-800/40 text-blue-300 hover:border-blue-500 hover:text-blue-200'
-                                : 'bg-violet-950/40 border-violet-800/40 text-violet-300 hover:border-violet-500 hover:text-violet-200'
-                            }`}
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] leading-tight font-mono font-bold tracking-tight border transition-all shadow-sm bg-yellow-950/40 border-yellow-800/40 text-yellow-300 hover:border-yellow-500 hover:text-yellow-200"
                           >
                             #{genre}
                           </span>
@@ -2052,11 +2380,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   glowEffect = 'shadow-[0_0_15px_rgba(234,179,8,0.12)]';
                 }
 
-                const songUrl = effTarget?.top_song_url || effTarget?.featured_youtube_url || (isPromoter ? '' : ((selectedUserProfile?.isBandProfile || effTarget?.isBandProfile || effTarget?.type === 'band' || isArtistOrBand) ? '' : ((selectedUserProfile as any)?.top_song_url || (userProfile as any)?.top_song_url || '')));
+                const songUrl = localAnthemUrl || effTarget?.top_song_url || effTarget?.featured_youtube_url || selectedUserProfile?.top_song_url || selectedUserProfile?.featured_youtube_url || (selectedUserProfile as any)?.promoter_metadata?.top_song_url || (userProfile as any)?.promoter_metadata?.top_song_url || '';
                 const embedUrl = getEmbedUrl(songUrl);
                 
                 let songTitle = '';
-                if (effTarget?.top_song_artist && effTarget?.top_song_title) {
+                if (localAnthemArtist && localAnthemTitle) {
+                  songTitle = `${localAnthemArtist} - ${localAnthemTitle}`;
+                } else if (localAnthemTitle) {
+                  songTitle = localAnthemTitle;
+                } else if (effTarget?.top_song_artist && effTarget?.top_song_title) {
                   songTitle = `${effTarget.top_song_artist} - ${effTarget.top_song_title}`;
                 } else if (effTarget?.top_song_title) {
                   songTitle = effTarget.top_song_title;
@@ -2094,7 +2426,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           embedUrl={embedUrl || songUrl}
                           pageUrl={songUrl}
                           trackTitle={songTitle}
-                          artist={effTarget?.top_song_artist || effTarget?.name || selectedUserProfile?.name}
+                          artist={localAnthemArtist || effTarget?.top_song_artist || effTarget?.name || selectedUserProfile?.name}
                           compact={true}
                           variant="profile"
                         />
@@ -2137,10 +2469,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               )
                             ) : (
                               <div className="flex items-center gap-3 p-2 h-full bg-zinc-950/80">
-                                <Disc className="w-8 h-8 text-emerald-400 animate-spin-slow shrink-0" />
+                                <Disc className="w-8 h-8 text-yellow-400 animate-spin-slow shrink-0" />
                                 <div className="min-w-0 flex-1">
-                                  <div className="text-[9px] font-mono uppercase text-zinc-500 tracking-wider">AUDIO MATRIX READY</div>
-                                  <div className="text-xs font-bold text-white truncate">{songTitle || ((selectedUserProfile?.isYou || effTarget?.isYou) ? "No Anthem Selected (Click Edit Anthem to add your top song)" : "No Anthem Selected")}</div>
+                                  <div className="text-[9px] font-mono uppercase text-zinc-500 tracking-wider">FEATURED PROMO VIDEO MATRIX</div>
+                                  <div className="text-xs font-bold text-white truncate">{songTitle || ((selectedUserProfile?.isYou || effTarget?.isYou) ? "No Anthem / Video Selected (Click Edit Anthem to add YouTube or promo link)" : "No Anthem Selected")}</div>
                                 </div>
                               </div>
                             )}
@@ -2164,8 +2496,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           <div className="flex justify-end">
                             <button
                               onClick={() => setIsEditingTopSong(true)}
-                              className="px-2 py-1 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700/60 text-zinc-400 hover:text-[#39ff14] rounded-md transition-all shadow-sm cursor-pointer flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-widest"
-                              title="Edit Top Song"
+                              className="px-2 py-1 bg-yellow-950/40 hover:bg-yellow-950/70 border border-yellow-700/60 text-yellow-300 hover:text-yellow-200 rounded-md transition-all shadow-sm cursor-pointer flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-widest"
+                              title="Edit Featured Video / Anthem"
                             >
                               <Pencil className="w-3 h-3" /> Edit Anthem
                             </button>
@@ -2173,93 +2505,52 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         ) : (
                           <div className="space-y-2">
                             <div className="flex justify-between items-center mb-1">
-                              <span className="text-[9px] text-zinc-500 font-mono uppercase tracking-widest">Update Anthem Matrix</span>
+                              <span className="text-[9px] text-yellow-400 font-mono uppercase tracking-widest">Update Anthem / Featured Video Matrix</span>
                               <button
-                                onClick={() => {
-                                  saveProfileData(true);
-                                  setIsEditingTopSong(false);
-                                  triggerNotification?.("💾 Anthem updated.");
-                                }}
-                                className="px-2 py-0.5 bg-[#39ff14]/10 hover:bg-[#39ff14]/20 border border-[#39ff14]/40 text-[#39ff14] text-[9.5px] font-mono font-bold rounded flex items-center gap-1 transition-all"
+                                onClick={handleSaveAnthem}
+                                className="px-2 py-0.5 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/50 text-yellow-300 text-[9.5px] font-mono font-bold rounded flex items-center gap-1 transition-all cursor-pointer"
                               >
                                 <Check className="w-3 h-3" /> Save Anthem
                               </button>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div>
-                            <div className="text-[9px] text-zinc-500 font-mono uppercase tracking-widest mb-1">
+                            <div className="text-[9px] text-zinc-400 font-mono uppercase tracking-widest mb-1">
                               🎸 Band / Artist Name
                             </div>
                             <input
                               type="text"
-                              value={profileTopSongArtist}
-                              onChange={(e) => {
-                                const artist = e.target.value;
-                                if (setProfileTopSongArtist) setProfileTopSongArtist(artist);
-                                const fullTitle = artist && profileTopSongTitle ? `${artist} - ${profileTopSongTitle}` : (artist || profileTopSongTitle || 'None Selected');
-                                setProfileFavoriteSong(fullTitle);
-                                setSelectedUserProfile((prev: any) => prev ? { ...prev, favoriteSong: fullTitle, top_song_artist: artist, top_song_title: profileTopSongTitle || fullTitle } : null);
-                                if (setUserProfile) { queueMicrotask(() => { setUserProfile((pPrev: any) => pPrev ? { ...pPrev, favoriteSong: fullTitle, top_song_artist: artist, top_song_title: profileTopSongTitle || fullTitle } : null); }); }
-                                try {
-                                  localStorage.setItem('nexus_favorite_song', fullTitle);
-                                } catch(err){}
-                              }}
-                              onBlur={() => {
-                                saveProfileData(true);
-                                triggerNotification?.("💾 Band/Artist name updated.");
-                              }}
-                              placeholder="e.g. Dying Fetus"
-                              className="w-full bg-black/80 border border-zinc-800 focus:border-emerald-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
+                              value={localAnthemArtist}
+                              onChange={(e) => handleAnthemArtistChange(e.target.value)}
+                              placeholder="e.g. Excrescence"
+                              className="w-full bg-black/80 border border-zinc-800 focus:border-yellow-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
                             />
                           </div>
 
                           <div>
-                            <div className="text-[9px] text-zinc-500 font-mono uppercase tracking-widest mb-1">
+                            <div className="text-[9px] text-zinc-400 font-mono uppercase tracking-widest mb-1">
                               🎵 Song / Track Name
                             </div>
                             <input
                               type="text"
-                              value={profileTopSongTitle}
-                              onChange={(e) => {
-                                const title = e.target.value;
-                                if (setProfileTopSongTitle) setProfileTopSongTitle(title);
-                                const fullTitle = profileTopSongArtist && title ? `${profileTopSongArtist} - ${title}` : (profileTopSongArtist || title || 'None Selected');
-                                setProfileFavoriteSong(fullTitle);
-                                setSelectedUserProfile((prev: any) => prev ? { ...prev, favoriteSong: fullTitle, top_song_artist: profileTopSongArtist, top_song_title: title } : null);
-                                if (setUserProfile) { queueMicrotask(() => { setUserProfile((pPrev: any) => pPrev ? { ...pPrev, favoriteSong: fullTitle, top_song_artist: profileTopSongArtist, top_song_title: title } : null); }); }
-                                try {
-                                  localStorage.setItem('nexus_favorite_song', fullTitle);
-                                } catch(err){}
-                              }}
-                              onBlur={() => {
-                                saveProfileData(true);
-                                triggerNotification?.("💾 Song/Track title updated.");
-                              }}
-                              placeholder="e.g. Liege of Inveracity"
-                              className="w-full bg-black/80 border border-zinc-800 focus:border-emerald-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
+                              value={localAnthemTitle}
+                              onChange={(e) => handleAnthemTitleChange(e.target.value)}
+                              placeholder="e.g. Masticated Labia Coagulation"
+                              className="w-full bg-black/80 border border-zinc-800 focus:border-yellow-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
                             />
                           </div>
                         </div>
 
                         <div>
-                          <div className="text-[9px] text-zinc-500 font-mono uppercase tracking-widest mb-1">
+                          <div className="text-[9px] text-zinc-400 font-mono uppercase tracking-widest mb-1">
                             🔗 Embed URL (YouTube / Spotify / SoundCloud)
                           </div>
                           <input
                             type="text"
-                            value={effTarget?.top_song_url || effTarget?.featured_youtube_url || (selectedUserProfile as any)?.top_song_url || ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setSelectedUserProfile((prev: any) => prev ? { ...prev, top_song_url: val, featured_youtube_url: val } : null);
-                              if (setProfileTopSongUrl) setProfileTopSongUrl(val);
-                              if (setUserProfile) { queueMicrotask(() => { setUserProfile((pPrev: any) => pPrev ? { ...pPrev, top_song_url: val, featured_youtube_url: val } : null); }); }
-                            }}
-                            onBlur={() => {
-                              saveProfileData(true);
-                              triggerNotification?.("💾 Embed URL updated.");
-                            }}
-                            placeholder="https://www.youtube.com/watch?v=... or Spotify link"
-                            className="w-full bg-black/80 border border-zinc-800 focus:border-emerald-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
+                            value={localAnthemUrl}
+                            onChange={(e) => handleAnthemUrlChange(e.target.value)}
+                            placeholder="https://www.youtube.com/watch?v=... or youtu.be link"
+                            className="w-full bg-black/80 border border-zinc-800 focus:border-yellow-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
                           />
                         </div>
                       </div>
@@ -2308,7 +2599,9 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   {(() => {
                     const r = (selectedUserProfile?.role || selectedUserProfile?.account_type || selectedUserProfile?.portalRole || selectedUserProfile?.type || '').toLowerCase();
                     const isArtist = r.includes('artist') || r.includes('band') || selectedUserProfile?.isBandProfile === true || selectedUserProfile?.isBand === true;
+                    const isPromoter = r.includes('promoter') || r.includes('venue') || selectedUserProfile?.isPromoterProfile === true || selectedUserProfile?.type === 'promoter';
                     const isWorkspace = isArtist || 
+                      isPromoter ||
                       selectedUserProfile?.isCreativeProfile === true || 
                       selectedUserProfile?.isLabelProfile === true || 
                       selectedUserProfile?.isPromoterProfile === true || 
@@ -2320,6 +2613,42 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       r.includes('promoter') || 
                       r.includes('venue');
                     
+                    if (isPromoter) {
+                      return (
+                        <>
+                          <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono mb-2 flex items-center gap-1.5 flex-wrap">
+                            <Radio className="w-3.5 h-3.5 text-yellow-400 animate-pulse" />
+                            Gig Booking & Show Submissions
+                          </h3>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-yellow-950/20 border border-yellow-800/40 p-3 rounded-xl shadow-[0_0_20px_rgba(234,179,8,0.08)]">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[9.5px] font-black uppercase tracking-wider text-yellow-400 leading-none flex items-center gap-1.5">
+                                <Flame className="w-3.5 h-3.5 text-yellow-400" />
+                                Submit Band To Play
+                              </div>
+                              <p className="text-zinc-400 text-[10px] font-mono mt-1 leading-snug">
+                                Pitch your band to play upcoming local gigs, festival lineups, or tour support with this promoter.
+                              </p>
+                              <p className="text-[9px] text-yellow-500/80 font-mono mt-1 italic">
+                                * All submissions will be reviewed but not guaranteed to result in an offer.
+                              </p>
+                            </div>
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setShowSubmitBandModal(true);
+                              }}
+                              className="bg-yellow-400 hover:bg-yellow-300 text-black font-black text-[10.5px] px-3.5 py-2 rounded-lg transition-all uppercase tracking-wider font-mono shrink-0 shadow-[0_0_15px_rgba(250,204,21,0.3)] hover:shadow-[0_0_20px_rgba(250,204,21,0.5)] flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 relative z-20"
+                            >
+                              🎸 Submit Band to Play
+                            </button>
+                          </div>
+                        </>
+                      );
+                    }
+
                     if (isArtist) {
                       return (
                         <>
@@ -2388,8 +2717,9 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                 } else if (isPromoter) {
                   tabButtons = [
                     { id: 'timeline', label: 'TIMELINE', icon: <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> },
-                    { id: 'gallery', label: 'PHOTO PIT', icon: <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> },
-                    { id: 'tickets', label: 'TICKETS', icon: <Ticket className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> }
+                    { id: 'events', label: 'EVENTS', icon: <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> },
+                    { id: 'archives', label: 'ARCHIVES', icon: <History className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> },
+                    { id: 'gallery', label: 'PHOTO PIT', icon: <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> }
                   ];
                 } else if (isCreative) {
                   tabButtons = [
@@ -2493,37 +2823,56 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   </div>
                 )}
 
-                {profileActiveTab === 'tickets' && (
+                {(profileActiveTab === 'tickets' || profileActiveTab === 'events') && (
                   <div className="space-y-4 text-left">
                     <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
                       <div>
                         <h3 className="text-xs font-mono font-black uppercase text-yellow-400 tracking-wider flex items-center gap-2">
-                          <Ticket className="w-4 h-4 text-yellow-500" /> Confirmed Shows & Event Passes
+                          <Calendar className="w-4 h-4 text-yellow-500" /> Confirmed Shows & Upcoming Festivals
                         </h3>
                         <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
-                          Get official presale tickets, general admission, and VIP pass packages.
+                          Official live calendar • Presale passes, tour routing, and festival lineups.
                         </p>
                       </div>
-                      {selectedUserProfile.isYou && (
+                      <div className="flex items-center gap-2">
                         <button
-                          onClick={() => triggerNotification?.("Create new ticket listing modal opened.")}
-                          className="px-2.5 py-1 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 border border-yellow-500/30 rounded text-[10px] font-mono font-bold transition-colors flex items-center gap-1"
+                          type="button"
+                          onClick={() => setShowEventsModal(true)}
+                          className="px-2.5 py-1 bg-yellow-500 hover:bg-yellow-400 text-black rounded text-[10px] font-mono font-black transition-colors flex items-center gap-1 shadow-md cursor-pointer"
                         >
-                          <Plus className="w-3 h-3" /> List Event Tickets
+                          <Ticket className="w-3 h-3" /> View Interactive Portal
                         </button>
-                      )}
+                      </div>
                     </div>
 
                     <div className="space-y-3">
                       {[
                         {
-                          title: "Brutal Deathfest IX 2026",
-                          lineup: "Devourment, Gorgasm, Cephalotripsy, Putrid Pile",
-                          venue: "The Palladium, Worcester MA",
-                          date: "OCT 24, 2026 • 6:00 PM",
-                          price: "$45.00",
+                          title: "Chicago Domination Fest: Next Generation 2026",
+                          lineup: "Analepsy, Devourment, Cephalotripsy, Gorgasm, Vulvodynia, Putrid Pile, Disgorge",
+                          venue: "Reggies Rock Club, Chicago IL",
+                          date: "OCT 23 - 25, 2026 • 4:00 PM",
+                          price: "$110 3-Day Pass / $45 Single Day",
                           status: "Selling Fast",
                           thumbnail: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=200"
+                        },
+                        {
+                          title: "Texas Domination Showcase 2026",
+                          lineup: "Stabbing, Malignancy, Kraanium, Short Bus Pile Up, Viral Load",
+                          venue: "Subterranean / North Texas Circuit, Denison / Dallas TX",
+                          date: "NOV 14, 2026 • 5:30 PM",
+                          price: "$35.00 Advance",
+                          status: "Presale Active",
+                          thumbnail: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=200"
+                        },
+                        {
+                          title: "Midwest Slam Assault: Winter Tour Stop",
+                          lineup: "Virulent Excision, Internal Bleeding, Organectomy, Embryectomy",
+                          venue: "Cobra Lounge, Chicago IL",
+                          date: "DEC 05, 2026 • 6:30 PM",
+                          price: "$28.00 Advance",
+                          status: "Confirmed",
+                          thumbnail: "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&q=80&w=200"
                         }
                       ].map((event, idx) => (
                         <div key={`promoter-ticket-${event.title}-${idx}`} className="bg-zinc-950 border border-zinc-900 hover:border-yellow-500/40 rounded-xl p-3.5 flex flex-col sm:flex-row items-center gap-4 transition-all">
@@ -2543,14 +2892,93 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             <span className="text-sm font-mono font-black text-yellow-400">{event.price}</span>
                             <button
                               onClick={() => {
-                                openCheckout?.('ticket', { name: event.title, price: parseFloat(event.price.replace('$','')), venue: event.venue });
+                                openCheckout?.('ticket', { name: event.title, price: parseFloat(event.price.replace(/[^0-9.]/g, '')) || 35, venue: event.venue });
                                 triggerNotification?.(`Adding ticket for ${event.title} to checkout...`);
                               }}
-                              className="mt-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded text-[10px] uppercase font-mono transition-colors shadow-lg"
+                              className="mt-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded text-[10px] uppercase font-mono transition-colors shadow-lg cursor-pointer"
                             >
                               Buy Tickets
                             </button>
                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {profileActiveTab === 'archives' && (
+                  <div className="space-y-4 text-left">
+                    <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
+                      <div>
+                        <h3 className="text-xs font-mono font-black uppercase text-amber-400 tracking-wider flex items-center gap-2">
+                          <History className="w-4 h-4 text-amber-500" /> Historic Show Archives (2014 – 2024)
+                        </h3>
+                        <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                          A decade of underground extreme metal history • All past editions and milestone festivals.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowArchivesModal(true)}
+                        className="px-2.5 py-1 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30 rounded text-[10px] font-mono font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <Archive className="w-3 h-3" /> Full Archives Browser
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {[
+                        {
+                          year: 2024,
+                          title: "Chicago Domination Fest 2024 (10-Year Anniversary Finale)",
+                          lineup: "Defeated Sanity, Disgorge, Cephalotripsy, Internal Bleeding, Malignancy, Gorgasm, Kraanium, Brodequin",
+                          venue: "Reggies Rock Club, Chicago IL",
+                          date: "OCT 18 - 20, 2024",
+                          milestone: "Decade Milestone Finale • 750+ Capacity Sellout",
+                          thumbnail: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=200"
+                        },
+                        {
+                          year: 2023,
+                          title: "Chicago Domination Fest 2023 (9th Edition)",
+                          lineup: "Devourment, Skinless, Mortal Decay, Visceral Disgorge, Short Bus Pile Up, Lust of Decay",
+                          venue: "Reggies Rock Club, Chicago IL",
+                          date: "OCT 20 - 22, 2023",
+                          milestone: "Historic Slam Co-Headliner Package",
+                          thumbnail: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=200"
+                        },
+                        {
+                          year: 2022,
+                          title: "Texas Domination Fest 2022 (Inaugural Expansion)",
+                          lineup: "Putrid Pile, Devourment, Stabbing, Viral Load, Prophecy, Condemned",
+                          venue: "The Rail Club Live, Fort Worth / Dallas TX",
+                          date: "NOV 11 - 12, 2022",
+                          milestone: "Official Southwest Territory Expansion",
+                          thumbnail: "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&q=80&w=200"
+                        }
+                      ].map((item, idx) => (
+                        <div key={`promoter-archive-${item.title}-${idx}`} className="bg-zinc-950 border border-zinc-900 hover:border-amber-500/40 rounded-xl p-3.5 flex flex-col sm:flex-row items-center gap-4 transition-all">
+                          <div className="w-16 h-16 rounded-lg bg-zinc-900 border border-amber-500/30 flex flex-col items-center justify-center text-center shrink-0">
+                            <span className="text-base font-black text-amber-400 font-mono leading-none">{item.year}</span>
+                            <span className="text-[8px] font-mono text-zinc-500 uppercase mt-0.5">ARCHIVE</span>
+                          </div>
+                          <div className="flex-1 min-w-0 text-left">
+                            <div className="flex items-center gap-2">
+                              <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded text-[8px] font-mono font-bold uppercase">{item.milestone}</span>
+                              <span className="text-[10px] font-mono text-zinc-500">{item.date}</span>
+                            </div>
+                            <h4 className="text-sm font-bold text-white uppercase tracking-wider mt-1 truncate">{item.title}</h4>
+                            <div className="text-[11px] text-zinc-300 font-mono mt-0.5 truncate">{item.lineup}</div>
+                            <div className="text-[10px] text-zinc-500 font-mono mt-0.5 flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-amber-500" /> {item.venue}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowArchivesModal(true)}
+                            className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-amber-400 rounded text-[10px] uppercase font-mono font-bold transition-colors cursor-pointer shrink-0"
+                          >
+                            View Details
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -3278,6 +3706,38 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       isOpen={showBandBookingModal}
       onClose={() => setShowBandBookingModal(false)}
       targetProfile={selectedUserProfile || targetProfile || fetchedBandData || linkedBandData}
+      userProfile={userProfile}
+      triggerNotification={triggerNotification}
+    />
+
+    {/* SUBMIT BAND TO PROMOTER GIG MODAL */}
+    <SubmitBandToPromoterModal
+      key="promoter-gig-submission-modal"
+      isOpen={showSubmitBandModal}
+      onClose={() => setShowSubmitBandModal(false)}
+      promoterProfile={selectedUserProfile || targetProfile}
+      userProfile={userProfile}
+      activeBand={fetchedBandData || linkedBandData}
+      triggerNotification={triggerNotification}
+    />
+
+    {/* PROMOTER EVENTS MODAL (UPCOMING SHOWS, TOURS, FESTIVALS) */}
+    <PromoterEventsModal
+      key="promoter-events-modal"
+      isOpen={showEventsModal}
+      onClose={() => setShowEventsModal(false)}
+      promoterProfile={selectedUserProfile || targetProfile}
+      userProfile={userProfile}
+      triggerNotification={triggerNotification}
+      openCheckout={openCheckout}
+    />
+
+    {/* PROMOTER ARCHIVES MODAL (HISTORIC PAST SHOWS & FESTIVALS) */}
+    <PromoterArchivesModal
+      key="promoter-archives-modal"
+      isOpen={showArchivesModal}
+      onClose={() => setShowArchivesModal(false)}
+      promoterProfile={selectedUserProfile || targetProfile}
       userProfile={userProfile}
       triggerNotification={triggerNotification}
     />

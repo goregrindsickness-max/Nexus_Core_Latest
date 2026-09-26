@@ -293,21 +293,36 @@ export function extractSlugMetadata(url: string) {
 
 export function getEmbedUrl(url: string | undefined | null): string | null {
   if (!url) return null;
-  const cleanedUrl = url.trim();
+  let cleanedUrl = url.trim();
+
+  // Strip iframe HTML if the whole tag was pasted
+  const iframeMatch = cleanedUrl.match(/src=["'](https?:\/\/[^"']+)["']/i);
+  if (iframeMatch && iframeMatch[1]) {
+    cleanedUrl = iframeMatch[1];
+  }
+
+  // Handle leading slashes or protocol-relative URLs (e.g. /youtu.be/..., //youtube.com/...)
+  if (cleanedUrl.startsWith('//')) {
+    cleanedUrl = `https:${cleanedUrl}`;
+  } else if (cleanedUrl.startsWith('/youtu.be/')) {
+    cleanedUrl = `https://youtu.be/${cleanedUrl.slice(10)}`;
+  } else if (cleanedUrl.startsWith('/youtube.com/')) {
+    cleanedUrl = `https://youtube.com/${cleanedUrl.slice(13)}`;
+  }
 
   // Spotify
   if (cleanedUrl.includes('spotify.com')) {
     return cleanedUrl.replace(/open\.spotify\.com\/(track|playlist|album|artist)\/([a-zA-Z0-9]+)/i, 'open.spotify.com/embed/$1/$2');
   }
 
-  // YouTube (supports watch, shorts, live, youtu.be, embed, mobile)
-  const ytMatch = cleanedUrl.match(/(?:youtube(?:-nocookie)?\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?|shorts|live)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i);
+  // YouTube (supports watch, shorts, live, youtu.be, embed, mobile, with query params like ?si=)
+  const ytMatch = cleanedUrl.match(/(?:(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube(?:-nocookie)?\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?|shorts|live)\/|\S*?[?&]v=)|(?:\/)?youtu\.be\/))([a-zA-Z0-9_-]{11})/i);
   if (ytMatch && ytMatch[1]) {
     return `https://www.youtube.com/embed/${ytMatch[1]}`;
   }
 
   if (cleanedUrl.includes('youtube.com/embed/') || cleanedUrl.includes('youtube-nocookie.com/embed/')) {
-    return cleanedUrl;
+    return cleanedUrl.startsWith('http') ? cleanedUrl : `https://${cleanedUrl.replace(/^\/+/, '')}`;
   }
 
   // SoundCloud
@@ -317,10 +332,6 @@ export function getEmbedUrl(url: string | undefined | null): string | null {
 
   // Bandcamp
   if (cleanedUrl.includes('bandcamp.com')) {
-    const iframeSrc = cleanedUrl.match(/src=["'](https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^"']+)["']/i);
-    if (iframeSrc) {
-      return iframeSrc[1].replace(/&amp;/g, '&');
-    }
     const directEmbed = cleanedUrl.match(/https:\/\/bandcamp\.com\/EmbeddedPlayer\/[^\s"']+/i);
     if (directEmbed) {
       return directEmbed[0].replace(/&amp;/g, '&');
@@ -764,7 +775,10 @@ export { playAmbientMetalDrone } from './audioEngine';
 export const formatTimeTo12h = (input?: string): string => {
   if (!input) return 'Doors 8:00 PM';
   let str = String(input);
-  str = str.replace(/\b([01]?[0-9]|2[0-3]):([0-5][0-9])\b/g, (match, h, m) => {
+  if (/\b\d{1,2}:\d{2}\s*(AM|PM)\b/i.test(str)) {
+    return str.replace(/\s*(AM|PM)\s*(AM|PM)/gi, ' $1');
+  }
+  str = str.replace(/\b([01]?[0-9]|2[0-3]):([0-5][0-9])(?!\s*(?:AM|PM))\b/gi, (match, h, m) => {
     let hour = parseInt(h, 10);
     const minute = m;
     const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -772,15 +786,7 @@ export const formatTimeTo12h = (input?: string): string => {
     hour = hour ? hour : 12;
     return `${hour}:${minute} ${ampm}`;
   });
-  str = str.replace(/\b([01][0-9]|2[0-3])([0-5][0-9])\b/g, (match, h, m) => {
-    let hour = parseInt(h, 10);
-    const minute = m;
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    hour = hour % 12;
-    hour = hour ? hour : 12;
-    return `${hour}:${minute} ${ampm}`;
-  });
-  return str;
+  return str.replace(/\s*(AM|PM)\s*(AM|PM)/gi, ' $1');
 };
 
 export const hasGigTickets = (gig: any): boolean => {

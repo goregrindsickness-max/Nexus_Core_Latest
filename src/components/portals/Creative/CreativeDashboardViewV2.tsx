@@ -347,7 +347,7 @@ export default function CreativeDashboardViewV2({
         setGearTags([userProfile.creative_metadata.primary_gear]);
       }
     }
-  }, [userProfile]);
+  }, [userProfile?.id]);
 
   const handleOpenMyCreativeProfile = () => {
     safeTriggerNotification("⚡ Opening creative public profile card...");

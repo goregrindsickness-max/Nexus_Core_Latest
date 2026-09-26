@@ -20,16 +20,28 @@ export const isVirulentExcisionProfile = (activeBand: any, userProfile: any): bo
 };
 
 export const resolveBandLogo = (activeBand: any, userProfile: any): string => {
+  const isPersonalOrPromoter = (candidate?: string | null) => {
+    if (!candidate || typeof candidate !== 'string') return true;
+    if (candidate.startsWith('data:image')) return true;
+    if (candidate.includes('unsplash')) return true;
+    if (userProfile?.avatar && candidate === userProfile.avatar) return true;
+    if (userProfile?.avatar_url && candidate === userProfile.avatar_url) return true;
+    if (userProfile?.promoter_logo && candidate === userProfile.promoter_logo) return true;
+    if (userProfile?.promoter_metadata?.logo_url && candidate === userProfile.promoter_metadata.logo_url) return true;
+    return false;
+  };
+
   if (activeBand?.id && typeof window !== 'undefined') {
     const saved = localStorage.getItem(`nexus_core_band_logo_${activeBand.id}`) || localStorage.getItem(`nexus_band_logo_${activeBand.id}`);
-    if (saved && !saved.startsWith('data:image')) return saved;
+    if (saved && !isPersonalOrPromoter(saved)) return saved;
   }
-  if (activeBand?.logo_url && !activeBand.logo_url.startsWith('data:image')) return activeBand.logo_url;
-  if (activeBand?.avatar_url && !activeBand.avatar_url.startsWith('data:image')) return activeBand.avatar_url;
-  if (activeBand?.avatar && !activeBand.avatar.startsWith('data:image')) return activeBand.avatar;
-  if (activeBand?.image && !activeBand.image.startsWith('data:image')) return activeBand.image;
-  if (userProfile?.band_logo && !userProfile.band_logo.startsWith('data:image')) return userProfile.band_logo;
-  if (userProfile?.bandLogo && !userProfile.bandLogo.startsWith('data:image')) return userProfile.bandLogo;
+  if (activeBand?.logo_url && !isPersonalOrPromoter(activeBand.logo_url)) return activeBand.logo_url;
+  if (activeBand?.avatar_url && !isPersonalOrPromoter(activeBand.avatar_url)) return activeBand.avatar_url;
+  if (activeBand?.avatar && !isPersonalOrPromoter(activeBand.avatar)) return activeBand.avatar;
+  if (activeBand?.image && !isPersonalOrPromoter(activeBand.image)) return activeBand.image;
+  if (userProfile?.band_logo && !isPersonalOrPromoter(userProfile.band_logo)) return userProfile.band_logo;
+  if (userProfile?.bandLogo && !isPersonalOrPromoter(userProfile.bandLogo)) return userProfile.bandLogo;
+  if (userProfile?.band_metadata?.logo_url && !isPersonalOrPromoter(userProfile.band_metadata.logo_url)) return userProfile.band_metadata.logo_url;
   
   if (isVirulentExcisionProfile(activeBand, userProfile)) {
     return VIRULENT_EXCISION_DEFAULT_LOGO;

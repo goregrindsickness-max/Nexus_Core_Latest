@@ -35,6 +35,7 @@ export {
   base64ToBlob,
   uploadBase64ToStorage,
   uploadCommunityBandMedia,
+  uploadArchiveFlyer,
   uploadClipVideoFile,
   testPhotoPitStorageConnection,
   ensureImagesUploadedToStorage,
@@ -131,4 +132,16 @@ export {
   deleteInventoryItem,
 } from './services/inventoryService';
 export type { InventoryImageUploadResult } from './services/inventoryService';
+
+// 10. Archive Shows Domain Service
+export {
+  fetchArchiveShowsFromDatabase,
+  saveArchiveShowToDatabase,
+  deleteArchiveShowFromDatabase,
+  resetArchiveShowInDatabase,
+  seedArchiveShowsToTable,
+  CANONICAL_DOMINATION_FEST_ARCHIVES,
+  sanitizeArchiveShowForDb,
+} from './services/archiveShowsService';
+export type { ArchiveShowItem } from './services/archiveShowsService';
 

@@ -1646,7 +1646,7 @@ export default function PromoterPortalView({
     setVenueGearProvided(userProfile?.promoter_metadata?.home_venue?.gear_provided || userProfile?.promoter_metadata?.tech_rider || '');
     setVenueAudioRequirements(userProfile?.promoter_metadata?.home_venue?.audio_requirements || userProfile?.promoter_metadata?.tech_rider || '');
     setVenueBacklineRequirements(userProfile?.promoter_metadata?.home_venue?.backline_requirements || userProfile?.promoter_metadata?.security_map || '');
-  }, [userProfile]);
+  }, [userProfile?.id]);
 
   // Local Utility to Compress Images to avoid payload size constraints
   const compressImage = (dataUrl: string, maxDimension: number, callback: (url: string) => void) => {

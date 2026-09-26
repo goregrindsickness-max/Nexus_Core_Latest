@@ -20,7 +20,7 @@ export const extractUUID = (idOrStr: any): string | null => {
   return match ? match[0] : null;
 };
 
-const generateDeterministicUUID = (seed: string): string => {
+export const generateDeterministicUUID = (seed: string): string => {
   let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
   for (let i = 0; i < seed.length; i++) {
     const ch = seed.charCodeAt(i);

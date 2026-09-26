@@ -245,7 +245,21 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = (props) => 
     return <LabelProfileCard {...props} />;
   }
 
-  if (baseTarget?.type === 'promoter' || baseTarget?.account_type === 'promoter' || baseTarget?.isPromoterProfile === true || targetRole === 'promoter' || targetRole.includes('promoter') || targetRole.includes('venue')) {
+  const isPromoter = (
+    baseTarget?.type === 'promoter' || 
+    baseTarget?.account_type === 'promoter' || 
+    baseTarget?.isPromoterProfile === true || 
+    baseTarget?.is_promoter === true ||
+    targetRole === 'promoter' || 
+    targetRole.includes('promoter') || 
+    targetRole.includes('venue') ||
+    Boolean(baseTarget?.promoter_metadata) ||
+    Boolean(baseTarget?.promoter_agency) ||
+    (typeof baseTarget?.name === 'string' && (baseTarget.name.toLowerCase().includes('nexus live') || baseTarget.name.toLowerCase().includes('pure domination') || baseTarget.name.toLowerCase().includes('domination fest'))) ||
+    (typeof baseTarget?.entity_name === 'string' && (baseTarget.entity_name.toLowerCase().includes('nexus live') || baseTarget.entity_name.toLowerCase().includes('pure domination') || baseTarget.entity_name.toLowerCase().includes('domination fest')))
+  );
+
+  if (isPromoter) {
     return <PromoterProfileCard {...props} />;
   }
 

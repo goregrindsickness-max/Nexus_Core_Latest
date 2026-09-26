@@ -878,8 +878,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       r.includes('band') || 
                       r.includes('artist') || 
                       r.includes('creative') || 
-                      r.includes('label') || 
-                      r.includes('promoter')
+                      r.includes('label')
                     );
 
                     const showStorefront = !isPersonalOrFan && (
@@ -889,7 +888,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       r.includes('artist') || 
                       r.includes('creative') || 
                       r.includes('label') || 
-                      r.includes('promoter') || 
                       effTarget?.hasStorefront === true || 
                       effTarget?.has_storefront === true
                     );
@@ -1268,6 +1266,27 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                      return false;
                    };
 
+                   const isPersonalOrOtherAvatar = (candidateLogo?: string | null) => {
+                     if (!candidateLogo) return false;
+                     if (effTarget?.avatar && candidateLogo === effTarget.avatar) return true;
+                     if (effTarget?.avatar_url && candidateLogo === effTarget.avatar_url) return true;
+                     if (userProfile?.avatar && candidateLogo === userProfile.avatar) return true;
+                     if (userProfile?.avatar_url && candidateLogo === userProfile.avatar_url) return true;
+                     if (selectedUserProfile?.avatar && candidateLogo === selectedUserProfile.avatar) return true;
+                     if (selectedUserProfile?.avatar_url && candidateLogo === selectedUserProfile.avatar_url) return true;
+                     if (userProfile?.creative_avatar && candidateLogo === userProfile.creative_avatar) return true;
+                     if (userProfile?.label_avatar && candidateLogo === userProfile.label_avatar) return true;
+                     return false;
+                   };
+
+                   const isValidBandLogo = (candidateLogo?: string | null) => {
+                     if (!candidateLogo || typeof candidateLogo !== 'string') return false;
+                     if (candidateLogo.includes('unsplash')) return false;
+                     if (isLogoPromoterLogo(candidateLogo)) return false;
+                     if (isPersonalOrOtherAvatar(candidateLogo)) return false;
+                     return true;
+                   };
+
                    if (hasBand) {
                     const isVeOverride = isEffTargetMiguel || (typeof rawBandName === 'string' && rawBandName.toLowerCase() === 'virulent excision');
                     const name = isVeOverride ? 'Virulent Excision' : String(rawBandName).trim();
@@ -1275,20 +1294,25 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     const veLogo = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396';
                     const veBanner = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-cover_1787467851123.jpg?t=1787467851123';
                     
+                    const savedCoreBandLogo = (typeof window !== 'undefined') ? (
+                      localStorage.getItem('nexus_core_band_logo_cbddb810-259b-4230-9968-3d402dfdb872') ||
+                      localStorage.getItem('nexus_band_logo_cbddb810-259b-4230-9968-3d402dfdb872') ||
+                      (targetBandId ? localStorage.getItem(`nexus_core_band_logo_${targetBandId}`) : null)
+                    ) : null;
+
                     const candidateBandLogo = (
-                      (lbd?.logo_url && !lbd.logo_url.includes('unsplash') && !isLogoPromoterLogo(lbd.logo_url) ? lbd.logo_url : null) ||
-                      (isTargetSelf && localSavedBand?.logo_url && !isLogoPromoterLogo(localSavedBand.logo_url) ? localSavedBand.logo_url : null) ||
-                      (isTargetSelf && userProfile?.band_metadata?.logo_url && !isLogoPromoterLogo(userProfile.band_metadata.logo_url) ? userProfile.band_metadata.logo_url : null) ||
-                      (isTargetSelf && userProfile?.band_logo && !isLogoPromoterLogo(userProfile.band_logo) ? userProfile.band_logo : null) ||
-                      (lbd?.avatar_url && !lbd.avatar_url.includes('unsplash') && !isLogoPromoterLogo(lbd.avatar_url) ? lbd.avatar_url : null) ||
-                      (lbd?.avatar && !lbd.avatar.includes('unsplash') && !isLogoPromoterLogo(lbd.avatar) ? lbd.avatar : null) ||
-                      (isTargetSelf && localSavedBand?.avatar_url && !isLogoPromoterLogo(localSavedBand.avatar_url) ? localSavedBand.avatar_url : null) ||
-                      (lbd?.logo_url && !isLogoPromoterLogo(lbd.logo_url) ? lbd.logo_url : null) ||
+                      (savedCoreBandLogo && isValidBandLogo(savedCoreBandLogo) ? savedCoreBandLogo : null) ||
+                      (isTargetSelf && userProfile?.band_logo && isValidBandLogo(userProfile.band_logo) ? userProfile.band_logo : null) ||
+                      (isTargetSelf && userProfile?.band_metadata?.logo_url && isValidBandLogo(userProfile.band_metadata.logo_url) ? userProfile.band_metadata.logo_url : null) ||
+                      (isTargetSelf && localSavedBand?.logo_url && isValidBandLogo(localSavedBand.logo_url) ? localSavedBand.logo_url : null) ||
+                      (lbd?.logo_url && isValidBandLogo(lbd.logo_url) ? lbd.logo_url : null) ||
+                      (lbd?.avatar_url && isValidBandLogo(lbd.avatar_url) ? lbd.avatar_url : null) ||
+                      (lbd?.avatar && isValidBandLogo(lbd.avatar) ? lbd.avatar : null) ||
                       null
                     );
 
                     const logo = isVirulentExcision
-                      ? (candidateBandLogo && !candidateBandLogo.includes('unsplash') ? candidateBandLogo : veLogo)
+                      ? (candidateBandLogo || veLogo)
                       : (candidateBandLogo || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=300');
                     const subtitle = isVirulentExcision
                       ? 'Brutal Death Metal • Slamming BDM • Death Metal'
@@ -1739,10 +1763,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                        onChange={(e) => {
                          const val = e.target.value.slice(0, 500);
                          setProfileBlurb(val);
-                         setSelectedUserProfile((prev: any) => prev ? { ...prev, bio: val, profileBlurb: val } : null);
-                         if (setUserProfile) { queueMicrotask(() => { setUserProfile((pPrev: any) => pPrev ? { ...pPrev, bio: val } : null); }); }
+                         setSelectedUserProfile((prev: any) => prev ? { ...prev, bio: val, label_bio: val, profileBlurb: val } : null);
+                         if (setUserProfile) {
+                           queueMicrotask(() => {
+                             setUserProfile((pPrev: any) => pPrev ? {
+                               ...pPrev,
+                               label_bio: val
+                             } : null);
+                           });
+                         }
                          try {
-                           localStorage.setItem('nexus_user_bio', val);
+                           localStorage.setItem('nexus_label_bio', val);
                          } catch(err){}
                        }}
                        onBlur={() => {
@@ -1971,14 +2002,24 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   const allGenres = Array.from(new Set(rawList.filter(Boolean)));
                   if (allGenres.length === 0) return null;
 
-                  const isFanOnly = (targetRoleStr.includes('fan') || targetRoleStr.includes('listener') || effTarget?.name === 'Fan Listener') && !effTarget?.isBandProfile && !isTargetBand;
+                  const isPromoter = Boolean(
+                    effTarget?.isPromoterProfile ||
+                    effTarget?.type === 'promoter' ||
+                    effTarget?.account_type === 'promoter' ||
+                    effTarget?.portalRole === 'promoter' ||
+                    targetRoleStr.includes('promoter') ||
+                    targetRoleStr.includes('venue') ||
+                    targetRoleStr.includes('booking')
+                  );
+
+                  const isFanOnly = !isPromoter && (targetRoleStr.includes('fan') || targetRoleStr.includes('listener') || effTarget?.name === 'Fan Listener') && !effTarget?.isBandProfile && !isTargetBand;
 
                   return (
-                    <div className="mt-3 bg-zinc-950/80 border border-zinc-900 rounded-xl p-3">
+                    <div className={`mt-3 bg-zinc-950/80 border border-zinc-900 ${isPromoter ? 'hover:border-yellow-500/30' : ''} rounded-xl p-3 transition-colors`}>
                       <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono mb-2 flex items-center justify-between">
                         <span className="flex items-center gap-1.5">
-                          <Tag className={`w-3.5 h-3.5 ${isFanOnly ? 'text-blue-400' : 'text-violet-400'}`} />
-                          <span>My Genres</span>
+                          <Tag className={`w-3.5 h-3.5 ${isPromoter ? 'text-yellow-400' : (isFanOnly ? 'text-blue-400' : 'text-violet-400')}`} />
+                          <span>{isPromoter ? 'Genres We Book' : 'My Genres'}</span>
                         </span>
                         <span className="text-[9px] text-zinc-500 font-mono font-medium">
                           {allGenres.length} {allGenres.length === 1 ? 'Genre' : 'Genres'}
@@ -1989,9 +2030,11 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           <span
                             key={`genre-${genre}-${idx}`}
                             className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] leading-tight font-mono font-bold tracking-tight border transition-all shadow-sm ${
-                              isFanOnly
-                                ? 'bg-blue-950/40 border-blue-800/40 text-blue-300 hover:border-blue-500 hover:text-blue-200'
-                                : 'bg-violet-950/40 border-violet-800/40 text-violet-300 hover:border-violet-500 hover:text-violet-200'
+                              isPromoter
+                                ? 'bg-yellow-950/40 border-yellow-800/40 text-yellow-300 hover:border-yellow-500 hover:text-yellow-200'
+                                : (isFanOnly
+                                  ? 'bg-blue-950/40 border-blue-800/40 text-blue-300 hover:border-blue-500 hover:text-blue-200'
+                                  : 'bg-violet-950/40 border-violet-800/40 text-violet-300 hover:border-violet-500 hover:text-violet-200')
                             }`}
                           >
                             #{genre}

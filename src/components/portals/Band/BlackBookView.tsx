@@ -7,6 +7,7 @@ import { getSupabase } from '../../../supabase';
 import { handleSendMessage as sendDbMessage } from '../../../store/useChatStore';
 import VenueReputationCard from './VenueReputationCard';
 import { seedVenuesForCities, classifyPlace, isIrrelevantPlace } from '../../../services/musicBrainzSeederService';
+import { getAllBlackBookVenues } from '../../../services/venueSearchService';
 
 /**
  * Detect if an existing place record appears to be closed, defunct, or former
@@ -492,8 +493,32 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
 
       let cachedVenues: any[] = [];
       try {
+        const bbVenues = await getAllBlackBookVenues();
+        if (Array.isArray(bbVenues) && bbVenues.length > 0) {
+          cachedVenues = bbVenues.map(v => ({
+            id: v.id,
+            name: v.name,
+            address: v.fullAddress || v.streetAddress || '',
+            city: v.city,
+            state_province: v.state || 'USA',
+            country: v.country || 'USA',
+            capacity: typeof v.capacity === 'number' ? v.capacity : 500,
+            genre_fit: v.genreFit || 90,
+            payout_rating: v.payoutRating || 4.8,
+            load_in_rating: v.loadInRating || 4.5,
+            source: v.source || 'blackbook'
+          }));
+        }
+      } catch (_) {}
+
+      try {
         const local = localStorage.getItem('nexus_musicbrainz_venues');
-        if (local) cachedVenues = JSON.parse(local);
+        if (local) {
+          const parsed = JSON.parse(local);
+          if (Array.isArray(parsed)) {
+            cachedVenues = [...cachedVenues, ...parsed];
+          }
+        }
       } catch (_) {}
 
       // Load custom overrides if user has edited details
@@ -591,55 +616,46 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
   }, [venues]);
 
   const syncVenuesBatchToSupabase = async (venuesList: any[]) => {
+    if (!venuesList || venuesList.length === 0) return;
+
+    // 1. Post batch to server-side persistent endpoint (works across all devices & APK)
+    try {
+      await fetch('/api/venues/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ venues: venuesList })
+      });
+    } catch (_) {}
+
+    // 2. Direct Supabase venues upsert attempt
     const supabase = getSupabase();
-    if (!supabase || !venuesList || venuesList.length === 0) return;
-    for (const v of venuesList) {
-      try {
-        const venueId = v.id || `mb_${v.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${v.city.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-        const payload: any = {
-          id: venueId,
-          name: v.name,
-          address: v.address || null,
-          city: v.city,
-          state_province: v.state_province || v.state || null,
-          country: v.country || 'USA',
-          lat: v.lat || null,
-          lng: v.lng || null,
-          place_type: v.place_type || 'venue',
-          capacity: v.capacity || null,
-          email: v.email || null,
-          buyers: v.buyers || 'Local Booking Coordinator',
-          genre_fit: v.genre_fit || v.genreFit || 85,
-          payout_rating: v.payout_rating || v.payoutRating || 4.5,
-          load_in_rating: v.load_in_rating || v.loadInRating || 4.0,
-          source: 'MusicBrainz',
-          intel_entries: Array.isArray(v.intel_entries || v.intelEntries) ? (v.intel_entries || v.intelEntries) : []
-        };
-        
-        const { error: err1 } = await supabase.from('venues').upsert(payload, { onConflict: 'id' });
-        if (err1) {
-          // Fallback with base columns
-          const basePayload = {
-            id: payload.id,
-            name: payload.name,
-            city: payload.city,
-            state_province: payload.state_province,
-            country: payload.country,
-            capacity: payload.capacity,
-            email: payload.email,
-            buyers: payload.buyers,
-            genre_fit: payload.genre_fit,
-            payout_rating: payload.payout_rating,
-            load_in_rating: payload.load_in_rating,
-            intel_entries: [
-              ...(payload.intel_entries || []),
-              payload.address ? `Address: ${payload.address}` : '',
-              payload.lat && payload.lng ? `GPS: [${payload.lat}, ${payload.lng}]` : ''
-            ].filter(Boolean)
+    if (supabase) {
+      for (const v of venuesList) {
+        try {
+          const venueId = v.id || `mb_${v.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${v.city.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+          const payload: any = {
+            id: venueId,
+            name: v.name,
+            address: v.address || null,
+            city: v.city,
+            state_province: v.state_province || v.state || null,
+            country: v.country || 'USA',
+            lat: v.lat || null,
+            lng: v.lng || null,
+            place_type: v.place_type || 'venue',
+            capacity: v.capacity || null,
+            email: v.email || null,
+            buyers: v.buyers || 'Local Booking Coordinator',
+            genre_fit: v.genre_fit || v.genreFit || 85,
+            payout_rating: v.payout_rating || v.payoutRating || 4.5,
+            load_in_rating: v.load_in_rating || v.loadInRating || 4.0,
+            source: 'MusicBrainz',
+            intel_entries: Array.isArray(v.intel_entries || v.intelEntries) ? (v.intel_entries || v.intelEntries) : []
           };
-          await supabase.from('venues').upsert(basePayload, { onConflict: 'id' });
-        }
-      } catch (_) {}
+          
+          await supabase.from('venues').upsert(payload, { onConflict: 'id' });
+        } catch (_) {}
+      }
     }
   };
 

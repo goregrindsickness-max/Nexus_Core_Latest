@@ -116,6 +116,7 @@ export function isValidStorageOrImageUrl(
 
   // Rule 1: Allow Valid Supabase Storage URLs
   if (
+    trimmed.includes('/storage/v1/object/public/archives/') ||
     trimmed.includes('/storage/v1/object/public/stories/') ||
     trimmed.includes('/storage/v1/object/public/inventory-items/') ||
     trimmed.includes('/storage/v1/object/public/community-bands/') ||
@@ -123,6 +124,7 @@ export function isValidStorageOrImageUrl(
     trimmed.includes('/storage/v1/object/public/bannersv2/') ||
     trimmed.includes('/storage/v1/object/public/clips/') ||
     trimmed.includes('/storage/v1/object/public/') ||
+    trimmed.includes('/archives/') ||
     trimmed.includes('/stories/') ||
     trimmed.includes('/inventory-items/') ||
     trimmed.includes('/community-bands/') ||
@@ -223,7 +225,14 @@ export async function uploadBase64ToStorage(
     const cleanToken = String(fileNameToken || 'asset').toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '_');
 
     let primaryBucket = 'community-bands';
-    if (cleanRequested === 'stories' || cleanRequested.includes('stori') || cleanToken.includes('story')) {
+    if (
+      cleanRequested === 'archives' ||
+      cleanRequested.includes('archive') ||
+      cleanToken.includes('archive') ||
+      cleanToken.includes('flyer')
+    ) {
+      primaryBucket = 'archives';
+    } else if (cleanRequested === 'stories' || cleanRequested.includes('stori') || cleanToken.includes('story')) {
       primaryBucket = 'stories';
     } else if (cleanRequested === 'clips' || cleanRequested.includes('clip') || cleanToken.includes('clip')) {
       primaryBucket = 'clips';
@@ -266,14 +275,21 @@ export async function uploadBase64ToStorage(
       primaryBucket = cleanRequested;
     }
 
+    const isArchiveRequested =
+      cleanRequested === 'archives' ||
+      cleanRequested.includes('archive') ||
+      cleanToken.includes('archive') ||
+      cleanToken.includes('flyer');
     const isStoryRequested = cleanRequested === 'stories' || cleanRequested.includes('stori') || cleanToken.includes('story');
     const isClipRequested = cleanRequested === 'clips' || cleanRequested.includes('clip') || cleanToken.includes('clip');
     const bucketCandidates = Array.from(
       new Set(
         [
           primaryBucket,
+          ...(isArchiveRequested ? ['archives', 'public-assets', 'community-bands', 'feed_media', 'bannersv2'] : []),
           ...(isStoryRequested ? ['stories', 'photo-pit', 'clips', 'public-assets', 'media'] : []),
           ...(isClipRequested ? ['clips'] : []),
+          'archives',
           'stories',
           'photo-pit',
           'community-bands',
@@ -419,6 +435,69 @@ export async function uploadCommunityBandMedia(
     return typeof imageInput === 'string' ? imageInput : '';
   } catch (err) {
     console.warn(`[uploadCommunityBandMedia] Error uploading ${mediaType}:`, err);
+    return typeof imageInput === 'string' ? imageInput : '';
+  }
+}
+
+/**
+ * Standardized single helper utility for uploading historic show flyer / poster media
+ * ensuring it is routed directly to the 'archives' storage bucket with WebP compression and fallback resilience.
+ */
+export async function uploadArchiveFlyer(
+  imageInput: string | File | Blob | null | undefined,
+  showId: string = 'archive-show',
+  customTitle: string = 'flyer'
+): Promise<string> {
+  if (!imageInput) return '';
+  if (typeof imageInput === 'string' && !imageInput.startsWith('data:')) {
+    return imageInput; // Already a remote storage URL
+  }
+
+  try {
+    const resolvedShowId = showId || `show_${Date.now()}`;
+    const cleanToken = `flyer_${customTitle.substring(0, 30).toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+
+    // 1. Transcode/compress image to lightweight WebP
+    let processedFile: any = imageInput;
+    if (typeof imageInput === 'string' && imageInput.startsWith('data:')) {
+      processedFile = await compressAndTranscodeImageToWebP(imageInput);
+    } else if (typeof imageInput === 'object' && (imageInput instanceof File || imageInput instanceof Blob)) {
+      processedFile = await compressAndTranscodeImageToWebP(imageInput);
+    }
+
+    // 2. Convert processed file/blob to base64 string for uploadBase64ToStorage
+    let base64String = '';
+    if (typeof processedFile === 'string') {
+      base64String = processedFile;
+    } else if (processedFile instanceof File || processedFile instanceof Blob) {
+      base64String = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string) || '');
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(processedFile);
+      });
+    }
+
+    if (!base64String) {
+      return typeof imageInput === 'string' ? imageInput : '';
+    }
+
+    // 3. Upload directly into 'archives' bucket
+    const publicUrl = await uploadBase64ToStorage(
+      base64String,
+      'archives',
+      resolvedShowId,
+      cleanToken
+    );
+
+    if (publicUrl && !publicUrl.startsWith('data:')) {
+      console.log(`[ARCHIVES STORAGE SUCCESS] Flyer uploaded to 'archives' bucket:`, publicUrl);
+      return publicUrl;
+    }
+
+    return publicUrl || (typeof imageInput === 'string' ? imageInput : '');
+  } catch (err) {
+    console.warn(`[uploadArchiveFlyer] Error uploading archive flyer to 'archives' bucket:`, err);
     return typeof imageInput === 'string' ? imageInput : '';
   }
 }

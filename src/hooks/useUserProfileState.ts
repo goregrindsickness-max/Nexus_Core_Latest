@@ -357,17 +357,19 @@ export function useUserProfileState({
       return resolveBandBio(activeBand, userProfile);
     }
     if (portalRole === 'creative') {
-      return userProfile?.creative_metadata?.bio || userProfile?.creative_bio || 'Professional creative specialist on the Nexus network.';
+      return (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_bio') : null) || userProfile?.creative_metadata?.bio || userProfile?.creative_bio || 'Professional creative specialist on the Nexus network.';
     }
     if (portalRole === 'promoter') {
-      return userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || 'Concert promoter and event organizer on Nexus.';
+      return (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || 'Concert promoter and event organizer on Nexus.';
     }
     if (portalRole === 'label') {
-      return userProfile?.label_bio || 'Official record label on Nexus.';
+      return (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_bio') : null) || userProfile?.label_bio || 'Official record label on Nexus.';
     }
-    if (userProfile?.bio) return userProfile.bio;
-    if (userProfile?.profileBlurb) return userProfile.profileBlurb;
-    return '';
+    const savedPersonalBio = typeof window !== 'undefined' ? localStorage.getItem('nexus_user_bio') : null;
+    if (savedPersonalBio) return savedPersonalBio;
+    if (userProfile?.bio && userProfile.bio !== userProfile?.promoter_metadata?.bio && userProfile.bio !== userProfile?.promoter_bio) return userProfile.bio;
+    if (userProfile?.profileBlurb && userProfile.profileBlurb !== userProfile?.promoter_metadata?.bio && userProfile.profileBlurb !== userProfile?.promoter_bio) return userProfile.profileBlurb;
+    return 'Extreme metal musician, archivist, and underground pit warrior.';
   });
 
   useEffect(() => {
@@ -375,13 +377,22 @@ export function useUserProfileState({
     if (portalRole === 'band') {
       freshBio = resolveBandBio(activeBand, userProfile);
     } else if (portalRole === 'creative') {
-      freshBio = userProfile?.creative_metadata?.bio || userProfile?.creative_bio || 'Professional creative specialist on the Nexus network.';
+      freshBio = (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_bio') : null) || userProfile?.creative_metadata?.bio || userProfile?.creative_bio || 'Professional creative specialist on the Nexus network.';
     } else if (portalRole === 'promoter') {
-      freshBio = userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || 'Concert promoter and event organizer on Nexus.';
+      freshBio = (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || 'Concert promoter and event organizer on Nexus.';
     } else if (portalRole === 'label') {
-      freshBio = userProfile?.label_bio || 'Official record label on Nexus.';
+      freshBio = (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_bio') : null) || userProfile?.label_bio || 'Official record label on Nexus.';
     } else {
-      freshBio = userProfile?.bio || userProfile?.profileBlurb || '';
+      const savedUserBio = typeof window !== 'undefined' ? localStorage.getItem('nexus_user_bio') : null;
+      if (savedUserBio && savedUserBio !== userProfile?.promoter_metadata?.bio && savedUserBio !== userProfile?.promoter_bio) {
+        freshBio = savedUserBio;
+      } else if (userProfile?.bio && userProfile.bio !== userProfile?.promoter_metadata?.bio && userProfile.bio !== userProfile?.promoter_bio) {
+        freshBio = userProfile.bio;
+      } else if (userProfile?.profileBlurb && userProfile.profileBlurb !== userProfile?.promoter_metadata?.bio && userProfile.profileBlurb !== userProfile?.promoter_bio) {
+        freshBio = userProfile.profileBlurb;
+      } else {
+        freshBio = 'Extreme metal musician, archivist, and underground pit warrior.';
+      }
     }
 
     if (freshBio && freshBio !== profileBlurb) {
@@ -440,6 +451,18 @@ export function useUserProfileState({
           if (profileCoverUrl) localStorage.setItem(`nexus_core_band_cover_${activeBand.id}`, profileCoverUrl);
           localStorage.setItem(`nexus_band_bio_${activeBand.id}`, profileBlurb);
         }
+      } else if (portalRole === 'promoter') {
+        if (profileAvatarUrl) localStorage.setItem('nexus_promoter_logo', profileAvatarUrl);
+        if (profileCoverUrl) localStorage.setItem('nexus_promoter_cover', profileCoverUrl);
+        localStorage.setItem('nexus_promoter_bio', profileBlurb);
+      } else if (portalRole === 'creative') {
+        if (profileAvatarUrl) localStorage.setItem('nexus_creative_avatar', profileAvatarUrl);
+        if (profileCoverUrl) localStorage.setItem('nexus_creative_cover', profileCoverUrl);
+        localStorage.setItem('nexus_creative_bio', profileBlurb);
+      } else if (portalRole === 'label') {
+        if (profileAvatarUrl) localStorage.setItem('nexus_label_avatar', profileAvatarUrl);
+        if (profileCoverUrl) localStorage.setItem('nexus_label_cover', profileCoverUrl);
+        localStorage.setItem('nexus_label_bio', profileBlurb);
       } else if (portalRole === 'fan_only' || portalRole === 'industry_pro') {
         if (profileAvatarUrl) localStorage.setItem('nexus_user_avatar', profileAvatarUrl);
         if (profileCoverUrl) localStorage.setItem('nexus_user_banner', profileCoverUrl);
@@ -456,15 +479,71 @@ export function useUserProfileState({
     }
 
     if (setUserProfile) {
-      setUserProfile((prev: any) => prev ? {
-        ...prev,
-        avatar: profileAvatarUrl || prev?.avatar,
-        avatar_url: profileAvatarUrl || prev?.avatar_url,
-        logo_url: profileAvatarUrl || prev?.logo_url,
-        banner: profileCoverUrl || prev?.banner,
-        banner_url: profileCoverUrl || prev?.banner_url,
-        cover_url: profileCoverUrl || prev?.cover_url,
-      } : prev);
+      setUserProfile((prev: any) => {
+        if (!prev) return prev;
+        if (portalRole === 'promoter') {
+          return {
+            ...prev,
+            promoter_logo: profileAvatarUrl || prev?.promoter_logo,
+            promoter_cover_image: profileCoverUrl || prev?.promoter_cover_image,
+            promoter_bio: profileBlurb || prev?.promoter_bio,
+            top_song_url: profileTopSongUrl || prev?.top_song_url,
+            featured_youtube_url: profileTopSongUrl || prev?.featured_youtube_url,
+            top_song_artist: profileTopSongArtist || prev?.top_song_artist,
+            top_song_title: profileTopSongTitle || prev?.top_song_title,
+            favoriteSong: profileFavoriteSong || prev?.favoriteSong,
+            promoter_metadata: {
+              ...(prev.promoter_metadata || {}),
+              bio: profileBlurb || prev?.promoter_metadata?.bio,
+              logo_url: profileAvatarUrl || prev?.promoter_metadata?.logo_url,
+              banner_url: profileCoverUrl || prev?.promoter_metadata?.banner_url,
+              top_song_url: profileTopSongUrl || prev?.promoter_metadata?.top_song_url,
+              featured_video_url: profileTopSongUrl || prev?.promoter_metadata?.featured_video_url,
+              top_song_artist: profileTopSongArtist || prev?.promoter_metadata?.top_song_artist,
+              top_song_title: profileTopSongTitle || prev?.promoter_metadata?.top_song_title
+            }
+          };
+        } else if (portalRole === 'band') {
+          return {
+            ...prev,
+            band_logo: profileAvatarUrl || prev?.band_logo,
+            band_cover: profileCoverUrl || prev?.band_cover,
+            band_bio: profileBlurb || prev?.band_bio
+          };
+        } else if (portalRole === 'creative') {
+          return {
+            ...prev,
+            creative_avatar: profileAvatarUrl || prev?.creative_avatar,
+            creative_banner: profileCoverUrl || prev?.creative_banner,
+            creative_bio: profileBlurb || prev?.creative_bio,
+            creative_metadata: {
+              ...(prev.creative_metadata || {}),
+              bio: profileBlurb || prev?.creative_metadata?.bio,
+              avatar_url: profileAvatarUrl || prev?.creative_metadata?.avatar_url,
+              banner_url: profileCoverUrl || prev?.creative_metadata?.banner_url
+            }
+          };
+        } else if (portalRole === 'label') {
+          return {
+            ...prev,
+            label_avatar: profileAvatarUrl || prev?.label_avatar,
+            label_banner: profileCoverUrl || prev?.label_banner,
+            label_bio: profileBlurb || prev?.label_bio
+          };
+        } else {
+          return {
+            ...prev,
+            avatar: profileAvatarUrl || prev?.avatar,
+            avatar_url: profileAvatarUrl || prev?.avatar_url,
+            logo_url: profileAvatarUrl || prev?.logo_url,
+            banner: profileCoverUrl || prev?.banner,
+            banner_url: profileCoverUrl || prev?.banner_url,
+            cover_url: profileCoverUrl || prev?.cover_url,
+            bio: profileBlurb || prev?.bio,
+            profileBlurb: profileBlurb || prev?.profileBlurb
+          };
+        }
+      });
     }
 
     if (profileAvatarUrl && typeof window !== 'undefined') {
@@ -540,24 +619,48 @@ export function useUserProfileState({
             });
           }
         } else if (portalRole === 'promoter') {
-          const promoterId = userProfile?.promoter_id || userProfile?.registered_promoter_id;
-          if (promoterId) {
+          const promoterId = userProfile?.promoter_id || userProfile?.registered_promoter_id || userProfile?.id;
+          if (promoterId && userProfile?.id) {
             const promoterPayload = {
               id: promoterId,
+              user_id: userProfile.id,
+              name: profileFullLegalName || userProfile?.full_name || userProfile?.name || 'Miguel Goregrinder Medina',
+              entity_name: profileFullLegalName || userProfile?.corporate_name || userProfile?.name || 'Nexus Live Productions',
               corporate_name: profileFullLegalName || userProfile?.corporate_name || userProfile?.name || 'Nexus Live Productions',
               brand_name: profileFullLegalName || userProfile?.corporate_name || userProfile?.name || 'Nexus Live Productions',
+              email: userProfile?.email || 'goregrindsickness@gmail.com',
+              phone: userProfile?.phone || '(580)952-2047',
+              location: profileLocation || userProfile?.city || 'Denison, TX',
+              active_venues: [
+                'Reggies Rock Club',
+                'Subterranean',
+                'Cobra Lounge',
+                'WC Social Club',
+                'Live Wire Lounge',
+                'Empty Bottle',
+                'Beat Kitchen'
+              ],
+              social_links: {
+                instagram: 'https://instagram.com/nexusliveproductions',
+                facebook: 'https://facebook.com/nexuslive'
+              },
+              notes: 'Primary underground death metal, slam, and grindcore tour operations (Chicago/Texas Domination Fest iterations).',
               promoter_logo: profileAvatarUrl,
               promoter_cover_image: profileCoverUrl,
               bio: profileBlurb,
               genres: combinedGenres,
               city: profileLocation,
+              top_song_url: finalTopSongUrl,
+              featured_youtube_url: finalTopSongUrl,
+              top_song_title: fullTopSong,
+              top_song_artist: profileTopSongArtist,
             };
             executeWithSchemaResilience(
-              async (payload) => await supabase.from('promoters').upsert([payload]),
+              async (payload) => await supabase.from('promoters').upsert([payload], { onConflict: 'id' }),
               promoterPayload
             ).then(({ error }) => {
               if (error) console.error('[Supabase Promoter Profile Sync Error]:', error);
-              else console.log('[Supabase Promoter Profile Sync Success] Promoter profile saved.');
+              else console.log('[Supabase Promoter Profile Sync Success] Promoter profile saved to public.promoters.');
             });
           }
         } else if (portalRole === 'label') {
@@ -595,13 +698,17 @@ export function useUserProfileState({
         let personalTopSongUrl = finalTopSongUrl;
 
         if (isProfessionalPortal) {
-          // Use original userProfile values to keep personal rows untouched by professional details,
-          // while respecting explicitly set avatar/banner
+          // Use original userProfile / localStorage values to keep personal rows strictly untouched by professional details!
           personalName = userProfile?.full_name || userProfile?.name || '';
           personalHandle = userProfile?.console_handle || userProfile?.handle || '';
-          personalAvatar = profileAvatarUrl || userProfile?.avatar_url || null;
-          personalBanner = profileCoverUrl || userProfile?.banner_url || null;
-          personalBio = userProfile?.bio || profileBlurb || '';
+          personalAvatar = userProfile?.avatar_url || userProfile?.avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null);
+          personalBanner = userProfile?.banner_url || userProfile?.banner || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_banner') : null);
+          const savedUserBio = typeof window !== 'undefined' ? localStorage.getItem('nexus_user_bio') : null;
+          personalBio = (savedUserBio && savedUserBio !== userProfile?.promoter_metadata?.bio && savedUserBio !== userProfile?.promoter_bio)
+            ? savedUserBio
+            : ((userProfile?.bio && userProfile.bio !== userProfile?.promoter_metadata?.bio && userProfile.bio !== userProfile?.promoter_bio)
+              ? userProfile.bio
+              : 'Extreme metal musician, archivist, and underground pit warrior.');
           personalGenres = userProfile?.genre_tags || userProfile?.genres || [];
           personalTopSong = userProfile?.top_song_title || '';
           personalTopSongUrl = userProfile?.top_song_url || '';

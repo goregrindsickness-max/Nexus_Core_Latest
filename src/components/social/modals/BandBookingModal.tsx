@@ -143,7 +143,7 @@ export const BandBookingModal: React.FC<BandBookingModalProps> = ({
         promoterEmail: prev.promoterEmail || userProfile.email || ''
       }));
     }
-  }, [userProfile]);
+  }, [userProfile?.id]);
 
   if (!isOpen) return null;
 

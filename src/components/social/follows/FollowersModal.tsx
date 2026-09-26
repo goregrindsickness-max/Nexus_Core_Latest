@@ -43,33 +43,96 @@ export const FollowersModal: React.FC<FollowersModalProps> = ({
   const [activeCategory, setActiveCategory] = useState<CategoryType>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const effTarget = selectedUserProfile || targetProfile;
+  const rawTargetRole = (
+    effTarget?.role ||
+    effTarget?.portalRole ||
+    effTarget?.account_type ||
+    effTarget?.type ||
+    portalRole ||
+    ''
+  ).toLowerCase();
+
+  const isPromoterEntity = Boolean(
+    effTarget?.type === 'promoter' ||
+    effTarget?.account_type === 'promoter' ||
+    effTarget?.portalRole === 'promoter' ||
+    effTarget?.isPromoterProfile ||
+    portalRole === 'promoter' ||
+    rawTargetRole.includes('promoter') ||
+    rawTargetRole.includes('venue') ||
+    rawTargetRole.includes('booking') ||
+    rawTargetRole.includes('talent_buyer') ||
+    effTarget?.agency_name ||
+    effTarget?.promoter_name ||
+    effTarget?.promoterName ||
+    effTarget?.promoter_id ||
+    effTarget?.registered_promoter_id
+  );
+
   const uRole = selectedUserProfile?.role?.toLowerCase() || '';
   const isMiguel = !!(
     selectedUserProfile?.name?.toLowerCase().includes('miguel') ||
     selectedUserProfile?.email?.toLowerCase().includes('miguel') ||
     selectedUserProfile?.role?.toLowerCase().includes('miguel')
   );
-  const isFanProfile = !isMiguel && (selectedUserProfile?.name === 'Fan Listener' || uRole === 'fan_only' || uRole === 'fan only' || uRole === 'listener' || (selectedUserProfile?.isYou && portalRole === 'fan_only'));
-  const isPro = (selectedUserProfile?.hasProAccess || selectedUserProfile?.isYou) && !isFanProfile;
+  const isFanProfile = !isMiguel && !isPromoterEntity && (selectedUserProfile?.name === 'Fan Listener' || uRole === 'fan_only' || uRole === 'fan only' || uRole === 'listener' || (selectedUserProfile?.isYou && portalRole === 'fan_only'));
+  const isPro = !isPromoterEntity && (selectedUserProfile?.hasProAccess || selectedUserProfile?.isYou) && !isFanProfile;
 
   let modalAccentClass = 'text-orange-400';
   let modalBorderClass = 'border-orange-500/40 shadow-[0_0_30px_rgba(249,115,22,0.2)]';
+  let tabActiveBgClass = 'bg-orange-950/80 border-orange-500 text-orange-200 shadow-sm shadow-orange-950';
+  let tabActiveBadgeClass = 'bg-orange-800 text-white';
+  let searchFocusClass = 'focus:border-orange-500';
+  let actionButtonClass = 'bg-orange-950/60 hover:bg-orange-800/80 border-orange-500/40 text-orange-200 group-hover:border-orange-400';
+  let spinnerClass = 'border-orange-500';
+  let rowHoverClass = 'hover:border-orange-500/50';
 
-  if (uRole.includes('artist') || uRole.includes('band')) {
+  if (isPromoterEntity || uRole.includes('promoter')) {
+    modalAccentClass = 'text-yellow-400';
+    modalBorderClass = 'border-yellow-500/50 shadow-[0_0_30px_rgba(234,179,8,0.25)]';
+    tabActiveBgClass = 'bg-yellow-950/80 border-yellow-500 text-yellow-200 shadow-sm shadow-yellow-950';
+    tabActiveBadgeClass = 'bg-yellow-700 text-yellow-100 font-bold';
+    searchFocusClass = 'focus:border-yellow-400';
+    actionButtonClass = 'bg-yellow-950/60 hover:bg-yellow-800/80 border-yellow-500/40 text-yellow-200 group-hover:border-yellow-400';
+    spinnerClass = 'border-yellow-400';
+    rowHoverClass = 'hover:border-yellow-500/50';
+  } else if (uRole.includes('artist') || uRole.includes('band')) {
     modalAccentClass = 'text-emerald-400';
     modalBorderClass = 'border-emerald-500/40 shadow-[0_0_30px_rgba(16,185,129,0.2)]';
-  } else if (uRole.includes('promoter')) {
-    modalAccentClass = 'text-yellow-400';
-    modalBorderClass = 'border-yellow-500/40 shadow-[0_0_30px_rgba(234,179,8,0.2)]';
+    tabActiveBgClass = 'bg-emerald-950/80 border-emerald-500 text-emerald-200 shadow-sm shadow-emerald-950';
+    tabActiveBadgeClass = 'bg-emerald-800 text-white';
+    searchFocusClass = 'focus:border-emerald-500';
+    actionButtonClass = 'bg-emerald-950/60 hover:bg-emerald-800/80 border-emerald-500/40 text-emerald-200 group-hover:border-emerald-400';
+    spinnerClass = 'border-emerald-500';
+    rowHoverClass = 'hover:border-emerald-500/50';
   } else if (uRole.includes('creative')) {
     modalAccentClass = 'text-fuchsia-400';
     modalBorderClass = 'border-fuchsia-500/40 shadow-[0_0_30px_rgba(217,70,239,0.2)]';
+    tabActiveBgClass = 'bg-fuchsia-950/80 border-fuchsia-500 text-fuchsia-200 shadow-sm shadow-fuchsia-950';
+    tabActiveBadgeClass = 'bg-fuchsia-800 text-white';
+    searchFocusClass = 'focus:border-fuchsia-500';
+    actionButtonClass = 'bg-fuchsia-950/60 hover:bg-fuchsia-800/80 border-fuchsia-500/40 text-fuchsia-200 group-hover:border-fuchsia-400';
+    spinnerClass = 'border-fuchsia-500';
+    rowHoverClass = 'hover:border-fuchsia-500/50';
   } else if (isPro) {
-    modalAccentClass = 'text-violet-500';
+    modalAccentClass = 'text-violet-400';
     modalBorderClass = 'border-violet-700/50 shadow-[0_0_30px_rgba(109,40,217,0.3)]';
+    tabActiveBgClass = 'bg-violet-950/80 border-violet-500 text-violet-200 shadow-sm shadow-violet-950';
+    tabActiveBadgeClass = 'bg-violet-800 text-white';
+    searchFocusClass = 'focus:border-violet-500';
+    actionButtonClass = 'bg-violet-950/60 hover:bg-violet-800/80 border-violet-500/40 text-violet-200 group-hover:border-violet-400';
+    spinnerClass = 'border-violet-500';
+    rowHoverClass = 'hover:border-violet-500/50';
   } else if (isFanProfile) {
-    modalAccentClass = 'text-cyan-500';
+    modalAccentClass = 'text-cyan-400';
     modalBorderClass = 'border-cyan-500 shadow-[0_0_30px_rgba(6,182,212,0.3)]';
+    tabActiveBgClass = 'bg-cyan-950/80 border-cyan-500 text-cyan-200 shadow-sm shadow-cyan-950';
+    tabActiveBadgeClass = 'bg-cyan-800 text-white';
+    searchFocusClass = 'focus:border-cyan-500';
+    actionButtonClass = 'bg-cyan-950/60 hover:bg-cyan-800/80 border-cyan-500/40 text-cyan-200 group-hover:border-cyan-400';
+    spinnerClass = 'border-cyan-500';
+    rowHoverClass = 'hover:border-cyan-500/50';
   }
 
   const isViewingSelf = !!(selectedUserProfile?.isYou || (userProfile?.id && selectedUserProfile?.id === userProfile.id));
@@ -280,10 +343,10 @@ export const FollowersModal: React.FC<FollowersModalProps> = ({
     <div 
       key={`follower-row-${groupKey}-${index}-${user.id || ''}-${user.band_id || ''}-${user.raw_id || ''}-${user.handle || ''}-${user.name || ''}`} 
       onClick={() => handleNavigateToProfile(user)}
-      className="flex items-center justify-between p-2.5 bg-zinc-900/90 border border-zinc-800/80 rounded-xl hover:border-violet-500/50 hover:bg-zinc-800/60 transition-all text-left cursor-pointer group"
+      className={`flex items-center justify-between p-2.5 bg-zinc-900/90 border border-zinc-800/80 rounded-xl ${rowHoverClass} hover:bg-zinc-800/60 transition-all text-left cursor-pointer group`}
     >
       <div className="flex items-center gap-2.5 min-w-0">
-        <div className="w-9 h-9 rounded-full overflow-hidden shrink-0 border border-zinc-700/60 group-hover:border-violet-500/60 transition-colors">
+        <div className="w-9 h-9 rounded-full overflow-hidden shrink-0 border border-zinc-700/60 group-hover:border-zinc-500 transition-colors">
           {user?.avatar_url ? (
             <img 
               src={user?.avatar_url} 
@@ -292,7 +355,7 @@ export const FollowersModal: React.FC<FollowersModalProps> = ({
               referrerPolicy="no-referrer"
             />
           ) : (
-            <div className="w-full h-full bg-violet-950/60 flex items-center justify-center text-xs text-violet-300 font-bold font-mono">
+            <div className={`w-full h-full ${isPromoterEntity ? 'bg-yellow-950/60 text-yellow-300' : 'bg-violet-950/60 text-violet-300'} flex items-center justify-center text-xs font-bold font-mono`}>
               {(user.display_name || user.handle || '?').charAt(0).toUpperCase()}
             </div>
           )}
@@ -300,7 +363,7 @@ export const FollowersModal: React.FC<FollowersModalProps> = ({
         
         <div className="flex flex-col min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-bold text-white truncate text-xs group-hover:text-violet-300 transition-colors">
+            <span className={`font-bold text-white truncate text-xs ${isPromoterEntity ? 'group-hover:text-yellow-300' : 'group-hover:text-violet-300'} transition-colors`}>
               {user.display_name}
             </span>
             {getCategoryBadge(user.category)}
@@ -319,7 +382,7 @@ export const FollowersModal: React.FC<FollowersModalProps> = ({
           e.stopPropagation();
           handleNavigateToProfile(user);
         }}
-        className="px-2.5 py-1 bg-violet-950/60 hover:bg-violet-800/80 border border-violet-500/40 text-violet-200 text-[10px] rounded-lg font-mono font-bold transition-all shrink-0 flex items-center gap-1 group-hover:border-violet-400"
+        className={`px-2.5 py-1 ${actionButtonClass} text-[10px] rounded-lg font-mono font-bold transition-all shrink-0 flex items-center gap-1`}
       >
         View <ArrowUpRight className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
       </button>
@@ -359,7 +422,7 @@ export const FollowersModal: React.FC<FollowersModalProps> = ({
                 <span className="flex items-center gap-2 truncate max-w-[320px]">
                   <Users className={`w-4 h-4 shrink-0 ${modalAccentClass}`} />
                   <span className="truncate">
-                    {(selectedUserProfile?.business_name || selectedUserProfile?.creative_name || selectedUserProfile?.band_name || selectedUserProfile?.bandName || selectedUserProfile?.name || selectedUserProfile?.full_name || 'Profile')}'s {viewingFollowersOrFollowing === 'followers' ? 'Followers' : 'Following'}
+                    {(selectedUserProfile?.agency_name || selectedUserProfile?.promoter_name || selectedUserProfile?.promoterName || selectedUserProfile?.business_name || selectedUserProfile?.creative_name || selectedUserProfile?.band_name || selectedUserProfile?.bandName || selectedUserProfile?.name || selectedUserProfile?.full_name || 'Profile')}'s {viewingFollowersOrFollowing === 'followers' ? 'Followers' : 'Following'}
                   </span>
                 </span>
                 {!liveFollowsLoading && (
@@ -379,7 +442,7 @@ export const FollowersModal: React.FC<FollowersModalProps> = ({
                   placeholder="Filter nodes by name or handle..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800/80 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500 transition-colors"
+                  className={`w-full bg-zinc-950 border border-zinc-800/80 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none ${searchFocusClass} transition-colors`}
                 />
                 {searchQuery && (
                   <button 
@@ -403,14 +466,14 @@ export const FollowersModal: React.FC<FollowersModalProps> = ({
                     onClick={() => setActiveCategory(cat.key)}
                     className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-tight whitespace-nowrap transition-all border ${
                       isActive
-                        ? 'bg-violet-950/80 border-violet-500 text-violet-200 shadow-sm shadow-violet-950'
+                        ? tabActiveBgClass
                         : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-white'
                     }`}
                   >
                     <Icon className="w-3 h-3" />
                     <span>{cat.label}</span>
                     <span className={`text-[8px] px-1 py-0.2 rounded-full font-mono ${
-                      isActive ? 'bg-violet-800 text-white' : 'bg-zinc-800 text-zinc-500'
+                      isActive ? tabActiveBadgeClass : 'bg-zinc-800 text-zinc-500'
                     }`}>
                       {cat.count}
                     </span>
@@ -425,7 +488,7 @@ export const FollowersModal: React.FC<FollowersModalProps> = ({
                 if (liveFollowsLoading) {
                   return (
                     <div className="text-center py-10 px-4 border border-dashed border-zinc-800 rounded-xl">
-                      <div className="w-6 h-6 border-2 border-t-transparent border-violet-500 rounded-full animate-spin mx-auto mb-3" />
+                      <div className={`w-6 h-6 border-2 border-t-transparent ${spinnerClass} rounded-full animate-spin mx-auto mb-3`} />
                       <p className="text-[10px] text-zinc-500 font-mono">LOADING SECTOR NODES...</p>
                     </div>
                   );

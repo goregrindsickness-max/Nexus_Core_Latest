@@ -98,7 +98,9 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
   variant
 }) => {
   const bData = post?.bandcampData || (post as any)?.bandcamp_data || (post as any)?.data?.bandcampData || (post as any)?.data?.bandcamp_data || {};
-  const rawEmbedUrl = directEmbedUrl || 
+  const rawEmbedUrl = (directEmbedUrl && !directEmbedUrl.includes('EmbeddedPlayer') ? directEmbedUrl : null) || 
+    bData.pageUrl ||
+    bData.page_url ||
     bData.embedUrl || 
     bData.embed_url || 
     post?.bandcampUrl || 
@@ -108,7 +110,10 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
     (post?.mediaUrl && post.mediaUrl.includes('bandcamp.com') ? post.mediaUrl : null) || 
     ((post as any)?.media_url && (post as any).media_url.includes('bandcamp.com') ? (post as any).media_url : null) || 
     (post?.image_url && post.image_url.includes('bandcamp.com') ? post.image_url : null) || 
-    (post?.image && post.image.includes('bandcamp.com') ? post.image : null);
+    (post?.image && post.image.includes('bandcamp.com') ? post.image : null) ||
+    (post?.content && typeof post.content === 'string' && post.content.match(/https?:\/\/[^\s]+bandcamp\.com[^\s]*/)?.[0]) ||
+    directPageUrl ||
+    directEmbedUrl;
 
   const [asyncResolved, setAsyncResolved] = useState<BandcampResolvedData | null>(null);
   const [isResolving, setIsResolving] = useState<boolean>(false);
@@ -117,9 +122,10 @@ export const BandcampEmbedCard: React.FC<BandcampEmbedCardProps> = ({
   const [fallbackImgError, setFallbackImgError] = useState<boolean>(false);
 
   // Check if we already have a pre-resolved embed URL from props or post data
-  const knownEmbedUrl = directEmbedUrl || 
-    bData.embedUrl || 
-    bData.embed_url || 
+  const knownEmbedUrl = 
+    (directEmbedUrl && directEmbedUrl.includes('EmbeddedPlayer') ? directEmbedUrl : null) ||
+    (bData.embedUrl && bData.embedUrl.includes('EmbeddedPlayer') ? bData.embedUrl : null) || 
+    (bData.embed_url && bData.embed_url.includes('EmbeddedPlayer') ? bData.embed_url : null) || 
     (rawEmbedUrl && rawEmbedUrl.includes('EmbeddedPlayer') ? rawEmbedUrl : null) ||
     (bData.trackId ? `https://bandcamp.com/EmbeddedPlayer/bgcol=000000/linkcol=06b6d4/v=2/track=${bData.trackId}/size=large/tracklist=false/artwork=small/transparent=true/` : null) ||
     (bData.albumId ? `https://bandcamp.com/EmbeddedPlayer/bgcol=000000/linkcol=06b6d4/v=2/album=${bData.albumId}/size=large/tracklist=false/artwork=small/transparent=true/` : null);

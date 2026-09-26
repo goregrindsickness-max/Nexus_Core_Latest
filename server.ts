@@ -3330,6 +3330,159 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     }
   });
 
+  // API ROUTE: Save single venue
+  app.post('/api/venues', express.json(), async (req: express.Request, res: express.Response) => {
+    try {
+      const venue = req.body?.venue || req.body;
+      if (!venue || !venue.name) {
+        return res.status(400).json({ error: 'Venue name is required' });
+      }
+      await saveCachedVenues([venue]);
+      const updated = await loadCachedVenues();
+      res.json({ success: true, count: updated.length, venue });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to save venue' });
+    }
+  });
+
+  // API ROUTE: Batch save venues
+  app.post('/api/venues/batch', express.json(), async (req: express.Request, res: express.Response) => {
+    try {
+      const venues = req.body?.venues || (Array.isArray(req.body) ? req.body : []);
+      if (!Array.isArray(venues) || venues.length === 0) {
+        return res.status(400).json({ error: 'Array of venues is required' });
+      }
+      await saveCachedVenues(venues);
+      const updated = await loadCachedVenues();
+      res.json({ success: true, count: updated.length, total: updated.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to batch save venues' });
+    }
+  });
+
+  /**
+   * TOUR PACKAGES PERSISTENCE & CROSS-DEVICE SYNC APIS
+   */
+  const tourPackagesCacheFile = path.join(uploadsDir, 'tour_packages_cache.json');
+
+  async function loadCachedTourPackages(): Promise<any[]> {
+    try {
+      if (fs.existsSync(tourPackagesCacheFile)) {
+        const content = await fs.promises.readFile(tourPackagesCacheFile, 'utf8');
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('[SERVER TOURS] Local cache read warning:', e);
+    }
+    return [];
+  }
+
+  async function saveCachedTourPackages(toursList: any[]): Promise<void> {
+    try {
+      const existing = await loadCachedTourPackages();
+      const map = new Map<string, any>();
+      existing.forEach((t: any) => {
+        if (t && t.id) map.set(t.id, t);
+      });
+      toursList.forEach((t: any) => {
+        if (t && t.id) map.set(t.id, { ...(map.get(t.id) || {}), ...t, updatedAt: new Date().toISOString() });
+      });
+      await fs.promises.writeFile(tourPackagesCacheFile, JSON.stringify(Array.from(map.values()), null, 2), 'utf8');
+    } catch (e) {
+      console.warn('[SERVER TOURS] Local cache write warning:', e);
+    }
+  }
+
+  // API ROUTE: Get all tour packages
+  app.get('/api/tour-packages', async (_req: express.Request, res: express.Response) => {
+    try {
+      const tours = await loadCachedTourPackages();
+      res.json({ success: true, tours });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to load tour packages' });
+    }
+  });
+
+  // API ROUTE: Save or update tour package(s)
+  app.post('/api/tour-packages', express.json(), async (req: express.Request, res: express.Response) => {
+    try {
+      const payload = req.body?.tour || req.body?.tours || req.body;
+      const toursToSave = Array.isArray(payload) ? payload : [payload];
+      if (toursToSave.length === 0 || !toursToSave[0]?.id) {
+        return res.status(400).json({ error: 'Valid tour package is required' });
+      }
+
+      await saveCachedTourPackages(toursToSave);
+
+      // Async sync stops into Supabase shows table
+      const supabase = getSupabaseService();
+      if (supabase) {
+        for (const tour of toursToSave) {
+          if (Array.isArray(tour.stops)) {
+            for (const stop of tour.stops) {
+              try {
+                const hexId = (stop.id || '').replace(/[^a-f0-9]/gi, '').padEnd(32, '0').slice(0, 32);
+                const stopUuid = hexId.slice(0, 8) + '-' + hexId.slice(8, 12) + '-4' + hexId.slice(13, 16) + '-a' + hexId.slice(17, 20) + '-' + hexId.slice(20, 32);
+                const showRecord = {
+                  id: stopUuid,
+                  creator_id: '24523979-7f72-422b-8fb6-85634345d81c',
+                  show_name: (tour.title || 'Tour') + ' - ' + (stop.city || 'Tour Stop'),
+                  headliner: tour.headlinerClientName || 'Headliner Band',
+                  date: stop.date,
+                  show_date: stop.date,
+                  venue_name: stop.venueName || 'Venue',
+                  venue: stop.venueName || 'Venue',
+                  city: stop.city || 'Tour City',
+                  state_province: stop.state || 'USA',
+                  country: 'USA',
+                  guarantee_amount: stop.grossDeal || 2000,
+                  doors_time: stop.doorsTime || '19:00',
+                  set_time: stop.showStartTime || '20:00',
+                  promoter_contact: stop.venueContactName || '',
+                  parking_arrangements: stop.parkingNotes || '',
+                  status: 'Active',
+                  additional_notes: JSON.stringify({
+                    tour_id: tour.id,
+                    tour_title: tour.title,
+                    stop_id: stop.id,
+                    load_in_time: stop.loadInTime,
+                    soundcheck_time: stop.soundcheckTime,
+                    curfew_time: stop.curfewTime,
+                    hospitality: stop.hospitalityNotes,
+                    venue_email: stop.venueContactEmail,
+                    venue_phone: stop.venueContactPhone,
+                    stop_status: stop.status
+                  }),
+                  support_lineup: Array.isArray(tour.bands) ? tour.bands.map((b: any) => b.name).join(', ') : ''
+                };
+                await supabase.from('shows').upsert(showRecord, { onConflict: 'id' });
+              } catch (_) {}
+            }
+          }
+        }
+      }
+
+      const updated = await loadCachedTourPackages();
+      res.json({ success: true, count: updated.length, tours: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to save tour package' });
+    }
+  });
+
+  // API ROUTE: Delete tour package
+  app.delete('/api/tour-packages/:id', async (req: express.Request, res: express.Response) => {
+    try {
+      const tourId = req.params.id;
+      const existing = await loadCachedTourPackages();
+      const filtered = existing.filter((t: any) => t.id !== tourId);
+      await fs.promises.writeFile(tourPackagesCacheFile, JSON.stringify(filtered, null, 2), 'utf8');
+      res.json({ success: true, count: filtered.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to delete tour package' });
+    }
+  });
+
   /**
    * MUSICBRAINZ VENUE SEEDING & GEOLOCATION API
    * Pre-seeds regional hub venues with coordinates for tour routing

@@ -573,78 +573,142 @@ class TourPackageManagerService {
     return true;
   }
 
-  // Cloud Database Sync Methods (Two-way timestamp-aware reconciliation)
+  // Cloud Database Sync Methods (Multi-tier resilient cloud & Supabase synchronization)
   public async pullFromCloud(): Promise<TourPackageRecord[]> {
+    let cloudTours: TourPackageRecord[] = [];
+
+    // 1. Fetch from server-side persistent endpoint (works across all devices & APK)
+    try {
+      const res = await fetch('/api/tour-packages');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.tours) && json.tours.length > 0) {
+          cloudTours = json.tours.map((t: any) => this.normalizeTour(t));
+        }
+      }
+    } catch (_) {}
+
+    // 2. Query Supabase tour_packages table if accessible
     try {
       const { data, error } = await supabase
         .from('tour_packages')
         .select('*')
         .order('updated_at', { ascending: false });
 
-      if (error) {
-        // Table may be offline or initializing - return safe local memory
-        return this.memoryTours;
+      if (!error && data && data.length > 0) {
+        const dbTours = data.map((item: any) => this.normalizeTour(item));
+        // Merge dbTours into cloudTours
+        const map = new Map<string, TourPackageRecord>();
+        cloudTours.forEach(t => map.set(t.id, t));
+        dbTours.forEach(t => map.set(t.id, t));
+        cloudTours = Array.from(map.values());
+      }
+    } catch (_) {}
+
+    // 3. Reconcile with local tours
+    if (cloudTours.length > 0) {
+      let hasChanges = false;
+      const mergedMap = new Map<string, TourPackageRecord>();
+      for (const local of this.memoryTours) {
+        mergedMap.set(local.id, local);
       }
 
-      if (data && data.length > 0) {
-        const cloudTours: TourPackageRecord[] = data.map(item => this.normalizeTour(item));
-        let hasChanges = false;
+      for (const cloud of cloudTours) {
+        const local = mergedMap.get(cloud.id);
+        if (!local) {
+          mergedMap.set(cloud.id, cloud);
+          hasChanges = true;
+        } else {
+          const cloudTime = new Date(cloud.updatedAt || 0).getTime();
+          const localTime = new Date(local.updatedAt || 0).getTime();
 
-        const mergedMap = new Map<string, TourPackageRecord>();
-        // First populate with current local tours
-        for (const local of this.memoryTours) {
-          mergedMap.set(local.id, local);
-        }
-
-        // Reconcile with cloud tours based on timestamps
-        for (const cloud of cloudTours) {
-          const local = mergedMap.get(cloud.id);
-          if (!local) {
-            // New tour from cloud
+          if (cloudTime > localTime + 1000) {
             mergedMap.set(cloud.id, cloud);
             hasChanges = true;
-          } else {
-            const cloudTime = new Date(cloud.updatedAt || 0).getTime();
-            const localTime = new Date(local.updatedAt || 0).getTime();
-
-            if (cloudTime > localTime + 1000) {
-              // Cloud version is strictly newer
-              mergedMap.set(cloud.id, cloud);
-              hasChanges = true;
-            } else if (localTime > cloudTime + 1000) {
-              // Local version has newer edits - push to cloud in background
-              this.syncToCloud(local);
-            }
-          }
-        }
-
-        // Check for local-only tours that need to be pushed to cloud
-        for (const local of this.memoryTours) {
-          if (!cloudTours.some(c => c.id === local.id)) {
+          } else if (localTime > cloudTime + 1000) {
             this.syncToCloud(local);
           }
         }
+      }
 
-        if (hasChanges) {
-          this.memoryTours = Array.from(mergedMap.values());
-          this.saveToLocal();
-          this.notifyChanges();
-        }
-
-        return this.memoryTours;
-      } else if (this.memoryTours.length > 0) {
-        // Cloud table is empty: seed cloud with current local tours
-        for (const local of this.memoryTours) {
+      // Check for local-only tours that need pushing
+      for (const local of this.memoryTours) {
+        if (!cloudTours.some(c => c.id === local.id)) {
           this.syncToCloud(local);
         }
       }
-    } catch {
-      // Offline safe fallback
+
+      if (hasChanges) {
+        this.memoryTours = Array.from(mergedMap.values());
+        this.saveToLocal();
+        this.notifyChanges();
+      }
+      return this.memoryTours;
+    } else if (this.memoryTours.length > 0) {
+      for (const local of this.memoryTours) {
+        this.syncToCloud(local);
+      }
     }
+
     return this.memoryTours;
   }
 
   private async syncToCloud(tour: TourPackageRecord) {
+    // 1. Push to server persistent API endpoint
+    try {
+      fetch('/api/tour-packages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tour })
+      }).catch(() => {});
+    } catch (_) {}
+
+    // 2. Sync all stops directly to Supabase `shows` table (guaranteed accessible across all devices)
+    try {
+      if (Array.isArray(tour.stops) && tour.stops.length > 0) {
+        for (const stop of tour.stops) {
+          const hexId = (stop.id || '').replace(/[^a-f0-9]/gi, '').padEnd(32, '0').slice(0, 32);
+          const stopUuid = hexId.slice(0, 8) + '-' + hexId.slice(8, 12) + '-4' + hexId.slice(13, 16) + '-a' + hexId.slice(17, 20) + '-' + hexId.slice(20, 32);
+
+          const showRecord = {
+            id: stopUuid,
+            creator_id: '24523979-7f72-422b-8fb6-85634345d81c',
+            show_name: `${tour.title} - ${stop.city || 'Tour Stop'}`,
+            headliner: tour.headlinerClientName || 'Headliner Band',
+            date: stop.date,
+            show_date: stop.date,
+            venue_name: stop.venueName || 'Venue',
+            venue: stop.venueName || 'Venue',
+            city: stop.city || 'Tour City',
+            state_province: stop.state || 'USA',
+            country: 'USA',
+            guarantee_amount: stop.grossDeal || 2000,
+            doors_time: stop.doorsTime || '19:00',
+            set_time: stop.showStartTime || '20:00',
+            promoter_contact: stop.venueContactName || '',
+            parking_arrangements: stop.parkingNotes || '',
+            status: 'Active',
+            additional_notes: JSON.stringify({
+              tour_id: tour.id,
+              tour_title: tour.title,
+              stop_id: stop.id,
+              load_in_time: stop.loadInTime,
+              soundcheck_time: stop.soundcheckTime,
+              curfew_time: stop.curfewTime,
+              hospitality: stop.hospitalityNotes,
+              venue_email: stop.venueContactEmail,
+              venue_phone: stop.venueContactPhone,
+              stop_status: stop.status
+            }),
+            support_lineup: Array.isArray(tour.bands) ? tour.bands.map(b => b.name).join(', ') : ''
+          };
+
+          supabase.from('shows').upsert(showRecord, { onConflict: 'id' }).then();
+        }
+      }
+    } catch (_) {}
+
+    // 3. Attempt direct Supabase tour_packages table upsert
     try {
       const fullPayload = {
         id: tour.id,
@@ -656,8 +720,8 @@ class TourPackageManagerService {
         stops: tour.stops,
         vehicles: tour.vehicles,
         backline_config: tour.backlineConfig,
-        data: tour, // JSONB fallback
-        payload: tour, // Alternative JSONB column
+        data: tour,
+        payload: tour,
         updated_at: tour.updatedAt || new Date().toISOString()
       };
 
@@ -666,7 +730,6 @@ class TourPackageManagerService {
         .upsert(fullPayload, { onConflict: 'id' });
 
       if (error) {
-        // Fallback: try minimal upsert without relational extra columns if schema differs
         await supabase
           .from('tour_packages')
           .upsert({
@@ -676,15 +739,14 @@ class TourPackageManagerService {
             updated_at: tour.updatedAt || new Date().toISOString()
           }, { onConflict: 'id' });
       }
-    } catch {
-      // Supabase offline fallback active
-    }
+    } catch (_) {}
   }
 
   private async deleteFromCloud(tourId: string) {
     try {
+      fetch(`/api/tour-packages/${tourId}`, { method: 'DELETE' }).catch(() => {});
       await supabase.from('tour_packages').delete().eq('id', tourId);
-    } catch {}
+    } catch (_) {}
   }
 
   private saveToLocal() {

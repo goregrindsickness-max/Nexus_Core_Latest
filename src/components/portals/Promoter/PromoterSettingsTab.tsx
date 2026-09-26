@@ -210,7 +210,7 @@ export default function PromoterSettingsTab({
     userProfile.promoter_metadata?.website || userProfile.promoter_metadata?.portfolio_link || ''
   );
   const [bio, setBio] = useState(
-    userProfile.promoter_metadata?.bio || (userProfile as any)?.promoter_bio || userProfile.bio || ''
+    userProfile.promoter_metadata?.bio || (userProfile as any)?.promoter_bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || ''
   );
 
   // 3. Section B: Tax Hygiene & Venue Specifications (Matching Promoter Onboarding Form Section B)
@@ -354,7 +354,7 @@ export default function PromoterSettingsTab({
       setPromoterInstagram(meta.instagram || '');
       setPromoterTwitter(meta.twitter || '');
       setPromoterWebsite(meta.website || meta.portfolio_link || '');
-      setBio(meta.bio || (userProfile as any)?.promoter_bio || userProfile.bio || '');
+      setBio(meta.bio || (userProfile as any)?.promoter_bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || '');
 
       setPromoterLegalFullName(meta.legal_full_name || userProfile.name || '');
       setPromoterLegalEntityType(meta.legal_entity_type || 'LLC');
@@ -384,7 +384,7 @@ export default function PromoterSettingsTab({
         setTargetBookingScopes(meta.booking_scopes);
       }
     }
-  }, [userProfile]);
+  }, [userProfile?.id]);
 
   const PLAN_LIMITS: Record<string, number> = {
     'freelance_specialist': PROMOTER_BILLING_MATRIX.tiers.freelance_specialist.adminSeatLimit,
@@ -698,9 +698,14 @@ export default function PromoterSettingsTab({
         promoter_booking_email: pBookingEmail.trim(),
         promoter_logo: pLogo || prev?.promoter_logo,
         promoter_cover_image: pCover || prev?.promoter_cover_image,
+        promoter_bio: pBio.trim(),
         promoter_metadata: updatedMetadata
       };
     });
+
+    try {
+      localStorage.setItem('nexus_promoter_bio', pBio.trim());
+    } catch (_) {}
 
     showLocalToast("✓ Promoter specifications updated successfully.");
   };

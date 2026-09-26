@@ -1636,8 +1636,42 @@ if (!leftDrawerOpen) return null;
                               onChange={(e) => {
                                 const val = e.target.value.slice(0, 500);
                                 setProfileBlurb(val);
-                                if (setUserProfile) { setUserProfile((prev: any) => prev ? { ...prev, bio: val, profileBlurb: val } : null); }
-                                if (selectedUserProfile?.isYou) { setSelectedUserProfile((prev: any) => prev ? { ...prev, bio: val, profileBlurb: val } : null); }
+                                if (setUserProfile) {
+                                  setUserProfile((prev: any) => {
+                                    if (!prev) return prev;
+                                    const roleStr = (portalRole as any);
+                                    if (roleStr === 'promoter') {
+                                      return {
+                                        ...prev,
+                                        promoter_bio: val,
+                                        promoter_metadata: { ...(prev.promoter_metadata || {}), bio: val }
+                                      };
+                                    } else if (roleStr === 'band') {
+                                      return { ...prev, band_bio: val };
+                                    } else if (roleStr === 'creative') {
+                                      return {
+                                        ...prev,
+                                        creative_bio: val,
+                                        creative_metadata: { ...(prev.creative_metadata || {}), bio: val }
+                                      };
+                                    } else if (roleStr === 'label') {
+                                      return { ...prev, label_bio: val };
+                                    } else {
+                                      return { ...prev, bio: val, profileBlurb: val };
+                                    }
+                                  });
+                                }
+                                if (selectedUserProfile?.isYou) {
+                                  const roleStr = (portalRole as any);
+                                  setSelectedUserProfile((prev: any) => prev ? {
+                                    ...prev,
+                                    ...(roleStr === 'promoter' ? { promoter_bio: val } :
+                                        roleStr === 'band' ? { band_bio: val } :
+                                        roleStr === 'creative' ? { creative_bio: val } :
+                                        roleStr === 'label' ? { label_bio: val } :
+                                        { bio: val, profileBlurb: val }),
+                                  } : null);
+                                }
                               }}
                               rows={3}
                               placeholder="Write your short scene blurb..."

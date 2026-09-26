@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Check, Pencil, X, ArrowLeft, Edit2, AlertTriangle, Briefcase, Plus, Ticket, MapPin, Disc, Tag, Pause, Play, Search, Volume2, ChevronDown, Music, Download, PlayCircle, ShoppingCart, SkipBack, Square, SkipForward, UserCheck, UserPlus, MessageSquare, Shield, ShoppingBag, Calendar, Award, Network, Activity, Camera, ArrowUpRight, FileUp, Users, CheckCircle, Flame, Shirt, Building2, ShieldCheck, Sparkles, Lock, Unlock } from 'lucide-react';
+import { Check, Pencil, X, ArrowLeft, Edit2, AlertTriangle, Briefcase, Plus, Ticket, MapPin, Disc, Tag, Pause, Play, Search, Volume2, ChevronDown, Music, Download, PlayCircle, ShoppingCart, SkipBack, Square, SkipForward, UserCheck, UserPlus, MessageSquare, Shield, ShoppingBag, Calendar, Award, Network, Activity, Camera, ArrowUpRight, FileUp, Users, CheckCircle, Flame, Shirt, Building2, ShieldCheck, Sparkles, Lock, Unlock, Radio, History } from 'lucide-react';
 import { hasRegisteredWorkspace } from '../../../types';
 import { getProfileGlowInfo } from '../../../utils/profileGlow';
 import { formatLocationDisplay } from '../../../constants/location';
@@ -13,6 +13,9 @@ import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
 import CommunityBandCuratorModal from '../../social/modals/CommunityBandCuratorModal';
 import BandClaimHandoverModal from '../../social/modals/BandClaimHandoverModal';
 import BandBookingModal from '../../social/modals/BandBookingModal';
+import SubmitBandToPromoterModal from '../../social/modals/SubmitBandToPromoterModal';
+import PromoterEventsModal from '../../social/modals/PromoterEventsModal';
+import PromoterArchivesModal from '../../social/modals/PromoterArchivesModal';
 import MarqueeText from '../../MarqueeText';
 import { SonicFootprint, ListenerMetric, calculateListenerMetrics } from '../../profile/SonicFootprint';
 import { TimelineTab } from '../../profile/TimelineTab';
@@ -143,6 +146,9 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [showCuratorModal, setShowCuratorModal] = useState(false);
   const [showBandBookingModal, setShowBandBookingModal] = useState(false);
+  const [showSubmitBandModal, setShowSubmitBandModal] = useState(false);
+  const [showEventsModal, setShowEventsModal] = useState(false);
+  const [showArchivesModal, setShowArchivesModal] = useState(false);
   const [selectedRelease, setSelectedRelease] = React.useState<any>(null);
   const [isIsolatedStorefrontOpen, setIsIsolatedStorefrontOpen] = useState(false);
   const [storefrontBandData, setStorefrontBandData] = useState<any>(null);
@@ -1376,24 +1382,35 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       r === 'industry' || 
                       r === 'listener';
 
-                    const showJoinTeam = !isPersonalOrFan && (
-                      effTarget?.isBandProfile || 
-                      effTarget?.type === 'band' || 
-                      r.includes('band') || 
-                      r.includes('artist') || 
-                      r.includes('creative') || 
-                      r.includes('label') || 
-                      r.includes('promoter')
+                    const isTargetPromoter = !isPersonalOrFan && (
+                      effTarget?.type === 'promoter' ||
+                      effTarget?.account_type === 'promoter' ||
+                      effTarget?.isPromoterProfile === true ||
+                      effTarget?.is_promoter === true ||
+                      r.includes('promoter') ||
+                      r.includes('venue') ||
+                      Boolean(effTarget?.promoter_metadata) ||
+                      Boolean(effTarget?.promoter_agency) ||
+                      (typeof effTarget?.name === 'string' && (effTarget.name.toLowerCase().includes('nexus live') || effTarget.name.toLowerCase().includes('pure domination') || effTarget.name.toLowerCase().includes('domination fest'))) ||
+                      (typeof selectedUserProfile?.name === 'string' && (selectedUserProfile.name.toLowerCase().includes('nexus live') || selectedUserProfile.name.toLowerCase().includes('pure domination') || selectedUserProfile.name.toLowerCase().includes('domination fest')))
                     );
 
-                    const showStorefront = !isPersonalOrFan && (
+                    const showJoinTeam = !isPersonalOrFan && !isTargetPromoter && (
+                      effTarget?.isBandProfile || 
+                      effTarget?.type === 'band' || 
+                      r.includes('band') || 
+                      r.includes('artist') || 
+                      r.includes('creative') || 
+                      r.includes('label')
+                    );
+
+                    const showStorefront = !isPersonalOrFan && !isTargetPromoter && (
                       effTarget?.isBandProfile || 
                       effTarget?.type === 'band' || 
                       r.includes('band') || 
                       r.includes('artist') || 
                       r.includes('creative') || 
                       r.includes('label') || 
-                      r.includes('promoter') || 
                       effTarget?.hasStorefront === true || 
                       effTarget?.has_storefront === true
                     );
@@ -1506,43 +1523,54 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           <MessageSquare className="w-3.5 h-3.5" /> Message
                         </button>
 
-                        {/* 3. Join Team Button */}
-                        {showJoinTeam && (() => {
-                          const isPending = bandJoinRequests?.some((r: any) => r.band_name === selectedUserProfile.name && r.user_email === userProfile?.email && r.status === 'pending');
-                          if (isPending) {
-                            return (
-                              <button className="w-full py-2.5 px-3 bg-zinc-900 border border-zinc-700 text-zinc-500 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 uppercase font-mono cursor-not-allowed">
-                                <UserPlus className="w-3.5 h-3.5" /> Pending
-                              </button>
-                            );
-                          }
-                          return (
+                        {/* 3. Promoter: EVENTS Button (Upcoming shows, tours, festivals) */}
+                        {isTargetPromoter && (
+                          <>
                             <button
-                              onClick={() => {
-                                const newReq = {
-                                  id: `join_req_${Date.now()}`,
-                                  band_id: 'unknown_band_id',
-                                  band_name: selectedUserProfile.name,
-                                  user_id: userProfile?.id || `user_${Date.now()}`,
-                                  user_name: userProfile?.name || 'Unknown User',
-                                  user_email: userProfile?.email || 'unknown@example.com',
-                                  role_requested: userProfile?.role || 'Crew',
-                                  status: 'pending',
-                                  created_at: new Date().toISOString()
-                                };
-                                if (setBandJoinRequests) {
-                                  queueMicrotask(() => { setBandJoinRequests((prev: any) => [...(prev || []), newReq]); });
-                                  triggerNotification?.(`✉️ Sent request to join ${selectedUserProfile.name}!`);
-                                }
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setShowEventsModal(true);
+                                triggerNotification?.("⚡ Loading upcoming events & festival schedule...");
                               }}
-                              className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-colors uppercase font-mono shadow-md"
+                              className="w-full py-2.5 px-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-[0_0_15px_rgba(234,179,8,0.25)] hover:shadow-[0_0_20px_rgba(234,179,8,0.4)] cursor-pointer active:scale-95 border border-yellow-300/40"
+                              title="Upcoming shows, tours, and festivals"
                             >
-                              <UserPlus className="w-3.5 h-3.5" /> Join Team
+                              <Calendar className="w-3.5 h-3.5 text-black" /> EVENTS
                             </button>
-                          );
-                        })()}
 
-                        {/* 4. Storefront Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setShowArchivesModal(true);
+                                triggerNotification?.("📜 Accessing promoter historical show archives...");
+                              }}
+                              className="w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-yellow-500/40 text-yellow-400 hover:text-yellow-300 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-md cursor-pointer active:scale-95"
+                              title="All past shows and historic festival archives"
+                            >
+                              <History className="w-3.5 h-3.5 text-yellow-400" /> ARCHIVES
+                            </button>
+                          </>
+                        )}
+
+                        {/* 3. Events Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowEventsModal(true);
+                            triggerNotification?.(`📅 Opening upcoming shows list...`);
+                          }}
+                          className="w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-yellow-500/40 text-yellow-400 hover:text-yellow-300 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-md cursor-pointer active:scale-95"
+                        >
+                          <Calendar className="w-3.5 h-3.5 text-yellow-400" /> EVENTS
+                        </button>
+
+                        {/* 4. Storefront Button (Non-promoter) */}
                         {showStorefront && (
                           <button
                             type="button"
@@ -1828,7 +1856,12 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                 })() : (() => {
                   const isTargetSelf = Boolean(
                     effTarget?.isYou ||
-                    (userProfile?.id && effTarget?.id && String(effTarget.id) === String(userProfile.id))
+                    baseTarget?.isYou ||
+                    selectedUserProfile?.isYou ||
+                    (userProfile?.id && effTarget?.id && String(effTarget.id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+                    (userProfile?.id && baseTarget?.id && String(baseTarget.id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+                    (userProfile?.email && effTarget?.email && String(effTarget.email).toLowerCase() === String(userProfile.email).toLowerCase()) ||
+                    (userProfile?.email && baseTarget?.email && String(baseTarget.email).toLowerCase() === String(userProfile.email).toLowerCase())
                   );
                   const registeredWorkspaces = isTargetSelf
                     ? (userProfile?.registered_workspaces || effTarget?.registered_workspaces || userProfile?.allowed_workspaces || effTarget?.allowed_workspaces || effTarget?.workspaces || [])
@@ -1878,17 +1911,19 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     (targetRole && targetRole.toLowerCase() === 'band')
                   );
 
-                  const isEffTargetMiguel = isMiguelNameOrProfile(effTarget) || (isTargetSelf && isMiguelNameOrProfile(userProfile));
+                  const isEffTargetMiguel = isMiguelNameOrProfile(effTarget) || isMiguelNameOrProfile(baseTarget) || isMiguelNameOrProfile(selectedUserProfile) || (isTargetSelf && isMiguelNameOrProfile(userProfile)) || isMiguelNameOrProfile(userProfile);
                   const targetBandId = isEffTargetMiguel ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (effTarget?.band_id || (isTargetSelf ? userProfile?.band_id : null));
                   let matchingBandProfile: any = null;
 
                   if (isEffTargetMiguel) {
-                    matchingBandProfile = allProfiles.find((p: any) => {
+                    matchingBandProfile = Array.isArray(allProfiles) ? allProfiles.find((p: any) => {
+                      const isBandType = p.type === 'band' || p.isBandProfile || p.category === 'bands' || (p.role && p.role.toLowerCase() === 'band') || (p.portalRole && p.portalRole.toLowerCase() === 'band');
+                      if (!isBandType) return false;
                       const pId = String(p.id || '').toLowerCase().trim();
                       const rawId = String(p.raw_id || p.band_id || '').toLowerCase().trim();
                       const cleanName = (p.name || p.band_name || '').toLowerCase().trim();
                       return pId === 'cbddb810-259b-4230-9968-3d402dfdb872' || pId === 'real-b-cbddb810-259b-4230-9968-3d402dfdb872' || rawId === 'cbddb810-259b-4230-9968-3d402dfdb872' || cleanName === 'virulent excision';
-                    });
+                    }) : null;
                   } else if (targetBandId) {
                     matchingBandProfile = allProfiles.find((p: any) => {
                       if (isCommunityBandRecord(p.id) || isCommunityBandRecord(p.name) || isCommunityBandRecord(p.band_name) || (p.name && p.name.toLowerCase().includes('necroticgorebeast'))) return false;
@@ -1945,7 +1980,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                    const hasBand = !isCurrentProfileBand && hasBandWorkspace;
 
-                   const promoterRefLogo = effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null);
+                   const promoterRefLogo = effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null);
 
                    const isLogoPromoterLogo = (candidateLogo?: string | null) => {
                      if (!candidateLogo) return false;
@@ -1954,7 +1989,37 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                      if (effTarget?.promoter_metadata?.logo_url && candidateLogo === effTarget.promoter_metadata.logo_url) return true;
                      if (userProfile?.promoter_logo && candidateLogo === userProfile.promoter_logo) return true;
                      if (userProfile?.promoter_metadata?.logo_url && candidateLogo === userProfile.promoter_metadata.logo_url) return true;
+                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_promoter_logo') === candidateLogo) return true;
                      return false;
+                   };
+
+                   const isPersonalOrOtherAvatar = (candidateLogo?: string | null) => {
+                     if (!candidateLogo) return false;
+                     if (effTarget?.avatar && candidateLogo === effTarget.avatar) return true;
+                     if (effTarget?.avatar_url && candidateLogo === effTarget.avatar_url) return true;
+                     if (baseTarget?.avatar && candidateLogo === baseTarget.avatar) return true;
+                     if (baseTarget?.avatar_url && candidateLogo === baseTarget.avatar_url) return true;
+                     if (userProfile?.avatar && candidateLogo === userProfile.avatar) return true;
+                     if (userProfile?.avatar_url && candidateLogo === userProfile.avatar_url) return true;
+                     if (selectedUserProfile?.avatar && candidateLogo === selectedUserProfile.avatar) return true;
+                     if (selectedUserProfile?.avatar_url && candidateLogo === selectedUserProfile.avatar_url) return true;
+                     if (userProfile?.creative_avatar && candidateLogo === userProfile.creative_avatar) return true;
+                     if (userProfile?.label_avatar && candidateLogo === userProfile.label_avatar) return true;
+                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_user_avatar') === candidateLogo) return true;
+                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_creative_avatar') === candidateLogo) return true;
+                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_label_avatar') === candidateLogo) return true;
+                     return false;
+                   };
+
+                   const isValidBandLogo = (candidateLogo?: string | null) => {
+                     if (!candidateLogo || typeof candidateLogo !== 'string') return false;
+                     if (candidateLogo.trim() === '') return false;
+                     if (candidateLogo.includes('unsplash')) return false;
+                     if (candidateLogo.startsWith('data:image')) return false;
+                     if (candidateLogo.includes('default') || candidateLogo.includes('photo-')) return false;
+                     if (isLogoPromoterLogo(candidateLogo)) return false;
+                     if (isPersonalOrOtherAvatar(candidateLogo)) return false;
+                     return true;
                    };
 
                    if (hasBand) {
@@ -1964,20 +2029,25 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     const veLogo = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396';
                     const veBanner = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-cover_1787467851123.jpg?t=1787467851123';
                     
+                    const savedCoreBandLogo = (typeof window !== 'undefined') ? (
+                      localStorage.getItem('nexus_core_band_logo_cbddb810-259b-4230-9968-3d402dfdb872') ||
+                      localStorage.getItem('nexus_band_logo_cbddb810-259b-4230-9968-3d402dfdb872') ||
+                      (targetBandId ? localStorage.getItem(`nexus_core_band_logo_${targetBandId}`) : null)
+                    ) : null;
+
                     const candidateBandLogo = (
-                      (lbd?.logo_url && !lbd.logo_url.includes('unsplash') && !isLogoPromoterLogo(lbd.logo_url) ? lbd.logo_url : null) ||
-                      (isTargetSelf && localSavedBand?.logo_url && !isLogoPromoterLogo(localSavedBand.logo_url) ? localSavedBand.logo_url : null) ||
-                      (isTargetSelf && userProfile?.band_metadata?.logo_url && !isLogoPromoterLogo(userProfile.band_metadata.logo_url) ? userProfile.band_metadata.logo_url : null) ||
-                      (isTargetSelf && userProfile?.band_logo && !isLogoPromoterLogo(userProfile.band_logo) ? userProfile.band_logo : null) ||
-                      (lbd?.avatar_url && !lbd.avatar_url.includes('unsplash') && !isLogoPromoterLogo(lbd.avatar_url) ? lbd.avatar_url : null) ||
-                      (lbd?.avatar && !lbd.avatar.includes('unsplash') && !isLogoPromoterLogo(lbd.avatar) ? lbd.avatar : null) ||
-                      (isTargetSelf && localSavedBand?.avatar_url && !isLogoPromoterLogo(localSavedBand.avatar_url) ? localSavedBand.avatar_url : null) ||
-                      (lbd?.logo_url && !isLogoPromoterLogo(lbd.logo_url) ? lbd.logo_url : null) ||
+                      (savedCoreBandLogo && isValidBandLogo(savedCoreBandLogo) ? savedCoreBandLogo : null) ||
+                      (isTargetSelf && userProfile?.band_logo && isValidBandLogo(userProfile.band_logo) ? userProfile.band_logo : null) ||
+                      (isTargetSelf && userProfile?.band_metadata?.logo_url && isValidBandLogo(userProfile.band_metadata.logo_url) ? userProfile.band_metadata.logo_url : null) ||
+                      (isTargetSelf && localSavedBand?.logo_url && isValidBandLogo(localSavedBand.logo_url) ? localSavedBand.logo_url : null) ||
+                      (lbd?.logo_url && isValidBandLogo(lbd.logo_url) ? lbd.logo_url : null) ||
+                      (lbd?.avatar_url && isValidBandLogo(lbd.avatar_url) ? lbd.avatar_url : null) ||
+                      (lbd?.avatar && isValidBandLogo(lbd.avatar) ? lbd.avatar : null) ||
                       null
                     );
 
                     const logo = isVirulentExcision
-                      ? (candidateBandLogo && !candidateBandLogo.includes('unsplash') ? candidateBandLogo : veLogo)
+                      ? ((candidateBandLogo && isValidBandLogo(candidateBandLogo) && (candidateBandLogo.includes('band-logo') || candidateBandLogo.includes('cbddb810') || candidateBandLogo.includes('virulent'))) ? candidateBandLogo : veLogo)
                       : (candidateBandLogo || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=300');
                     const subtitle = isVirulentExcision
                       ? 'Brutal Death Metal • Slamming BDM • Death Metal'
@@ -2536,10 +2606,36 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                            }
                            return isOwner ? '"Click edit to add your band bio."' : '"no bio written yet"';
                          } else if (isOwner) {
-                           const b = (profileBlurb || effTarget?.bio || (userProfile as any)?.bio || '').trim();
+                           const promoterBio = (userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio;
+                           const savedUserBio = typeof window !== 'undefined' ? localStorage.getItem('nexus_user_bio') : null;
+                           let b = '';
+                           if (savedUserBio && savedUserBio !== promoterBio) {
+                             b = savedUserBio;
+                           } else if ((userProfile as any)?.bio && (userProfile as any)?.bio !== promoterBio) {
+                             b = (userProfile as any).bio;
+                           } else if (effTarget?.bio && effTarget.bio !== promoterBio) {
+                             b = effTarget.bio;
+                           } else if (profileBlurb && profileBlurb !== promoterBio) {
+                             b = profileBlurb;
+                           }
+                           b = b.trim();
+                           if (!b || (promoterBio && b === promoterBio)) {
+                             const isTargetMiguel = isMiguelNameOrProfile(effTarget) || isMiguelNameOrProfile(baseTarget) || isMiguelNameOrProfile(selectedUserProfile) || isMiguelNameOrProfile(userProfile) || isOwnerMiguel;
+                             b = isTargetMiguel
+                               ? 'Extreme metal musician, archivist, and underground pit warrior.'
+                               : 'Extreme music enthusiast and underground supporter navigating the Nexus.';
+                             try { localStorage.setItem('nexus_user_bio', b); } catch(e) {}
+                           }
                            return b ? `"${b}"` : '"Click edit to add your bio."';
                          } else {
-                           const b = (fetchedProfileData?.bio || effTarget?.bio || baseTarget?.bio || '').trim();
+                           const promoterBio = (userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio;
+                           let b = (fetchedProfileData?.bio || effTarget?.bio || baseTarget?.bio || '').trim();
+                           if (promoterBio && b === promoterBio.trim()) {
+                             b = '';
+                           }
+                           if (!b && (isMiguelNameOrProfile(effTarget) || isMiguelNameOrProfile(baseTarget) || isMiguelNameOrProfile(fetchedProfileData))) {
+                             b = 'Extreme metal musician, archivist, and underground pit warrior.';
+                           }
                            return b ? `"${b}"` : '"no bio written yet"';
                          }
                        })()}
@@ -2547,136 +2643,174 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                    </div>
                   )}
 
-                  {/* Glowing Scrolling Marquee Text Box for Live Updates */}
-                 <div className="mt-3.5 space-y-1">
-                   <div className="flex items-center justify-between px-0.5">
-                     <span className="text-[10px] font-bold text-cyan-400 font-mono tracking-wider uppercase flex items-center gap-1.5">
-                       <span className="relative flex h-2 w-2 shrink-0">
-                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                         <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
-                       </span>
-                       📢 LIVE UPDATE
-                     </span>
-                     {selectedUserProfile.isYou && !isEditingTicker && (
-                       <button
-                         type="button"
-                         onClick={() => setIsEditingTicker(true)}
-                         title="Edit Marquee Update"
-                         className="px-2 py-0.5 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-800/60 text-cyan-300 hover:text-white rounded-md transition-all shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-semibold group"
-                       >
-                         <Pencil className="w-3 h-3 text-cyan-400 group-hover:text-cyan-300" /> Edit Update
-                       </button>
-                     )}
-                   </div>
+                   {/* Glowing Scrolling Marquee Text Box for Live Updates */}
+                 {(() => {
+                   const isTargetPromoter = Boolean(
+                     effTarget?.isPromoterProfile ||
+                     effTarget?.type === 'promoter' ||
+                     effTarget?.account_type === 'promoter' ||
+                     effTarget?.portalRole === 'promoter' ||
+                     (effTarget?.role || '').toLowerCase().includes('promoter') ||
+                     (effTarget?.role || '').toLowerCase().includes('venue')
+                   );
 
-                   {isEditingTicker ? (
-                     <div className="bg-zinc-950/90 border border-cyan-500/50 rounded-xl p-3 space-y-2 shadow-[0_0_15px_rgba(6,182,212,0.15)] relative">
-                       <div className="flex items-center justify-between">
-                         <span className="text-[9.5px] font-mono text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                           ✍️ EDIT TICKER
+                   const tickerColorClass = isTargetPromoter ? 'text-yellow-400' : 'text-cyan-400';
+                   const tickerBgPing = isTargetPromoter ? 'bg-yellow-400' : 'bg-cyan-400';
+                   const tickerBgDot = isTargetPromoter ? 'bg-yellow-500' : 'bg-cyan-500';
+                   const editBtnClass = isTargetPromoter 
+                     ? 'bg-yellow-950/60 hover:bg-yellow-900/80 border-yellow-800/60 text-yellow-300' 
+                     : 'bg-cyan-950/60 hover:bg-cyan-900/80 border-cyan-800/60 text-cyan-300';
+                   const editBoxBorder = isTargetPromoter 
+                     ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.15)]' 
+                     : 'border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)]';
+                   const marqueeContainer = isTargetPromoter
+                     ? 'bg-yellow-950/20 border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.15)]'
+                     : 'bg-cyan-950/20 border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.15)]';
+                   const marqueeTextClass = isTargetPromoter
+                     ? 'text-yellow-300 drop-shadow-[0_0_6px_rgba(234,179,8,0.6)]'
+                     : 'text-cyan-300 drop-shadow-[0_0_6px_rgba(6,182,212,0.6)]';
+
+                   return (
+                     <div className="mt-3.5 space-y-1">
+                       <div className="flex items-center justify-between px-0.5">
+                         <span className={`text-[10px] font-bold ${tickerColorClass} font-mono tracking-wider uppercase flex items-center gap-1.5`}>
+                           <span className="relative flex h-2 w-2 shrink-0">
+                             <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${tickerBgPing} opacity-75`}></span>
+                             <span className={`relative inline-flex rounded-full h-2 w-2 ${tickerBgDot}`}></span>
+                           </span>
+                           📢 LIVE UPDATE
                          </span>
-                         <div className="flex items-center gap-2">
-                           <span className="text-[9px] font-mono text-zinc-400 font-bold">
-                             {tickerUpdateText.length}/200
-                           </span>
+                         {selectedUserProfile.isYou && !isEditingTicker && (
                            <button
                              type="button"
-                             onClick={() => handleSaveTickerUpdate(tickerUpdateText)}
-                             className="px-2.5 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-cyan-300 hover:text-cyan-200 text-[9.5px] font-mono font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                             onClick={() => setIsEditingTicker(true)}
+                             title="Edit Marquee Update"
+                             className={`px-2 py-0.5 ${editBtnClass} hover:text-white rounded-md transition-all shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-semibold group`}
                            >
-                             <Check className="w-3 h-3" /> Save
+                             <Pencil className={`w-3 h-3 ${tickerColorClass} group-hover:text-white`} /> Edit Update
                            </button>
-                           <button
-                             type="button"
-                             onClick={() => setIsEditingTicker(false)}
-                             className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 text-[9.5px] font-mono font-bold rounded-lg transition-all cursor-pointer"
-                           >
-                             Cancel
-                           </button>
+                         )}
+                       </div>
+
+                       {isEditingTicker ? (
+                         <div className={`bg-zinc-950/90 border ${editBoxBorder} rounded-xl p-3 space-y-2 relative`}>
+                           <div className="flex items-center justify-between">
+                             <span className={`text-[9.5px] font-mono ${tickerColorClass} font-bold uppercase tracking-wider flex items-center gap-1`}>
+                               ✍️ EDIT TICKER
+                             </span>
+                             <div className="flex items-center gap-2">
+                               <span className="text-[9px] font-mono text-zinc-400 font-bold">
+                                 {tickerUpdateText.length}/200
+                               </span>
+                               <button
+                                 type="button"
+                                 onClick={() => handleSaveTickerUpdate(tickerUpdateText)}
+                                 className={`px-2.5 py-1 ${isTargetPromoter ? 'bg-yellow-500/20 hover:bg-yellow-500/30 border-yellow-400/50 text-yellow-300' : 'bg-cyan-500/20 hover:bg-cyan-500/30 border-cyan-400/50 text-cyan-300'} border text-[9.5px] font-mono font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer`}
+                               >
+                                 <Check className="w-3 h-3" /> Save
+                               </button>
+                               <button
+                                 type="button"
+                                 onClick={() => setIsEditingTicker(false)}
+                                 className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 text-[9.5px] font-mono font-bold rounded-lg transition-all cursor-pointer"
+                               >
+                                 Cancel
+                               </button>
+                             </div>
+                           </div>
+                           <textarea
+                             maxLength={200}
+                             value={tickerUpdateText}
+                             onChange={(e) => setTickerUpdateText(e.target.value.slice(0, 200))}
+                             placeholder="Post a quick live update, gig news, tape drop, or announcement (max 200 chars)..."
+                             className={`w-full bg-black/80 border border-zinc-800 ${isTargetPromoter ? 'focus:border-yellow-400 focus:ring-yellow-400/30 text-yellow-200' : 'focus:border-cyan-400 focus:ring-cyan-400/30 text-cyan-200'} rounded-lg p-2.5 text-xs font-mono tracking-wide focus:outline-none focus:ring-1 resize-none`}
+                             rows={2.5}
+                             autoFocus
+                           />
+                         </div>
+                       ) : (
+                         <div className={`flex items-center border rounded-xl overflow-hidden ${marqueeContainer} py-2.5 px-1 relative group/marquee cursor-default`}>
+                           <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
+                           <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
+                           <div className="w-full relative flex items-center overflow-hidden">
+                             <div className="flex whitespace-nowrap animate-[marquee_28s_linear_infinite] group-hover/marquee:[animation-play-state:paused] items-center">
+                               <span className={`text-[10.5px] font-mono font-bold tracking-widest uppercase ${marqueeTextClass} px-6 flex items-center gap-2`}>
+                                 ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
+                               </span>
+                               <span className={`text-[10.5px] font-mono font-bold tracking-widest uppercase ${marqueeTextClass} px-6 flex items-center gap-2`}>
+                                 ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
+                               </span>
+                             </div>
+                           </div>
+                         </div>
+                       )}
+                     </div>
+                   );
+                 })()}
+
+                   {/* Stats Ledger Row */}
+                 {(() => {
+                   const isTargetPromoter = Boolean(
+                     effTarget?.isPromoterProfile ||
+                     effTarget?.type === 'promoter' ||
+                     effTarget?.account_type === 'promoter' ||
+                     effTarget?.portalRole === 'promoter' ||
+                     (effTarget?.role || '').toLowerCase().includes('promoter') ||
+                     (effTarget?.role || '').toLowerCase().includes('venue')
+                   );
+
+                   const followersVal = liveProfileStats?.followers !== undefined ? liveProfileStats.followers : (effTarget.followersCount !== undefined ? effTarget.followersCount : (effTarget.followers || 0));
+                   const followingVal = liveProfileStats?.following !== undefined ? liveProfileStats.following : (effTarget.followingCount !== undefined ? effTarget.followingCount : (effTarget.following || 0));
+
+                   return (
+                     <div className={`bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-3 mt-4 transition-all duration-200 ${isTargetPromoter ? 'hover:border-yellow-500/40' : 'hover:border-violet-500/40'} shadow-inner`}>
+                       <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-900/80 px-1">
+                         <span className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                           <Activity className={`w-3 h-3 ${isTargetPromoter ? 'text-yellow-400' : 'text-violet-400'} animate-pulse`} />
+                           Network Telemetry
+                         </span>
+                         <span className="text-[8px] font-mono text-emerald-400 bg-emerald-950/50 border border-emerald-800/50 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                           Live Node
+                         </span>
+                       </div>
+
+                       <div className="grid grid-cols-2 gap-2 text-center">
+                         <div 
+                           onClick={() => setViewingFollowersOrFollowing?.('followers')}
+                           className={`rounded-lg p-2 transition-all border border-zinc-900/60 bg-zinc-900/40 flex flex-col items-center justify-center ${isTargetPromoter ? 'hover:bg-yellow-950/40 hover:border-yellow-700/40 hover:shadow-yellow-950/30' : 'hover:bg-violet-950/40 hover:border-violet-700/40 hover:shadow-violet-950/30'} cursor-pointer group/stat`}
+                         >
+                           <div className={`flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono uppercase tracking-wider ${isTargetPromoter ? 'group-hover/stat:text-yellow-300' : 'group-hover/stat:text-violet-300'} transition-colors`}>
+                             <Users className={`w-3.5 h-3.5 ${isTargetPromoter ? 'text-yellow-400' : 'text-violet-400'} group-hover/stat:scale-110 transition-transform`} />
+                             Followers
+                           </div>
+                           <div className={`text-base font-black text-white font-mono mt-1 ${isTargetPromoter ? 'group-hover/stat:text-yellow-200' : 'group-hover/stat:text-violet-200'} group-hover/stat:scale-105 transition-all`}>
+                             {followersVal.toLocaleString()}
+                           </div>
+                           <div className={`text-[8px] text-zinc-500 font-mono uppercase tracking-tight mt-1 ${isTargetPromoter ? 'group-hover/stat:text-yellow-400' : 'group-hover/stat:text-violet-400'} flex items-center gap-0.5 transition-colors`}>
+                             View Roster <ArrowUpRight className="w-2.5 h-2.5 opacity-60 group-hover/stat:opacity-100 group-hover/stat:translate-x-0.5 transition-all" />
+                           </div>
+                         </div>
+
+                         <div 
+                           onClick={() => setViewingFollowersOrFollowing?.('following')}
+                           className={`rounded-lg p-2 transition-all border border-zinc-900/60 bg-zinc-900/40 flex flex-col items-center justify-center ${isTargetPromoter ? 'hover:bg-yellow-950/40 hover:border-yellow-700/40 hover:shadow-yellow-950/30' : 'hover:bg-violet-950/40 hover:border-violet-700/40 hover:shadow-violet-950/30'} cursor-pointer group/stat`}
+                         >
+                           <div className={`flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono uppercase tracking-wider ${isTargetPromoter ? 'group-hover/stat:text-yellow-300' : 'group-hover/stat:text-violet-300'} transition-colors`}>
+                             <UserCheck className={`w-3.5 h-3.5 ${isTargetPromoter ? 'text-yellow-400' : 'text-violet-400'} group-hover/stat:scale-110 transition-transform`} />
+                             Following
+                           </div>
+                           <div className={`text-base font-black text-white font-mono mt-1 ${isTargetPromoter ? 'group-hover/stat:text-yellow-200' : 'group-hover/stat:text-violet-200'} group-hover/stat:scale-105 transition-all`}>
+                             {followingVal.toLocaleString()}
+                           </div>
+                           <div className={`text-[8px] text-zinc-500 font-mono uppercase tracking-tight mt-1 ${isTargetPromoter ? 'group-hover/stat:text-yellow-400' : 'group-hover/stat:text-violet-400'} flex items-center gap-0.5 transition-colors`}>
+                             View List <ArrowUpRight className="w-2.5 h-2.5 opacity-60 group-hover/stat:opacity-100 group-hover/stat:translate-x-0.5 transition-all" />
+                           </div>
                          </div>
                        </div>
-                       <textarea
-                         maxLength={200}
-                         value={tickerUpdateText}
-                         onChange={(e) => setTickerUpdateText(e.target.value.slice(0, 200))}
-                         placeholder="Post a quick live update, gig news, tape drop, or announcement (max 200 chars)..."
-                         className="w-full bg-black/80 border border-zinc-800 focus:border-cyan-400 rounded-lg p-2.5 text-xs text-cyan-200 font-mono tracking-wide focus:outline-none focus:ring-1 focus:ring-cyan-400/30 resize-none"
-                         rows={2.5}
-                         autoFocus
-                       />
                      </div>
-                   ) : (
-                     <div className="flex items-center border rounded-xl overflow-hidden bg-cyan-950/20 border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.15)] py-2.5 px-1 relative group/marquee cursor-default">
-                       <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
-                       <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
-                       <div className="w-full relative flex items-center overflow-hidden">
-                         <div className="flex whitespace-nowrap animate-[marquee_28s_linear_infinite] group-hover/marquee:[animation-play-state:paused] items-center">
-                           <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-cyan-300 px-6 drop-shadow-[0_0_6px_rgba(6,182,212,0.6)] flex items-center gap-2">
-                             ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
-                           </span>
-                           <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-cyan-300 px-6 drop-shadow-[0_0_6px_rgba(6,182,212,0.6)] flex items-center gap-2">
-                             ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
-                           </span>
-                         </div>
-                       </div>
-                     </div>
-                   )}
-                 </div>
-
-                  {/* Stats Ledger Row */}
-                {(() => {
-                  const followersVal = liveProfileStats?.followers !== undefined ? liveProfileStats.followers : (effTarget.followersCount !== undefined ? effTarget.followersCount : (effTarget.followers || 0));
-                  const followingVal = liveProfileStats?.following !== undefined ? liveProfileStats.following : (effTarget.followingCount !== undefined ? effTarget.followingCount : (effTarget.following || 0));
-
-                  return (
-                    <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-3 mt-4 transition-all duration-200 hover:border-violet-500/40 shadow-inner">
-                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-900/80 px-1">
-                        <span className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                          <Activity className="w-3 h-3 text-violet-400 animate-pulse" />
-                          Network Telemetry
-                        </span>
-                        <span className="text-[8px] font-mono text-emerald-400 bg-emerald-950/50 border border-emerald-800/50 px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                          Live Node
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-center">
-                        <div 
-                          onClick={() => setViewingFollowersOrFollowing?.('followers')}
-                          className="rounded-lg p-2 transition-all border border-zinc-900/60 bg-zinc-900/40 flex flex-col items-center justify-center hover:bg-violet-950/40 cursor-pointer group/stat hover:border-violet-700/40 hover:shadow-lg hover:shadow-violet-950/30"
-                        >
-                          <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono uppercase tracking-wider group-hover/stat:text-violet-300 transition-colors">
-                            <Users className="w-3.5 h-3.5 text-violet-400 group-hover/stat:scale-110 transition-transform" />
-                            Followers
-                          </div>
-                          <div className="text-base font-black text-white font-mono mt-1 group-hover/stat:text-violet-200 group-hover/stat:scale-105 transition-all">
-                            {followersVal.toLocaleString()}
-                          </div>
-                          <div className="text-[8px] text-zinc-500 font-mono uppercase tracking-tight mt-1 group-hover/stat:text-violet-400 flex items-center gap-0.5 transition-colors">
-                            View Roster <ArrowUpRight className="w-2.5 h-2.5 opacity-60 group-hover/stat:opacity-100 group-hover/stat:translate-x-0.5 transition-all" />
-                          </div>
-                        </div>
-
-                        <div 
-                          onClick={() => setViewingFollowersOrFollowing?.('following')}
-                          className="rounded-lg p-2 transition-all border border-zinc-900/60 bg-zinc-900/40 flex flex-col items-center justify-center hover:bg-violet-950/40 cursor-pointer group/stat hover:border-violet-700/40 hover:shadow-lg hover:shadow-violet-950/30"
-                        >
-                          <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono uppercase tracking-wider group-hover/stat:text-violet-300 transition-colors">
-                            <UserCheck className="w-3.5 h-3.5 text-violet-400 group-hover/stat:scale-110 transition-transform" />
-                            Following
-                          </div>
-                          <div className="text-base font-black text-white font-mono mt-1 group-hover/stat:text-violet-200 group-hover/stat:scale-105 transition-all">
-                            {followingVal.toLocaleString()}
-                          </div>
-                          <div className="text-[8px] text-zinc-500 font-mono uppercase tracking-tight mt-1 group-hover/stat:text-violet-400 flex items-center gap-0.5 transition-colors">
-                            View List <ArrowUpRight className="w-2.5 h-2.5 opacity-60 group-hover/stat:opacity-100 group-hover/stat:translate-x-0.5 transition-all" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
+                   );
+                 })()}
 
                 {/* Unlimited "My Favorite Genres" Badge Section for Fan Only and Industry Pro Profiles */}
                 {(() => {
@@ -2728,14 +2862,24 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   const allGenres = Array.from(new Set(rawList.filter(Boolean)));
                   if (allGenres.length === 0) return null;
 
-                  const isFanOnly = (targetRoleStr.includes('fan') || targetRoleStr.includes('listener') || effTarget?.name === 'Fan Listener') && !effTarget?.isBandProfile && !isTargetBand;
+                  const isPromoter = Boolean(
+                    effTarget?.isPromoterProfile ||
+                    effTarget?.type === 'promoter' ||
+                    effTarget?.account_type === 'promoter' ||
+                    effTarget?.portalRole === 'promoter' ||
+                    targetRoleStr.includes('promoter') ||
+                    targetRoleStr.includes('venue') ||
+                    targetRoleStr.includes('booking')
+                  );
+
+                  const isFanOnly = !isPromoter && (targetRoleStr.includes('fan') || targetRoleStr.includes('listener') || effTarget?.name === 'Fan Listener') && !effTarget?.isBandProfile && !isTargetBand;
 
                   return (
-                    <div className="mt-3 bg-zinc-950/80 border border-zinc-900 rounded-xl p-3">
+                    <div className={`mt-3 bg-zinc-950/80 border border-zinc-900 ${isPromoter ? 'hover:border-yellow-500/30' : ''} rounded-xl p-3 transition-colors`}>
                       <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono mb-2 flex items-center justify-between">
                         <span className="flex items-center gap-1.5">
-                          <Tag className={`w-3.5 h-3.5 ${isFanOnly ? 'text-blue-400' : 'text-violet-400'}`} />
-                          <span>My Genres</span>
+                          <Tag className={`w-3.5 h-3.5 ${isPromoter ? 'text-yellow-400' : (isFanOnly ? 'text-blue-400' : 'text-violet-400')}`} />
+                          <span>{isPromoter ? 'Genres We Book' : 'My Genres'}</span>
                         </span>
                         <span className="text-[9px] text-zinc-500 font-mono font-medium">
                           {allGenres.length} {allGenres.length === 1 ? 'Genre' : 'Genres'}
@@ -2747,9 +2891,11 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             key={`genre-${genre}-${idx}`}
 
                             className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] leading-tight font-mono font-bold tracking-tight border transition-all shadow-sm ${
-                              isFanOnly
-                                ? 'bg-blue-950/40 border-blue-800/40 text-blue-300 hover:border-blue-500 hover:text-blue-200'
-                                : 'bg-violet-950/40 border-violet-800/40 text-violet-300 hover:border-violet-500 hover:text-violet-200'
+                              isPromoter
+                                ? 'bg-yellow-950/40 border-yellow-800/40 text-yellow-300 hover:border-yellow-500 hover:text-yellow-200'
+                                : (isFanOnly
+                                  ? 'bg-blue-950/40 border-blue-800/40 text-blue-300 hover:border-blue-500 hover:text-blue-200'
+                                  : 'bg-violet-950/40 border-violet-800/40 text-violet-300 hover:border-violet-500 hover:text-violet-200')
                             }`}
                           >
                             #{genre}
@@ -3013,7 +3159,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             value={effTarget?.top_song_url || effTarget?.featured_youtube_url || (selectedUserProfile as any)?.top_song_url || ''}
                             onChange={(e) => {
                               const val = e.target.value;
-                              setSelectedUserProfile((prev: any) => prev ? { ...prev, top_song_url: val, featured_youtube_url: isBandTypeCard ? val : prev?.featured_youtube_url } : null);
+                              setSelectedUserProfile((prev: any) => prev ? { ...prev, top_song_url: val, featured_youtube_url: val } : null);
+                              if (setFetchedProfileData) {
+                                setFetchedProfileData((prev: any) => prev ? { ...prev, top_song_url: val, featured_youtube_url: val } : null);
+                              }
                               if (isBandTypeCard) {
                                 if (setFetchedBandData) {
                                   setFetchedBandData((prev: any) => ({ ...prev, top_song_url: val, featured_youtube_url: val }));
@@ -3021,7 +3170,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               } else {
                                 if (setProfileTopSongUrl) setProfileTopSongUrl(val);
                                 if (setUserProfile) { 
-                                  queueMicrotask(() => { setUserProfile((pPrev: any) => pPrev ? { ...pPrev, top_song_url: val } : null); }); 
+                                  queueMicrotask(() => { setUserProfile((pPrev: any) => pPrev ? { ...pPrev, top_song_url: val, featured_youtube_url: val } : null); }); 
                                 }
                               }
                             }}
@@ -3099,8 +3248,44 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       r.includes('promoter') || 
                       r.includes('venue'));
                     
+                    const isPromoter = r.includes('promoter') || r.includes('venue') || selectedUserProfile?.isPromoterProfile === true || selectedUserProfile?.type === 'promoter';
+
                     return (
                       <div className="space-y-3">
+                        {isPromoter && (
+                          <>
+                            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono mb-2 flex items-center gap-1.5 flex-wrap">
+                              <Radio className="w-3.5 h-3.5 text-yellow-400 animate-pulse" />
+                              Gig Booking & Show Submissions
+                            </h3>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-yellow-950/20 border border-yellow-800/40 p-3 rounded-xl shadow-[0_0_20px_rgba(234,179,8,0.08)]">
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[9.5px] font-black uppercase tracking-wider text-yellow-400 leading-none flex items-center gap-1.5">
+                                  <Flame className="w-3.5 h-3.5 text-yellow-400" />
+                                  Submit Band To Play
+                                </div>
+                                <p className="text-zinc-400 text-[10px] font-mono mt-1 leading-snug">
+                                  Pitch your band to play upcoming local gigs, festival lineups, or tour support with this promoter.
+                                </p>
+                                <p className="text-[9px] text-yellow-500/80 font-mono mt-1 italic">
+                                  * All submissions will be reviewed but not guaranteed to result in an offer.
+                                </p>
+                              </div>
+                              <button 
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  setShowSubmitBandModal(true);
+                                }}
+                                className="bg-yellow-400 hover:bg-yellow-300 text-black font-black text-[10.5px] px-3.5 py-2 rounded-lg transition-all uppercase tracking-wider font-mono shrink-0 shadow-[0_0_15px_rgba(250,204,21,0.3)] hover:shadow-[0_0_20px_rgba(250,204,21,0.5)] flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 relative z-20"
+                              >
+                                🎸 Submit Band to Play
+                              </button>
+                            </div>
+                          </>
+                        )}
+
                         {isArtist && (
                           <>
                             <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono mb-2 flex items-center gap-1.5 flex-wrap">
@@ -4316,6 +4501,38 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       isOpen={showBandBookingModal}
       onClose={() => setShowBandBookingModal(false)}
       targetProfile={selectedUserProfile || targetProfile || bData || communityArchiveMatch}
+      userProfile={userProfile}
+      triggerNotification={triggerNotification}
+    />
+
+    {/* SUBMIT BAND TO PROMOTER GIG MODAL */}
+    <SubmitBandToPromoterModal
+      key="promoter-gig-submission-modal-band-view"
+      isOpen={showSubmitBandModal}
+      onClose={() => setShowSubmitBandModal(false)}
+      promoterProfile={selectedUserProfile || targetProfile}
+      userProfile={userProfile}
+      activeBand={bData || fetchedBandData}
+      triggerNotification={triggerNotification}
+    />
+
+    {/* PROMOTER EVENTS MODAL (UPCOMING SHOWS, TOURS, FESTIVALS) */}
+    <PromoterEventsModal
+      key="promoter-events-modal-band-view"
+      isOpen={showEventsModal}
+      onClose={() => setShowEventsModal(false)}
+      promoterProfile={selectedUserProfile || targetProfile}
+      userProfile={userProfile}
+      triggerNotification={triggerNotification}
+      openCheckout={openCheckout}
+    />
+
+    {/* PROMOTER ARCHIVES MODAL (HISTORIC PAST SHOWS & FESTIVALS) */}
+    <PromoterArchivesModal
+      key="promoter-archives-modal-band-view"
+      isOpen={showArchivesModal}
+      onClose={() => setShowArchivesModal(false)}
+      promoterProfile={selectedUserProfile || targetProfile}
       userProfile={userProfile}
       triggerNotification={triggerNotification}
     />

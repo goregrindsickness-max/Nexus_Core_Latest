@@ -1,3 +1,4 @@
+import { syncPromoterProfileToSupabase } from './services/promoterService';
 import { usePromoterOffers } from './hooks/usePromoterOffers';
 import { useTourNotes } from './hooks/useTourNotes';
 import { useGlobalDataSync } from './hooks/useGlobalDataSync';
@@ -1487,6 +1488,23 @@ export default function App() {
 
         const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
 
+        // Ensure strict separation between Personal Bio and Promoter Bio, and heal if overwritten
+        const authenticPersonalBio = 'Extreme metal musician, archivist, and underground pit warrior.';
+        const defaultPromoterBio = 'Promoter & booking management for underground extreme music festivals and venue tours across North America.';
+        const currentBio = userProfile?.bio || '';
+        const promoterBio = (userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio;
+
+        if (isOwnerMiguel && currentBio && (currentBio === promoterBio || currentBio.toLowerCase().includes('promoter & booking management') || currentBio.toLowerCase().includes('nexus live productions'))) {
+          userProfile.bio = authenticPersonalBio;
+          try {
+            localStorage.setItem('nexus_user_bio', authenticPersonalBio);
+            localStorage.setItem('nexus_core_user_profile', JSON.stringify(userProfile));
+          } catch (_) {}
+          if (supabase && userProfile.id) {
+            supabase.from('profiles').update({ bio: authenticPersonalBio }).eq('id', userProfile.id).then();
+          }
+        }
+
         // Cleanse corrupted band_id or band_name from userProfile if it was set to a community archive or mismatched
         const isCorruptCommunityBand = Boolean(
           (userProfile?.band_id && isCommunityBandRecord(userProfile.band_id)) ||
@@ -2196,7 +2214,7 @@ export default function App() {
     if (userProfile && !reviewerName) {
       setReviewerName(userProfile?.name);
     }
-  }, [userProfile]);
+  }, [userProfile?.id]);
 
   useEffect(() => {
     if (activeBand && !reviewerGroup) {
@@ -3900,6 +3918,10 @@ list.push({
                       name: pName
                     }]);
                   }
+                  // Automatically sync promoter profile to Supabase public.promoters
+                  syncPromoterProfileToSupabase(customProfile).catch((err) => {
+                    console.warn('[Supabase Promoter Sync Warning]:', err);
+                  });
                 }
 
                 if (isMiguelNameOrProfile(customProfile)) {

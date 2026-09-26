@@ -313,16 +313,50 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                       </div>
                     </div>
 
-                    {/* View My Profile Button */}
+                    {/* View Profile Button */}
                     <button 
                       onClick={() => {
                         setRoleMenuOpen(false);
-                        if (handleOpenMyProfile) handleOpenMyProfile();
+                        const isBandActive = userProfile?.active_workspace === 'band' && activeBand;
+                        if (isBandActive) {
+                          const bandName = activeBand?.name || 'Band';
+                          const bandHandle = (activeBand as any)?.custom_slug || (activeBand as any)?.slug || '@band';
+                          const bandLogo = (activeBand as any)?.logo_url || null;
+                          const bandCover = (activeBand as any)?.banner_url || (activeBand as any)?.cover_url || null;
+                          const bandBio = activeBand?.bio || 'Band profile.';
+                          const detailPayload = {
+                            id: activeBand?.id || 'band:active',
+                            name: bandName,
+                            legalName: bandName,
+                            handle: bandHandle.startsWith('@') ? bandHandle : `@${bandHandle}`,
+                            avatar: bandLogo,
+                            avatar_url: bandLogo,
+                            logo: bandLogo,
+                            logo_url: bandLogo,
+                            banner: bandCover,
+                            banner_url: bandCover,
+                            cover: bandCover,
+                            cover_url: bandCover,
+                            location: activeBand?.homebase || 'Global',
+                            role: 'Band / Artist',
+                            account_type: 'band',
+                            type: 'band',
+                            isPersonal: false,
+                            isBandProfile: true,
+                            isYou: true,
+                            badges: ['⚡ Band Core', '🎵 Metal'],
+                            bio: bandBio
+                          };
+                          window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
+                          triggerNotification?.("⚡ Opening Band Public Profile...");
+                        } else if (handleOpenMyProfile) {
+                          handleOpenMyProfile();
+                        }
                       }}
                       className="w-full flex items-center justify-center gap-2 mt-2 mb-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors cursor-pointer shadow-md shadow-emerald-950/30"
                     >
                       <User className="w-3.5 h-3.5" />
-                      View My Profile
+                      {userProfile?.active_workspace === 'band' ? 'VIEW BAND PROFILE' : 'VIEW MY PROFILE'}
                     </button>
 
                     {/* Default Band/Artist Tab Section - Only if band is registered */}

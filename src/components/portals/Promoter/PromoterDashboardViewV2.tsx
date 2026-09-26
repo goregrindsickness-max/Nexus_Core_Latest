@@ -909,7 +909,7 @@ export default function PromoterDashboardViewV2({
       setStripeAccountId(userProfile.promoter_metadata?.stripe_account_id || '');
       setPaypalEmail(userProfile.promoter_metadata?.paypal_email || '');
     }
-  }, [userProfile]);
+  }, [userProfile?.id]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

@@ -985,13 +985,49 @@ export const initGooglePlacesScript = (): Promise<boolean> => {
   });
 };
 
-// Fetch all aggregated local Black Book venues
+// Fetch all aggregated local Black Book venues (multi-tier resilient cloud & local storage)
 export async function getAllBlackBookVenues(): Promise<VenueResult[]> {
   const aggregated: VenueResult[] = [...BUILT_IN_BLACK_BOOK_VENUES];
   const seenIds = new Set(aggregated.map((v) => v.id.toLowerCase()));
   const seenNames = new Set(aggregated.map((v) => `${v.name.toLowerCase()}_${(v.city || '').toLowerCase()}`));
 
-  // 1. Check IndexedDB venuesStore
+  // 1. Fetch live venues from persistent server API endpoint
+  try {
+    const res = await fetch('/api/venues');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.venues)) {
+        data.venues.forEach((v: any) => {
+          if (!v?.name) return;
+          const key = `${v.name.toLowerCase()}_${(v.city || '').toLowerCase()}`;
+          if (!seenNames.has(key)) {
+            seenNames.add(key);
+            const vId = v.id || `srv_${v.name.replace(/\s+/g, '_')}`;
+            if (!seenIds.has(vId.toLowerCase())) {
+              seenIds.add(vId.toLowerCase());
+              aggregated.push({
+                id: vId,
+                name: v.name,
+                city: v.city,
+                state: v.state_province || v.state,
+                country: v.country || 'USA',
+                streetAddress: v.street_address || v.address,
+                fullAddress: [v.street_address || v.address, v.city, v.state_province || v.state].filter(Boolean).join(', '),
+                capacity: v.capacity,
+                payoutRating: v.payout_rating || v.payoutRating || 4.5,
+                loadInRating: v.load_in_rating || v.loadInRating || 4.0,
+                genreFit: v.genre_fit || v.genreFit || 90,
+                source: 'blackbook',
+                displayText: `${v.name}${v.city ? ` • ${v.city}${v.state_province || v.state ? `, ${v.state_province || v.state}` : ''}` : ''}${v.capacity ? ` (Cap: ${v.capacity})` : ''}`
+              });
+            }
+          }
+        });
+      }
+    }
+  } catch (_) {}
+
+  // 2. Check IndexedDB venuesStore
   try {
     const stored = await venuesStore.getItem<any>('nexus_master_venues');
     let dbVenues: any[] = [];
@@ -1028,7 +1064,7 @@ export async function getAllBlackBookVenues(): Promise<VenueResult[]> {
     }
   } catch (_) {}
 
-  // 2. Check localStorage nexus_core_venues
+  // 3. Check localStorage nexus_core_venues
   try {
     const local = localStorage.getItem('nexus_core_venues');
     if (local) {
@@ -1353,7 +1389,16 @@ export function saveVenueToBlackBook(venueData: {
     localStorage.setItem('nexus_venue_custom_overrides', JSON.stringify(overrides));
   } catch {}
 
-  // 3. Broadcast window event so Black Book tabs refresh live
+  // 3. Persist to server API endpoint (sync across preview, web & APK)
+  try {
+    fetch('/api/venues', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ venue: newVenueRecord })
+    }).catch(() => {});
+  } catch (_) {}
+
+  // 4. Broadcast window event so Black Book tabs refresh live
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('nexus_venues_updated', { detail: newVenueRecord }));
   }

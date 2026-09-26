@@ -240,3 +240,5 @@ export const uploadFeedMedia = async (file: File): Promise<string | null> => {
   }
 };
 
+export { uploadArchiveFlyer } from '../services/storageService';
+
