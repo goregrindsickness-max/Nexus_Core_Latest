@@ -70,6 +70,8 @@ export interface Show {
   revenue?: number;
   show_type?: 'headliner' | 'support' | 'festival' | 'tour date' | 'one-off';
   band_id?: string;
+  is_published?: boolean;
+  publication_status?: 'draft' | 'embargoed_private' | 'confirmed_routing' | 'public_announced' | string;
 
   // Added Fields based on Event input screen:
   event_scope?: 'tour' | 'single';

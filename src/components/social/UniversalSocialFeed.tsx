@@ -1108,6 +1108,9 @@ export function UniversalSocialFeed({
 
             const showsGigs = dedupedRawShows
               .filter(s => {
+                if (s.is_published === false || s.publication_status === 'embargoed_private' || s.publication_status === 'draft' || s.status === 'Draft' || s.status === 'Embargoed') {
+                  return false;
+                }
                 const sId = String(s.id || '').toLowerCase().trim();
                 const sH = String(s.headliner || s.band_name || s.name || s.show_name || '').toLowerCase().trim();
                 const sD = String(s.date || s.show_date || '').toLowerCase().trim();

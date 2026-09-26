@@ -175,6 +175,9 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
     ...DEFAULT_NEXUS_UPCOMING_EVENTS,
     // Map any active live shows from DB
     ...(shows || []).filter(s => {
+      if (s.is_published === false || s.publication_status === 'embargoed_private' || s.publication_status === 'draft' || s.status === 'Draft' || s.status === 'Embargoed') {
+        return false;
+      }
       const showDate = s.date || s.show_date || '';
       return showDate >= new Date().toISOString().split('T')[0];
     }).map(s => ({

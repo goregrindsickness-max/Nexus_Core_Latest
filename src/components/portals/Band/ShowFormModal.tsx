@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, Calendar, DollarSign, Clock, MapPin, Building, Users, 
-  Trash2, Copy, Check, Info, FileText, ChevronDown, Sparkles, Coffee, ShieldAlert, AlertTriangle
+  Trash2, Copy, Check, Info, FileText, ChevronDown, Sparkles, Coffee, ShieldAlert, AlertTriangle, Megaphone, Lock
 } from 'lucide-react';
 import { Show, GuestListItem, SupportBand } from '../../../types';
 
@@ -155,6 +155,7 @@ export default function ShowFormModal({
 
   const [isCommunitySubmitted, setIsCommunitySubmitted] = useState<boolean>(false);
   const [externalTicketUrl, setExternalTicketUrl] = useState<string>('');
+  const [isPublished, setIsPublished] = useState<boolean>(false);
   const [isTime24Hour, setIsTime24Hour] = useState<boolean>(() => { try { return localStorage.getItem('tour_time_is_24h') !== 'false'; } catch(e) { return true; } });
 
   const existingDuplicateMatch = useMemo(() => {
@@ -388,8 +389,10 @@ export default function ShowFormModal({
       setAdditionalNotes(editingShow.additional_notes || '');
       setIsCommunitySubmitted(!!editingShow.is_community_submitted);
       setExternalTicketUrl(editingShow.external_ticket_url || '');
+      setIsPublished(editingShow.is_published !== undefined ? !!editingShow.is_published : (editingShow.publication_status === 'public_announced' ? true : false));
     } else {
       // Set default dates & values for a new show
+      setIsPublished(false);
       setEventScope('tour');
       setTourId(uniqueTours[0] || '');
       setName('');
@@ -721,6 +724,8 @@ export default function ShowFormModal({
       additional_notes: sanitizeInput(additionalNotes),
       is_community_submitted: isCommunitySubmitted,
       external_ticket_url: sanitizeInput(externalTicketUrl),
+      is_published: isPublished,
+      publication_status: isPublished ? 'public_announced' : 'embargoed_private',
       status: editingShow?.status || 'Active'
     };
 
@@ -783,6 +788,33 @@ export default function ShowFormModal({
             <h3 className="text-[10px] font-mono font-semibold text-zinc-400 uppercase tracking-widest border-b border-zinc-800 pb-1 flex items-center gap-1.5">
               <Building className="w-3.5 h-3.5 text-teal-400" /> Event Details
             </h3>
+
+            {/* Publication Status Toggle */}
+            <div className="bg-[#13161d] border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center border ${isPublished ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-400'}`}>
+                  {isPublished ? <Megaphone className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    <span>{isPublished ? 'Officially Published & Public' : 'Working Draft / Embargoed'}</span>
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${isPublished ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/25 text-amber-300 border border-amber-500/30'}`}>
+                      {isPublished ? 'PUBLIC FEED LIVE' : 'PRIVATE WORKSPACE'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400">
+                    {isPublished ? 'Visible in upcoming shows across all feeds & tour directories.' : 'Hidden from public upcoming shows until officially published.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPublished(!isPublished)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isPublished ? 'bg-emerald-500' : 'bg-zinc-700'}`}
+              >
+                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isPublished ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
 
             {/* Scope Button Group */}
             <div className="grid grid-cols-2 gap-2">

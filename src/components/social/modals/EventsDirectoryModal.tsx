@@ -517,6 +517,9 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
     // Add shows from props.shows if not already present
     if (shows && Array.isArray(shows)) {
       shows.forEach((s, idx) => {
+        if (s.is_published === false || s.publication_status === 'embargoed_private' || s.publication_status === 'draft' || s.status === 'Draft' || s.status === 'Embargoed') {
+          return;
+        }
         const normalized = normalizeShowToEventDirectoryItem(s, idx);
         const idStr = String(normalized.id || '').toLowerCase().trim();
         const sig = `${(normalized.headliner || normalized.title || normalized.name || '').toLowerCase()}_${(normalized.date || normalized.rawDate || '').toLowerCase()}`;
