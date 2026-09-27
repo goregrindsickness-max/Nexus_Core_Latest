@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Compass,
   Calendar,
@@ -74,6 +74,8 @@ export type { TourPackageBand, TourPackageStop, TourVehicle, SharedBacklineConfi
 interface TourManagerPackageModuleProps {
   userProfile: any;
   activeBand: any;
+  shows?: any[];
+  setShows?: React.Dispatch<React.SetStateAction<any[]>>;
   triggerNotification?: (msg: string) => void;
   addLog?: (msg: string) => void;
   onSwitchToSingleBandView?: () => void;
@@ -224,6 +226,8 @@ const DEFAULT_PACKAGE_STOPS: TourPackageStop[] = [
 export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> = ({
   userProfile,
   activeBand,
+  shows,
+  setShows,
   triggerNotification,
   addLog,
   onSwitchToSingleBandView
@@ -263,6 +267,9 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
   const [saveSuccessAnimation, setSaveSuccessAnimation] = useState(false);
   const lastSavedSnapshotRef = useRef<string>('');
 
+  const [isPullingLiveShows, setIsPullingLiveShows] = useState(false);
+  const isCloudHydratedRef = useRef(false);
+
   // Current tour state snapshot for tracking dirty/unsaved state
   const currentSnapshot = useMemo(() => {
     return JSON.stringify({
@@ -278,33 +285,38 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
     });
   }, [activeTourId, tourTitle, clientBandName, publicationStatus, embargoUntilDate, bands, stops, vehicles, backlineConfig]);
 
-  // Sync state whenever activeTour changes
+  // Helper to load a tour record into component form state
+  const loadTourIntoState = useCallback((tour: TourPackageRecord) => {
+    setTourTitle(tour.title);
+    setBands(tour.bands);
+    setStops(tour.stops);
+    setVehicles(tour.vehicles || [...DEFAULT_SEED_VEHICLES]);
+    setBacklineConfig(tour.backlineConfig || { ...DEFAULT_BACKLINE_CONFIG });
+    setClientBandName(tour.headlinerClientName);
+    setPublicationStatus(tour.publicationStatus);
+    setEmbargoUntilDate(tour.embargoUntilDate || '2026-10-01T10:00');
+    lastSavedSnapshotRef.current = JSON.stringify({
+      activeTourId: tour.id,
+      tourTitle: tour.title,
+      clientBandName: tour.headlinerClientName,
+      publicationStatus: tour.publicationStatus,
+      embargoUntilDate: tour.embargoUntilDate || '2026-10-01T10:00',
+      bands: tour.bands,
+      stops: tour.stops,
+      vehicles: tour.vehicles || [...DEFAULT_SEED_VEHICLES],
+      backlineConfig: tour.backlineConfig || { ...DEFAULT_BACKLINE_CONFIG }
+    });
+    setHasUnsavedChanges(false);
+    setLastSavedAt(new Date(tour.updatedAt || Date.now()));
+  }, []);
+
+  // Sync state whenever activeTourId changes
   useEffect(() => {
     const tour = allTours.find(t => t.id === activeTourId);
     if (tour) {
-      setTourTitle(tour.title);
-      setBands(tour.bands);
-      setStops(tour.stops);
-      setVehicles(tour.vehicles || [...DEFAULT_SEED_VEHICLES]);
-      setBacklineConfig(tour.backlineConfig || { ...DEFAULT_BACKLINE_CONFIG });
-      setClientBandName(tour.headlinerClientName);
-      setPublicationStatus(tour.publicationStatus);
-      setEmbargoUntilDate(tour.embargoUntilDate || '2026-10-01T10:00');
-      lastSavedSnapshotRef.current = JSON.stringify({
-        activeTourId: tour.id,
-        tourTitle: tour.title,
-        clientBandName: tour.headlinerClientName,
-        publicationStatus: tour.publicationStatus,
-        embargoUntilDate: tour.embargoUntilDate || '2026-10-01T10:00',
-        bands: tour.bands,
-        stops: tour.stops,
-        vehicles: tour.vehicles || [...DEFAULT_SEED_VEHICLES],
-        backlineConfig: tour.backlineConfig || { ...DEFAULT_BACKLINE_CONFIG }
-      });
-      setHasUnsavedChanges(false);
-      setLastSavedAt(new Date(tour.updatedAt || Date.now()));
+      loadTourIntoState(tour);
     }
-  }, [activeTourId]);
+  }, [activeTourId, loadTourIntoState]);
 
   // Check for unsaved changes against last saved snapshot
   useEffect(() => {
@@ -315,28 +327,55 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
     }
   }, [currentSnapshot]);
 
+  // Manual & initial live pull from Cloud / Supabase Shows Table
+  const handlePullLiveFromShowsTable = useCallback(async (notify = false) => {
+    setIsPullingLiveShows(true);
+    try {
+      const updatedTours = await tourPackageManager.pullFromCloud();
+      setAllTours(updatedTours);
+      const matched = updatedTours.find(t => t.id === activeTourId) || updatedTours[0];
+      if (matched && !hasUnsavedChanges) {
+        loadTourIntoState(matched);
+      }
+      isCloudHydratedRef.current = true;
+      if (notify) {
+        triggerNotification?.(`⚡ Pulled ${matched?.stops?.length || 0} live tour stops directly from Shows database.`);
+        addLog?.(`TM Mode: Synchronized tour package from Supabase shows table.`);
+      }
+    } catch (err: any) {
+      console.warn('Error pulling live shows from cloud:', err);
+    } finally {
+      setIsPullingLiveShows(false);
+      isCloudHydratedRef.current = true;
+    }
+  }, [activeTourId, hasUnsavedChanges, loadTourIntoState, triggerNotification, addLog]);
+
   // Listen to external/cloud updates
   useEffect(() => {
     const handleToursUpdated = (e: any) => {
       if (e.detail?.tours) {
         setAllTours(e.detail.tours);
+        if (!hasUnsavedChanges) {
+          const matched = e.detail.tours.find((t: any) => t.id === activeTourId);
+          if (matched) {
+            loadTourIntoState(matched);
+          }
+        }
       }
     };
     window.addEventListener('tour_manager_packages_updated', handleToursUpdated);
     
-    // Initial async pull from Cloud DB
-    tourPackageManager.pullFromCloud().then(updatedTours => {
-      setAllTours(updatedTours);
-    });
+    // Initial async pull from Cloud DB & Shows Table
+    handlePullLiveFromShowsTable(false);
 
     return () => {
       window.removeEventListener('tour_manager_packages_updated', handleToursUpdated);
     };
-  }, []);
+  }, [handlePullLiveFromShowsTable, activeTourId, hasUnsavedChanges, loadTourIntoState]);
 
-  // Background auto-save to in-memory/debounced store
+  // Background auto-save to in-memory/debounced store (ONLY after cloud hydration)
   useEffect(() => {
-    if (!currentTour) return;
+    if (!currentTour || !isCloudHydratedRef.current) return;
     const updatedRecord: TourPackageRecord = {
       ...currentTour,
       id: activeTourId,
@@ -1119,7 +1158,7 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
               )}
             </button>
 
-            {/* Secondary Controls: Add Package Band & Countdown Card */}
+            {/* Secondary Controls: Add Package Band, Sync Shows DB, & Countdown Card */}
             <div className="flex items-center justify-center gap-2.5 w-full flex-wrap">
               <button
                 type="button"
@@ -1131,6 +1170,16 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
               >
                 <Users className="w-3.5 h-3.5" />
                 Add Package Band
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePullLiveFromShowsTable(true)}
+                disabled={isPullingLiveShows}
+                className="px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-cyan-400 hover:text-cyan-300 border border-cyan-500/40 font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                title="Force refresh live tour stops and routing from Supabase Shows table"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isPullingLiveShows ? 'animate-spin text-cyan-300' : ''}`} />
+                <span>{isPullingLiveShows ? 'Syncing...' : 'Pull Shows Table'}</span>
               </button>
               {onSwitchToSingleBandView && (
                 <button
@@ -1360,13 +1409,45 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
           embargoUntilDate={embargoUntilDate}
           tourTitle={tourTitle}
           onOpenPrivacyModal={() => setIsPrivacyModalOpen(true)}
-          onPublish={() => {
+          onPublish={async () => {
             setPublicationStatus('public_announced');
+            if (currentTour) {
+              const updated = {
+                ...currentTour,
+                id: activeTourId,
+                title: tourTitle,
+                headlinerClientName: clientBandName,
+                publicationStatus: 'public_announced' as const,
+                embargoUntilDate,
+                bands,
+                stops,
+                vehicles,
+                backlineConfig,
+                updatedAt: new Date().toISOString()
+              };
+              await tourPackageManager.saveTour(updated, true);
+            }
             triggerNotification?.('🎉 Tour officially published and marked as Publicly Announced!');
             addLog?.(`TM Mode: Tour "${tourTitle}" announced publicly.`);
           }}
-          onLock={() => {
+          onLock={async () => {
             setPublicationStatus('embargoed_private');
+            if (currentTour) {
+              const updated = {
+                ...currentTour,
+                id: activeTourId,
+                title: tourTitle,
+                headlinerClientName: clientBandName,
+                publicationStatus: 'embargoed_private' as const,
+                embargoUntilDate,
+                bands,
+                stops,
+                vehicles,
+                backlineConfig,
+                updatedAt: new Date().toISOString()
+              };
+              await tourPackageManager.saveTour(updated, true);
+            }
             triggerNotification?.('🔒 Tour reverted to Private & Embargoed mode.');
             addLog?.(`TM Mode: Tour "${tourTitle}" set back to private.`);
           }}
@@ -2212,9 +2293,25 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
             <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   setIsPrivacyModalOpen(false);
-                  triggerNotification?.(`Confidentiality status set to: ${publicationStatus.replace('_', ' ').toUpperCase()}`);
+                  if (currentTour) {
+                    const updated = {
+                      ...currentTour,
+                      id: activeTourId,
+                      title: tourTitle,
+                      headlinerClientName: clientBandName,
+                      publicationStatus: publicationStatus,
+                      embargoUntilDate: embargoUntilDate,
+                      bands,
+                      stops,
+                      vehicles,
+                      backlineConfig,
+                      updatedAt: new Date().toISOString()
+                    };
+                    await tourPackageManager.saveTour(updated, true);
+                  }
+                  triggerNotification?.(`Confidentiality & Embargo status updated to: ${publicationStatus.replace('_', ' ').toUpperCase()}`);
                 }}
                 className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold text-xs uppercase cursor-pointer"
               >

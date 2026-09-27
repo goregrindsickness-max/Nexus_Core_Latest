@@ -47,7 +47,9 @@ import {
   Eye,
   EyeOff,
   Building2,
-  BookOpen
+  BookOpen,
+  Lock,
+  Megaphone
 } from 'lucide-react';
 
 export interface ShowWeatherWarning {
@@ -449,7 +451,7 @@ export default function ShowsView({
 
   // Navigation & Filtering State
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterTab, setFilterTab] = useState<'upcoming' | 'past' | 'all'>('all');
+  const [filterTab, setFilterTab] = useState<'upcoming' | 'past' | 'embargoed' | 'all'>('upcoming');
   const [sortBy, setSortBy] = useState<'date' | 'revenue'>('date');
   
   // Interactive Map and Calendar selections
@@ -1586,6 +1588,31 @@ export default function ShowsView({
     };
   }, [shows, sales]);
 
+  // Helper to check if a show is currently embargoed or confidential
+  const isShowEmbargoed = (s: Show) => {
+    if (s.is_published === false) return true;
+    if (s.publication_status === 'embargoed_private' || s.publication_status === 'draft') return true;
+    if (s.status === 'Draft' || s.status === 'Embargoed') return true;
+    
+    // Cross-check if stop is assigned to an embargoed tour package
+    if (s.additional_notes) {
+      try {
+        const extra = typeof s.additional_notes === 'string' ? JSON.parse(s.additional_notes) : s.additional_notes;
+        if (extra.tour_id) {
+          const tour = allTourPackages.find(t => t.id === extra.tour_id);
+          if (tour && tour.publicationStatus === 'embargoed_private') {
+            return true;
+          }
+        }
+      } catch (_) {}
+    }
+    return false;
+  };
+
+  const embargoedCount = useMemo(() => {
+    return shows.filter(isShowEmbargoed).length;
+  }, [shows, allTourPackages]);
+
   // Filter shows for rendering lists
   const filteredShows = useMemo(() => {
     let result = [...shows];
@@ -1594,17 +1621,23 @@ export default function ShowsView({
     if (searchQuery.trim().length > 0) {
       const query = searchQuery.toLowerCase();
       result = result.filter(s => 
-        s.name.toLowerCase().includes(query) || 
-        (s.festival_name && s.festival_name.toLowerCase().includes(query))
+        (s.name && s.name.toLowerCase().includes(query)) || 
+        (s.festival_name && s.festival_name.toLowerCase().includes(query)) ||
+        (s.venue && s.venue.toLowerCase().includes(query)) ||
+        (s.city && s.city.toLowerCase().includes(query))
       );
     }
 
     // Tab Filter
     const todayStr = new Date().toISOString().split('T')[0];
     if (filterTab === 'upcoming') {
-      result = result.filter(s => s.date >= todayStr);
+      // Strictly public/announced upcoming dates (retroactively hides embargoed tour dates)
+      result = result.filter(s => s.date >= todayStr && !isShowEmbargoed(s));
     } else if (filterTab === 'past') {
       result = result.filter(s => s.date < todayStr);
+    } else if (filterTab === 'embargoed') {
+      // Embargoed & confidential routing only
+      result = result.filter(s => isShowEmbargoed(s));
     }
 
     // Sort options
@@ -1615,7 +1648,7 @@ export default function ShowsView({
     }
 
     return result;
-  }, [shows, searchQuery, filterTab, sortBy]);
+  }, [shows, searchQuery, filterTab, sortBy, allTourPackages]);
 
   const activeSelectedTour = useMemo(() => {
     if (selectedTourId) {
@@ -3143,6 +3176,25 @@ export default function ShowsView({
                 Past
               </button>
               <button
+                onClick={() => setFilterTab('embargoed')}
+                className={`flex-grow px-3 py-1.5 rounded transition-colors cursor-pointer text-center flex items-center justify-center gap-1 ${
+                  filterTab === 'embargoed' 
+                    ? 'bg-rose-500 text-black font-extrabold shadow-sm' 
+                    : embargoedCount > 0 
+                    ? 'text-rose-400 hover:text-rose-300' 
+                    : 'text-zinc-450 hover:text-white'
+                }`}
+                title="View confidential & embargoed tour stops"
+              >
+                <Lock className="w-2.5 h-2.5" />
+                <span>Embargoed</span>
+                {embargoedCount > 0 && (
+                  <span className={`text-[8px] px-1 py-0.2 rounded font-black ${filterTab === 'embargoed' ? 'bg-black text-rose-400' : 'bg-rose-950 text-rose-300 border border-rose-800/60'}`}>
+                    {embargoedCount}
+                  </span>
+                )}
+              </button>
+              <button
                 onClick={() => setFilterTab('all')}
                 className={`flex-grow px-3 py-1.5 rounded transition-colors cursor-pointer text-center ${
                   filterTab === 'all' ? 'bg-[#00ffcc] text-black font-extrabold' : 'text-zinc-450 hover:text-white'
@@ -3308,6 +3360,15 @@ export default function ShowsView({
                         <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${typeDetails.badgeBg}`}>
                           {typeDetails.label}
                         </span>
+                        {isShowEmbargoed(stop) ? (
+                          <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1 shadow-sm">
+                            <Lock className="w-2.5 h-2.5 text-rose-400" /> EMBARGOED
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 shadow-sm">
+                            <Megaphone className="w-2.5 h-2.5 text-emerald-400" /> PUBLIC
+                          </span>
+                        )}
                         {isTopPerformer && (
                           <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1">
                             <Sparkles className="w-2.5 h-2.5" /> Top Performer

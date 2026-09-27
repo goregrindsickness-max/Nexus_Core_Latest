@@ -152,13 +152,26 @@ export function normalizeLoadedProfile(data: any): any {
     normalized.promoter_metadata = {};
   }
   const pm = normalized.promoter_metadata;
-  pm.brand_name = pm.brand_name || pm.agency_name || pm.entity_name || normalized.promoter_agency || normalized.promoter_brand || normalized.promoter_name || normalized.entity_name || normalized.corporate_name || normalized.full_name || normalized.name;
+  pm.brand_name = pm.brand_name || pm.agency_name || pm.entity_name || normalized.promoter_agency || normalized.promoter_brand || normalized.promoter_name || normalized.entity_name || normalized.corporate_name || normalized.full_name || normalized.name || 'Nexus Live Productions';
   pm.agency_name = pm.agency_name || pm.brand_name;
+  pm.business_name = pm.business_name || pm.brand_name || pm.agency_name;
   pm.city = pm.city || normalized.promoter_city || normalized.city;
   pm.state = pm.state || normalized.promoter_state || normalized.state_province || normalized.state;
   pm.logo_url = pm.logo_url || pm.avatar_url || normalized.promoter_logo || normalized.avatar_url;
   pm.banner_url = pm.banner_url || pm.cover_url || normalized.promoter_cover_image || normalized.banner_url;
-  pm.bio = pm.bio || normalized.promoter_bio || normalized.bio || normalized.profileBlurb;
+  pm.bio = pm.bio || normalized.promoter_bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
+
+  // Backfill top-level promoter properties so components never fall back to empty or stale local storage
+  normalized.promoter_id = normalized.promoter_id || pm.id || (normalized.id && normalized.id !== 'guest' ? normalized.id : undefined);
+  normalized.promoter_name = pm.brand_name;
+  normalized.promoter_agency = pm.agency_name;
+  normalized.promoter_brand = pm.brand_name;
+  normalized.promoter_logo = pm.logo_url || normalized.promoter_logo;
+  normalized.promoter_cover_image = pm.banner_url || pm.cover_url || normalized.promoter_cover_image;
+  normalized.promoter_bio = pm.bio;
+  normalized.promoter_city = pm.city || normalized.promoter_city || normalized.city;
+  normalized.promoter_state = pm.state || normalized.promoter_state;
+  normalized.promoter_booking_email = pm.booking_email || normalized.promoter_booking_email || normalized.email;
 
   const possibleCustomFields = [
     'pin',

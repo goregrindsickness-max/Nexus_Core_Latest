@@ -3304,14 +3304,18 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       const map = new Map<string, any>();
       existing.forEach((v: any) => {
         if (v && (v.id || v.name)) {
-          const key = v.id || `${(v.name || '').toLowerCase()}_${(v.city || '').toLowerCase()}`;
-          map.set(key, v);
+          const vId = v.id || `srv_${(v.name || '').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${(v.city || '').toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+          const normalized = { ...v, id: vId };
+          const key = vId;
+          map.set(key, normalized);
         }
       });
-      venuesList.forEach((v: any) => {
+      venuesList.forEach((v: any, idx: number) => {
         if (v && (v.id || v.name)) {
-          const key = v.id || `${(v.name || '').toLowerCase()}_${(v.city || '').toLowerCase()}`;
-          map.set(key, { ...(map.get(key) || {}), ...v });
+          const vId = v.id || `srv_${(v.name || '').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${(v.city || '').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${idx}`;
+          const normalized = { ...v, id: vId };
+          const key = vId;
+          map.set(key, { ...(map.get(key) || {}), ...normalized });
         }
       });
       await fs.promises.writeFile(venuesCacheFile, JSON.stringify(Array.from(map.values()), null, 2), 'utf8');
@@ -3357,6 +3361,59 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       res.json({ success: true, count: updated.length, total: updated.length });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to batch save venues' });
+    }
+  });
+
+  // API ROUTE: Batch delete venues by IDs and/or Keys
+  app.post('/api/venues/batch-delete', async (req: express.Request, res: express.Response) => {
+    try {
+      const { ids = [], keys = [] } = req.body || {};
+      const idSet = new Set((ids as string[]).map((id: string) => String(id).trim().toLowerCase()));
+      const keySet = new Set((keys as string[]).map((k: string) => String(k).trim().toLowerCase()));
+
+      const existing = await loadCachedVenues();
+      const filtered = existing.filter((v: any) => {
+        if (!v) return false;
+        if (v.id && idSet.has(String(v.id).trim().toLowerCase())) return false;
+        const key = `${(v.name || '').trim().toLowerCase()}_${(v.city || '').trim().toLowerCase()}`;
+        if (keySet.has(key)) return false;
+        return true;
+      });
+
+      await fs.promises.writeFile(venuesCacheFile, JSON.stringify(filtered, null, 2), 'utf8');
+      res.json({ success: true, count: filtered.length, purgedCount: existing.length - filtered.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to batch delete venues' });
+    }
+  });
+
+  // API ROUTE: Delete single venue by ID and/or Name+City
+  app.delete('/api/venues/:id', async (req: express.Request, res: express.Response) => {
+    try {
+      const venueId = req.params.id;
+      const venueName = (req.query.name as string || '').trim().toLowerCase();
+      const venueCity = (req.query.city as string || '').trim().toLowerCase();
+
+      const existing = await loadCachedVenues();
+      const filtered = existing.filter((v: any) => {
+        if (!v) return false;
+        // Match by ID if valid
+        if (venueId && venueId !== 'undefined' && venueId !== 'null' && v.id === venueId) {
+          return false;
+        }
+        // Match by exact Name + City
+        if (venueName && venueCity && v.name && v.city) {
+          if (v.name.trim().toLowerCase() === venueName && v.city.trim().toLowerCase() === venueCity) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      await fs.promises.writeFile(venuesCacheFile, JSON.stringify(filtered, null, 2), 'utf8');
+      res.json({ success: true, count: filtered.length, deletedId: venueId });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to delete venue' });
     }
   });
 
@@ -3424,6 +3481,8 @@ Return a valid JSON object matching the requested schema. If any field is not fo
               try {
                 const hexId = (stop.id || '').replace(/[^a-f0-9]/gi, '').padEnd(32, '0').slice(0, 32);
                 const stopUuid = hexId.slice(0, 8) + '-' + hexId.slice(8, 12) + '-4' + hexId.slice(13, 16) + '-a' + hexId.slice(17, 20) + '-' + hexId.slice(20, 32);
+                const isPublished = tour.publicationStatus === 'public_announced';
+                const isEmbargoed = tour.publicationStatus === 'embargoed_private';
                 const showRecord = {
                   id: stopUuid,
                   creator_id: '24523979-7f72-422b-8fb6-85634345d81c',
@@ -3441,7 +3500,10 @@ Return a valid JSON object matching the requested schema. If any field is not fo
                   set_time: stop.showStartTime || '20:00',
                   promoter_contact: stop.venueContactName || '',
                   parking_arrangements: stop.parkingNotes || '',
-                  status: 'Active',
+                  status: isEmbargoed ? 'Embargoed' : 'Active',
+                  is_published: isPublished,
+                  publication_status: tour.publicationStatus || 'embargoed_private',
+                  embargo_until_date: tour.embargoUntilDate || '',
                   additional_notes: JSON.stringify({
                     tour_id: tour.id,
                     tour_title: tour.title,
@@ -3662,7 +3724,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
             }
 
             const venueItem = {
-              id: place.id || `mb_${place.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${city.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+              id: place.id || `mb_${(place.name || '').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${city.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${citySeeded}`,
               name: place.name,
               address: place.address || null,
               city: city,

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, MapPin, Users, Mail, Star, MessageSquare, Send, ChevronLeft, ChevronRight, ChevronDown, Calendar, Plus, X, Radio, CheckCircle, XCircle, Clock, Edit2, Sparkles, Database, RefreshCw, Globe, Check, Trash2, Mic2, Music, Building2, SlidersHorizontal, Filter, AlertTriangle, Save, ChevronsUpDown, AlertOctagon, ShieldAlert, CheckSquare, Square } from 'lucide-react';
+import { Search, MapPin, Users, Mail, Star, MessageSquare, Send, ChevronLeft, ChevronRight, ChevronDown, Calendar, Plus, X, Radio, CheckCircle, XCircle, Clock, Edit2, Sparkles, Database, RefreshCw, Globe, Check, Trash2, Mic2, Music, Building2, SlidersHorizontal, Filter, AlertTriangle, Save, ChevronsUpDown, AlertOctagon, ShieldAlert, CheckSquare, Square, RotateCcw } from 'lucide-react';
 import { Offer, UserReview, Venue } from '../../../types';
 import { RoutingBeacon } from '../Promoter/PromoterPortalView';
 import { getSupabase } from '../../../supabase';
@@ -382,7 +382,10 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     if (!clean) return;
 
     if (seededHubs.some(sh => sh.toLowerCase() === clean.toLowerCase())) {
-      triggerNotification(`ℹ️ '${clean}' has already been seeded in the Black Book.`);
+      if (!selectedHubs.some(sh => sh.toLowerCase() === clean.toLowerCase())) {
+        setSelectedHubs(prev => [...prev, clean]);
+      }
+      triggerNotification(`📍 Selected '${clean}' for re-seeding.`);
       setCustomCityInput('');
       return;
     }
@@ -415,19 +418,65 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     });
   });
 
-  // Deleted venues registry
+  // Deleted venues registry (IDs and Name+City keys to prevent re-hydration from external caches)
   const [deletedVenueIds, setDeletedVenueIds] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem('nexus_deleted_venue_ids');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
+      if (!saved) return new Set();
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return new Set();
+      const sanitized = parsed.filter((id: any) => typeof id === 'string' && id.trim().length > 0 && id !== 'undefined' && id !== 'null');
+      if (sanitized.length !== parsed.length) {
+        try { localStorage.setItem('nexus_deleted_venue_ids', JSON.stringify(sanitized)); } catch {}
+      }
+      return new Set(sanitized);
     } catch {
       return new Set();
     }
   });
 
+  const [deletedVenueKeys, setDeletedVenueKeys] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_deleted_venue_keys');
+      if (!saved) return new Set();
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return new Set();
+      const sanitized = parsed.filter((k: any) => typeof k === 'string' && k.trim().length > 0 && k !== 'undefined_undefined');
+      if (sanitized.length !== parsed.length) {
+        try { localStorage.setItem('nexus_deleted_venue_keys', JSON.stringify(sanitized)); } catch {}
+      }
+      return new Set(sanitized);
+    } catch {
+      return new Set();
+    }
+  });
+
+  // Archive of deleted venues allowing instant 1-click restore without reseeding
+  const [deletedVenuesArchive, setDeletedVenuesArchive] = useState<Array<any>>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_deleted_venues_archive');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+
   // Category filter state: venue | studio | rehearsal | saved (Live Stages by default)
   const [categoryFilter, setCategoryFilter] = useState<'venue' | 'studio' | 'rehearsal' | 'saved'>('venue');
   const [selectedCityFilter, setSelectedCityFilter] = useState<string | null>(null);
+
+  // Delete Hub Modal State & Long Press tracking
+  const [hubToDelete, setHubToDelete] = useState<{
+    city: string;
+    placesCount: number;
+    deletePlaces: boolean;
+  } | null>(null);
+  const [isDeleteHubModalOpen, setIsDeleteHubModalOpen] = useState(false);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressTriggeredRef = useRef<boolean>(false);
 
   // Edit Venue Modal State
   const [isEditVenueOpen, setIsEditVenueOpen] = useState(false);
@@ -530,7 +579,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
 
       const allCombined = [...dbVenues, ...serverVenues, ...cachedVenues].filter(v => !isIrrelevantPlace(v));
       if (allCombined.length > 0) {
-        const mapped = allCombined.map(v => {
+        const mapped = allCombined.map((v, idx) => {
           const cls = classifyPlace(v.name, v.place_type || v.type || v.source);
           const defaultPlaceType = v.place_type || cls.place_type;
           
@@ -542,8 +591,14 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
             effectiveCapacity = cls.estimated_capacity;
           }
 
+          const nameSlug = (v.name || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+          const citySlug = (v.city || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+          const stableId = (v.id && typeof v.id === 'string' && v.id.trim().length > 0 && v.id !== 'undefined' && v.id !== 'null')
+            ? v.id
+            : `v_${nameSlug}_${citySlug}_${idx}`;
+
           const baseItem = {
-            id: v.id || `v_${Math.random()}`,
+            id: stableId,
             name: v.name,
             address: v.address || '',
             city: v.city,
@@ -572,8 +627,21 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
         });
 
         setLocalVenues(prev => {
-          const existingKeys = new Set(prev.map(p => `${p.name.toLowerCase()}_${p.city.toLowerCase()}`));
-          const uniqueNew = mapped.filter(m => !existingKeys.has(`${m.name.toLowerCase()}_${m.city.toLowerCase()}`));
+          const existingIds = new Set(prev.map(p => p.id).filter(Boolean));
+          const existingKeys = new Set(prev.map(p => `${(p.name || '').toLowerCase().trim()}_${(p.city || '').toLowerCase().trim()}`));
+          const uniqueNew: any[] = [];
+          for (const m of mapped) {
+            const mName = (m.name || '').toLowerCase().trim();
+            const mCity = (m.city || '').toLowerCase().trim();
+            const key = `${mName}_${mCity}`;
+            if (deletedVenueKeys.has(key)) continue;
+            if (m.id && deletedVenueIds.has(m.id)) continue;
+            if (existingKeys.has(key)) continue;
+            if (m.id && existingIds.has(m.id)) continue;
+            existingKeys.add(key);
+            if (m.id) existingIds.add(m.id);
+            uniqueNew.push(m);
+          }
           return [...prev, ...uniqueNew];
         });
       }
@@ -584,10 +652,16 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
 
   useEffect(() => {
     // combine mockVenues with any dynamically passed global venues
-    const mappedGlobal = (venues || []).map(v => {
+    const mappedGlobal = (venues || []).map((v, idx) => {
       const cls = classifyPlace(v.name, (v as any).place_type);
+      const nameSlug = (v.name || 'venue').toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const citySlug = (v.city || 'city').toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const stableId = (v.id && typeof v.id === 'string' && v.id.trim().length > 0 && v.id !== 'undefined' && v.id !== 'null')
+        ? v.id.trim()
+        : `v_glob_${nameSlug}_${citySlug}_${idx}`;
+
       return {
-        id: v.id,
+        id: stableId,
         name: v.name,
         address: v.address || '',
         city: v.city,
@@ -607,10 +681,23 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
       };
     });
     
-    // Merge but don't duplicate (by id or name+city)
+    // Merge but don't duplicate (by id or name+city), skipping any deleted items
     setLocalVenues(prev => {
-      const existingIds = new Set(prev.map(m => m.id));
-      const newGlobals = mappedGlobal.filter(mg => !existingIds.has(mg.id));
+      const existingIds = new Set(prev.map(m => m.id).filter(Boolean));
+      const existingKeys = new Set(prev.map(m => `${(m.name || '').toLowerCase().trim()}_${(m.city || '').toLowerCase().trim()}`));
+      const newGlobals: any[] = [];
+      for (const mg of mappedGlobal) {
+        const mgName = (mg.name || '').toLowerCase().trim();
+        const mgCity = (mg.city || '').toLowerCase().trim();
+        const key = `${mgName}_${mgCity}`;
+        if (deletedVenueKeys.has(key)) continue;
+        if (mg.id && deletedVenueIds.has(mg.id)) continue;
+        if (existingKeys.has(key)) continue;
+        if (mg.id && existingIds.has(mg.id)) continue;
+        existingKeys.add(key);
+        if (mg.id) existingIds.add(mg.id);
+        newGlobals.push(mg);
+      }
       return [...prev, ...newGlobals];
     });
   }, [venues]);
@@ -957,47 +1044,88 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
   const [areAllExpanded, setAreAllExpanded] = useState<boolean>(false);
   const [globalExpandState, setGlobalExpandState] = useState<boolean | undefined>(undefined);
 
-  // Active places excluding deleted records
-  const activePlaces = localVenues.filter(v => !deletedVenueIds.has(v.id));
+  // Active places excluding deleted records (both by ID and by normalized name_city key)
+  const activePlaces = useMemo(() => {
+    return localVenues.filter(v => {
+      if (!v) return false;
+      if (v.id && deletedVenueIds.has(v.id)) return false;
+      const key = `${(v.name || '').toLowerCase().trim()}_${(v.city || '').toLowerCase().trim()}`;
+      if (deletedVenueKeys.has(key)) return false;
+      return true;
+    });
+  }, [localVenues, deletedVenueIds, deletedVenueKeys]);
+
+  // Helper to classify place types consistently across filters, tabs, and city badge counts
+  const isPlaceStudio = (v: any) => {
+    return v.place_type === 'studio' || !!v.name?.toLowerCase().match(/\b(studio|recording|sound lab|mastering|tracking)\b/i);
+  };
+
+  const isPlaceRehearsal = (v: any) => {
+    return v.place_type === 'rehearsal' || v.place_type === 'other' || !!v.name?.toLowerCase().match(/\b(rehearsal|lockout|jam space|production center)\b/i);
+  };
+
+  const isPlaceVenue = (v: any) => {
+    if (v.place_type === 'studio' || v.place_type === 'rehearsal') return false;
+    if (isPlaceStudio(v) || isPlaceRehearsal(v)) return false;
+    return true;
+  };
+
+  const isPlaceInCategory = (v: any, cat: 'venue' | 'studio' | 'rehearsal' | 'saved', isSavedOnly: boolean) => {
+    if (cat === 'saved' || isSavedOnly) {
+      return savedVenueIds.includes(v.id);
+    }
+    if (cat === 'studio') {
+      return isPlaceStudio(v);
+    }
+    if (cat === 'rehearsal') {
+      return isPlaceRehearsal(v);
+    }
+    return isPlaceVenue(v);
+  };
 
   // Compute category counts for tab headers
-  const venuesCount = activePlaces.filter(v => {
-    const pType = v.place_type;
-    if (pType === 'studio' || pType === 'rehearsal') return false;
-    if (v.name?.toLowerCase().match(/\b(studio|recording|rehearsal)\b/i)) return false;
-    return true;
-  }).length;
-  const studiosCount = activePlaces.filter(v => {
-    return v.place_type === 'studio' || v.name?.toLowerCase().match(/\b(studio|recording|sound lab|mastering|tracking)\b/i);
-  }).length;
-  const rehearsalCount = activePlaces.filter(v => {
-    return v.place_type === 'rehearsal' || v.place_type === 'other' || v.name?.toLowerCase().match(/\b(rehearsal|lockout|jam space|production center)\b/i);
-  }).length;
-  const savedCount = activePlaces.filter(v => savedVenueIds.includes(v.id)).length;
-  const detectedDefunctCount = activePlaces.filter(v => detectDefunctReason(v) !== null).length;
+  const venuesCount = useMemo(() => activePlaces.filter(v => isPlaceVenue(v)).length, [activePlaces]);
+  const studiosCount = useMemo(() => activePlaces.filter(v => isPlaceStudio(v)).length, [activePlaces]);
+  const rehearsalCount = useMemo(() => activePlaces.filter(v => isPlaceRehearsal(v)).length, [activePlaces]);
+  const savedCount = useMemo(() => activePlaces.filter(v => savedVenueIds.includes(v.id)).length, [activePlaces, savedVenueIds]);
+  const detectedDefunctCount = useMemo(() => {
+    return activePlaces.filter(v => detectDefunctReason(v) !== null).length;
+  }, [activePlaces]);
 
-  // Derive unique seeded cities and places counts
+  // Derive unique seeded cities and places counts separated and filtered by the currently active category
   const seededHubsWithCounts = useMemo(() => {
-    const countsByCity: Record<string, number> = {};
+    const totalCountsByCity: Record<string, number> = {};
+    const categoryCountsByCity: Record<string, number> = {};
+
     activePlaces.forEach(p => {
       if (!p.city) return;
       const cleanCity = p.city.trim();
       if (!cleanCity) return;
-      // Capitalize first letters nicely
       const normalized = cleanCity;
-      countsByCity[normalized] = (countsByCity[normalized] || 0) + 1;
+      totalCountsByCity[normalized] = (totalCountsByCity[normalized] || 0) + 1;
+      if (isPlaceInCategory(p, categoryFilter, showBookmarksOnly)) {
+        categoryCountsByCity[normalized] = (categoryCountsByCity[normalized] || 0) + 1;
+      }
     });
 
     // Merge explicitly seeded hubs with all cities found in active places
-    const allKnownCities = Array.from(new Set([...seededHubs, ...Object.keys(countsByCity)]));
+    const allKnownCities = Array.from(new Set([...seededHubs, ...Object.keys(totalCountsByCity)]));
     return allKnownCities
       .map(city => ({
         city,
-        count: countsByCity[city] || 0
+        count: categoryCountsByCity[city] || 0,
+        totalCount: totalCountsByCity[city] || 0
       }))
       .filter(item => item.count > 0 || seededHubs.some(sh => sh.toLowerCase() === item.city.toLowerCase()))
-      .sort((a, b) => b.count - a.count || a.city.localeCompare(b.city));
-  }, [activePlaces, seededHubs]);
+      .sort((a, b) => b.count - a.count || b.totalCount - a.totalCount || a.city.localeCompare(b.city));
+  }, [activePlaces, seededHubs, categoryFilter, showBookmarksOnly, savedVenueIds]);
+
+  const activeCategoryPlacesCount = useMemo(() => {
+    if (categoryFilter === 'saved' || showBookmarksOnly) return savedCount;
+    if (categoryFilter === 'studio') return studiosCount;
+    if (categoryFilter === 'rehearsal') return rehearsalCount;
+    return venuesCount;
+  }, [categoryFilter, showBookmarksOnly, savedCount, studiosCount, rehearsalCount, venuesCount]);
 
   const filteredVenues = activePlaces.filter(v => {
     // 1. City / Seeded Hub Smart Filter
@@ -1008,18 +1136,8 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     }
 
     // 2. Tab category filter
-    if (categoryFilter === 'saved' || showBookmarksOnly) {
-      if (!savedVenueIds.includes(v.id)) return false;
-    } else if (categoryFilter === 'venue') {
-      const isStudio = v.place_type === 'studio' || v.name?.toLowerCase().match(/\b(studio|recording|sound lab)\b/i);
-      const isRehearsal = v.place_type === 'rehearsal' || v.name?.toLowerCase().match(/\b(rehearsal|lockout)\b/i);
-      if (isStudio || isRehearsal) return false;
-    } else if (categoryFilter === 'studio') {
-      const isStudio = v.place_type === 'studio' || v.name?.toLowerCase().match(/\b(studio|recording|sound lab|mastering|tracking)\b/i);
-      if (!isStudio) return false;
-    } else if (categoryFilter === 'rehearsal') {
-      const isRehearsal = v.place_type === 'rehearsal' || v.place_type === 'other' || v.name?.toLowerCase().match(/\b(rehearsal|lockout|jam space|production center)\b/i);
-      if (!isRehearsal) return false;
+    if (!isPlaceInCategory(v, categoryFilter, showBookmarksOnly)) {
+      return false;
     }
 
     // 3. Search term filter
@@ -1162,26 +1280,58 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
   const handleConfirmDelete = async () => {
     if (!venueToDelete) return;
     const { id, name } = venueToDelete;
+    const venueObj = localVenues.find(v => v.id === id) || venueToDelete;
+    const city = (venueObj.city || '').trim().toLowerCase();
+    const nameLower = (venueObj.name || name || '').trim().toLowerCase();
+    const key = `${nameLower}_${city}`;
 
     // Remove from localVenues
-    setLocalVenues(prev => prev.filter(v => v.id !== id));
+    setLocalVenues(prev => prev.filter(v => v.id !== id && `${(v.name || '').toLowerCase().trim()}_${(v.city || '').toLowerCase().trim()}` !== key));
     if (setVenues) {
-      setVenues(prev => prev.filter(v => v.id !== id));
+      setVenues(prev => prev.filter(v => v.id !== id && `${(v.name || '').toLowerCase().trim()}_${(v.city || '').toLowerCase().trim()}` !== key));
     }
 
     // Update deleted registry
     setDeletedVenueIds(prev => {
       const next = new Set(prev);
-      next.add(id);
+      if (id) next.add(id);
       try {
         localStorage.setItem('nexus_deleted_venue_ids', JSON.stringify(Array.from(next)));
       } catch {}
       return next;
     });
 
+    setDeletedVenueKeys(prev => {
+      const next = new Set(prev);
+      if (key && key !== '_') next.add(key);
+      try {
+        localStorage.setItem('nexus_deleted_venue_keys', JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+
+    // Save to deleted archive for restore
+    setDeletedVenuesArchive(prev => {
+      const existingIds = new Set(prev.map(p => p.id).filter(Boolean));
+      const next = existingIds.has(id) ? prev : [venueObj, ...prev];
+      try {
+        localStorage.setItem('nexus_deleted_venues_archive', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    // Sync deletion to server cache
+    try {
+      await fetch(`/api/venues/${encodeURIComponent(id || 'none')}?name=${encodeURIComponent(name || '')}&city=${encodeURIComponent(venueObj.city || '')}`, {
+        method: 'DELETE'
+      });
+    } catch (e) {
+      console.warn("Could not sync delete to server cache:", e);
+    }
+
     // Delete from Supabase if connected
     const supabase = getSupabase();
-    if (supabase) {
+    if (supabase && id) {
       try {
         await supabase.from('venues').delete().eq('id', id);
       } catch (err) {
@@ -1192,6 +1342,196 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     setIsDeleteConfirmOpen(false);
     setVenueToDelete(null);
     triggerNotification(`🗑️ Removed "${name}" from Black Book.`);
+  };
+
+  const handleRestoreVenue = (venue: any) => {
+    if (!venue) return;
+    const vId = venue.id;
+    const vKey = `${(venue.name || '').toLowerCase().trim()}_${(venue.city || '').toLowerCase().trim()}`;
+
+    // Remove from deleted trackers
+    setDeletedVenueIds(prev => {
+      const next = new Set(prev);
+      if (vId) next.delete(vId);
+      try {
+        localStorage.setItem('nexus_deleted_venue_ids', JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+
+    setDeletedVenueKeys(prev => {
+      const next = new Set(prev);
+      if (vKey) next.delete(vKey);
+      try {
+        localStorage.setItem('nexus_deleted_venue_keys', JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+
+    // Remove from archive
+    setDeletedVenuesArchive(prev => {
+      const next = prev.filter(item => item.id !== vId && `${(item.name || '').toLowerCase().trim()}_${(item.city || '').toLowerCase().trim()}` !== vKey);
+      try {
+        localStorage.setItem('nexus_deleted_venues_archive', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    // Add back to localVenues
+    setLocalVenues(prev => [venue, ...prev]);
+    if (setVenues) {
+      setVenues(prev => [venue, ...prev]);
+    }
+
+    triggerNotification(`♻️ Restored "${venue.name}" to directory.`);
+  };
+
+  // Long-press and Hub Deletion Handlers
+  const startHubPress = (city: string) => {
+    isLongPressTriggeredRef.current = false;
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressTriggeredRef.current = true;
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate(60); } catch (e) {}
+      }
+      handleOpenDeleteHub(city);
+    }, 550);
+  };
+
+  const cancelHubPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleHubClick = (city: string) => {
+    if (isLongPressTriggeredRef.current) {
+      isLongPressTriggeredRef.current = false;
+      return;
+    }
+    if (selectedCityFilter?.toLowerCase() === city.toLowerCase()) {
+      setSelectedCityFilter(null);
+    } else {
+      setSelectedCityFilter(city);
+    }
+  };
+
+  const handleOpenDeleteHub = (city: string) => {
+    const cityPlaces = activePlaces.filter(p => (p.city || '').trim().toLowerCase() === city.trim().toLowerCase());
+    setHubToDelete({
+      city,
+      placesCount: cityPlaces.length,
+      deletePlaces: true
+    });
+    setIsDeleteHubModalOpen(true);
+  };
+
+  const handleConfirmDeleteHub = async () => {
+    if (!hubToDelete) return;
+    const targetCity = hubToDelete.city.trim();
+    const targetCityLower = targetCity.toLowerCase();
+
+    // 1. Remove from seededHubs state and localStorage
+    setSeededHubs(prev => {
+      const next = prev.filter(h => h.toLowerCase() !== targetCityLower);
+      try {
+        localStorage.setItem('nexus_seeded_hubs', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    // 2. If selectedCityFilter is this city, reset filter
+    if (selectedCityFilter && selectedCityFilter.toLowerCase() === targetCityLower) {
+      setSelectedCityFilter(null);
+    }
+
+    // 3. If deletePlaces is true, remove all places in that city
+    if (hubToDelete.deletePlaces) {
+      const cityPlaces = activePlaces.filter(p => (p.city || '').trim().toLowerCase() === targetCityLower);
+      const placeIdsToDelete = cityPlaces.map(p => p.id).filter(Boolean) as string[];
+      const placeKeysToDelete = cityPlaces.map(p => `${(p.name || '').toLowerCase().trim()}_${(p.city || '').toLowerCase().trim()}`).filter(k => k !== '_');
+
+      // Remove from localVenues
+      setLocalVenues(prev => prev.filter(v => {
+        const vCity = (v.city || '').trim().toLowerCase();
+        return vCity !== targetCityLower && !placeIdsToDelete.includes(v.id);
+      }));
+
+      if (setVenues) {
+        setVenues(prev => prev.filter(v => {
+          const vCity = (v.city || '').trim().toLowerCase();
+          return vCity !== targetCityLower && !placeIdsToDelete.includes(v.id);
+        }));
+      }
+
+      // Update deleted trackers
+      setDeletedVenueIds(prev => {
+        const next = new Set(prev);
+        placeIdsToDelete.forEach(id => next.add(id));
+        try {
+          localStorage.setItem('nexus_deleted_venue_ids', JSON.stringify(Array.from(next)));
+        } catch (e) {}
+        return next;
+      });
+
+      setDeletedVenueKeys(prev => {
+        const next = new Set(prev);
+        placeKeysToDelete.forEach(key => next.add(key));
+        try {
+          localStorage.setItem('nexus_deleted_venue_keys', JSON.stringify(Array.from(next)));
+        } catch (e) {}
+        return next;
+      });
+
+      // Save to deleted archive (Trash)
+      setDeletedVenuesArchive(prev => {
+        const existingIds = new Set(prev.map(p => p.id).filter(Boolean));
+        const newItemsToArchive = cityPlaces.filter(p => !existingIds.has(p.id));
+        const next = [...newItemsToArchive, ...prev];
+        try {
+          localStorage.setItem('nexus_deleted_venues_archive', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+
+      // Sync deletion to server cache for all deleted places in this city
+      for (const place of cityPlaces) {
+        try {
+          fetch(`/api/venues/${encodeURIComponent(place.id || 'none')}?name=${encodeURIComponent(place.name || '')}&city=${encodeURIComponent(place.city || '')}`, {
+            method: 'DELETE'
+          }).catch(() => {});
+        } catch (e) {}
+      }
+
+      // Delete from Supabase if connected
+      const supabase = getSupabase();
+      if (supabase && placeIdsToDelete.length > 0) {
+        try {
+          await supabase.from('venues').delete().in('id', placeIdsToDelete);
+        } catch (err) {
+          console.warn("Could not delete city venues from Supabase:", err);
+        }
+      }
+
+      triggerNotification(`🗑️ Hub "${targetCity}" deleted. ${cityPlaces.length} places moved to Trash.`);
+    } else {
+      triggerNotification(`🗑️ Hub "${targetCity}" removed from seeded hubs list.`);
+    }
+
+    setIsDeleteHubModalOpen(false);
+    setHubToDelete(null);
+  };
+
+  const handleClearTrashArchive = () => {
+    setDeletedVenuesArchive([]);
+    try {
+      localStorage.removeItem('nexus_deleted_venues_archive');
+    } catch {}
+    triggerNotification("🗑️ Trash archive cleared permanently.");
   };
 
   const handleOpenAuditModal = () => {
@@ -1275,14 +1615,19 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     if (selectedAuditIds.size === 0) return;
     setIsPurging(true);
     const idsToPurge = Array.from(selectedAuditIds);
+    const idSet = new Set(idsToPurge);
+
+    const purgedItems = activePlaces.filter(v => idSet.has(v.id));
+    const keysToPurge = purgedItems.map(v => `${(v.name || '').toLowerCase().trim()}_${(v.city || '').toLowerCase().trim()}`);
+    const keySet = new Set(keysToPurge);
 
     // 1. Remove from local state
-    setLocalVenues(prev => prev.filter(v => !selectedAuditIds.has(v.id)));
+    setLocalVenues(prev => prev.filter(v => !idSet.has(v.id) && !keySet.has(`${(v.name || '').toLowerCase().trim()}_${(v.city || '').toLowerCase().trim()}`)));
     if (setVenues) {
-      setVenues(prev => prev.filter(v => !selectedAuditIds.has(v.id)));
+      setVenues(prev => prev.filter(v => !idSet.has(v.id) && !keySet.has(`${(v.name || '').toLowerCase().trim()}_${(v.city || '').toLowerCase().trim()}`)));
     }
 
-    // 2. Mark in deleted IDs set and localStorage
+    // 2. Mark in deleted IDs and Keys set & localStorage
     setDeletedVenueIds(prev => {
       const next = new Set(prev);
       idsToPurge.forEach(id => next.add(id));
@@ -1292,7 +1637,38 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
       return next;
     });
 
-    // 3. Delete from Supabase
+    setDeletedVenueKeys(prev => {
+      const next = new Set(prev);
+      keysToPurge.forEach(k => { if (k && k !== '_') next.add(k); });
+      try {
+        localStorage.setItem('nexus_deleted_venue_keys', JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+
+    // 3. Save to deleted archive
+    setDeletedVenuesArchive(prev => {
+      const existingIds = new Set(prev.map(p => p.id).filter(Boolean));
+      const newlyArchived = purgedItems.filter(p => !existingIds.has(p.id));
+      const next = [...newlyArchived, ...prev];
+      try {
+        localStorage.setItem('nexus_deleted_venues_archive', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    // 4. Batch delete on server cache
+    try {
+      await fetch('/api/venues/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: idsToPurge, keys: keysToPurge })
+      });
+    } catch (e) {
+      console.warn("Could not sync batch delete to server cache:", e);
+    }
+
+    // 5. Delete from Supabase
     const supabase = getSupabase();
     if (supabase) {
       try {
@@ -1552,23 +1928,52 @@ Representing ${activeBandName}`;
           </div>
         )}
 
-        {/* Action Button, Subcategory Tabs & Search Bar */}
+        {/* Action Buttons, Subcategory Tabs & Search Bar */}
         {activeTab === 'directory' && (
           <div className="mt-4 flex flex-col gap-3 w-full">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 onClick={() => setIsAddVenueOpen(true)}
-                className="w-full bg-transparent border-2 border-[#00ffcc] text-[#00ffcc] hover:bg-[#00ffcc]/10 py-2.5 rounded-lg flex items-center justify-center font-bold tracking-widest uppercase transition-colors font-mono cursor-pointer shadow-[0_0_15px_rgba(0,255,204,0.15)] text-xs"
+                className="w-full bg-transparent border-2 border-[#00ffcc] text-[#00ffcc] hover:bg-[#00ffcc]/10 py-2.5 rounded-lg flex items-center justify-center font-bold tracking-wider uppercase transition-colors font-mono cursor-pointer shadow-[0_0_15px_rgba(0,255,204,0.15)] text-xs truncate px-2"
               >
                 <Plus className="w-4 h-4 mr-1.5 shrink-0" />
-                <span>Add Place</span>
+                <span className="truncate">Add Place</span>
               </button>
               <button
                 onClick={() => setIsSeederModalOpen(true)}
-                className="w-full bg-gradient-to-r from-teal-950/60 to-emerald-950/40 border-2 border-teal-400 text-teal-300 hover:from-teal-900/60 hover:to-emerald-900/40 py-2.5 rounded-lg flex items-center justify-center font-bold tracking-widest uppercase transition-all font-mono cursor-pointer shadow-[0_0_20px_rgba(45,212,191,0.25)] text-xs group truncate px-2"
+                className="w-full bg-gradient-to-r from-teal-950/60 to-emerald-950/40 border-2 border-teal-400 text-teal-300 hover:from-teal-900/60 hover:to-emerald-900/40 py-2.5 rounded-lg flex items-center justify-center font-bold tracking-wider uppercase transition-all font-mono cursor-pointer shadow-[0_0_20px_rgba(45,212,191,0.25)] text-xs group truncate px-2"
               >
                 <Sparkles className="w-4 h-4 mr-1.5 text-teal-400 group-hover:rotate-12 transition-transform shrink-0" />
-                <span className="truncate">Seed Tour Hubs</span>
+                <span className="truncate">Seed Hubs</span>
+              </button>
+              <button
+                onClick={handleOpenAuditModal}
+                className={`w-full py-2.5 rounded-lg flex items-center justify-center font-bold tracking-wider uppercase transition-all font-mono cursor-pointer border text-xs truncate px-2 relative ${
+                  detectedDefunctCount > 0
+                    ? 'bg-red-950/50 border-red-500/70 text-red-300 hover:bg-red-900/50 shadow-[0_0_15px_rgba(239,68,68,0.25)]'
+                    : 'bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800'
+                }`}
+                title="Audit directory and clean up closed or defunct venue listings"
+              >
+                <ShieldAlert className={`w-4 h-4 mr-1.5 shrink-0 ${detectedDefunctCount > 0 ? 'text-red-400 animate-pulse' : 'text-zinc-400'}`} />
+                <span className="truncate">Health Audit</span>
+                {detectedDefunctCount > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.2 bg-red-600 text-white rounded-full text-[9px] font-mono font-black">
+                    {detectedDefunctCount}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setIsRestoreModalOpen(true)}
+                className={`w-full py-2.5 rounded-lg flex items-center justify-center font-bold tracking-wider uppercase transition-all font-mono cursor-pointer border text-xs truncate px-2 ${
+                  deletedVenuesArchive.length > 0
+                    ? 'bg-zinc-900 border-zinc-700 text-zinc-200 hover:border-zinc-500'
+                    : 'bg-zinc-950/60 border-zinc-900 text-zinc-500 hover:border-zinc-800'
+                }`}
+                title="View and restore deleted places"
+              >
+                <RotateCcw className="w-4 h-4 mr-1.5 text-zinc-400 shrink-0" />
+                <span className="truncate">Trash ({deletedVenuesArchive.length})</span>
               </button>
             </div>
 
@@ -1668,7 +2073,12 @@ Representing ${activeBandName}`;
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-mono font-bold uppercase text-teal-400 tracking-wider flex items-center gap-1.5">
                     <MapPin className="w-3 h-3 text-teal-400" />
-                    <span>Seeded Hubs Filter</span>
+                    <span>
+                      Seeded Hubs ({categoryFilter === 'venue' ? 'Live Stages' : categoryFilter === 'studio' ? 'Studios' : categoryFilter === 'rehearsal' ? 'Rehearsal Spaces' : 'Bookmarks'})
+                    </span>
+                    <span className="text-zinc-500 font-normal normal-case hidden sm:inline">
+                      (press & hold to delete hub)
+                    </span>
                     {selectedCityFilter && (
                       <span className="text-zinc-400 font-normal">
                         • showing <strong className="text-teal-300 underline">{selectedCityFilter}</strong>
@@ -1701,33 +2111,44 @@ Representing ${activeBandName}`;
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
                       selectedCityFilter === null ? 'bg-black/20 text-black font-black' : 'bg-zinc-900 text-zinc-500'
                     }`}>
-                      {activePlaces.length}
+                      {activeCategoryPlacesCount}
                     </span>
                   </button>
 
-                  {seededHubsWithCounts.map(({ city, count }) => {
+                  {seededHubsWithCounts.map(({ city, count, totalCount }) => {
                     const isSelected = selectedCityFilter?.toLowerCase() === city.toLowerCase();
+                    const categoryLabel = categoryFilter === 'venue' ? 'live stages' : categoryFilter === 'studio' ? 'studios' : categoryFilter === 'rehearsal' ? 'rehearsal spaces' : 'saved places';
                     return (
                       <button
                         key={`hub-filter-${city}`}
                         type="button"
-                        onClick={() => {
-                          if (isSelected) {
-                            setSelectedCityFilter(null);
-                          } else {
-                            setSelectedCityFilter(city);
-                          }
+                        onClick={() => handleHubClick(city)}
+                        onTouchStart={() => startHubPress(city)}
+                        onTouchEnd={cancelHubPress}
+                        onTouchCancel={cancelHubPress}
+                        onTouchMove={cancelHubPress}
+                        onMouseDown={() => startHubPress(city)}
+                        onMouseUp={cancelHubPress}
+                        onMouseLeave={cancelHubPress}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          handleOpenDeleteHub(city);
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer border ${
+                        title={`${count} ${categoryLabel} in ${city}${totalCount !== count ? ` (${totalCount} all categories)` : ''}\n• Click to filter\n• Press & hold or right-click to delete hub`}
+                        className={`group relative px-3 py-1.5 rounded-lg text-xs font-mono font-bold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer border select-none ${
                           isSelected
                             ? 'bg-teal-400 text-black border-teal-300 shadow-[0_0_15px_rgba(45,212,191,0.5)] font-black ring-1 ring-teal-300'
-                            : 'bg-zinc-950/80 border-zinc-850 text-zinc-300 hover:border-teal-500/50 hover:text-teal-200 hover:bg-zinc-900/60'
+                            : 'bg-zinc-950/80 border-zinc-850 text-zinc-300 hover:border-teal-500/50 hover:text-teal-200 hover:bg-zinc-900/60 active:scale-95'
                         }`}
                       >
                         <MapPin className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-black' : 'text-teal-400'}`} />
                         <span>{city}</span>
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
-                          isSelected ? 'bg-black/25 text-black font-black' : 'bg-zinc-900 text-zinc-400'
+                          isSelected 
+                            ? 'bg-black/25 text-black font-black' 
+                            : count > 0 
+                              ? 'bg-zinc-900 text-teal-300 border border-teal-500/20' 
+                              : 'bg-zinc-900/60 text-zinc-600'
                         }`}>
                           {count}
                         </span>
@@ -2952,10 +3373,21 @@ Representing ${activeBandName}`;
                       {seededHubs.map(hubCity => (
                         <span
                           key={`seeded-hub-${hubCity}`}
-                          className="px-2 py-0.5 rounded bg-zinc-900/80 border border-zinc-800 text-zinc-400 text-[10px] font-mono flex items-center gap-1"
+                          className="px-2 py-0.5 rounded bg-zinc-900/80 border border-zinc-800 text-zinc-400 text-[10px] font-mono flex items-center gap-1.5 group"
                         >
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80"></span>
-                          {hubCity}
+                          <span>{hubCity}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenDeleteHub(hubCity);
+                            }}
+                            title={`Delete / Remove hub ${hubCity}`}
+                            className="text-zinc-500 hover:text-red-400 ml-0.5 p-0.5 rounded cursor-pointer transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
                         </span>
                       ))}
                     </div>
@@ -3553,6 +3985,224 @@ Representing ${activeBandName}`;
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Delete Place</span>
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+
+        {/* Delete Hub Confirmation Modal */}
+        {isDeleteHubModalOpen && hubToDelete && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setIsDeleteHubModalOpen(false);
+                setHubToDelete(null);
+              }}
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed left-4 right-4 top-1/2 -translate-y-1/2 bg-[#101216] border border-red-500/40 rounded-2xl z-50 overflow-hidden shadow-[0_0_50px_rgba(239,68,68,0.25)] max-w-md mx-auto"
+            >
+              <div className="p-5 border-b border-zinc-800 bg-[#0c0d10] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-950/50 border border-red-500/50 text-red-400 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-bold text-white text-base tracking-wide">
+                      Delete Hub City
+                    </h3>
+                    <p className="text-xs font-mono text-zinc-400 mt-0.5">
+                      Remove <span className="text-red-400 font-bold">{hubToDelete.city}</span> from Black Book
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteHubModalOpen(false);
+                    setHubToDelete(null);
+                  }}
+                  className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4 text-left">
+                <div className="p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-zinc-400">Target Hub City:</span>
+                    <span className="text-white font-bold">{hubToDelete.city}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-zinc-400">Places in this Hub:</span>
+                    <span className="text-teal-400 font-bold">{hubToDelete.placesCount} places</span>
+                  </div>
+                </div>
+
+                <label className="flex items-start gap-3 p-3 rounded-xl bg-red-950/20 border border-red-900/40 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={hubToDelete.deletePlaces}
+                    onChange={(e) => setHubToDelete(prev => prev ? { ...prev, deletePlaces: e.target.checked } : null)}
+                    className="mt-0.5 rounded border-zinc-700 text-red-500 focus:ring-red-500/30 accent-red-500"
+                  />
+                  <div className="space-y-0.5 text-left">
+                    <p className="text-xs font-mono font-bold text-red-200">
+                      Move all {hubToDelete.placesCount} places in {hubToDelete.city} to Trash
+                    </p>
+                    <p className="text-[11px] font-mono text-zinc-400">
+                      Venues, studios, and rehearsals in {hubToDelete.city} will be archived to Trash and can be restored at any time.
+                    </p>
+                  </div>
+                </label>
+
+                <p className="text-[11px] font-mono text-zinc-500 text-left">
+                  {hubToDelete.deletePlaces
+                    ? `Deleting will unseed "${hubToDelete.city}" and purge its places from active filters.`
+                    : `Unchecking will only remove the hub badge; places in "${hubToDelete.city}" will remain in the database.`}
+                </p>
+              </div>
+
+              <div className="p-4 border-t border-zinc-800 bg-[#0a0a0c] flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteHubModalOpen(false);
+                    setHubToDelete(null);
+                  }}
+                  className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-xl text-xs font-mono font-bold uppercase transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteHub}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete Hub</span>
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+        {/* Restore Trash Archive Modal */}
+        {isRestoreModalOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsRestoreModalOpen(false)}
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed left-4 right-4 top-1/2 -translate-y-1/2 bg-[#101216] border border-zinc-700/60 rounded-2xl z-50 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] max-w-2xl mx-auto max-h-[85vh] flex flex-col"
+            >
+              {/* Header */}
+              <div className="p-5 border-b border-zinc-800 bg-[#0c0d10] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-750 text-zinc-300 flex items-center justify-center shrink-0">
+                    <RotateCcw className="w-5 h-5 text-teal-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-bold text-white text-base tracking-wide flex items-center gap-2">
+                      <span>Deleted Places Archive</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-850 text-zinc-300">
+                        {deletedVenuesArchive.length} in trash
+                      </span>
+                    </h3>
+                    <p className="text-xs font-mono text-zinc-400 mt-0.5">
+                      Restore removed or purged venues back into the active directory
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRestoreModalOpen(false)}
+                  className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 space-y-3 overflow-y-auto flex-1 custom-scrollbar">
+                {deletedVenuesArchive.length === 0 ? (
+                  <div className="py-12 text-center space-y-2 border border-dashed border-zinc-800 rounded-xl bg-zinc-950/40">
+                    <Trash2 className="w-8 h-8 text-zinc-600 mx-auto" />
+                    <p className="text-sm font-mono text-zinc-300 font-bold">Trash is empty</p>
+                    <p className="text-xs font-mono text-zinc-500">No deleted or purged venues in the trash archive.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {deletedVenuesArchive.map((v, idx) => (
+                      <div
+                        key={`archived-v-${v.id || idx}`}
+                        className="p-3.5 rounded-xl border border-zinc-850 bg-zinc-950/80 hover:border-zinc-750 transition-all flex items-center justify-between gap-3 text-left"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white text-sm truncate">{v.name}</span>
+                            <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 shrink-0">
+                              {v.place_type || 'venue'}
+                            </span>
+                          </div>
+                          <div className="text-xs font-mono text-zinc-400 truncate mt-0.5">
+                            {v.city}{v.state ? `, ${v.state}` : ''}{v.country ? ` (${v.country})` : ''} • Cap: {v.capacity || 'N/A'}
+                          </div>
+                          {v.address && (
+                            <div className="text-[10px] font-mono text-zinc-500 truncate mt-0.5">
+                              {v.address}
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreVenue(v)}
+                          className="px-3 py-1.5 bg-teal-950/60 hover:bg-teal-900/60 border border-teal-500/50 text-teal-300 rounded-lg text-xs font-mono font-bold tracking-wider uppercase transition-all shrink-0 flex items-center gap-1.5 cursor-pointer shadow-[0_0_10px_rgba(45,212,191,0.2)]"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Restore</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-zinc-800 bg-[#0c0d10] flex items-center justify-between gap-3">
+                {deletedVenuesArchive.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearTrashArchive}
+                    className="px-3 py-2 bg-red-950/40 hover:bg-red-900/40 border border-red-500/30 text-red-400 rounded-xl text-xs font-mono font-bold uppercase transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Clear Trash</span>
+                  </button>
+                )}
+                <div className="flex-1" />
+                <button
+                  type="button"
+                  onClick={() => setIsRestoreModalOpen(false)}
+                  className="px-5 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-mono font-bold uppercase transition-colors cursor-pointer"
+                >
+                  Close
                 </button>
               </div>
             </motion.div>

@@ -220,7 +220,15 @@ export function useSocialProfileState({
     } else if (!profileIsPlaying && !collPlayerIsPlaying) {
       universalAudioPlayer.pause();
     }
-  }, [profileIsPlaying, profileActivePlaybackTrackId, userProfile]);
+  }, [
+    profileIsPlaying, 
+    profileActivePlaybackTrackId, 
+    userProfile?.band_name, 
+    userProfile?.name, 
+    userProfile?.handle, 
+    userProfile?.avatar,
+    collPlayerIsPlaying
+  ]);
 
   useEffect(() => {
     universalAudioPlayer.setVolume(profileAudioVolume);

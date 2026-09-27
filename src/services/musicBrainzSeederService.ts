@@ -71,6 +71,18 @@ export function isIrrelevantPlace(place: any): boolean {
   const rawType = (place.type || '').toLowerCase();
   const disambiguation = (place.disambiguation || '').toLowerCase();
 
+  // Whitelist legitimate music venues & clubs that happen to contain historical/architectural words
+  const musicVenueWhitelist = [
+    'the parish', 'parish austin', 'parish underground', 'the chapel', 
+    'the tabernacle', 'tabernacle atlanta', 'masonic temple', 'temple live',
+    'the church nightclub', 'church boston', 'civic center music hall',
+    'union transfer', 'preservation hall', 'asbury park convention hall',
+    'temple bar', 'sanctuary arts', 'saint vitus', 'st. vitus'
+  ];
+  if (musicVenueWhitelist.some(wl => name.includes(wl))) {
+    return false;
+  }
+
   let tagStrings: string[] = [];
   if (Array.isArray(place.tags)) {
     tagStrings = place.tags.map((t: any) => (typeof t === 'string' ? t : t.name || '').toLowerCase());
@@ -79,36 +91,32 @@ export function isIrrelevantPlace(place: any): boolean {
   const combinedText = `${name} ${rawType} ${disambiguation} ${tagStrings.join(' ')}`;
 
   // 1. Churches & Religious institutions
-  // Exempt legitimate clubs/studios that simply have "Parish" in their title unless explicitly religious
   const isClubOrStudioType = rawType === 'club' || rawType === 'studio' || rawType === 'rehearsal';
   
   const religiousKeywords = [
-    'church', 'cathedral', 'chapel', 'ministry', 'ministries',
-    'sanctuary', 'worship', 'synagogue', 'mosque', 'tabernacle', 'basilica', 'baptist',
-    'methodist', 'lutheran', 'presbyterian', 'episcopal', 'catholic',
+    'church', 'cathedral', 'ministry', 'ministries',
+    'worship center', 'worship centre', 'synagogue', 'mosque', 'basilica',
+    'baptist', 'methodist', 'lutheran', 'presbyterian', 'episcopal',
     'orthodox church', 'evangelical', 'christian center', 'christian centre',
     'kingdom hall', 'diocese', 'monastery', 'convent', 'abbey',
-    'fellowship hall', 'fellowship center', 'fellowship church', 'temple', 'gurdwara', 'ashram'
+    'fellowship hall', 'fellowship center', 'fellowship church', 'gurdwara', 'ashram'
   ];
 
   if (religiousKeywords.some(kw => combinedText.includes(kw))) {
     return true;
   }
 
-  if (!isClubOrStudioType && (name.includes('parish church') || name.includes('saint ') || name.includes('st. '))) {
-    if (name.includes('parish') || name.includes('mary') || name.includes('paul') || name.includes('peter') || name.includes('john') || name.includes('joseph') || name.includes('jude')) {
-      return true;
-    }
+  if (!isClubOrStudioType && name.includes('parish church')) {
+    return true;
   }
 
   // 2. Arenas, Stadiums & Mega-Sports Facilities
   const arenaKeywords = [
-    'arena', 'stadium', 'coliseum', 'colosseum', 'fieldhouse',
+    'stadium', 'coliseum', 'colosseum', 'fieldhouse',
     'field house', 'ballpark', 'speedway', 'racecourse', 'raceway',
     'racetrack', 'sports complex', 'athletic center', 'athletic centre',
     'center court', 'superdome', 'astrodome', 'metrodome', 'silverdome',
-    'skating arena', 'ice center', 'ice centre', 'motorsports', 'velodrome',
-    'sports arena', 'motor speedway'
+    'motorsports', 'velodrome', 'sports arena', 'motor speedway'
   ];
 
   if (rawType === 'stadium' || rawType === 'arena') {
@@ -121,13 +129,12 @@ export function isIrrelevantPlace(place: any): boolean {
 
   // 3. Convention Centers, Conference Centers & Expo Halls
   const conventionKeywords = [
-    'convention center', 'convention centre', 'convention hall',
+    'convention center', 'convention centre',
     'conference center', 'conference centre', 'conference hall',
     'expo center', 'expo centre', 'exposition center', 'exposition centre',
-    'exposition hall', 'civic center', 'civic centre',
-    'exhibition center', 'exhibition centre', 'exhibition hall',
+    'exposition hall', 'exhibition center', 'exhibition centre', 'exhibition hall',
     'fairgrounds', 'fair grounds', 'county fair', 'trade center', 'trade centre',
-    'trade mart', 'event center at the', 'banquet hall', 'reception hall'
+    'trade mart', 'banquet hall', 'reception hall'
   ];
 
   if (conventionKeywords.some(kw => combinedText.includes(kw))) {

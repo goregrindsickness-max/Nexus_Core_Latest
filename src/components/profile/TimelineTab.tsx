@@ -761,6 +761,80 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         setError(selectErr.message);
       }
 
+      const targetWorkspace = (
+        workspaceType ||
+        portalRole ||
+        selectedUserProfile?.active_workspace ||
+        selectedUserProfile?.type ||
+        selectedUserProfile?.role ||
+        ''
+      ).toLowerCase();
+
+      const isMatchingWorkspacePost = (item: any, postObj: any) => {
+        const postWs = String(
+          postObj.workspace_type ||
+          postObj.workspaceType ||
+          postObj.author?.workspace_type ||
+          postObj.author?.workspaceType ||
+          postObj.portalRole ||
+          postObj.author?.portalRole ||
+          item.workspace_type ||
+          ''
+        ).toLowerCase();
+
+        const postRole = String(
+          postObj.authorRole ||
+          postObj.author?.role ||
+          postObj.role ||
+          item.role ||
+          ''
+        ).toLowerCase();
+
+        const authorName = String(
+          postObj.author?.name ||
+          postObj.authorName ||
+          postObj.author?.username ||
+          item.author_name ||
+          ''
+        ).toLowerCase();
+
+        if (targetWorkspace.includes('promoter')) {
+          if (['band', 'creative', 'label', 'fan_only', 'personal'].includes(postWs)) return false;
+          if (postWs === 'promoter' || postRole.includes('promoter')) return true;
+          if (selectedUserProfile?.promoter_metadata?.brand_name && authorName.includes(selectedUserProfile.promoter_metadata.brand_name.toLowerCase())) return true;
+          if (targetName && authorName.includes(targetName)) return true;
+          return !postWs;
+        }
+
+        if (targetWorkspace.includes('band') || targetWorkspace.includes('artist')) {
+          if (['promoter', 'creative', 'label', 'fan_only', 'personal'].includes(postWs)) return false;
+          if (postWs === 'band' || postRole.includes('artist') || postRole.includes('band') || postObj.isBand || postObj.author?.isBand) return true;
+          if (targetName && authorName.includes(targetName)) return true;
+          return !postWs;
+        }
+
+        if (targetWorkspace.includes('creative')) {
+          if (['promoter', 'band', 'label', 'fan_only', 'personal'].includes(postWs)) return false;
+          if (postWs === 'creative' || postRole.includes('creative')) return true;
+          if (targetName && authorName.includes(targetName)) return true;
+          return !postWs;
+        }
+
+        if (targetWorkspace.includes('label')) {
+          if (['promoter', 'band', 'creative', 'fan_only', 'personal'].includes(postWs)) return false;
+          if (postWs === 'label' || postRole.includes('label')) return true;
+          if (targetName && authorName.includes(targetName)) return true;
+          return !postWs;
+        }
+
+        if (targetWorkspace.includes('fan') || targetWorkspace.includes('personal')) {
+          if (['promoter', 'band', 'creative', 'label'].includes(postWs)) return false;
+          return true;
+        }
+
+        return true;
+      };
+
       const formattedPosts: TimelinePost[] = (data || []).filter((item: any) => {
         const postObj = typeof item.data === 'string' ? JSON.parse(item.data) : (item.data || {});
         // Exclude quiet vault posts and archived asset posts from timeline view
@@ -779,7 +853,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         ) {
           return false;
         }
-        return true;
+        return isMatchingWorkspacePost(item, postObj);
       }).map((item: any) => {
         const postObj = typeof item.data === 'string' ? JSON.parse(item.data) : (item.data || {});
 

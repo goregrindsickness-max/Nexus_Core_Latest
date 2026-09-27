@@ -1002,7 +1002,11 @@ export async function getAllBlackBookVenues(): Promise<VenueResult[]> {
           const key = `${v.name.toLowerCase()}_${(v.city || '').toLowerCase()}`;
           if (!seenNames.has(key)) {
             seenNames.add(key);
-            const vId = v.id || `srv_${v.name.replace(/\s+/g, '_')}`;
+            const nameSlug = (v.name || 'venue').toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const citySlug = (v.city || 'city').toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const vId = (v.id && typeof v.id === 'string' && v.id.trim().length > 0 && v.id !== 'undefined' && v.id !== 'null')
+              ? v.id
+              : `srv_${nameSlug}_${citySlug}_${Math.random().toString(36).substring(2, 7)}`;
             if (!seenIds.has(vId.toLowerCase())) {
               seenIds.add(vId.toLowerCase());
               aggregated.push({
@@ -1040,7 +1044,11 @@ export async function getAllBlackBookVenues(): Promise<VenueResult[]> {
         const key = `${v.name.toLowerCase()}_${(v.city || '').toLowerCase()}`;
         if (!seenNames.has(key)) {
           seenNames.add(key);
-          const vId = v.id || `db_${v.name.replace(/\s+/g, '_')}`;
+          const nameSlug = (v.name || 'venue').toLowerCase().replace(/[^a-z0-9]/g, '_');
+          const citySlug = (v.city || 'city').toLowerCase().replace(/[^a-z0-9]/g, '_');
+          const vId = (v.id && typeof v.id === 'string' && v.id.trim().length > 0 && v.id !== 'undefined' && v.id !== 'null')
+            ? v.id
+            : `db_${nameSlug}_${citySlug}_${Math.random().toString(36).substring(2, 7)}`;
           if (!seenIds.has(vId.toLowerCase())) {
             seenIds.add(vId.toLowerCase());
             aggregated.push({
@@ -1075,7 +1083,11 @@ export async function getAllBlackBookVenues(): Promise<VenueResult[]> {
           const key = `${v.name.toLowerCase()}_${(v.city || '').toLowerCase()}`;
           if (!seenNames.has(key)) {
             seenNames.add(key);
-            const vId = v.id || `loc_${v.name.replace(/\s+/g, '_')}`;
+            const nameSlug = (v.name || 'venue').toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const citySlug = (v.city || 'city').toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const vId = (v.id && typeof v.id === 'string' && v.id.trim().length > 0 && v.id !== 'undefined' && v.id !== 'null')
+              ? v.id
+              : `loc_${nameSlug}_${citySlug}_${Math.random().toString(36).substring(2, 7)}`;
             if (!seenIds.has(vId.toLowerCase())) {
               seenIds.add(vId.toLowerCase());
               aggregated.push({

@@ -1232,14 +1232,34 @@ export default function PromoterPortalView({
       daysArr.push({ date: null, isCurrentMonth: false, hasShow: false, events: [] });
     }
 
+    // Helper to identify purely community-submitted shows that should not appear in promoter's active portfolio
+    const isCommunityOnlyShow = (s: any) => {
+      if (!s) return false;
+      if (s.is_community_submitted === true || s.is_community === true || s.source === 'community' || s.source === 'events_directory') return true;
+      if (typeof s.id === 'string' && (s.id.startsWith('sh_comm_') || s.id.startsWith('evt_'))) return true;
+      if (s.band_id && (s.band_id === 'community_hub' || s.band_id.startsWith('community'))) return true;
+      
+      const nameUpper = String(s.festival_name || s.name || s.headliner || '').toUpperCase();
+      if (nameUpper.includes('DYING FETUS') || nameUpper.includes('NEKROGOBLIKON') || nameUpper.includes('20 YEARS OF NEKROGOBLIKON')) {
+        const isExplicitlyMyPromoterShow = (userProfile?.email && s.promoter_email === userProfile.email) || 
+                                           (userProfile?.id && s.promoter_id === userProfile.id) || 
+                                           (userProfile?.id && s.created_by === userProfile.id);
+        if (!isExplicitlyMyPromoterShow) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     // Populate actual month days
     for (let d = 1; d <= totalDays; d++) {
       const dayDate = new Date(calendarCurrentDate.getFullYear(), calendarCurrentDate.getMonth(), d);
       const isoStr = `${dayDate.getFullYear()}-${String(dayDate.getMonth() + 1).padStart(2, '0')}-${String(dayDate.getDate()).padStart(2, '0')}`;
       
-      // Match 1: Global shows matching our venue name or city
+      // Match 1: Global shows matching our venue name or city (excluding community-only shows)
       const matchedGlobalShows = (shows || []).filter(s => {
         if (s.date !== isoStr) return false;
+        if (isCommunityOnlyShow(s)) return false;
         const sName = (s.name || '').toLowerCase();
         const vName = activeVenue.name.toLowerCase();
         const matchesName = sName.includes(vName) || vName.includes(sName);
@@ -1360,9 +1380,28 @@ export default function PromoterPortalView({
     const list: any[] = [];
     const activeVenue = activeAllVenues[selectedVenueIndex] || activeAllVenues[0];
 
-    // 1. Add other venues or specifically matched global shows
+    const isCommunityOnlyShow = (s: any) => {
+      if (!s) return false;
+      if (s.is_community_submitted === true || s.is_community === true || s.source === 'community' || s.source === 'events_directory') return true;
+      if (typeof s.id === 'string' && (s.id.startsWith('sh_comm_') || s.id.startsWith('evt_'))) return true;
+      if (s.band_id && (s.band_id === 'community_hub' || s.band_id.startsWith('community'))) return true;
+      
+      const nameUpper = String(s.festival_name || s.name || s.headliner || '').toUpperCase();
+      if (nameUpper.includes('DYING FETUS') || nameUpper.includes('NEKROGOBLIKON') || nameUpper.includes('20 YEARS OF NEKROGOBLIKON')) {
+        const isExplicitlyMyPromoterShow = (userProfile?.email && s.promoter_email === userProfile.email) || 
+                                           (userProfile?.id && s.promoter_id === userProfile.id) || 
+                                           (userProfile?.id && s.created_by === userProfile.id);
+        if (!isExplicitlyMyPromoterShow) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // 1. Add other venues or specifically matched global shows (excluding community-only shows)
     if (shows) {
       shows.forEach(s => {
+        if (isCommunityOnlyShow(s)) return;
         const matchedVenue = activeAllVenues.find(v => {
           const sName = (s.name || '').toLowerCase();
           const sFest = (s.festival_name || '').toLowerCase();
@@ -1646,7 +1685,7 @@ export default function PromoterPortalView({
     setVenueGearProvided(userProfile?.promoter_metadata?.home_venue?.gear_provided || userProfile?.promoter_metadata?.tech_rider || '');
     setVenueAudioRequirements(userProfile?.promoter_metadata?.home_venue?.audio_requirements || userProfile?.promoter_metadata?.tech_rider || '');
     setVenueBacklineRequirements(userProfile?.promoter_metadata?.home_venue?.backline_requirements || userProfile?.promoter_metadata?.security_map || '');
-  }, [userProfile?.id]);
+  }, [userProfile?.id, userProfile?.name, userProfile?.promoter_name, userProfile?.promoter_agency, userProfile?.promoter_brand, userProfile?.promoter_logo, userProfile?.promoter_cover_image, userProfile?.promoter_bio, userProfile?.promoter_metadata]);
 
   // Local Utility to Compress Images to avoid payload size constraints
   const compressImage = (dataUrl: string, maxDimension: number, callback: (url: string) => void) => {

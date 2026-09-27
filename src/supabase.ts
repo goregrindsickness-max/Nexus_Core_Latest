@@ -104,6 +104,13 @@ export {
   autoSyncCreativeProfile,
 } from './services/creativeService';
 
+// 6c. Promoter Domain Service
+export {
+  buildNexusLivePromoterPayload,
+  syncPromoterProfileToSupabase,
+  autoSyncPromoterProfile,
+} from './services/promoterService';
+
 // 7. Shop Merch Service
 export {
   fetchShopMerchItems,

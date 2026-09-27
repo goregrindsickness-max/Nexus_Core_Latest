@@ -462,7 +462,7 @@ export function AppNavigationBar({
                         const isFanAcc = currentAcc === 'fan' || currentAcc === 'fan_only';
                         const isProAcc = currentAcc === 'industry_pro';
                         const isCreativeAcc = currentAcc === 'creative';
-                        const isPromoterAcc = currentAcc === 'promoter';
+                        const isPromoterAcc = currentAcc === 'promoter' || userProfile?.active_workspace === 'promoter' || activeTab === 'promoter';
                         const isLabelAcc = currentAcc === 'label';
                         const isBandAcc = currentAcc === 'band';
 
@@ -534,7 +534,7 @@ export function AppNavigationBar({
                               isYou: true,
                               badges: ['🎪 Event Promoter', '⚡ Nexus Live'],
                               customBadges: ['🎪 Event Promoter', '⚡ Nexus Live'],
-                              bio: (updated as any)?.promoter_metadata?.bio || (updated as any)?.promoter_bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || 'Promoter & booking management for underground extreme music festivals and venue tours across North America.',
+                              bio: (updated as any)?.promoter_metadata?.bio || (updated as any)?.promoter_bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.',
                               promoter_metadata: (updated as any)?.promoter_metadata || {}
                             } : {
                               id: updated?.id || null,

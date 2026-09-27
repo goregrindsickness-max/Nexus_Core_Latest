@@ -417,6 +417,10 @@ export interface UserProfile {
   promoter_logo?: string;
   promoter_cover_image?: string;
   promoter_region?: string;
+  promoter_bio?: string;
+  promoter_handle?: string;
+  promoter_city?: string;
+  promoter_state?: string;
   band_logo?: string;
   band_banner?: string;
   band_metadata?: any;

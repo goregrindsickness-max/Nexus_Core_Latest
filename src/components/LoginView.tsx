@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Radio, Lock, UserPlus, Eye, EyeOff, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
-import { sanitizeProfilePayload, sanitizeProfileUpsertPayload, executeSanitizedProfileUpsert, isValidStorageOrImageUrl, sanitizeBandPayload, sanitizeCreativePayload, autoSyncCreativeProfile } from '../supabase';
+import { sanitizeProfilePayload, sanitizeProfileUpsertPayload, executeSanitizedProfileUpsert, isValidStorageOrImageUrl, sanitizeBandPayload, sanitizeCreativePayload, autoSyncCreativeProfile, autoSyncPromoterProfile } from '../supabase';
 const getSupabase = () => supabase;
 import {
   uploadBase64ToStorage,
@@ -650,6 +650,82 @@ export const LoginView: React.FC<LoginViewProps> = ({
             creative_id: effectiveCreativeId,
             creative_name: effectiveCreativeName,
             creative_business_name: effectiveCreativeName,
+            allowed_workspaces: normalizedProfile.allowed_workspaces,
+            registered_workspaces: normalizedProfile.registered_workspaces
+          }).eq('id', data.id);
+        }
+      }
+
+      // Query promoters table / promoter_metadata for this user to check if they own/created a promoter workspace
+      let userPromoter: any = null;
+      try {
+        const { data: promoterData } = await supabase
+          .from('promoters')
+          .select('*')
+          .or(`id.eq.${data.id},user_id.eq.${data.id}`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (promoterData) {
+          userPromoter = promoterData;
+        } else if (data.promoter_metadata || data.promoter_agency || data.promoter_id || (data.allowed_workspaces && data.allowed_workspaces.includes('promoter'))) {
+          userPromoter = await autoSyncPromoterProfile({ ...data, ...normalizedProfile });
+        }
+      } catch (pErr) {
+        console.warn('Could not fetch user promoter on login:', pErr);
+      }
+
+      if (userPromoter || data.promoter_id || data.promoter_agency || data.promoter_metadata) {
+        const effectivePromoterId = userPromoter?.id || data.promoter_id || data.id;
+        const effectivePromoterName = userPromoter?.entity_name || userPromoter?.brand_name || userPromoter?.name || data.promoter_metadata?.brand_name || data.promoter_metadata?.agency_name || data.promoter_agency || 'Nexus Live Productions';
+        const effectivePromoterLogo = userPromoter?.promoter_logo || userPromoter?.logo_url || data.promoter_metadata?.logo_url || data.promoter_logo;
+        const effectivePromoterBanner = userPromoter?.promoter_cover_image || userPromoter?.banner_url || data.promoter_metadata?.banner_url || data.promoter_cover_image;
+        const effectivePromoterBio = userPromoter?.bio || data.promoter_metadata?.bio || data.promoter_bio;
+
+        normalizedProfile.promoter_id = effectivePromoterId;
+        normalizedProfile.promoter_name = effectivePromoterName;
+        normalizedProfile.promoter_agency = effectivePromoterName;
+        normalizedProfile.promoter_brand = effectivePromoterName;
+        if (effectivePromoterLogo) normalizedProfile.promoter_logo = effectivePromoterLogo;
+        if (effectivePromoterBanner) normalizedProfile.promoter_cover_image = effectivePromoterBanner;
+        if (effectivePromoterBio) normalizedProfile.promoter_bio = effectivePromoterBio;
+
+        normalizedProfile.allowed_workspaces = Array.from(new Set([
+          ...(normalizedProfile.allowed_workspaces || []),
+          'promoter'
+        ]));
+
+        normalizedProfile.registered_workspaces = normalizeRegisteredWorkspaces(
+          normalizedProfile.registered_workspaces || [],
+          [{ type: 'promoter', id: effectivePromoterId, name: effectivePromoterName }]
+        );
+
+        normalizedProfile.promoter_metadata = {
+          ...(normalizedProfile.promoter_metadata || {}),
+          ...(userPromoter || {}),
+          brand_name: effectivePromoterName,
+          agency_name: effectivePromoterName,
+          entity_name: effectivePromoterName,
+          business_name: effectivePromoterName,
+          logo_url: effectivePromoterLogo,
+          banner_url: effectivePromoterBanner,
+          bio: effectivePromoterBio
+        };
+
+        if (normalizedProfile.account_type !== 'fan' && normalizedProfile.account_type !== 'fan_only') {
+          normalizedProfile.account_type = 'industry pro';
+        }
+
+        // Backfill NULL promoter_id or promoter_agency in profiles table in Supabase
+        if (!data.promoter_id || !data.promoter_agency || !data.promoter_logo) {
+          await supabase.from('profiles').update({
+            promoter_id: effectivePromoterId,
+            promoter_agency: effectivePromoterName,
+            promoter_brand: effectivePromoterName,
+            promoter_name: effectivePromoterName,
+            promoter_logo: effectivePromoterLogo,
+            promoter_cover_image: effectivePromoterBanner,
             allowed_workspaces: normalizedProfile.allowed_workspaces,
             registered_workspaces: normalizedProfile.registered_workspaces
           }).eq('id', data.id);

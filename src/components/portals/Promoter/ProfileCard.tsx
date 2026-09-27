@@ -6,7 +6,8 @@ import { getProfileGlowInfo } from '../../../utils/profileGlow';
 import { formatLocationDisplay } from '../../../constants/location';
 import { useUserPresence } from '../../../lib/presence';
 import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
-import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert } from '../../../supabase';
+import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, ensureValidSupabaseAuthSession } from '../../../supabase';
+import { resolvePromoterHandle, resolvePromoterLogo, resolvePromoterCover, resolvePromoterLocation, formatCleanLocation } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
 import { isCommunityBandRecord } from '../../../lib/seedBandsData';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
@@ -130,156 +131,61 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const [fetchedBandData, setFetchedBandData] = React.useState<any>(null);
   const [linkedBandData, setLinkedBandData] = React.useState<any>(null);
   const [fetchedProfileData, setFetchedProfileData] = React.useState<any>(null);
+  const [fetchedPromoterRecord, setFetchedPromoterRecord] = React.useState<any>(null);
   const [isEditingBio, setIsEditingBio] = React.useState(false);
   const [promoterBioText, setPromoterBioText] = React.useState<string>(() => {
-    const defaultPromoterBio = 'Promoter & booking management for underground extreme music festivals and venue tours across North America.';
-    const personalBio = (userProfile as any)?.bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_bio') : null);
-    const stored = typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null;
-    if (stored && stored !== personalBio) return stored;
+    const defaultPromoterBio = 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
+    const personalBio = (userProfile as any)?.bio;
     const fromProfile = selectedUserProfile?.promoter_metadata?.bio || selectedUserProfile?.promoter_bio || (userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio;
-    if (fromProfile && fromProfile !== personalBio) return fromProfile;
+    if (fromProfile && fromProfile !== personalBio && !fromProfile.toLowerCase().includes('booking management')) return fromProfile;
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null;
+    if (stored && stored !== personalBio && !stored.toLowerCase().includes('booking management')) return stored;
     return defaultPromoterBio;
   });
 
   React.useEffect(() => {
-    const personalBio = (userProfile as any)?.bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_bio') : null);
-    const stored = typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null;
-    if (stored && stored !== personalBio) {
-      setPromoterBioText(stored);
+    const personalBio = (userProfile as any)?.bio;
+    const fromProfile = fetchedPromoterRecord?.bio || fetchedProfileData?.promoter_metadata?.bio || fetchedProfileData?.promoter_bio || selectedUserProfile?.promoter_metadata?.bio || selectedUserProfile?.promoter_bio || (userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio;
+    if (fromProfile && fromProfile !== personalBio && !fromProfile.toLowerCase().includes('booking management')) {
+      setPromoterBioText(fromProfile);
       return;
     }
-    const fromProfile = selectedUserProfile?.promoter_metadata?.bio || selectedUserProfile?.promoter_bio || (userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio;
-    if (fromProfile && fromProfile !== personalBio) {
-      setPromoterBioText(fromProfile);
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null;
+    if (stored && stored !== personalBio && !stored.toLowerCase().includes('booking management')) {
+      setPromoterBioText(stored);
     }
-  }, [selectedUserProfile?.promoter_metadata?.bio, selectedUserProfile?.promoter_bio, userProfile?.promoter_metadata?.bio, userProfile?.promoter_bio]);
+  }, [fetchedPromoterRecord?.bio, fetchedProfileData?.promoter_metadata?.bio, fetchedProfileData?.promoter_bio, selectedUserProfile?.promoter_metadata?.bio, selectedUserProfile?.promoter_bio, userProfile?.promoter_metadata?.bio, userProfile?.promoter_bio]);
   const [isEditingTopSong, setIsEditingTopSong] = React.useState(false);
 
-  const initialAnthemUrl = (selectedUserProfile?.top_song_url || selectedUserProfile?.featured_youtube_url || selectedUserProfile?.promoter_metadata?.top_song_url || selectedUserProfile?.promoter_metadata?.featured_video_url || (userProfile as any)?.promoter_metadata?.top_song_url || (userProfile as any)?.promoter_metadata?.featured_video_url || (userProfile as any)?.top_song_url || (userProfile as any)?.featured_youtube_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_url') : '') || '') as string;
-  const initialAnthemArtist = (selectedUserProfile?.top_song_artist || selectedUserProfile?.promoter_metadata?.top_song_artist || (userProfile as any)?.promoter_metadata?.top_song_artist || profileTopSongArtist || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_artist') : '') || '') as string;
-  const initialAnthemTitle = (selectedUserProfile?.top_song_title || selectedUserProfile?.promoter_metadata?.top_song_title || (userProfile as any)?.promoter_metadata?.top_song_title || profileTopSongTitle || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_title') : '') || '') as string;
+  const initialAnthemUrl = (fetchedPromoterRecord?.top_song_url || fetchedProfileData?.top_song_url || selectedUserProfile?.top_song_url || selectedUserProfile?.featured_youtube_url || selectedUserProfile?.promoter_metadata?.top_song_url || selectedUserProfile?.promoter_metadata?.featured_video_url || (userProfile as any)?.promoter_metadata?.top_song_url || (userProfile as any)?.promoter_metadata?.featured_video_url || (userProfile as any)?.top_song_url || (userProfile as any)?.featured_youtube_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_url') : '') || '') as string;
+  const initialAnthemArtist = (fetchedPromoterRecord?.top_song_artist || fetchedProfileData?.top_song_artist || selectedUserProfile?.top_song_artist || selectedUserProfile?.promoter_metadata?.top_song_artist || (userProfile as any)?.promoter_metadata?.top_song_artist || profileTopSongArtist || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_artist') : '') || '') as string;
+  const initialAnthemTitle = (fetchedPromoterRecord?.top_song_title || fetchedProfileData?.top_song_title || selectedUserProfile?.top_song_title || selectedUserProfile?.promoter_metadata?.top_song_title || (userProfile as any)?.promoter_metadata?.top_song_title || profileTopSongTitle || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_title') : '') || '') as string;
 
   const [localAnthemArtist, setLocalAnthemArtist] = React.useState(initialAnthemArtist);
   const [localAnthemTitle, setLocalAnthemTitle] = React.useState(initialAnthemTitle);
   const [localAnthemUrl, setLocalAnthemUrl] = React.useState(initialAnthemUrl);
 
   React.useEffect(() => {
-    const url = selectedUserProfile?.top_song_url || selectedUserProfile?.featured_youtube_url || selectedUserProfile?.promoter_metadata?.top_song_url || selectedUserProfile?.promoter_metadata?.featured_video_url || (userProfile as any)?.promoter_metadata?.top_song_url || (userProfile as any)?.top_song_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_url') : '') || '';
-    const artist = selectedUserProfile?.top_song_artist || selectedUserProfile?.promoter_metadata?.top_song_artist || (userProfile as any)?.promoter_metadata?.top_song_artist || profileTopSongArtist || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_artist') : '') || '';
-    const title = selectedUserProfile?.top_song_title || selectedUserProfile?.promoter_metadata?.top_song_title || (userProfile as any)?.promoter_metadata?.top_song_title || profileTopSongTitle || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_title') : '') || '';
-    if (url) setLocalAnthemUrl(url);
-    if (artist) setLocalAnthemArtist(artist);
-    if (title) setLocalAnthemTitle(title);
-  }, [selectedUserProfile?.top_song_url, selectedUserProfile?.featured_youtube_url, selectedUserProfile?.top_song_artist, selectedUserProfile?.top_song_title, profileTopSongArtist, profileTopSongTitle]);
+    // Never overwrite local state while user is actively editing
+    if (isEditingTopSong) return;
+    const url = fetchedPromoterRecord?.top_song_url || fetchedProfileData?.top_song_url || selectedUserProfile?.top_song_url || selectedUserProfile?.featured_youtube_url || selectedUserProfile?.promoter_metadata?.top_song_url || selectedUserProfile?.promoter_metadata?.featured_video_url || (userProfile as any)?.promoter_metadata?.top_song_url || (userProfile as any)?.top_song_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_url') : '') || '';
+    const artist = fetchedPromoterRecord?.top_song_artist || fetchedProfileData?.top_song_artist || selectedUserProfile?.top_song_artist || selectedUserProfile?.promoter_metadata?.top_song_artist || (userProfile as any)?.promoter_metadata?.top_song_artist || profileTopSongArtist || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_artist') : '') || '';
+    const title = fetchedPromoterRecord?.top_song_title || fetchedProfileData?.top_song_title || selectedUserProfile?.top_song_title || selectedUserProfile?.promoter_metadata?.top_song_title || (userProfile as any)?.promoter_metadata?.top_song_title || profileTopSongTitle || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_top_song_title') : '') || '';
+    if (url !== undefined && url !== null) setLocalAnthemUrl(url);
+    if (artist !== undefined && artist !== null) setLocalAnthemArtist(artist);
+    if (title !== undefined && title !== null) setLocalAnthemTitle(title);
+  }, [isEditingTopSong, fetchedPromoterRecord?.top_song_url, fetchedPromoterRecord?.top_song_artist, fetchedPromoterRecord?.top_song_title, fetchedProfileData?.top_song_url, fetchedProfileData?.top_song_artist, fetchedProfileData?.top_song_title, selectedUserProfile?.top_song_url, selectedUserProfile?.featured_youtube_url, selectedUserProfile?.top_song_artist, selectedUserProfile?.top_song_title]);
 
   const handleAnthemUrlChange = (val: string) => {
     setLocalAnthemUrl(val);
-    if (setProfileTopSongUrl) setProfileTopSongUrl(val);
-    setSelectedUserProfile((prev: any) => prev ? {
-      ...prev,
-      top_song_url: val,
-      featured_youtube_url: val,
-      promoter_metadata: {
-        ...(prev?.promoter_metadata || {}),
-        top_song_url: val,
-        featured_video_url: val,
-      }
-    } : null);
-    setFetchedProfileData((prev: any) => prev ? {
-      ...prev,
-      top_song_url: val,
-      featured_youtube_url: val
-    } : null);
-    if (setUserProfile) {
-      queueMicrotask(() => {
-        setUserProfile((pPrev: any) => pPrev ? {
-          ...pPrev,
-          top_song_url: val,
-          featured_youtube_url: val,
-          promoter_metadata: {
-            ...(pPrev?.promoter_metadata || {}),
-            top_song_url: val,
-            featured_video_url: val,
-          }
-        } : null);
-      });
-    }
   };
 
   const handleAnthemArtistChange = (artist: string) => {
     setLocalAnthemArtist(artist);
-    if (setProfileTopSongArtist) setProfileTopSongArtist(artist);
-    const fullTitle = artist && localAnthemTitle ? `${artist} - ${localAnthemTitle}` : (artist || localAnthemTitle || 'None Selected');
-    if (setProfileFavoriteSong) setProfileFavoriteSong(fullTitle);
-    setSelectedUserProfile((prev: any) => prev ? {
-      ...prev,
-      favoriteSong: fullTitle,
-      top_song_artist: artist,
-      top_song_title: localAnthemTitle || fullTitle,
-      promoter_metadata: {
-        ...(prev?.promoter_metadata || {}),
-        top_song_artist: artist,
-        top_song_title: localAnthemTitle || fullTitle
-      }
-    } : null);
-    setFetchedProfileData((prev: any) => prev ? {
-      ...prev,
-      top_song_artist: artist,
-      favoriteSong: fullTitle
-    } : null);
-    if (setUserProfile) {
-      queueMicrotask(() => {
-        setUserProfile((pPrev: any) => pPrev ? {
-          ...pPrev,
-          favoriteSong: fullTitle,
-          top_song_artist: artist,
-          top_song_title: localAnthemTitle || fullTitle,
-          promoter_metadata: {
-            ...(pPrev?.promoter_metadata || {}),
-            top_song_artist: artist,
-            top_song_title: localAnthemTitle || fullTitle
-          }
-        } : null);
-      });
-    }
   };
 
   const handleAnthemTitleChange = (title: string) => {
     setLocalAnthemTitle(title);
-    if (setProfileTopSongTitle) setProfileTopSongTitle(title);
-    const fullTitle = localAnthemArtist && title ? `${localAnthemArtist} - ${title}` : (localAnthemArtist || title || 'None Selected');
-    if (setProfileFavoriteSong) setProfileFavoriteSong(fullTitle);
-    setSelectedUserProfile((prev: any) => prev ? {
-      ...prev,
-      favoriteSong: fullTitle,
-      top_song_artist: localAnthemArtist,
-      top_song_title: title,
-      promoter_metadata: {
-        ...(prev?.promoter_metadata || {}),
-        top_song_artist: localAnthemArtist,
-        top_song_title: title
-      }
-    } : null);
-    setFetchedProfileData((prev: any) => prev ? {
-      ...prev,
-      top_song_title: title,
-      favoriteSong: fullTitle
-    } : null);
-    if (setUserProfile) {
-      queueMicrotask(() => {
-        setUserProfile((pPrev: any) => pPrev ? {
-          ...pPrev,
-          favoriteSong: fullTitle,
-          top_song_artist: localAnthemArtist,
-          top_song_title: title,
-          promoter_metadata: {
-            ...(pPrev?.promoter_metadata || {}),
-            top_song_artist: localAnthemArtist,
-            top_song_title: title
-          }
-        } : null);
-      });
-    }
   };
 
   const handleSaveAnthem = () => {
@@ -343,6 +249,9 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       localStorage.setItem('nexus_promoter_top_song_url', url);
       localStorage.setItem('nexus_promoter_top_song_artist', artist);
       localStorage.setItem('nexus_promoter_top_song_title', title);
+      localStorage.setItem('nexus_user_top_song_url', url);
+      localStorage.setItem('nexus_user_top_song_artist', artist);
+      localStorage.setItem('nexus_user_top_song_title', title);
       localStorage.setItem('nexus_favorite_song', fullTitle);
       const targetId = selectedUserProfile?.id || userProfile?.id;
       if (targetId) {
@@ -375,6 +284,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     setIsEditingTopSong(false);
     triggerNotification?.("💾 Featured video & anthem updated.");
   };
+
   const [isEditingTicker, setIsEditingTicker] = React.useState(false);
   const [tickerUpdateText, setTickerUpdateText] = React.useState<string>(() => {
     const targetId = selectedUserProfile?.id || 'guest';
@@ -663,6 +573,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       // C) Fetch Profile from 'profiles' table for full name, console handle, location, bio
       if (supabase) {
         try {
+          await ensureValidSupabaseAuthSession(supabase).catch(() => {});
           let profRecord: any = null;
           const targetId = base?.id || selectedUserProfile?.id || targetProfile?.id;
           const targetEmail = base?.email || selectedUserProfile?.email;
@@ -691,10 +602,21 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           if (isMounted && profRecord) {
             const normProf = normalizeLoadedProfile(profRecord);
             setFetchedProfileData(normProf);
-            if (normProf.top_song_url && setProfileTopSongUrl) {
-              if (base?.isYou || selectedUserProfile?.isYou) {
+            const promBio = normProf?.promoter_metadata?.bio || normProf?.promoter_bio;
+            if (promBio && !promBio.toLowerCase().includes('booking management')) {
+              setPromoterBioText(promBio);
+            }
+            if (normProf.top_song_url) {
+              setLocalAnthemUrl(normProf.top_song_url);
+              if (setProfileTopSongUrl && (base?.isYou || selectedUserProfile?.isYou)) {
                 setProfileTopSongUrl(normProf.top_song_url);
               }
+            }
+            if (normProf.top_song_title) {
+              setLocalAnthemTitle(normProf.top_song_title);
+            }
+            if (normProf.top_song_artist) {
+              setLocalAnthemArtist(normProf.top_song_artist);
             }
             if (normProf.bio && setProfileBlurb) {
               if (base?.isYou || selectedUserProfile?.isYou) {
@@ -705,6 +627,42 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         } catch (err) {
           // Fallback silently
         }
+
+        // D) Fetch Promoter Record directly from Supabase 'promoters' table
+        try {
+          let promRecord: any = null;
+          const targetId = base?.id || selectedUserProfile?.id || targetProfile?.id;
+          const targetEmail = base?.email || selectedUserProfile?.email;
+          const validUUID = targetId && extractUUID(targetId);
+
+          if (validUUID) {
+            const { data: pData } = await supabase.from('promoters').select('*').or(`id.eq.${validUUID},user_id.eq.${validUUID}`).maybeSingle();
+            if (pData) promRecord = pData;
+          }
+          if (!promRecord && targetEmail) {
+            const { data: pData } = await supabase.from('promoters').select('*').ilike('email', targetEmail.trim()).maybeSingle();
+            if (pData) promRecord = pData;
+          }
+
+          if (isMounted && promRecord) {
+            setFetchedPromoterRecord(promRecord);
+            if (promRecord.bio && !promRecord.bio.toLowerCase().includes('booking management')) {
+              setPromoterBioText(promRecord.bio);
+            }
+            if (promRecord.top_song_url) {
+              setLocalAnthemUrl(promRecord.top_song_url);
+              if (setProfileTopSongUrl && (base?.isYou || selectedUserProfile?.isYou)) {
+                setProfileTopSongUrl(promRecord.top_song_url);
+              }
+            }
+            if (promRecord.top_song_title) {
+              setLocalAnthemTitle(promRecord.top_song_title);
+            }
+            if (promRecord.top_song_artist) {
+              setLocalAnthemArtist(promRecord.top_song_artist);
+            }
+          }
+        } catch (_) {}
       }
     }
 
@@ -753,33 +711,83 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
   const bData = isCurrentUserBand ? (fetchedBandData || localSavedBand) : null;
 
-  const resolvedPromoterCover = userProfile?.promoter_cover_image || fetchedProfileData?.promoter_cover_image || fetchedProfileData?.cover_url || baseTarget?.promoter_cover_image || baseTarget?.cover_url || baseTarget?.banner_url || userProfile?.cover_url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80';
+  const resolvedPromoterCover = (
+    fetchedPromoterRecord?.promoter_cover_image ||
+    fetchedPromoterRecord?.banner_url ||
+    fetchedProfileData?.promoter_cover_image ||
+    fetchedProfileData?.promoter_metadata?.banner_url ||
+    fetchedProfileData?.promoter_metadata?.cover_url ||
+    (isTargetExplicitSelf ? (userProfile?.promoter_cover_image || (userProfile?.promoter_metadata as any)?.banner_url || (userProfile?.promoter_metadata as any)?.cover_url) : null) ||
+    baseTarget?.promoter_cover_image ||
+    baseTarget?.cover_url ||
+    baseTarget?.banner_url ||
+    (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) ||
+    'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635'
+  );
 
   const resolvedPromoterLogo = (
+    fetchedPromoterRecord?.promoter_logo ||
+    fetchedPromoterRecord?.logo_url ||
+    fetchedProfileData?.promoter_logo ||
+    fetchedProfileData?.promoter_metadata?.logo_url ||
+    (isTargetExplicitSelf ? (userProfile?.promoter_logo || (userProfile?.promoter_metadata as any)?.logo_url) : null) ||
     baseTarget?.promoter_logo ||
     baseTarget?.logo_url ||
     baseTarget?.logo ||
-    (isTargetExplicitSelf ? (userProfile?.promoter_logo || (userProfile?.promoter_metadata as any)?.logo_url) : null) ||
     (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) ||
-    fetchedProfileData?.promoter_logo ||
     'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601'
+  );
+
+  const resolvedPromoterBrandName = (
+    fetchedPromoterRecord?.entity_name ||
+    fetchedPromoterRecord?.brand_name ||
+    fetchedProfileData?.promoter_brand ||
+    fetchedProfileData?.promoter_agency ||
+    fetchedProfileData?.promoter_name ||
+    fetchedProfileData?.promoter_metadata?.brand_name ||
+    (isTargetExplicitSelf ? (userProfile?.promoter_brand || userProfile?.promoter_agency || (userProfile?.promoter_metadata as any)?.brand_name) : null) ||
+    baseTarget?.promoter_brand ||
+    baseTarget?.promoter_agency ||
+    baseTarget?.brand_name ||
+    baseTarget?.name ||
+    'Nexus Live Productions'
+  );
+
+  const resolvedPromoterHandleStr = (
+    baseTarget?.promoter_handle ||
+    fetchedProfileData?.promoter_handle ||
+    (isTargetExplicitSelf ? resolvePromoterHandle(userProfile) : null) ||
+    (resolvedPromoterBrandName ? `@${resolvedPromoterBrandName.replace(/\s+/g, '')}` : '@NexusLive')
+  );
+
+  const resolvedPromoterBioFinal = (
+    promoterBioText ||
+    fetchedPromoterRecord?.bio ||
+    fetchedProfileData?.promoter_metadata?.bio ||
+    fetchedProfileData?.promoter_bio ||
+    (isTargetExplicitSelf ? ((userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio) : null) ||
+    baseTarget?.promoter_metadata?.bio ||
+    baseTarget?.promoter_bio ||
+    'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.'
   );
 
   const effTarget = {
     ...baseTarget,
     portalRole: 'promoter',
     account_type: 'promoter',
-    console_handle: '@NexusLive',
-    handle: '@NexusLive',
+    console_handle: resolvedPromoterHandleStr,
+    handle: resolvedPromoterHandleStr,
+    name: resolvedPromoterBrandName,
+    full_name: resolvedPromoterBrandName,
     avatar: resolvedPromoterLogo,
     avatar_url: resolvedPromoterLogo,
     promoter_logo: resolvedPromoterLogo,
     cover_url: resolvedPromoterCover,
     banner_url: resolvedPromoterCover,
     banner: resolvedPromoterCover,
+    bio: resolvedPromoterBioFinal,
+    promoter_bio: resolvedPromoterBioFinal,
     ...(fetchedProfileData ? {
-      full_name: fetchedProfileData.full_name || fetchedProfileData.name || baseTarget.full_name || baseTarget.name,
-      name: fetchedProfileData.full_name || fetchedProfileData.name || baseTarget.name,
       city: fetchedProfileData.city || baseTarget.city,
       state_province: fetchedProfileData.state_province || baseTarget.state_province,
       country: fetchedProfileData.country || baseTarget.country,
@@ -787,11 +795,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       allowed_workspaces: fetchedProfileData.allowed_workspaces || baseTarget.allowed_workspaces,
       homebase: fetchedProfileData.homebase || baseTarget.homebase,
       location: formatLocationDisplay(fetchedProfileData) || baseTarget.location,
-      bio: (fetchedProfileData.bio !== undefined && fetchedProfileData.bio !== null && fetchedProfileData.bio !== '')
-        ? fetchedProfileData.bio
-        : ((baseTarget?.isYou || selectedUserProfile?.isYou || (userProfile?.id && (baseTarget?.id === userProfile.id || selectedUserProfile?.id === userProfile.id)))
-            ? (profileBlurb || (userProfile as any)?.bio || baseTarget?.bio || '')
-            : (baseTarget?.bio || '')),
       avatar: resolvedPromoterLogo || fetchedProfileData.avatar_url || fetchedProfileData.avatar || baseTarget.avatar,
       avatar_url: resolvedPromoterLogo || fetchedProfileData.avatar_url || fetchedProfileData.avatar || baseTarget.avatar_url,
       top_song_url: (selectedUserProfile?.isYou || baseTarget?.isYou) ? (localAnthemUrl || fetchedProfileData.top_song_url || baseTarget?.top_song_url) : (fetchedProfileData.top_song_url !== undefined && fetchedProfileData.top_song_url !== null && fetchedProfileData.top_song_url !== '' ? fetchedProfileData.top_song_url : baseTarget?.top_song_url),
@@ -1688,7 +1691,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   if (hasPromoter) {
                     const name = String(rawPromoterName).trim();
                     const logo = matchingPromoterProfile?.promoter_logo || matchingPromoterProfile?.logo_url || effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=300';
-                    const subtitle = effTarget?.promoter_metadata?.region || effTarget?.target_region || (isTargetSelf ? (userProfile?.promoter_metadata?.region || userProfile?.target_region) : null) || effTarget.venue || effTarget.location || 'Promoter & Venue Booking';
+                    const rawSub = effTarget?.promoter_metadata?.region || effTarget?.target_region || (isTargetSelf ? (userProfile?.promoter_metadata?.region || userProfile?.target_region) : null) || effTarget.venue || effTarget.location || 'Promoter & Venue Booking';
+                    const subtitle = rawSub && rawSub !== 'Promoter & Venue Booking' ? (formatCleanLocation(rawSub) || rawSub) : rawSub;
 
                     entities.push({
                       key: 'promoter',
@@ -2115,20 +2119,21 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                            baseTarget?.isYou ||
                            (userProfile?.id && (selectedUserProfile?.id === userProfile.id || effTarget?.id === userProfile.id || baseTarget?.id === userProfile.id))
                          );
-                         const defaultPromoterBio = 'Promoter & booking management for underground extreme music festivals and venue tours across North America.';
+                         const defaultPromoterBio = 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
                          const personalBio = (userProfile as any)?.bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_bio') : null) || 'Extreme metal musician, archivist, and underground pit warrior.';
 
                          let b = (
                            promoterBioText ||
-                           (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) ||
                            effTarget?.promoter_metadata?.bio ||
                            effTarget?.promoter_bio ||
+                           effTarget?.bio ||
                            (userProfile as any)?.promoter_metadata?.bio ||
                            (userProfile as any)?.promoter_bio ||
+                           (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) ||
                            ''
                          ).trim();
 
-                         if (!b || b === personalBio) {
+                         if (!b || b === personalBio || b.toLowerCase().includes('booking management for underground')) {
                            b = defaultPromoterBio;
                          }
                          return `"${b}"`;
@@ -2282,15 +2287,23 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                   let rawList: string[] = [];
 
-                  if (effTarget?.isYou) {
+                  if (effTarget?.isYou || isTargetExplicitSelf) {
                     rawList = [
+                      ...(userProfile?.promoter_metadata?.genres || []),
+                      ...(userProfile?.genres || []),
+                      ...(userProfile?.genre_tags || []),
+                      ...(userProfile?.fan_genres || []),
                       ...(profileMicroGenres || []),
                       ...(profilePrimaryGenres || []),
                       ...(profileGenres || []),
-                      ...(userProfile?.fan_genres || []),
+                      ...(effTarget?.promoter_metadata?.genres || []),
                       ...(effTarget?.genres || []),
                       ...(effTarget?.genre_tags || []),
                     ];
+                  }
+                  if (rawList.length === 0 && (effTarget?.promoter_metadata?.genres || (effTarget as any)?.genres_booked || (effTarget as any)?.genres_served)) {
+                    const pg = effTarget?.promoter_metadata?.genres || (effTarget as any)?.genres_booked || (effTarget as any)?.genres_served;
+                    if (Array.isArray(pg)) rawList = [...pg];
                   }
                   if (rawList.length === 0 && effTarget?.fan_genres && Array.isArray(effTarget.fan_genres)) {
                     rawList = [...effTarget.fan_genres];
@@ -2313,6 +2326,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   }
                   if (rawList.length === 0 && effTarget?.profilePrimaryGenres && Array.isArray(effTarget.profilePrimaryGenres)) {
                     rawList = [...rawList, ...effTarget.profilePrimaryGenres];
+                  }
+                  if (rawList.length === 0 && typeof window !== 'undefined') {
+                    try {
+                      const stored = localStorage.getItem('nexus_promoter_genres') || localStorage.getItem('nexus_user_genres');
+                      if (stored) {
+                        const parsed = JSON.parse(stored);
+                        if (Array.isArray(parsed)) rawList = [...parsed];
+                      }
+                    } catch (e) {}
                   }
 
                   const allGenres = Array.from(new Set(rawList.filter(Boolean)));
@@ -2380,7 +2402,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   glowEffect = 'shadow-[0_0_15px_rgba(234,179,8,0.12)]';
                 }
 
-                const songUrl = localAnthemUrl || effTarget?.top_song_url || effTarget?.featured_youtube_url || selectedUserProfile?.top_song_url || selectedUserProfile?.featured_youtube_url || (selectedUserProfile as any)?.promoter_metadata?.top_song_url || (userProfile as any)?.promoter_metadata?.top_song_url || '';
+                const isSelf = Boolean(selectedUserProfile?.isYou || effTarget?.isYou);
+                const songUrl = isSelf
+                  ? (localAnthemUrl !== undefined ? localAnthemUrl : '')
+                  : (effTarget?.top_song_url || effTarget?.featured_youtube_url || selectedUserProfile?.top_song_url || selectedUserProfile?.featured_youtube_url || (selectedUserProfile as any)?.promoter_metadata?.top_song_url || (userProfile as any)?.promoter_metadata?.top_song_url || '');
                 const embedUrl = getEmbedUrl(songUrl);
                 
                 let songTitle = '';
@@ -2396,7 +2421,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   songTitle = effTarget.favoriteSong;
                 } else if (effTarget?.isBandProfile || effTarget?.type === 'band' || isArtistOrBand) {
                   songTitle = effTarget?.name ? `${effTarget.name} - Newest Release` : 'Newest Release Video';
-                } else if ((selectedUserProfile?.isYou || effTarget?.isYou) && profileTopSongArtist && profileTopSongTitle) {
+                } else if (isSelf && profileTopSongArtist && profileTopSongTitle) {
                   songTitle = `${profileTopSongArtist} - ${profileTopSongTitle}`;
                 } else {
                   songTitle = '';
@@ -2514,46 +2539,112 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               </button>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <div>
-                            <div className="text-[9px] text-zinc-400 font-mono uppercase tracking-widest mb-1">
-                              🎸 Band / Artist Name
-                            </div>
-                            <input
-                              type="text"
-                              value={localAnthemArtist}
-                              onChange={(e) => handleAnthemArtistChange(e.target.value)}
-                              placeholder="e.g. Excrescence"
-                              className="w-full bg-black/80 border border-zinc-800 focus:border-yellow-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
-                            />
-                          </div>
+                              <div>
+                                <div className="flex justify-between items-center text-[9px] text-zinc-400 font-mono uppercase tracking-widest mb-1">
+                                  <span>🎸 Band / Artist Name</span>
+                                  {localAnthemArtist && (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => handleAnthemArtistChange('')}
+                                      className="text-zinc-500 hover:text-red-400 text-[8.5px] cursor-pointer"
+                                    >
+                                      Clear
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="relative">
+                                  <input
+                                    type="text"
+                                    value={localAnthemArtist}
+                                    onChange={(e) => handleAnthemArtistChange(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveAnthem(); }}
+                                    placeholder="e.g. Excrescence"
+                                    className="w-full bg-black/80 border border-zinc-800 focus:border-yellow-500 rounded px-2 py-1 text-xs text-white font-mono outline-none pr-6"
+                                  />
+                                  {localAnthemArtist && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAnthemArtistChange('')}
+                                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-0.5"
+                                      title="Clear"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
 
-                          <div>
-                            <div className="text-[9px] text-zinc-400 font-mono uppercase tracking-widest mb-1">
-                              🎵 Song / Track Name
+                              <div>
+                                <div className="flex justify-between items-center text-[9px] text-zinc-400 font-mono uppercase tracking-widest mb-1">
+                                  <span>🎵 Song / Track Name</span>
+                                  {localAnthemTitle && (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => handleAnthemTitleChange('')}
+                                      className="text-zinc-500 hover:text-red-400 text-[8.5px] cursor-pointer"
+                                    >
+                                      Clear
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="relative">
+                                  <input
+                                    type="text"
+                                    value={localAnthemTitle}
+                                    onChange={(e) => handleAnthemTitleChange(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveAnthem(); }}
+                                    placeholder="e.g. Masticated Labia Coagulation"
+                                    className="w-full bg-black/80 border border-zinc-800 focus:border-yellow-500 rounded px-2 py-1 text-xs text-white font-mono outline-none pr-6"
+                                  />
+                                  {localAnthemTitle && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAnthemTitleChange('')}
+                                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-0.5"
+                                      title="Clear"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <input
-                              type="text"
-                              value={localAnthemTitle}
-                              onChange={(e) => handleAnthemTitleChange(e.target.value)}
-                              placeholder="e.g. Masticated Labia Coagulation"
-                              className="w-full bg-black/80 border border-zinc-800 focus:border-yellow-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
-                            />
-                          </div>
-                        </div>
 
-                        <div>
-                          <div className="text-[9px] text-zinc-400 font-mono uppercase tracking-widest mb-1">
-                            🔗 Embed URL (YouTube / Spotify / SoundCloud)
+                            <div>
+                              <div className="flex justify-between items-center text-[9px] text-zinc-400 font-mono uppercase tracking-widest mb-1">
+                                <span>🔗 Embed URL (YouTube / Spotify / SoundCloud)</span>
+                                {localAnthemUrl && (
+                                  <button 
+                                    type="button" 
+                                    onClick={() => handleAnthemUrlChange('')}
+                                    className="text-zinc-500 hover:text-red-400 text-[8.5px] cursor-pointer font-bold"
+                                  >
+                                    Erase URL
+                                  </button>
+                                )}
+                              </div>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={localAnthemUrl}
+                                  onChange={(e) => handleAnthemUrlChange(e.target.value)}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') handleSaveAnthem(); }}
+                                  placeholder="Paste YouTube, Spotify or SoundCloud URL (or leave blank to clear)"
+                                  className="w-full bg-black/80 border border-zinc-800 focus:border-yellow-500 rounded px-2 py-1.5 text-xs text-white font-mono outline-none pr-7"
+                                />
+                                {localAnthemUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAnthemUrlChange('')}
+                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-red-400 p-1 cursor-pointer transition-colors"
+                                    title="Erase and clear URL"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <input
-                            type="text"
-                            value={localAnthemUrl}
-                            onChange={(e) => handleAnthemUrlChange(e.target.value)}
-                            placeholder="https://www.youtube.com/watch?v=... or youtu.be link"
-                            className="w-full bg-black/80 border border-zinc-800 focus:border-yellow-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
-                          />
-                        </div>
-                      </div>
                         )}
                       </div>
                     )}
@@ -3165,6 +3256,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     profileName={selectedUserProfile?.name}
                     isYou={selectedUserProfile?.isYou}
                     selectedUserProfile={selectedUserProfile}
+                    workspaceType="promoter"
+                    portalRole="promoter"
                     triggerPictureViewer={triggerPictureViewer}
                     triggerNotification={triggerNotification}
                   />

@@ -16,7 +16,8 @@ import {
   resolveEffectiveAvatar,
   resolveEffectiveCover,
   resolvePromoterName,
-  resolvePromoterHandle
+  resolvePromoterHandle,
+  formatCleanLocation
 } from "../../../utils/bandProfileUtils";
 import {
   getStoredWallets,
@@ -321,7 +322,8 @@ export const LeftProfileDrawer: React.FC<LeftProfileDrawerProps> = (props) => {
   const [newTierPoints, setNewTierPoints] = React.useState('');
   const [newTierReward, setNewTierReward] = React.useState('');
 
-  const locationParts = (profileLocation || '').split(',').map(s => s.trim());
+  const cleanLocStr = formatCleanLocation(profileLocation);
+  const locationParts = cleanLocStr.split(',').map(s => s.trim());
   const currentCity = locationParts[0] || '';
   const currentState = locationParts[1] || '';
   const [profileCountry, setProfileCountry] = React.useState(() => {

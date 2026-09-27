@@ -27,6 +27,7 @@ import { BAND_PORTAL_BILLING } from './config/billingMatrix';
 import { useBandState } from "./hooks/useBandState";
 import { useInventoryState } from "./hooks/useInventoryState";
 import { useOffersManagement } from "./hooks/useOffersManagement";
+import { tourPackageManager } from './lib/tourPackageManager';
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import InteractiveRoutePreview from './components/portals/Band/InteractiveRoutePreview';
 import { inventoryStore, posSalesStore, itinerariesStore, socialFeedStore, reviewsStore, showsStore, registrationStagingStore, venuesStore, offersStore, routingBeaconsStore, creativeNodesStore, expensesStore, profileStore } from './utils/indexedDB';
@@ -127,7 +128,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Sale, Show, InventoryItem, TourNote, Band, UserProfile, ChecklistItem, BankItem, Flight, InventoryAudit, UserReview, LoyaltyMember, Offer, DbNotification, SubscriptionTier, StagedDistroItem, AssetRevenueSplit, CashTransaction, BandJoinRequest, RegisteredWorkspaceRef, hasRegisteredWorkspace, normalizeRegisteredWorkspaces } from './types';
 import { communityBandManager, isCommunityBandRecord } from './lib/communityBands';
 import { isMiguelNameOrProfile } from './components/social/utils/profileUtils';
-import { initOfflineQueue, getSupabase, testSupabaseConnection, getSupabaseUrl, getSupabaseAnonKey, subscribeToTable, sanitizeInventoryItemForDb, executeWithSchemaResilience, getOfflineQueue, processOfflineQueue, isBypassRequiredError, handleDatabaseFailover, saveToFailoverCache, generateUUID, uploadBase64ToStorage, fetchUserBands, sanitizeBandPayload, ensureValidSupabaseAuthSession, autoSyncCreativeProfile, fetchUserCreatives, resolveInventoryImageUrl } from './supabase';
+import { initOfflineQueue, getSupabase, testSupabaseConnection, getSupabaseUrl, getSupabaseAnonKey, subscribeToTable, sanitizeInventoryItemForDb, executeWithSchemaResilience, getOfflineQueue, processOfflineQueue, isBypassRequiredError, handleDatabaseFailover, saveToFailoverCache, generateUUID, uploadBase64ToStorage, fetchUserBands, sanitizeBandPayload, ensureValidSupabaseAuthSession, autoSyncCreativeProfile, autoSyncPromoterProfile, normalizeLoadedProfile, fetchUserCreatives, resolveInventoryImageUrl } from './supabase';
 import AlbumArt from './components/AlbumArt';
 import { useOfflineSync } from './hooks/useOfflineSync';
 import { useSubscriptionTimer } from './hooks/useSubscriptionTimer';
@@ -327,9 +328,11 @@ export default function App() {
       if (parsed) {
         if (parsed.account_type === 'fan' || parsed.account_type === 'fan_only') {
           parsed.active_workspace = 'fan_only';
+        } else if (parsed.active_workspace === 'promoter' || parsed.account_type === 'promoter') {
+          parsed.active_workspace = 'promoter';
         } else {
-          parsed.active_workspace = 'industry_pro';
-          if (parsed.account_type === 'pro' || parsed.account_type === 'band' || parsed.account_type === 'creative' || parsed.account_type === 'promoter' || parsed.account_type === 'label') {
+          parsed.active_workspace = parsed.active_workspace || 'industry_pro';
+          if (parsed.account_type === 'pro' || parsed.account_type === 'band' || parsed.account_type === 'creative' || parsed.account_type === 'label') {
             parsed.account_type = 'industry_pro';
           }
         }
@@ -913,9 +916,43 @@ export default function App() {
         }
       }
     };
+    const handleTourShowsUpdate = (e: any) => {
+      const tour = e.detail?.tour;
+      if (!tour) return;
+      const isPublished = tour.publicationStatus === 'public_announced';
+      const isEmbargoed = tour.publicationStatus === 'embargoed_private';
+
+      setShows(prevShows => {
+        return prevShows.map(s => {
+          let belongsToTour = false;
+          if (s.additional_notes) {
+            try {
+              const extra = typeof s.additional_notes === 'string' ? JSON.parse(s.additional_notes) : s.additional_notes;
+              if (extra.tour_id === tour.id) belongsToTour = true;
+            } catch (_) {}
+          }
+          if (!belongsToTour && (s as any).show_name && (s as any).show_name.startsWith(tour.title)) {
+            belongsToTour = true;
+          }
+          if (belongsToTour) {
+            return {
+              ...s,
+              is_published: isPublished,
+              publication_status: tour.publicationStatus,
+              embargo_until_date: tour.embargoUntilDate,
+              status: isEmbargoed ? 'Embargoed' : (s.status === 'Embargoed' ? 'Active' : s.status)
+            };
+          }
+          return s;
+        });
+      });
+    };
+
+    window.addEventListener('shows_updated_from_tour_manager', handleTourShowsUpdate);
     window.addEventListener('nexus_navigate', handleNavigate);
     window.addEventListener('nexus_navigate_tab', handleNavigate);
     return () => {
+      window.removeEventListener('shows_updated_from_tour_manager', handleTourShowsUpdate);
       window.removeEventListener('nexus_navigate', handleNavigate);
       window.removeEventListener('nexus_navigate_tab', handleNavigate);
     };
@@ -1073,11 +1110,24 @@ export default function App() {
     if (shows.length === 0) return null;
     const todayStr = new Date().toISOString().split('T')[0];
     const upcoming = shows
-      .filter(s => s.date >= todayStr)
+      .filter(s => {
+        if (s.is_published === false) return false;
+        if (s.publication_status === 'embargoed_private' || s.publication_status === 'draft') return false;
+        if (s.status === 'Draft' || s.status === 'Embargoed') return false;
+        return s.date >= todayStr;
+      })
       .sort((a, b) => a.date.localeCompare(b.date));
     if (upcoming.length > 0) return upcoming[0];
-    // Fallback: sort all and pick the latest one
-    const sorted = [...shows].sort((a, b) => b.date.localeCompare(a.date));
+    
+    // Fallback: pick only from unembargoed shows
+    const unembargoed = shows.filter(s => {
+      if (s.is_published === false) return false;
+      if (s.publication_status === 'embargoed_private' || s.publication_status === 'draft') return false;
+      if (s.status === 'Draft' || s.status === 'Embargoed') return false;
+      return true;
+    });
+    if (unembargoed.length === 0) return null;
+    const sorted = [...unembargoed].sort((a, b) => b.date.localeCompare(a.date));
     return sorted[0];
   };
 
@@ -1335,6 +1385,69 @@ export default function App() {
       console.error('Failed to merge extended show metadata on mount:', err);
     }
   }, []);
+
+  // Listen to Tour Manager package and publication updates to retroactively update shows in real-time
+  useEffect(() => {
+    const handleTourSync = (e: any) => {
+      const tour = e.detail?.tour;
+      if (!tour) return;
+      const isEmbargoed = tour.publicationStatus === 'embargoed_private';
+      const isPublished = tour.publicationStatus === 'public_announced';
+
+      setShows(prevShows => {
+        const stopMap = new Map<string, any>();
+        if (Array.isArray(tour.stops)) {
+          tour.stops.forEach((st: any) => {
+            stopMap.set(st.id, st);
+            const hexId = (st.id || '').replace(/[^a-f0-9]/gi, '').padEnd(32, '0').slice(0, 32);
+            const stopUuid = hexId.slice(0, 8) + '-' + hexId.slice(8, 12) + '-4' + hexId.slice(13, 16) + '-a' + hexId.slice(17, 20) + '-' + hexId.slice(20, 32);
+            stopMap.set(stopUuid, st);
+          });
+        }
+
+        const updated = prevShows.map(s => {
+          let matches = false;
+          if (s.additional_notes) {
+            try {
+              const extra = typeof s.additional_notes === 'string' ? JSON.parse(s.additional_notes) : s.additional_notes;
+              if (extra.tour_id === tour.id || (extra.stop_id && stopMap.has(extra.stop_id))) {
+                matches = true;
+              }
+            } catch (_) {}
+          }
+          if (!matches && (s as any).show_name && (s as any).show_name.toLowerCase().startsWith((tour.title || '').toLowerCase())) {
+            matches = true;
+          }
+          if (!matches && stopMap.has(s.id)) {
+            matches = true;
+          }
+
+          if (matches) {
+            return {
+              ...s,
+              status: isEmbargoed ? 'Embargoed' : 'Active',
+              is_published: isPublished,
+              publication_status: tour.publicationStatus,
+              embargo_until_date: tour.embargoUntilDate
+            };
+          }
+          return s;
+        });
+
+        // Save updated shows to stores
+        showsStore.setItem('nexus_master_shows', JSON.stringify(updated)).catch(console.warn);
+        try {
+          localStorage.setItem('nexus_core_shows_offline', JSON.stringify(updated));
+        } catch (_) {}
+        return updated;
+      });
+    };
+
+    window.addEventListener('shows_updated_from_tour_manager', handleTourSync);
+    return () => {
+      window.removeEventListener('shows_updated_from_tour_manager', handleTourSync);
+    };
+  }, []);
   
   const isLoadedFromDbRef = useRef(false);
   const { inventory, setInventory, editingItem, setEditingItem, stagedDistroItems, setStagedDistroItems, inventoryAudits, setInventoryAudits } = useInventoryState();
@@ -1398,6 +1511,114 @@ export default function App() {
       }
     }
   }, [userProfile, isOnline]);
+
+  // Proactively hydrate userProfile from Supabase profiles table on startup & when coming online
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase || !navigator.onLine) return;
+
+    let isSubscribed = true;
+    const syncProfileFromSupabase = async () => {
+      try {
+        await ensureValidSupabaseAuthSession(supabase).catch(() => {});
+        let targetId = userProfile?.id;
+        let targetEmail = (userProfile?.email || '').trim();
+
+        if (!targetId || targetId === 'guest') {
+          const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+          if (session?.user) {
+            targetId = session.user.id;
+            targetEmail = session.user.email || '';
+          }
+        }
+
+        if (!targetId && !targetEmail) return;
+
+        let query = supabase.from('profiles').select('*');
+        if (targetId && targetEmail) {
+          query = query.or(`id.eq.${targetId},email.ilike.${targetEmail}`);
+        } else if (targetId) {
+          query = query.eq('id', targetId);
+        } else if (targetEmail) {
+          query = query.ilike('email', targetEmail);
+        }
+
+        const { data, error } = await query.maybeSingle();
+        if (data && !error && isSubscribed) {
+          // Also fetch live record from promoters table if accessible
+          let promoterRecord: any = null;
+          try {
+            const { data: pData } = await supabase
+              .from('promoters')
+              .select('*')
+              .or(`id.eq.${data.id},user_id.eq.${data.id}`)
+              .maybeSingle();
+            if (pData) promoterRecord = pData;
+          } catch (_) {}
+
+          const normalized = normalizeLoadedProfile(data);
+          if (promoterRecord) {
+            normalized.promoter_id = promoterRecord.id || normalized.promoter_id;
+            normalized.promoter_name = promoterRecord.entity_name || promoterRecord.brand_name || promoterRecord.name || normalized.promoter_name;
+            normalized.promoter_agency = promoterRecord.entity_name || promoterRecord.agency_name || normalized.promoter_agency;
+            normalized.promoter_brand = promoterRecord.entity_name || promoterRecord.brand_name || normalized.promoter_brand;
+            normalized.promoter_logo = promoterRecord.promoter_logo || normalized.promoter_logo;
+            normalized.promoter_cover_image = promoterRecord.promoter_cover_image || normalized.promoter_cover_image;
+            normalized.promoter_bio = promoterRecord.bio || normalized.promoter_bio;
+            normalized.promoter_metadata = {
+              ...(normalized.promoter_metadata || {}),
+              ...promoterRecord,
+              brand_name: normalized.promoter_name,
+              agency_name: normalized.promoter_agency,
+              logo_url: normalized.promoter_logo,
+              banner_url: normalized.promoter_cover_image,
+              bio: normalized.promoter_bio
+            };
+          }
+
+          setUserProfile((prev: any) => {
+            if (!prev) return normalized;
+            const merged = {
+              ...prev,
+              ...normalized,
+              active_workspace: normalized.active_workspace || prev.active_workspace || 'industry_pro',
+              account_type: prev.account_type || normalized.account_type || 'industry pro',
+              promoter_id: normalized.promoter_id || prev.promoter_id,
+              promoter_name: normalized.promoter_name || prev.promoter_name,
+              promoter_agency: normalized.promoter_agency || prev.promoter_agency,
+              promoter_brand: normalized.promoter_brand || prev.promoter_brand,
+              promoter_logo: normalized.promoter_logo || prev.promoter_logo,
+              promoter_cover_image: normalized.promoter_cover_image || prev.promoter_cover_image,
+              promoter_bio: normalized.promoter_bio || prev.promoter_bio,
+              promoter_metadata: {
+                ...(prev.promoter_metadata || {}),
+                ...(normalized.promoter_metadata || {})
+              }
+            };
+            try {
+              profileStore.setItem('nexus_core_user_profile', merged);
+              localStorage.setItem('nexus_core_user_profile', JSON.stringify(merged));
+              if (merged.promoter_metadata?.bio) {
+                localStorage.setItem('nexus_promoter_bio', merged.promoter_metadata.bio);
+              }
+              if (merged.promoter_metadata?.logo_url) {
+                localStorage.setItem('nexus_promoter_logo', merged.promoter_metadata.logo_url);
+              }
+              if (merged.promoter_metadata?.cover_url || merged.promoter_metadata?.banner_url) {
+                localStorage.setItem('nexus_promoter_cover', merged.promoter_metadata.cover_url || merged.promoter_metadata.banner_url);
+              }
+            } catch (_) {}
+            return merged;
+          });
+        }
+      } catch (err) {
+        console.warn('[App] Proactive Supabase profile hydration notice:', err);
+      }
+    };
+
+    syncProfileFromSupabase();
+    return () => { isSubscribed = false; };
+  }, [userProfile?.id, isOnline]);
 
   // Load account-specific offline caches instantly upon context/tenant switch to allow pristine clean slates
   useEffect(() => {
@@ -1489,12 +1710,12 @@ export default function App() {
         const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
 
         // Ensure strict separation between Personal Bio and Promoter Bio, and heal if overwritten
-        const authenticPersonalBio = 'Extreme metal musician, archivist, and underground pit warrior.';
-        const defaultPromoterBio = 'Promoter & booking management for underground extreme music festivals and venue tours across North America.';
+        const authenticPersonalBio = 'Chicago born artist, musician, promoter and entrepreneur with 25 years of history in the extreme metal underground. Probably best known for the Chicago/Texas Domination Fest that ran from 2014-2024. I am also the vocalist of Virulent Excision. Currently my latest ambition has been the creation of this very platform. I wanted to create the sickest all-in-one system for bands, labels, promoters and creators to link up free of algorithms of corporate junk and ads found on the platforms. Enjoy!';
+        const authenticPromoterBio = 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
         const currentBio = userProfile?.bio || '';
         const promoterBio = (userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio;
 
-        if (isOwnerMiguel && currentBio && (currentBio === promoterBio || currentBio.toLowerCase().includes('promoter & booking management') || currentBio.toLowerCase().includes('nexus live productions'))) {
+        if (isOwnerMiguel && currentBio && (currentBio === promoterBio || currentBio.toLowerCase().includes('booking management for underground'))) {
           userProfile.bio = authenticPersonalBio;
           try {
             localStorage.setItem('nexus_user_bio', authenticPersonalBio);
@@ -1588,6 +1809,38 @@ export default function App() {
               } catch (_) {}
             }
           }).catch((err) => console.warn('Creative auto-sync notice:', err));
+        }
+
+        // Auto-heal existing promoter profile from Supabase
+        if (supabase && navigator.onLine && userProfile?.id && userProfile.id !== 'guest') {
+          autoSyncPromoterProfile(userProfile).then((synced) => {
+            if (synced) {
+              setUserProfile((prev: any) => {
+                if (!prev) return prev;
+                const healedProfile = {
+                  ...prev,
+                  promoter_id: synced.id || prev.promoter_id,
+                  promoter_name: synced.brand_name || synced.name || prev.promoter_name,
+                  promoter_agency: synced.agency_name || synced.brand_name || prev.promoter_agency,
+                  promoter_brand: synced.brand_name || prev.promoter_brand,
+                  promoter_logo: synced.promoter_logo || synced.logo_url || prev.promoter_logo,
+                  promoter_cover_image: synced.promoter_cover_image || synced.banner_url || prev.promoter_cover_image,
+                  promoter_bio: synced.bio || prev.promoter_bio,
+                  promoter_metadata: {
+                    ...(prev.promoter_metadata || {}),
+                    ...synced
+                  }
+                };
+                try {
+                  localStorage.setItem('nexus_core_user_profile', JSON.stringify(healedProfile));
+                  if (synced.bio) localStorage.setItem('nexus_promoter_bio', synced.bio);
+                  if (synced.promoter_logo || synced.logo_url) localStorage.setItem('nexus_promoter_logo', synced.promoter_logo || synced.logo_url);
+                  if (synced.promoter_cover_image || synced.banner_url) localStorage.setItem('nexus_promoter_cover', synced.promoter_cover_image || synced.banner_url);
+                } catch (_) {}
+                return healedProfile;
+              });
+            }
+          }).catch((err) => console.warn('Promoter auto-sync notice:', err));
         }
 
         let userActiveId = 'cbddb810-259b-4230-9968-3d402dfdb872';
@@ -2630,6 +2883,9 @@ export default function App() {
               } catch (_) {}
               setShows(mergedShows);
               showsStore.setItem('nexus_master_shows', JSON.stringify(mergedShows)).catch(console.warn);
+              try {
+                tourPackageManager.incorporateShowsFromDb(showsDb);
+              } catch (_) {}
               addLog(`Synchronized ${realShows.length} tours from database table.`);
             } else {
               addLog(`Shows table is empty in live database.`);
@@ -3285,13 +3541,25 @@ export default function App() {
   }, [filteredSales, inventory]);
 
   // Active or next scheduled show (closest to today, within 1 year in the future)
-  const sortedShows = [...filteredShows].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const sortedShows = useMemo(() => {
+    return [...filteredShows].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [filteredShows]);
+
+  const publicAnnouncedShows = useMemo(() => {
+    return sortedShows.filter(s => {
+      if (s.is_published === false) return false;
+      if (s.publication_status === 'embargoed_private' || s.publication_status === 'draft') return false;
+      if (s.status === 'Draft' || s.status === 'Embargoed') return false;
+      return true;
+    });
+  }, [sortedShows]);
+
   const todayStr = new Date().toISOString().split('T')[0];
   const oneYearFromNow = new Date();
   oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
   const oneYearFromNowStr = oneYearFromNow.toISOString().split('T')[0];
   
-  const currentOrNextShow = sortedShows.find(s => s.date >= todayStr && s.date <= oneYearFromNowStr) || null;
+  const currentOrNextShow = publicAnnouncedShows.find(s => s.date >= todayStr && s.date <= oneYearFromNowStr) || null;
   
   // Calculate active shows needing settlement
   const showsNeedingSettlement = useMemo(() => {
@@ -3907,10 +4175,18 @@ list.push({
                 if (hasUnlockedPromoterWorkspace) {
                   const pName = customProfile.promoter_metadata?.brand_name || customProfile.promoter_metadata?.agency_name || customProfile.promoter_agency || customProfile.promoter_brand || customProfile.promoter_name || 'Nexus Live Productions';
                   const pId = customProfile.promoter_id || (customProfile.promoter_metadata as any)?.id || customProfile.id;
+                  const pLogo = customProfile.promoter_logo || customProfile.promoter_metadata?.logo_url || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
+                  const pCover = customProfile.promoter_cover_image || customProfile.promoter_metadata?.banner_url || customProfile.promoter_metadata?.cover_url || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
+                  const pBio = customProfile.promoter_bio || customProfile.promoter_metadata?.bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
+
                   customProfile.promoter_id = pId;
                   customProfile.promoter_agency = pName;
                   customProfile.promoter_brand = pName;
                   customProfile.promoter_name = pName;
+                  customProfile.promoter_logo = pLogo;
+                  customProfile.promoter_cover_image = pCover;
+                  customProfile.promoter_bio = pBio;
+
                   if (!hasRegisteredWorkspace(customProfile, 'promoter')) {
                     customProfile.registered_workspaces = normalizeRegisteredWorkspaces(customProfile.registered_workspaces, [{
                       type: 'promoter',

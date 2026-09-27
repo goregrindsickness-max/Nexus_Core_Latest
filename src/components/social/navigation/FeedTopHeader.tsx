@@ -343,18 +343,24 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                         }
 
                         if (portalRole === 'promoter') {
-                          const promoterName = (userProfile as any)?.promoter_metadata?.brand_name || (userProfile as any)?.promoter_metadata?.agency_name || (userProfile as any)?.promoter_agency || 'Nexus Live Productions';
-                          const promoterLogo = (userProfile as any)?.promoter_logo || (userProfile as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
-                          const promoterCover = (userProfile as any)?.promoter_cover_image || (userProfile as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
-                          const promoterBio = (userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || 'Promoter & booking management for underground extreme music festivals and venue tours across North America.';
+                          const pm = (userProfile as any)?.promoter_metadata || {};
+                          const promoterAgencyName = pm.brand_name || pm.agency_name || (userProfile as any)?.promoter_agency || 'Nexus Live Productions';
+                          const promoterLogo = pm.logo_url || (userProfile as any)?.promoter_logo || (userProfile as any)?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
+                          const promoterCover = pm.banner_url || pm.cover_url || (userProfile as any)?.promoter_cover_image || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
+                          const promoterBio = pm.bio || (userProfile as any)?.promoter_bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
+                          const rawHandle = (userProfile as any)?.promoter_handle || (promoterAgencyName ? `@${promoterAgencyName.replace(/\s+/g, '')}` : '@NexusLive');
+                          const resolvedHandle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
 
                           const detailPayload = {
-                            id: (userProfile as any)?.promoter_id || userProfile?.id || 'promoter:nexuslive',
-                            name: promoterName,
-                            legalName: promoterName,
-                            handle: '@NexusLive',
-                            console_handle: '@NexusLive',
-                            username: '@NexusLive',
+                            id: userProfile?.id || (userProfile as any)?.promoter_id || '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
+                            user_id: userProfile?.id || '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
+                            email: userProfile?.email || 'goregrindsickness@gmail.com',
+                            name: promoterAgencyName,
+                            legalName: userProfile?.full_name || userProfile?.name || 'Miguel Goregrinder Medina',
+                            full_name: userProfile?.full_name || userProfile?.name || 'Miguel Goregrinder Medina',
+                            handle: resolvedHandle,
+                            console_handle: resolvedHandle,
+                            username: resolvedHandle,
                             avatar: promoterLogo,
                             avatar_url: promoterLogo,
                             logo: promoterLogo,
@@ -376,7 +382,7 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                             badges: ['🎪 Event Promoter', '⚡ Nexus Live'],
                             customBadges: ['🎪 Event Promoter', '⚡ Nexus Live'],
                             bio: promoterBio,
-                            promoter_metadata: (userProfile as any)?.promoter_metadata || {}
+                            promoter_metadata: pm
                           };
                           window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
                           triggerNotification?.("⚡ Opening Promoter Public Profile...");
@@ -1036,13 +1042,15 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                 <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-2 px-0.5 select-none">
                   {[
                     { id: 'all', label: 'All Stream', emoji: '🔥' },
+                    { id: 'followed', label: 'Followed', emoji: '⭐' },
                     { id: 'tour', label: 'Tour Dates', emoji: '🎟️' },
                     { id: 'merch', label: 'Merch Drops', emoji: '👕' },
                     { id: 'audio', label: 'Demos & Tapes', emoji: '🎙️' },
-                    { id: 'photos', label: 'Photo Pit', emoji: '📸' },
-                    { id: 'following', label: 'Following', emoji: '⭐' }
+                    { id: 'photos', label: 'Photo Pit', emoji: '📸' }
                   ].map((chip) => {
-                    const isSelected = (activeFeedCategoryFilter || 'all') === chip.id;
+                    const isSelected = 
+                      (activeFeedCategoryFilter || 'all') === chip.id || 
+                      (chip.id === 'followed' && activeFeedCategoryFilter === 'following');
                     return (
                       <button
                         key={`feed-filter-chip-${chip.id}`}

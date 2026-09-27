@@ -6,7 +6,8 @@ import {
   resolveBandHandle,
   resolveBandName,
   resolveEffectiveAvatar,
-  resolveEffectiveCover
+  resolveEffectiveCover,
+  formatCleanLocation
 } from '../../utils/bandProfileUtils';
 
 interface ProfileHubCardProps {
@@ -144,7 +145,7 @@ export const ProfileHubCard: React.FC<ProfileHubCardProps> = ({
             ))}
             {profileLocation && (
               <span className="text-[7px] font-mono font-black uppercase tracking-wider bg-zinc-900/60 border border-zinc-850 text-zinc-300 px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                📍 {profileLocation}
+                📍 {formatCleanLocation(profileLocation)}
               </span>
             )}
           </div>

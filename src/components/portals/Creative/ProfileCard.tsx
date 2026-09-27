@@ -3559,6 +3559,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     profileName={selectedUserProfile?.name}
                     isYou={selectedUserProfile?.isYou}
                     selectedUserProfile={selectedUserProfile}
+                    workspaceType="creative"
+                    portalRole="creative"
                     triggerPictureViewer={triggerPictureViewer}
                     triggerNotification={triggerNotification}
                   />

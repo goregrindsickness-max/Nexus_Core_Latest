@@ -605,10 +605,24 @@ class TourPackageManagerService {
       }
     } catch (_) {}
 
-    // 3. Reconcile with local tours
+    // 3. Query Supabase shows table directly to extract live tour stops and sync with package records
+    try {
+      const { data: showsData, error: showsError } = await supabase
+        .from('shows')
+        .select('*')
+        .order('date', { ascending: true });
+
+      if (!showsError && showsData && Array.isArray(showsData) && showsData.length > 0) {
+        this.incorporateShowsFromDb(showsData, cloudTours.length > 0 ? cloudTours : this.memoryTours);
+      }
+    } catch (_) {}
+
+    // 4. Reconcile with local memory tours (Cloud takes precedence over seed/stale local state)
     if (cloudTours.length > 0) {
       let hasChanges = false;
       const mergedMap = new Map<string, TourPackageRecord>();
+      
+      // Seed initial from memory
       for (const local of this.memoryTours) {
         mergedMap.set(local.id, local);
       }
@@ -619,30 +633,20 @@ class TourPackageManagerService {
           mergedMap.set(cloud.id, cloud);
           hasChanges = true;
         } else {
+          // Cloud always takes precedence if cloud has more or equal fresh info
           const cloudTime = new Date(cloud.updatedAt || 0).getTime();
           const localTime = new Date(local.updatedAt || 0).getTime();
 
-          if (cloudTime > localTime + 1000) {
+          if (cloudTime >= localTime || cloud.stops.length > local.stops.length) {
             mergedMap.set(cloud.id, cloud);
             hasChanges = true;
-          } else if (localTime > cloudTime + 1000) {
-            this.syncToCloud(local);
           }
         }
       }
 
-      // Check for local-only tours that need pushing
-      for (const local of this.memoryTours) {
-        if (!cloudTours.some(c => c.id === local.id)) {
-          this.syncToCloud(local);
-        }
-      }
-
-      if (hasChanges) {
-        this.memoryTours = Array.from(mergedMap.values());
-        this.saveToLocal();
-        this.notifyChanges();
-      }
+      this.memoryTours = Array.from(mergedMap.values());
+      this.saveToLocal();
+      this.notifyChanges();
       return this.memoryTours;
     } else if (this.memoryTours.length > 0) {
       for (const local of this.memoryTours) {
@@ -653,7 +657,116 @@ class TourPackageManagerService {
     return this.memoryTours;
   }
 
+  // Merge stops found in Supabase shows table into existing or newly discovered tour packages
+  public incorporateShowsFromDb(showsData: any[], targetToursList: TourPackageRecord[] = this.memoryTours) {
+    if (!Array.isArray(showsData) || showsData.length === 0) return;
+
+    // Group shows by tour_id if present
+    const stopsByTourId = new Map<string, TourPackageStop[]>();
+    const tourStatusMap = new Map<string, { publicationStatus?: 'embargoed_private' | 'confirmed_routing' | 'public_announced'; embargoUntilDate?: string }>();
+
+    for (const s of showsData) {
+      if (!s) continue;
+      let tourId = '';
+      let stopId = s.id;
+      let extra: any = {};
+
+      if (s.additional_notes) {
+        try {
+          extra = typeof s.additional_notes === 'string' ? JSON.parse(s.additional_notes) : s.additional_notes;
+          if (extra.tour_id) tourId = extra.tour_id;
+          if (extra.stop_id) stopId = extra.stop_id;
+        } catch (_) {}
+      }
+
+      // If no explicit tour_id in additional_notes, try matching show_name (e.g. "Tour Title - City")
+      if (!tourId && s.show_name && s.show_name.includes(' - ')) {
+        const titlePart = s.show_name.split(' - ')[0].trim();
+        const matched = targetToursList.find(t => t.title.toLowerCase() === titlePart.toLowerCase());
+        if (matched) tourId = matched.id;
+      }
+
+      if (!tourId) {
+        // Assign to active or primary headline tour if headliner matches
+        const headliner = (s.headliner || s.name || '').toLowerCase();
+        const matched = targetToursList.find(t => (t.headlinerClientName || '').toLowerCase() === headliner);
+        if (matched) tourId = matched.id;
+      }
+
+      if (tourId) {
+        const isShowEmbargoed = s.status === 'Embargoed' || s.publication_status === 'embargoed_private' || s.is_published === false;
+        
+        if (!tourStatusMap.has(tourId)) {
+          tourStatusMap.set(tourId, {
+            publicationStatus: s.publication_status || (isShowEmbargoed ? 'embargoed_private' : 'public_announced'),
+            embargoUntilDate: s.embargo_until_date
+          });
+        }
+
+        const stop: TourPackageStop = {
+          id: stopId || `stop_${s.id}`,
+          date: s.date || s.show_date || new Date().toISOString().split('T')[0],
+          venueName: s.venue_name || s.venue || s.name || 'Venue',
+          city: s.city || 'Tour City',
+          state: s.state_province || s.state || 'USA',
+          grossDeal: s.guarantee_amount || 2000,
+          loadInTime: extra.load_in_time || '15:00',
+          soundcheckTime: extra.soundcheck_time || '17:30',
+          doorsTime: s.doors_time || '19:00',
+          showStartTime: s.set_time || '20:00',
+          curfewTime: extra.curfew_time || '23:30',
+          venueContactName: s.promoter_contact || '',
+          venueContactPhone: extra.venue_phone || '',
+          venueContactEmail: extra.venue_email || '',
+          parkingNotes: s.parking_arrangements || '',
+          hospitalityNotes: extra.hospitality || '',
+          status: extra.stop_status || (s.status === 'Active' ? 'confirmed' : (s.status === 'Embargoed' ? 'advancing' : 'advancing')),
+          advancingDone: extra.advancing_done ?? true,
+          merchCutVenuePct: extra.merchCutVenuePct ?? 0
+        };
+
+        if (!stopsByTourId.has(tourId)) {
+          stopsByTourId.set(tourId, []);
+        }
+        stopsByTourId.get(tourId)!.push(stop);
+      }
+    }
+
+    // Merge extracted stops and statuses into target tours
+    stopsByTourId.forEach((extractedStops, tourId) => {
+      const tour = targetToursList.find(t => t.id === tourId);
+      if (tour) {
+        const existingStopIds = new Set(tour.stops.map(st => st.id));
+        const newStops = [...tour.stops];
+        for (const es of extractedStops) {
+          if (!existingStopIds.has(es.id)) {
+            newStops.push(es);
+            existingStopIds.add(es.id);
+          } else {
+            // Update in-place
+            const idx = newStops.findIndex(st => st.id === es.id);
+            if (idx >= 0) newStops[idx] = { ...newStops[idx], ...es };
+          }
+        }
+        // Sort stops by date
+        newStops.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        tour.stops = newStops;
+
+        const statusMeta = tourStatusMap.get(tourId);
+        if (statusMeta?.publicationStatus) {
+          tour.publicationStatus = statusMeta.publicationStatus;
+        }
+        if (statusMeta?.embargoUntilDate) {
+          tour.embargoUntilDate = statusMeta.embargoUntilDate;
+        }
+      }
+    });
+  }
+
   private async syncToCloud(tour: TourPackageRecord) {
+    const isPublished = tour.publicationStatus === 'public_announced';
+    const isEmbargoed = tour.publicationStatus === 'embargoed_private';
+
     // 1. Push to server persistent API endpoint
     try {
       fetch('/api/tour-packages', {
@@ -663,7 +776,7 @@ class TourPackageManagerService {
       }).catch(() => {});
     } catch (_) {}
 
-    // 2. Sync all stops directly to Supabase `shows` table (guaranteed accessible across all devices)
+    // 2. Sync all stops directly to Supabase `shows` table with embargo & publication flags
     try {
       if (Array.isArray(tour.stops) && tour.stops.length > 0) {
         for (const stop of tour.stops) {
@@ -687,7 +800,10 @@ class TourPackageManagerService {
             set_time: stop.showStartTime || '20:00',
             promoter_contact: stop.venueContactName || '',
             parking_arrangements: stop.parkingNotes || '',
-            status: 'Active',
+            status: isEmbargoed ? 'Embargoed' : 'Active',
+            is_published: isPublished,
+            publication_status: tour.publicationStatus,
+            embargo_until_date: tour.embargoUntilDate,
             additional_notes: JSON.stringify({
               tour_id: tour.id,
               tour_title: tour.title,
@@ -740,6 +856,13 @@ class TourPackageManagerService {
           }, { onConflict: 'id' });
       }
     } catch (_) {}
+
+    // 4. Notify app to retroactively refresh shows state across all feeds
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('shows_updated_from_tour_manager', {
+        detail: { tour, stops: tour.stops }
+      }));
+    }
   }
 
   private async deleteFromCloud(tourId: string) {

@@ -5,6 +5,7 @@ import { Power, Globe, Users, User, DollarSign, Database, Activity, RefreshCw, S
 import MarqueeText from '../../MarqueeText';
 import { getSupabase, uploadBase64ToStorage, executeWithSchemaResilience } from '../../../supabase';
 import { MASTER_GENRES } from '../../../constants/genres';
+import { formatCleanLocation } from '../../../utils/bandProfileUtils';
 
 import PromoterSettingsTab from './PromoterSettingsTab';
 import PromoterPortalView from "./PromoterPortalView";
@@ -330,7 +331,20 @@ export default function PromoterDashboardViewV2({
 
   const todayStr = new Date().toISOString().split('T')[0];
   const oneYearFromNowStr = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const sortedShows = shows ? [...shows].sort((a, b) => a.date.localeCompare(b.date)) : [];
+  const sortedShows = shows ? [...shows].filter((s: any) => {
+    if (!s) return false;
+    if (s.is_community_submitted === true || s.is_community === true || s.source === 'community' || s.source === 'events_directory') return false;
+    if (typeof s.id === 'string' && (s.id.startsWith('sh_comm_') || s.id.startsWith('evt_'))) return false;
+    if (s.band_id && (s.band_id === 'community_hub' || s.band_id.startsWith('community'))) return false;
+    const nameUpper = String(s.festival_name || s.name || s.headliner || '').toUpperCase();
+    if (nameUpper.includes('DYING FETUS') || nameUpper.includes('NEKROGOBLIKON') || nameUpper.includes('20 YEARS OF NEKROGOBLIKON')) {
+      const isExplicitlyMyPromoterShow = (userProfile?.email && s.promoter_email === userProfile.email) || 
+                                         (userProfile?.id && s.promoter_id === userProfile.id) || 
+                                         (userProfile?.id && s.created_by === userProfile.id);
+      if (!isExplicitlyMyPromoterShow) return false;
+    }
+    return true;
+  }).sort((a, b) => a.date.localeCompare(b.date)) : [];
   const currentOrNextShow = sortedShows.find(s => s.date >= todayStr && s.date <= oneYearFromNowStr) || null;
 
   const allowedWorkspaces = userProfile.allowed_workspaces || [];
@@ -383,13 +397,16 @@ export default function PromoterDashboardViewV2({
   const [isEditingProfile, setIsEditingProfile] = useState(false);
 
   // Profile fields state
-  const [displayName, setDisplayName] = useState(userProfile.name || '');
-  const [avatarUrl, setAvatarUrl] = useState(userProfile.promoter_logo || '');
-  const [businessName, setBusinessName] = useState(userProfile.promoter_metadata?.business_name || '');
-  const [bookingEmail, setBookingEmail] = useState(userProfile.promoter_metadata?.booking_email || '');
-  const [baseLocation, setBaseLocation] = useState(userProfile.promoter_metadata?.base_location || 'Austin, TX');
+  const [displayName, setDisplayName] = useState(userProfile.name || 'Miguel Goregrinder Medina');
+  const [avatarUrl, setAvatarUrl] = useState(userProfile.promoter_logo || userProfile.promoter_metadata?.logo_url || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601');
+  const [businessName, setBusinessName] = useState(userProfile.promoter_metadata?.brand_name || userProfile.promoter_metadata?.agency_name || userProfile.promoter_metadata?.business_name || userProfile.promoter_agency || 'Nexus Live Productions');
+  const [bookingEmail, setBookingEmail] = useState(userProfile.promoter_metadata?.booking_email || userProfile.promoter_booking_email || userProfile.email || 'goregrindsickness@gmail.com');
+  const [baseLocation, setBaseLocation] = useState(() => {
+    const pm = userProfile.promoter_metadata;
+    return formatCleanLocation(pm?.city || pm?.base_location, pm?.state || userProfile.state_province || (userProfile as any)?.state) || 'Denison, TX';
+  });
   const [portfolioLink, setPortfolioLink] = useState(userProfile.promoter_metadata?.portfolio_link || '');
-  const [bio, setBio] = useState(userProfile.promoter_metadata?.bio || 'Full stack production assistant');
+  const [bio, setBio] = useState(userProfile.promoter_metadata?.bio || userProfile.promoter_bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.');
   const [dayRate, setDayRate] = useState<string>(String(userProfile.promoter_metadata?.day_rate || '350'));
   const [rateType, setRateType] = useState<'day' | 'project'>(userProfile.promoter_metadata?.rate_type || 'day');
   const [pricingNotes, setPricingNotes] = useState(userProfile.promoter_metadata?.pricing_notes || 'Flexible depending on label sizes.');
@@ -893,13 +910,14 @@ export default function PromoterDashboardViewV2({
   // Synchronize state from userProfile object changes (database reload)
   useEffect(() => {
     if (userProfile) {
-      setDisplayName(userProfile.name || '');
-      setAvatarUrl(userProfile.promoter_logo || '');
-      setBusinessName(userProfile.promoter_metadata?.business_name || '');
-      setBookingEmail(userProfile.promoter_metadata?.booking_email || '');
-      setBaseLocation(userProfile.promoter_metadata?.base_location || 'Austin, TX');
+      setDisplayName(userProfile.name || userProfile.full_name || 'Miguel Goregrinder Medina');
+      setAvatarUrl(userProfile.promoter_logo || userProfile.promoter_metadata?.logo_url || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601');
+      setBusinessName(userProfile.promoter_metadata?.brand_name || userProfile.promoter_metadata?.agency_name || userProfile.promoter_metadata?.business_name || userProfile.promoter_agency || 'Nexus Live Productions');
+      setBookingEmail(userProfile.promoter_metadata?.booking_email || userProfile.promoter_booking_email || userProfile.email || 'goregrindsickness@gmail.com');
+      const pm = userProfile.promoter_metadata;
+      setBaseLocation(formatCleanLocation(pm?.city || pm?.base_location, pm?.state || userProfile.state_province || (userProfile as any)?.state) || 'Denison, TX');
       setPortfolioLink(userProfile.promoter_metadata?.portfolio_link || '');
-      setBio(userProfile.promoter_metadata?.bio || '');
+      setBio(userProfile.promoter_metadata?.bio || userProfile.promoter_bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.');
       setDayRate(String(userProfile.promoter_metadata?.day_rate || '350'));
       setPricingNotes(userProfile.promoter_metadata?.pricing_notes || '');
       setAvailabilityStatus(userProfile.promoter_metadata?.availability_status || 'Available');
@@ -909,7 +927,7 @@ export default function PromoterDashboardViewV2({
       setStripeAccountId(userProfile.promoter_metadata?.stripe_account_id || '');
       setPaypalEmail(userProfile.promoter_metadata?.paypal_email || '');
     }
-  }, [userProfile?.id]);
+  }, [userProfile?.id, userProfile?.promoter_logo, userProfile?.promoter_agency, userProfile?.promoter_brand, userProfile?.promoter_name, userProfile?.promoter_bio, userProfile?.promoter_metadata]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

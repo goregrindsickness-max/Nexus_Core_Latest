@@ -7,6 +7,7 @@ import { formatLocationDisplay } from '../../../constants/location';
 import { useUserPresence } from '../../../lib/presence';
 import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, upsertBandToDatabase, generateUUID } from '../../../supabase';
+import { formatCleanLocation } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
 import { communityBandManager, CommunityBandRecord, isCommunityBandRecord } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
@@ -2150,7 +2151,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   if (hasPromoter) {
                     const name = String(rawPromoterName).trim();
                     const logo = matchingPromoterProfile?.promoter_logo || matchingPromoterProfile?.logo_url || effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=300';
-                    const subtitle = effTarget?.promoter_metadata?.region || effTarget?.target_region || (isTargetSelf ? (userProfile?.promoter_metadata?.region || userProfile?.target_region) : null) || effTarget.venue || effTarget.location || 'Promoter & Venue Booking';
+                    const rawSub = effTarget?.promoter_metadata?.region || effTarget?.target_region || (isTargetSelf ? (userProfile?.promoter_metadata?.region || userProfile?.target_region) : null) || effTarget.venue || effTarget.location || 'Promoter & Venue Booking';
+                    const subtitle = rawSub && rawSub !== 'Promoter & Venue Booking' ? (formatCleanLocation(rawSub) || rawSub) : rawSub;
 
                     entities.push({
                       key: 'promoter',
@@ -2828,13 +2830,21 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                   if (effTarget?.isYou) {
                     rawList = [
+                      ...(userProfile?.promoter_metadata?.genres || []),
+                      ...(userProfile?.genres || []),
+                      ...(userProfile?.genre_tags || []),
+                      ...(userProfile?.fan_genres || []),
                       ...(profileMicroGenres || []),
                       ...(profilePrimaryGenres || []),
                       ...(profileGenres || []),
-                      ...(userProfile?.fan_genres || []),
+                      ...(effTarget?.promoter_metadata?.genres || []),
                       ...(effTarget?.genres || []),
                       ...(effTarget?.genre_tags || []),
                     ];
+                  }
+                  if (rawList.length === 0 && (effTarget?.promoter_metadata?.genres || (effTarget as any)?.genres_booked || (effTarget as any)?.genres_served)) {
+                    const pg = effTarget?.promoter_metadata?.genres || (effTarget as any)?.genres_booked || (effTarget as any)?.genres_served;
+                    if (Array.isArray(pg)) rawList = [...pg];
                   }
                   if (rawList.length === 0 && effTarget?.fan_genres && Array.isArray(effTarget.fan_genres)) {
                     rawList = [...effTarget.fan_genres];
@@ -2857,6 +2867,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   }
                   if (rawList.length === 0 && effTarget?.profilePrimaryGenres && Array.isArray(effTarget.profilePrimaryGenres)) {
                     rawList = [...rawList, ...effTarget.profilePrimaryGenres];
+                  }
+                  if (rawList.length === 0 && typeof window !== 'undefined') {
+                    try {
+                      const stored = localStorage.getItem('nexus_promoter_genres') || localStorage.getItem('nexus_user_genres');
+                      if (stored) {
+                        const parsed = JSON.parse(stored);
+                        if (Array.isArray(parsed)) rawList = [...parsed];
+                      }
+                    } catch (e) {}
                   }
 
                   const allGenres = Array.from(new Set(rawList.filter(Boolean)));
@@ -3699,6 +3718,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     profileName={selectedUserProfile?.name}
                     isYou={selectedUserProfile?.isYou}
                     selectedUserProfile={selectedUserProfile}
+                    workspaceType="band"
+                    portalRole="band"
                     triggerPictureViewer={triggerPictureViewer}
                     triggerNotification={triggerNotification}
                     feed={feed}

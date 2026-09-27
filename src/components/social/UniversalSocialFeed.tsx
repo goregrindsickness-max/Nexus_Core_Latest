@@ -77,6 +77,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { getSupabase, subscribeToTable, executeWithSchemaResilience, uploadBase64ToStorage, normalizeLoadedProfile, createShopMerchItem, fetchShopMerchItems, sanitizeMicroGenres, formatBandLocation, sanitizeShowForDb, ensureUUID } from '../../supabase';
 import { uploadFeedMedia } from '../../lib/storage';
 import { communityBandManager } from '../../lib/communityBands';
+import { tourPackageManager } from '../../lib/tourPackageManager';
 import Barcode from 'react-barcode';
 import { MASTER_GENRES } from '../../constants/genres';
 import { InboxPreferences } from '../messaging/InboxPreferences';
@@ -1031,6 +1032,13 @@ export function UniversalSocialFeed({
           }
         } catch (e) {}
 
+        const allActiveTours = tourPackageManager.getAllTours();
+        const isTourEmbargoed = (tourIdOrTitle?: string) => {
+          if (!tourIdOrTitle) return false;
+          const matched = allActiveTours.find(t => t.id === tourIdOrTitle || (t.title && t.title.toLowerCase() === tourIdOrTitle.toLowerCase()));
+          return matched?.publicationStatus === 'embargoed_private';
+        };
+
         const { data: eventsData, error: eventsError } = await supabaseClient.from('nexus_events').select('*').order('created_at', { ascending: false });
         
         let compiledGigs: any[] = [];
@@ -1110,6 +1118,12 @@ export function UniversalSocialFeed({
               .filter(s => {
                 if (s.is_published === false || s.publication_status === 'embargoed_private' || s.publication_status === 'draft' || s.status === 'Draft' || s.status === 'Embargoed') {
                   return false;
+                }
+                if (s.additional_notes) {
+                  try {
+                    const extra = typeof s.additional_notes === 'string' ? JSON.parse(s.additional_notes) : s.additional_notes;
+                    if (extra.tour_id && isTourEmbargoed(extra.tour_id)) return false;
+                  } catch (_) {}
                 }
                 const sId = String(s.id || '').toLowerCase().trim();
                 const sH = String(s.headliner || s.band_name || s.name || s.show_name || '').toLowerCase().trim();
@@ -1249,6 +1263,15 @@ export function UniversalSocialFeed({
           const localGigs = Object.values(extendedMap)
             .filter((localShow: any) => {
               if (!localShow) return false;
+              if (localShow.is_published === false || localShow.publication_status === 'embargoed_private' || localShow.publication_status === 'draft' || localShow.status === 'Draft' || localShow.status === 'Embargoed') {
+                return false;
+              }
+              if (localShow.additional_notes) {
+                try {
+                  const extra = typeof localShow.additional_notes === 'string' ? JSON.parse(localShow.additional_notes) : localShow.additional_notes;
+                  if (extra.tour_id && isTourEmbargoed(extra.tour_id)) return false;
+                } catch (_) {}
+              }
               const localId = String(localShow.id || '').toLowerCase().trim();
               const localH = String(localShow.headliner || localShow.name || '').toLowerCase().trim();
               const localD = String(localShow.date || localShow.show_date || '').toLowerCase().trim();
@@ -3491,20 +3514,25 @@ const getProfileForUser = (userParam: any) => {
       };
     }
 
-    if (activeRole === 'promoter' || userProfile?.account_type === 'promoter') {
-      const promoterName = userProfile?.promoter_metadata?.brand_name || profileFullLegalName || userProfile?.name || 'Promoter';
-      const promoterHandle = profileHandle || 'promoter_pro';
+    if (activeRole === 'promoter' || userProfile?.account_type === 'promoter' || userProfile?.active_workspace === 'promoter') {
+      const promoterName = userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_agency || profileFullLegalName || userProfile?.name || 'Nexus Live Productions';
+      const promoterHandle = resolvePromoterHandle(userProfile) || profileHandle || 'NexusLive';
+      const promoterLogo = userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
+      const promoterCover = userProfile?.promoter_cover_image || userProfile?.promoter_metadata?.banner_url || userProfile?.promoter_metadata?.cover_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
+      const promoterLocation = resolvePromoterLocation(userProfile);
+      const promoterBioText = userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
+
       return {
         id: userProfile?.id || null,
         name: promoterName,
         legalName: profileFullLegalName || userProfile?.full_name || userProfile?.name,
-        avatar: userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.logo || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=150',
-        avatar_url: userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.logo || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=150',
-        promoter_logo: userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null),
-        banner: userProfile?.promoter_cover_image || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || null,
-        banner_url: userProfile?.promoter_cover_image || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || null,
-        cover_url: userProfile?.promoter_cover_image || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || null,
-        location: userProfile?.location || 'USA / Global',
+        avatar: promoterLogo,
+        avatar_url: promoterLogo,
+        promoter_logo: promoterLogo,
+        banner: promoterCover,
+        banner_url: promoterCover,
+        cover_url: promoterCover,
+        location: promoterLocation,
         role: 'Promoter',
         account_type: 'promoter',
         type: 'promoter',
@@ -3513,7 +3541,7 @@ const getProfileForUser = (userParam: any) => {
         isYou: true,
         badges: ['🎫 Promoter'],
         customBadges: ['🎫 Promoter'],
-        bio: userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || 'Concert promoter and event organizer on Nexus.',
+        bio: promoterBioText,
         handle: promoterHandle,
         console_handle: promoterHandle,
         followersCount: currentUserStats?.followers ?? 0,

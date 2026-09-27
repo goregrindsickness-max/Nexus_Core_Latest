@@ -97,13 +97,134 @@ export const resolveBandBio = (activeBand: any, userProfile: any): string => {
   return 'Official Nexus Artist Profile.';
 };
 
-export const resolveBandLocation = (activeBand: any, userProfile: any): string => {
-  if (activeBand?.homebase) return activeBand.homebase;
-  if (activeBand?.city && (activeBand?.state || activeBand?.state_province)) {
-    return `${activeBand.city}, ${activeBand.state || activeBand.state_province}, ${activeBand.country || 'USA'}`;
+export const formatCleanLocation = (rawLoc?: string | null, rawState?: string | null, rawCountry?: string | null): string => {
+  if (!rawLoc && !rawState && !rawCountry) return '';
+  const combined = `${rawLoc || ''}, ${rawState || ''}, ${rawCountry || ''}`;
+  const rawParts = combined
+    .split(/[,/|]+/)
+    .map(p => p.trim())
+    .filter(Boolean);
+
+  const seen = new Set<string>();
+  const parts: string[] = [];
+
+  const STATE_MAP: Record<string, string> = {
+    'texas': 'tx',
+    'california': 'ca',
+    'illinois': 'il',
+    'michigan': 'mi',
+    'new york': 'ny',
+    'florida': 'fl',
+    'ohio': 'oh',
+    'pennsylvania': 'pa',
+    'tennessee': 'tn',
+    'georgia': 'ga',
+    'colorado': 'co',
+    'washington': 'wa',
+    'massachusetts': 'ma',
+    'arizona': 'az',
+    'indiana': 'in',
+    'missouri': 'mo',
+    'maryland': 'md',
+    'wisconsin': 'wi',
+    'minnesota': 'mn',
+    'louisiana': 'la',
+    'alabama': 'al',
+    'kentucky': 'ky',
+    'oregon': 'or',
+    'oklahoma': 'ok',
+    'connecticut': 'ct',
+    'utah': 'ut',
+    'nevada': 'nv',
+    'iowa': 'ia',
+    'arkansas': 'ar',
+    'mississippi': 'ms',
+    'kansas': 'ks',
+    'new mexico': 'nm',
+    'nebraska': 'ne',
+    'west virginia': 'wv',
+    'idaho': 'id',
+    'hawaii': 'hi',
+    'new hampshire': 'nh',
+    'maine': 'me',
+    'rhode island': 'ri',
+    'montana': 'mt',
+    'delaware': 'de',
+    'south dakota': 'sd',
+    'north dakota': 'nd',
+    'alaska': 'ak',
+    'vermont': 'vt',
+    'wyoming': 'wy'
+  };
+
+  for (let rawPart of rawParts) {
+    let clean = rawPart.replace(/\s+/g, ' ').trim();
+    if (!clean) continue;
+
+    // Eliminate repeated words within a single segment (e.g. "TX TX" or "Denison TX TX")
+    const words = clean.split(' ');
+    const dedupedWords: string[] = [];
+    for (const w of words) {
+      if (dedupedWords.length > 0 && dedupedWords[dedupedWords.length - 1].toLowerCase() === w.toLowerCase()) {
+        continue;
+      }
+      dedupedWords.push(w);
+    }
+    clean = dedupedWords.join(' ');
+
+    const lower = clean.toLowerCase();
+    const normalizedState = STATE_MAP[lower] || (lower.length === 2 ? lower : null);
+
+    if (normalizedState && seen.has(normalizedState)) {
+      continue;
+    }
+
+    if (!seen.has(lower)) {
+      // Check if this part is a state that is already at the end of the previous city part
+      const isAlreadyInCity = parts.some(existing => {
+        const exLower = existing.toLowerCase();
+        if (clean.length === 2 && (exLower.endsWith(` ${lower}`) || exLower.endsWith(`, ${lower}`))) {
+          return true;
+        }
+        if (normalizedState && (exLower.endsWith(` ${normalizedState}`) || exLower.endsWith(`, ${normalizedState}`))) {
+          return true;
+        }
+        return false;
+      });
+
+      if (!isAlreadyInCity) {
+        seen.add(lower);
+        if (normalizedState) seen.add(normalizedState);
+        parts.push(clean);
+      }
+    }
   }
-  if (activeBand?.location) return activeBand.location;
-  if (userProfile?.band_location) return userProfile.band_location;
+
+  // Ensure if first part already has the 2-letter state at end, remove a standalone duplicate second part
+  if (parts.length >= 2) {
+    const firstLower = parts[0].toLowerCase();
+    const secondLower = parts[1].toLowerCase();
+    if (secondLower.length === 2 && (firstLower.endsWith(` ${secondLower}`) || firstLower.endsWith(`, ${secondLower}`))) {
+      parts.splice(1, 1);
+    }
+  }
+
+  return parts.join(', ');
+};
+
+export const resolveBandLocation = (activeBand: any, userProfile: any): string => {
+  if (activeBand?.city || activeBand?.state || activeBand?.state_province || activeBand?.homebase || activeBand?.location) {
+    const rawCity = activeBand?.city || '';
+    const rawState = activeBand?.state || activeBand?.state_province || '';
+    const rawCountry = activeBand?.country || '';
+    const rawHomebase = activeBand?.homebase || activeBand?.location || '';
+    const clean = formatCleanLocation(rawCity || rawHomebase, rawState, rawCountry);
+    if (clean) return clean;
+  }
+  if (userProfile?.city || userProfile?.state_province) {
+    const clean = formatCleanLocation(userProfile.city, userProfile.state_province, userProfile.country);
+    if (clean) return clean;
+  }
   return 'Denison, TX, USA';
 };
 
@@ -148,7 +269,7 @@ export const resolvePromoterLogo = (userProfile: any): string => {
     pm?.avatar_url ||
     userProfile?.avatar_url ||
     userProfile?.avatar ||
-    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
+    'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601'
   );
 };
 
@@ -159,34 +280,27 @@ export const resolvePromoterCover = (userProfile: any): string | null => {
     pm?.banner_url ||
     pm?.cover_url ||
     userProfile?.banner_url ||
-    null
+    'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635'
   );
 };
 
 export const resolvePromoterBio = (userProfile: any): string => {
   const pm = userProfile?.promoter_metadata;
-  return (
-    pm?.bio ||
-    userProfile?.promoter_bio ||
-    userProfile?.bio ||
-    userProfile?.profileBlurb ||
-    'Concert promoter and event organizer on Nexus.'
-  );
+  const cand = pm?.bio || userProfile?.promoter_bio;
+  if (cand && !cand.toLowerCase().includes('booking management for underground')) {
+    return cand;
+  }
+  return 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
 };
 
 export const resolvePromoterLocation = (userProfile: any): string => {
   const pm = userProfile?.promoter_metadata;
-  let loc = pm?.city || (userProfile as any)?.promoter_city || userProfile?.city || '';
+  const loc = pm?.city || pm?.base_location || (userProfile as any)?.promoter_city || userProfile?.city || '';
   const state = pm?.state || (userProfile as any)?.promoter_state || userProfile?.state_province || userProfile?.state || '';
 
-  if (loc && state) {
-    if (loc.toLowerCase().includes(state.toLowerCase())) {
-      return loc;
-    }
-    return `${loc}, ${state}`;
-  }
-  if (loc) return loc;
-  return userProfile?.location_code || userProfile?.city_state || 'Chicago, IL';
+  const clean = formatCleanLocation(loc, state);
+  if (clean) return clean;
+  return userProfile?.location_code || userProfile?.city_state || 'Denison, TX';
 };
 
 export const resolveEffectiveAvatar = (portalRole: string, activeBand: any, userProfile: any, profileAvatarUrl?: string | null): string => {

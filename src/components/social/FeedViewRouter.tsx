@@ -428,17 +428,72 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                 post.tag?.toLowerCase().includes('gallery') ||
                 post.type === 'photo';
               if (!isPhoto) return false;
-            } else if (filter === 'following') {
-              const authorName = (post?.author?.name || (post as any)?.profile?.name || (post as any)?.author_name || '').toLowerCase();
-              const isAuthorFollowed = (discoverProfiles || []).some(p => (p?.name || '').toLowerCase() === authorName && p.followed);
+            } else if (filter === 'followed' || filter === 'following') {
+              const authorName = (post?.author?.name || (post as any)?.profile?.name || (post as any)?.author_name || (post as any)?.authorName || '').toLowerCase().trim();
+              const authorId = post?.author?.id || post?.author_id || post?.profile_id || post?.user_id || post?.band_id;
+              const authorHandle = (post?.author?.handle || post?.handle || post?.console_handle || '').toLowerCase().trim().replace(/^@/, '');
+
+              // Check local storage follows
+              let localFollows: Record<string, boolean> = {};
+              try {
+                localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
+              } catch (e) {}
+
+              const isLocallyFollowed = Boolean(
+                (authorId && localFollows[authorId]) ||
+                (authorName && localFollows[authorName]) ||
+                (authorHandle && localFollows[authorHandle])
+              );
+
+              const isDiscoverFollowed = (discoverProfiles || []).some(p => {
+                if (!p?.followed) return false;
+                const pName = (p?.name || p?.band_name || '').toLowerCase().trim();
+                const pHandle = (p?.handle || '').toLowerCase().trim().replace(/^@/, '');
+                const pId = p?.id;
+                return (
+                  (authorName && pName === authorName) ||
+                  (authorId && pId === authorId) ||
+                  (authorHandle && pHandle && pHandle === authorHandle)
+                );
+              });
+
+              const isAllProfilesFollowed = (props.allProfiles || []).some((p: any) => {
+                if (!p?.followed && !p?.is_followed) return false;
+                const pName = (p?.name || p?.full_name || p?.band_name || '').toLowerCase().trim();
+                const pId = p?.id;
+                return (
+                  (authorName && pName === authorName) ||
+                  (authorId && pId === authorId)
+                );
+              });
+
+              const isFollowedInUserProfile = Boolean(
+                userProfile?.following?.includes(authorId) ||
+                userProfile?.followed_artists?.includes(authorId) ||
+                userProfile?.saved_bands?.includes(authorId) ||
+                (authorName && userProfile?.following?.some((f: any) => typeof f === 'string' && f.toLowerCase() === authorName))
+              );
+
               const isSelf = Boolean(
-                (post?.author?.name || '') === profileFullLegalName ||
-                (userProfile && (post?.author?.name || '') === userProfile?.name) ||
+                (authorName && authorName === (profileFullLegalName || '').toLowerCase()) ||
+                (userProfile?.name && authorName === userProfile.name.toLowerCase()) ||
+                (userProfile?.console_handle && (
+                  (authorHandle && authorHandle === userProfile.console_handle.toLowerCase().replace(/^@/, '')) ||
+                  (authorName && authorName.includes(userProfile.console_handle.toLowerCase().replace(/^@/, '')))
+                )) ||
                 post.author?.isYou ||
                 post.isYou ||
-                (userProfile?.id && (post.author?.id === userProfile.id || post.profile_id === userProfile.id || post.user_id === userProfile.id))
+                (userProfile?.id && (
+                  post.author?.id === userProfile.id || 
+                  post.profile_id === userProfile.id || 
+                  post.user_id === userProfile.id ||
+                  post.author_id === userProfile.id
+                ))
               );
-              if (!isAuthorFollowed && !isSelf) return false;
+
+              if (!isLocallyFollowed && !isDiscoverFollowed && !isAllProfilesFollowed && !isFollowedInUserProfile && !isSelf) {
+                return false;
+              }
             }
           }
           return true;
@@ -581,19 +636,19 @@ export const FeedViewRouter: React.FC<any> = (props) => {
             {isFilterActive && filteredFeed.length === 0 && (
               <div className="bg-[#0b0b0d] border border-zinc-800/80 rounded-2xl p-8 text-center my-4 space-y-3 shadow-xl animate-in fade-in duration-200">
                 <div className="w-12 h-12 mx-auto rounded-full bg-zinc-900/90 border border-zinc-800 flex items-center justify-center text-xl shadow-inner">
+                  {(props.activeFeedCategoryFilter === 'followed' || props.activeFeedCategoryFilter === 'following') && '⭐'}
                   {props.activeFeedCategoryFilter === 'tour' && '🎟️'}
                   {props.activeFeedCategoryFilter === 'merch' && '👕'}
                   {props.activeFeedCategoryFilter === 'audio' && '🎙️'}
                   {props.activeFeedCategoryFilter === 'photos' && '📸'}
-                  {props.activeFeedCategoryFilter === 'following' && '⭐'}
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-white uppercase tracking-wider">
-                    No {props.activeFeedCategoryFilter === 'tour' ? 'Tour Dates' : props.activeFeedCategoryFilter === 'merch' ? 'Merch Drops' : props.activeFeedCategoryFilter === 'audio' ? 'Demos & Tapes' : props.activeFeedCategoryFilter === 'photos' ? 'Photo Pit Snaps' : 'Followed Posts'} Yet
+                    No {(props.activeFeedCategoryFilter === 'followed' || props.activeFeedCategoryFilter === 'following') ? 'Followed Posts' : props.activeFeedCategoryFilter === 'tour' ? 'Tour Dates' : props.activeFeedCategoryFilter === 'merch' ? 'Merch Drops' : props.activeFeedCategoryFilter === 'audio' ? 'Demos & Tapes' : 'Photo Pit Snaps'} Yet
                   </h3>
                   <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto">
-                    {props.activeFeedCategoryFilter === 'following'
-                      ? 'Follow more bands, venues, and scene members to see their posts here.'
+                    {(props.activeFeedCategoryFilter === 'followed' || props.activeFeedCategoryFilter === 'following')
+                      ? 'Follow more bands, venues, labels, and scene members to see their posts exclusively here.'
                       : `There are currently no active posts in the stream tagged with this category.`}
                   </p>
                 </div>
