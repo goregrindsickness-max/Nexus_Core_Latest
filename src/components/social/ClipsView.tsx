@@ -33,6 +33,7 @@ import {
   trackRealClipView,
   calculateClipsDashboardStats
 } from './utils/clipsPersistenceService';
+import { extractYouTubeId } from './utils/postSyncUtils';
 
 interface ClipItem {
   id: any;
@@ -206,159 +207,6 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
     triggerNotification?.("Comment added to clip!");
   };
 
-  const handleCreateClip = async () => {
-    if (!newClipVideoUrl && !selectedClipFile) {
-      triggerNotification?.("Please provide a video URL or select a clip file.");
-      return;
-    }
-
-    setIsUploadingClip(true);
-    try {
-      let finalVideoUrl = newClipVideoUrl;
-      const supabaseClient = getSupabase ? getSupabase() : null;
-      const userId = userProfile?.id || userProfile?.user_id || 'anon';
-
-      if (selectedClipFile) {
-        // Upload to 'clips' storage bucket in Supabase
-        try {
-          finalVideoUrl = await uploadClipVideoFile(selectedClipFile, userId, 'clip');
-        } catch (storageErr) {
-          console.warn("[ClipsView] uploadClipVideoFile error:", storageErr);
-        }
-
-        // Direct fallback to 'photo-pit' and 'clips' buckets if needed
-        if (!finalVideoUrl && supabaseClient) {
-          const fileExt = selectedClipFile.name.split('.').pop() || 'mp4';
-          const fileName = `${userId}_${Date.now()}.${fileExt}`;
-          for (const b of ['photo-pit', 'clips']) {
-            try {
-              const { data, error } = await supabaseClient.storage.from(b).upload(fileName, selectedClipFile, {
-                upsert: true,
-                contentType: selectedClipFile.type || 'video/mp4'
-              });
-
-              if (!error && data) {
-                const { data: publicData } = supabaseClient.storage.from(b).getPublicUrl(fileName);
-                if (publicData?.publicUrl) {
-                  finalVideoUrl = publicData.publicUrl;
-                  break;
-                }
-              }
-            } catch (directErr) {
-              console.warn(`[ClipsView] Direct storage upload to ${b} failed:`, directErr);
-            }
-          }
-        }
-
-        if (!finalVideoUrl) {
-          console.warn("Storage upload failed, fallback to local object URL");
-          finalVideoUrl = URL.createObjectURL(selectedClipFile);
-        }
-      }
-
-      if (!finalVideoUrl) {
-        finalVideoUrl = 'https://assets.mixkit.co/videos/preview/mixkit-rock-band-performing-on-stage-41584-large.mp4';
-      }
-
-      const clipId = `clip_${Date.now()}`;
-
-      let thumbUrl = '';
-      if (selectedClipFile) {
-        await saveClipMediaBlob(clipId, selectedClipFile);
-        try {
-          thumbUrl = await generateVideoThumbnail(selectedClipFile);
-        } catch (_) {}
-      }
-
-      const newClipItem: ClipItem = {
-        id: clipId,
-        creator: userProfile?.name || userProfile?.username || 'Pro Creator',
-        role: portalRole === 'band' ? '💀 Band' : 'Member',
-        avatar: userProfile?.avatar || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=100',
-        caption: newClipCaption || 'Check out my new reel clip!',
-        title: newClipCaption || 'Live Clip',
-        videoUrl: finalVideoUrl,
-        thumbnailUrl: thumbUrl,
-        likes: 1,
-        comments: 0,
-        shares: 0,
-        reposts: 0,
-        views: 1,
-        audio: newClipSong || 'Original Sound',
-        hasLiked: true,
-        user_id: userProfile?.id || userProfile?.user_id,
-        created_at: new Date().toISOString()
-      };
-
-      // Persist to Supabase database ('clips' and 'nexus_clips' tables)
-      if (supabaseClient) {
-        try {
-          const { error: clipsErr } = await supabaseClient.from('clips').insert([{
-            id: clipId,
-            user_id: newClipItem.user_id,
-            video_url: finalVideoUrl,
-            caption: newClipItem.caption,
-            title: newClipItem.title,
-            description: newClipItem.caption || newClipItem.title,
-            song_title: newClipSong || 'Original Sound',
-            band_name: userProfile?.name || userProfile?.username || 'Scene Band',
-            username: userProfile?.name || userProfile?.username || 'Anonymous',
-            avatar: newClipItem.avatar,
-            created_at: newClipItem.created_at,
-            likes_count: 1,
-            comments_count: 0,
-            shares_count: 0
-          }]);
-          if (clipsErr) {
-            console.warn("Saving to 'clips' with extended columns failed, trying core schema fallback:", clipsErr.message);
-            await supabaseClient.from('clips').insert([{
-              video_url: finalVideoUrl,
-              title: newClipItem.title,
-              description: newClipItem.caption || newClipItem.title,
-              thumbnail_url: thumbUrl,
-              likes_count: 1
-            }]);
-          }
-        } catch (_) {}
-
-        try {
-          await supabaseClient.from('nexus_clips').insert([{
-            id: clipId,
-            profile_id: newClipItem.user_id,
-            user_id: newClipItem.user_id,
-            username: newClipItem.creator,
-            avatar: newClipItem.avatar,
-            video_url: finalVideoUrl,
-            caption: newClipItem.caption,
-            song_title: newClipSong || 'Original Sound',
-            band_name: userProfile?.name || 'Scene Band',
-            created_at: newClipItem.created_at
-          }]);
-        } catch (_) {}
-      }
-
-      // Update state and localStorage
-      setClips(prev => {
-        const updated = [newClipItem, ...prev.filter(c => c.id !== clipId)];
-        try {
-          localStorage.setItem('nexus_saved_clips', JSON.stringify(updated));
-        } catch (_) {}
-        return updated;
-      });
-
-      setShowUploadClipModal(false);
-      setNewClipVideoUrl('');
-      setSelectedClipFile(null);
-      setNewClipCaption('');
-      triggerNotification?.("⚡ Video clip uploaded and saved to clips storage!");
-    } catch (err: any) {
-      console.error("Failed to upload clip in ClipsView:", err);
-      triggerNotification?.(`Error posting clip: ${err.message || err}`);
-    } finally {
-      setIsUploadingClip(false);
-    }
-  };
-
   return (
     <div className="w-full bg-[#030303] flex flex-col items-center animate-in fade-in duration-300">
       {/* Top Bar Action Controls for Reels */}
@@ -402,43 +250,62 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
           >
             {/* Video Placeholder or Player */}
             <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-900 to-black overflow-hidden">
-              {clip.videoUrl && !clip.videoUrl.match(/\.(jpg|jpeg|png|webp|gif|svg)$/i) ? (
-                <video
-                  src={clip.videoUrl}
-                  poster={clip.thumbnailUrl || undefined}
-                  className="w-full h-full object-cover opacity-80"
-                  autoPlay
-                  loop
-                  playsInline
-                  controls
-                  onPlay={() => {
-                    requestPauseSceneRadio('clips_video_play');
-                    trackRealClipView(clip.id, clip.views, (newViews) => {
-                      setClips(prev => prev.map(c => c.id === clip.id ? { ...c, views: newViews } : c));
-                    });
-                  }}
-                  onError={async (e) => {
-                    const el = e.currentTarget;
-                    const fallback = await resolveClipVideoPlaybackUrl(clip.id, clip.videoUrl);
-                    if (el.src !== fallback) {
-                      el.src = fallback;
-                      el.load();
-                      el.play().catch(() => {});
-                    }
-                  }}
-                />
-              ) : (
-                <>
-                  <div
-                    className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-overlay"
-                    style={{ backgroundImage: `url('${clip.videoUrl}')` }}
-                  />
-                  <PlayCircle
-                    className="w-20 h-20 text-white/20 group-hover:text-white/40 transition-colors cursor-pointer"
-                    onClick={() => triggerNotification?.("Video played")}
-                  />
-                </>
-              )}
+              {(() => {
+                const ytId = extractYouTubeId(clip.videoUrl);
+                if (ytId) {
+                  return (
+                    <iframe
+                      src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&mute=0&loop=1&playlist=${ytId}&controls=1&modestbranding=1&rel=0`}
+                      className="w-full h-full object-cover"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      title={clip.title || clip.caption || 'Clip'}
+                    />
+                  );
+                }
+
+                if (clip.videoUrl && !clip.videoUrl.match(/\.(jpg|jpeg|png|webp|gif|svg)$/i)) {
+                  return (
+                    <video
+                      src={clip.videoUrl}
+                      poster={clip.thumbnailUrl || undefined}
+                      className="w-full h-full object-cover opacity-90"
+                      autoPlay
+                      loop
+                      playsInline
+                      controls
+                      onPlay={() => {
+                        requestPauseSceneRadio('clips_video_play');
+                        trackRealClipView(clip.id, clip.views, (newViews) => {
+                          setClips(prev => prev.map(c => c.id === clip.id ? { ...c, views: newViews } : c));
+                        });
+                      }}
+                      onError={async (e) => {
+                        const el = e.currentTarget;
+                        const fallback = await resolveClipVideoPlaybackUrl(clip.id, clip.videoUrl);
+                        if (el.src !== fallback) {
+                          el.src = fallback;
+                          el.load();
+                          el.play().catch(() => {});
+                        }
+                      }}
+                    />
+                  );
+                }
+
+                return (
+                  <>
+                    <div
+                      className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-overlay"
+                      style={{ backgroundImage: `url('${clip.videoUrl}')` }}
+                    />
+                    <PlayCircle
+                      className="w-20 h-20 text-white/20 group-hover:text-white/40 transition-colors cursor-pointer"
+                      onClick={() => triggerNotification?.("Video played")}
+                    />
+                  </>
+                );
+              })()}
             </div>
 
             {/* Content Overlay */}

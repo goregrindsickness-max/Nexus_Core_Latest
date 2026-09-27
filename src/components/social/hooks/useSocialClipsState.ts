@@ -72,19 +72,25 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
   };
 
   const deleteClip = async (clipId: string | number) => {
+    const idStr = String(clipId).trim();
     setClips(prev => {
-      const updated = prev.filter(c => c.id !== clipId);
+      const updated = prev.filter(c => String(c.id).trim().toLowerCase() !== idStr.toLowerCase());
       try {
         localStorage.setItem('nexus_saved_clips', JSON.stringify(updated));
       } catch (_) {}
       return updated;
     });
+    try {
+      await clipsMediaStore.removeItem(`clip_media_${idStr.toLowerCase()}`);
+      await clipsMediaStore.removeItem(`clip_media_${idStr}`);
+      await clipsMediaStore.removeItem(idStr.toLowerCase());
+      await clipsMediaStore.removeItem(idStr);
+    } catch (_) {}
     triggerNotification?.("Clip deleted successfully!");
     const supabaseClient = getSupabase();
-    if (supabaseClient && typeof clipId === 'string') {
+    if (supabaseClient) {
       try {
         await supabaseClient.from('clips').delete().eq('id', clipId);
-        await supabaseClient.from('nexus_clips').delete().eq('id', clipId);
       } catch (err) {
         console.error("Failed to delete clip from database:", err);
       }
@@ -220,9 +226,56 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
 
           if (isMounted) {
             setClips(prev => {
-              const dbIds = new Set(revivedMapped.map(c => c.id));
-              const localOnly = prev.filter(c => !dbIds.has(c.id));
-              const merged = [...revivedMapped, ...localOnly];
+              // Also check localStorage in case prev was empty during initial parallel mount
+              let localCached: any[] = [];
+              try {
+                const raw = localStorage.getItem('nexus_saved_clips');
+                if (raw) localCached = JSON.parse(raw);
+              } catch (_) {}
+
+              const existingClips = [...prev, ...localCached];
+              const existingMap = new Map<string, any>();
+              existingClips.forEach(c => {
+                if (c && c.id) {
+                  existingMap.set(String(c.id).toLowerCase(), c);
+                }
+              });
+
+              const dbIds = new Set(revivedMapped.map(c => String(c.id).toLowerCase()));
+
+              // Preserve interaction states (likes, hasLiked, views) and local video URLs
+              const mergedDbClips = revivedMapped.map(dbClip => {
+                const local = existingMap.get(String(dbClip.id).toLowerCase());
+                if (!local) return dbClip;
+                return {
+                  ...dbClip,
+                  hasLiked: local.hasLiked !== undefined ? local.hasLiked : dbClip.hasLiked,
+                  likes: Math.max(Number(local.likes) || 0, Number(dbClip.likes) || 0),
+                  likes_count: Math.max(Number(local.likes_count) || 0, Number(dbClip.likes_count) || 0),
+                  views: Math.max(Number(local.views) || 0, Number(dbClip.views) || 0),
+                  views_count: Math.max(Number(local.views_count) || 0, Number(dbClip.views_count) || 0),
+                  comments: Math.max(Number(local.comments) || 0, Number(dbClip.comments) || 0),
+                  videoUrl: (dbClip.videoUrl && !dbClip.videoUrl.startsWith('blob:') && dbClip.videoUrl.startsWith('http'))
+                    ? dbClip.videoUrl
+                    : (local.videoUrl || dbClip.videoUrl),
+                  video_url: (dbClip.video_url && !dbClip.video_url.startsWith('blob:') && dbClip.video_url.startsWith('http'))
+                    ? dbClip.video_url
+                    : (local.video_url || dbClip.video_url),
+                };
+              });
+
+              // Retain any clips present locally that haven't synced to DB yet
+              const localOnly: any[] = [];
+              const seenLocal = new Set<string>();
+              existingClips.forEach(c => {
+                const cId = String(c?.id || '').toLowerCase();
+                if (cId && !dbIds.has(cId) && !seenLocal.has(cId)) {
+                  seenLocal.add(cId);
+                  localOnly.push(c);
+                }
+              });
+
+              const merged = [...mergedDbClips, ...localOnly];
               try {
                 localStorage.setItem('nexus_saved_clips', JSON.stringify(merged));
               } catch (_) {}

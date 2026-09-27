@@ -914,11 +914,19 @@ export async function ensureImagesUploadedToStorage(payload: any): Promise<any> 
  * with fallbacks to other public media buckets if needed, and returns the accessible public URL.
  */
 export async function uploadClipVideoFile(
-  file: File | Blob,
+  file: File | Blob | string,
   userId: string = 'user',
   fileNameToken: string = 'clip'
 ): Promise<string> {
   if (!file) return '';
+
+  if (typeof file === 'string') {
+    if (file.startsWith('http://') || file.startsWith('https://')) {
+      if (!file.startsWith('blob:')) {
+        return file;
+      }
+    }
+  }
 
   const client = getRawSupabase() || rawClient || getSupabase();
   if (!client) {
@@ -932,6 +940,29 @@ export async function uploadClipVideoFile(
     const cleanAuthId = String(authUserId).replace(/[^a-zA-Z0-9_-]/g, '_');
     const cleanToken = String(fileNameToken || 'clip').replace(/[^a-zA-Z0-9_-]/g, '_');
     const timestamp = Date.now();
+
+    let uploadPayload: Blob | File;
+    if (typeof file === 'string' && file.startsWith('data:')) {
+      try {
+        const parts = file.split(',');
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'video/mp4';
+        const bstr = atob(parts[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        uploadPayload = new Blob([u8arr], { type: mime });
+      } catch (convErr) {
+        console.warn('[STORAGE] Data URL conversion failed:', convErr);
+        return '';
+      }
+    } else if (typeof file === 'object' && file !== null) {
+      uploadPayload = file as Blob | File;
+    } else {
+      return '';
+    }
     
     // Bucket creation check (safe try-catch)
     try {
@@ -939,8 +970,8 @@ export async function uploadClipVideoFile(
     } catch (_) {}
 
     let rawName = 'clip.mp4';
-    if (file && typeof file === 'object' && 'name' in file && typeof (file as any).name === 'string') {
-      rawName = (file as any).name;
+    if (uploadPayload && typeof uploadPayload === 'object' && 'name' in uploadPayload && typeof (uploadPayload as any).name === 'string') {
+      rawName = (uploadPayload as any).name;
     }
     const extMatch = rawName.match(/\.([a-zA-Z0-9]+)$/);
     const ext = extMatch ? extMatch[1].toLowerCase() : 'mp4';
@@ -948,8 +979,8 @@ export async function uploadClipVideoFile(
     const safeFileName = `${cleanBaseName || 'clip'}.${ext}`;
 
     let contentType = 'video/mp4';
-    if (file && typeof file === 'object' && 'type' in file && typeof (file as any).type === 'string' && (file as any).type && (file as any).type !== 'application/octet-stream') {
-      contentType = (file as any).type;
+    if (uploadPayload && typeof uploadPayload === 'object' && 'type' in uploadPayload && typeof (uploadPayload as any).type === 'string' && (uploadPayload as any).type && (uploadPayload as any).type !== 'application/octet-stream') {
+      contentType = (uploadPayload as any).type;
     } else if (ext === 'webm') {
       contentType = 'video/webm';
     } else if (ext === 'mov') {
@@ -969,7 +1000,7 @@ export async function uploadClipVideoFile(
         try {
           const { data: uploadData, error: uploadError } = await client.storage
             .from(targetBucket)
-            .upload(currentPath, file, {
+            .upload(currentPath, uploadPayload, {
               upsert: true,
               cacheControl: '3600',
               contentType,
