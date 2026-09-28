@@ -242,15 +242,18 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                   }}
                 />
               ) : (
-                <span className="text-emerald-400 text-sm font-bold font-mono">
+                <span className="text-emerald-400 text-xs font-bold font-mono">
                   {(() => {
                     const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
-                    if (r === 'band') return activeBand?.name;
-                    if (r === 'creative') return userProfile?.creative_metadata?.business_name;
-                    if (r === 'label') return userProfile?.label_company_name;
-                    if (r === 'promoter') return userProfile?.promoter_metadata?.brand_name;
-                    return userProfile?.name;
-                  })()?.charAt(0).toUpperCase() || 'U'}
+                    if (r === 'band') return (activeBand?.name || 'BD').slice(0, 2).toUpperCase();
+                    if (r === 'creative') return (userProfile?.creative_metadata?.business_name || 'CR').slice(0, 2).toUpperCase();
+                    if (r === 'label') return (userProfile?.label_company_name || 'LB').slice(0, 2).toUpperCase();
+                    if (r === 'promoter') return (userProfile?.promoter_metadata?.brand_name || 'PR').slice(0, 2).toUpperCase();
+                    const name = (userProfile?.full_name || userProfile?.name || 'User').replace(/^@+/, '').trim();
+                    const parts = name.split(/\s+/).filter(Boolean);
+                    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+                    return name.slice(0, 2).toUpperCase() || 'U';
+                  })()}
                 </span>
               )}
             </button>

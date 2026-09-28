@@ -1400,6 +1400,18 @@ export function UniversalSocialFeed({
   }, [fetchEventsAndSetlists]);
 
   useEffect(() => {
+    const handlePrefillShowCreator = (evt: any) => {
+      const parsed = evt?.detail;
+      if (parsed) {
+        setEditingCommunityShow(parsed);
+        setIsCommunityShowModalOpen(true);
+      }
+    };
+    window.addEventListener('nexus_prefill_show_creator', handlePrefillShowCreator);
+    return () => window.removeEventListener('nexus_prefill_show_creator', handlePrefillShowCreator);
+  }, []);
+
+  useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 1500);
     return () => clearTimeout(timer);
   }, []);

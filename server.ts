@@ -3819,6 +3819,90 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     }
   });
 
+  /**
+   * AI FLYER & SHOW ANNOUNCEMENT PARSER ENDPOINT
+   * Uses Gemini 3.8 Flash to extract structured event details from flyer images or pasted text
+   */
+  app.post("/api/parse-show-flyer", async (req, res) => {
+    try {
+      const { imageBase64, mimeType, rawText } = req.body;
+      if (!imageBase64 && !rawText) {
+        return res.status(400).json({ error: "Missing imageBase64 or rawText input." });
+      }
+
+      const apiKey = process.env.GEMINI_API_KEY || await getVaultSecret("GEMINI_API_KEY");
+      if (!apiKey) {
+        return res.status(500).json({ error: "Gemini API key is unavailable." });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const parts: any[] = [];
+      if (imageBase64) {
+        parts.push({
+          inlineData: {
+            data: imageBase64.replace(/^data:image\/[a-z]+;base64,/, ""),
+            mimeType: mimeType || "image/jpeg"
+          }
+        });
+      }
+      if (rawText) {
+        parts.push({ text: `Raw Show Announcement Copy:\n${rawText}` });
+      }
+
+      parts.push({
+        text: "Extract all concert/show event details from this flyer image or copy. Return a JSON object with headliner, support_lineup array, venue_name, venue_address, city, state_province, country, show_date (YYYY-MM-DD), doors_time (e.g. '7:00 PM'), set_time, presale_price, day_of_show_price, external_ticket_url, and micro_genres array."
+      });
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: { parts },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              headliner: { type: Type.STRING },
+              support_lineup: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+              },
+              venue_name: { type: Type.STRING },
+              venue_address: { type: Type.STRING },
+              city: { type: Type.STRING },
+              state_province: { type: Type.STRING },
+              country: { type: Type.STRING },
+              show_date: { type: Type.STRING },
+              doors_time: { type: Type.STRING },
+              set_time: { type: Type.STRING },
+              presale_price: { type: Type.STRING },
+              day_of_show_price: { type: Type.STRING },
+              external_ticket_url: { type: Type.STRING },
+              micro_genres: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+              }
+            }
+          }
+        }
+      });
+
+      const jsonText = response.text || "{}";
+      const parsed = JSON.parse(jsonText);
+      return res.json({ success: true, data: parsed });
+    } catch (err: any) {
+      console.error("Flyer AI Parser Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to parse flyer with Gemini AI" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");

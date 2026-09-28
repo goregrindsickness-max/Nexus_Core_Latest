@@ -2,6 +2,7 @@ import { normalizeRegisteredWorkspaces } from '../types';
 import { executeWithSchemaResilience } from './schemaResilienceService';
 import { isMiguelNameOrProfile } from '../components/social/utils/profileUtils';
 import { isCommunityBandRecord } from '../lib/seedBandsData';
+import { isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER } from '../utils/bandProfileUtils';
 
 export const PROFILES_COLUMNS = [
   'id',
@@ -229,13 +230,20 @@ export function normalizeLoadedProfile(data: any): any {
     }
   }
 
-  // Sanitize personal banner_url: only clear if it is the static promoter default banner on a non-promoter context
-  const staticPromoterBannerDefault = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
-  if (normalized.banner_url === staticPromoterBannerDefault && normalized.account_type !== 'promoter' && normalized.active_workspace !== 'promoter') {
-    normalized.banner_url = null;
-  }
-  if (normalized.cover_url === staticPromoterBannerDefault && normalized.account_type !== 'promoter' && normalized.active_workspace !== 'promoter') {
-    normalized.cover_url = null;
+  // Sanitize personal avatar_url & banner_url: isolate promoter assets when in personal / industry pro context
+  const isPromoterContext = normalized.account_type === 'promoter' || normalized.active_workspace === 'promoter';
+  if (!isPromoterContext) {
+    if (isPromoterAvatarUrl(normalized.avatar_url, normalized) || isPromoterAvatarUrl(normalized.avatar, normalized)) {
+      const savedUserAvatar = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null;
+      normalized.avatar_url = savedUserAvatar && !isPromoterAvatarUrl(savedUserAvatar, normalized) ? savedUserAvatar : DEFAULT_PERSONAL_AVATAR;
+      normalized.avatar = normalized.avatar_url;
+    }
+    if (isPromoterCoverUrl(normalized.banner_url, normalized) || isPromoterCoverUrl(normalized.cover_url, normalized) || isPromoterCoverUrl(normalized.banner, normalized)) {
+      const savedUserBanner = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner')) : null;
+      normalized.banner_url = savedUserBanner && !isPromoterCoverUrl(savedUserBanner, normalized) ? savedUserBanner : DEFAULT_PERSONAL_COVER;
+      normalized.cover_url = normalized.banner_url;
+      normalized.banner = normalized.banner_url;
+    }
   }
 
   // Ensure band identity integrity: prevent community bands (e.g. Necroticgorebeast) from corrupting personal band profile
@@ -410,9 +418,7 @@ export function sanitizeProfilePayload(rawPayload: any): any {
     rawPayload.logo_url !== undefined;
 
   if (hasAvatarField) {
-    let uploadedAvatarUrl: string | null = null;
-    let existingAvatarUrl: string | null = null;
-
+    let chosenAvatarUrl: string | null = null;
     const avatarCandidates = [
       rawPayload.avatar_url,
       rawPayload.avatarUrl,
@@ -422,22 +428,19 @@ export function sanitizeProfilePayload(rawPayload: any): any {
     ];
 
     for (const cand of avatarCandidates) {
-      if (typeof cand === 'string' && cand.trim().length > 0 && !cand.startsWith('data:image/')) {
-        if (!existingAvatarUrl && !cand.includes('Nexus%20Icon%20Circuits.png')) {
-          existingAvatarUrl = cand;
+      if (typeof cand === 'string' && cand.trim().length > 0) {
+        if (!cand.includes('Nexus%20Icon%20Circuits.png')) {
+          chosenAvatarUrl = cand.trim();
+          break;
         }
       }
     }
 
-    if (
-      typeof cleanProfilePayload.avatar_url === 'string' &&
-      cleanProfilePayload.avatar_url.trim().length > 0 &&
-      !cleanProfilePayload.avatar_url.startsWith('data:image/')
-    ) {
-      uploadedAvatarUrl = cleanProfilePayload.avatar_url;
+    if (chosenAvatarUrl !== null) {
+      cleanProfilePayload.avatar_url = chosenAvatarUrl;
+    } else if (rawPayload.avatar_url === null || rawPayload.avatar === null) {
+      cleanProfilePayload.avatar_url = null;
     }
-
-    cleanProfilePayload.avatar_url = uploadedAvatarUrl || existingAvatarUrl || null;
   }
 
   // Banner URL resolving only if a banner field was provided
@@ -449,9 +452,7 @@ export function sanitizeProfilePayload(rawPayload: any): any {
     rawPayload.profileCoverUrl !== undefined;
 
   if (hasBannerField) {
-    let uploadedBannerUrl: string | null = null;
-    let existingBannerUrl: string | null = null;
-
+    let chosenBannerUrl: string | null = null;
     const bannerCandidates = [
       rawPayload.banner_url,
       rawPayload.bannerUrl,
@@ -461,22 +462,17 @@ export function sanitizeProfilePayload(rawPayload: any): any {
     ];
 
     for (const cand of bannerCandidates) {
-      if (typeof cand === 'string' && cand.trim().length > 0 && !cand.startsWith('data:image/')) {
-        if (!existingBannerUrl) {
-          existingBannerUrl = cand;
-        }
+      if (typeof cand === 'string' && cand.trim().length > 0) {
+        chosenBannerUrl = cand.trim();
+        break;
       }
     }
 
-    if (
-      typeof cleanProfilePayload.banner_url === 'string' &&
-      cleanProfilePayload.banner_url.trim().length > 0 &&
-      !cleanProfilePayload.banner_url.startsWith('data:image/')
-    ) {
-      uploadedBannerUrl = cleanProfilePayload.banner_url;
+    if (chosenBannerUrl !== null) {
+      cleanProfilePayload.banner_url = chosenBannerUrl;
+    } else if (rawPayload.banner_url === null || rawPayload.cover_url === null) {
+      cleanProfilePayload.banner_url = null;
     }
-
-    cleanProfilePayload.banner_url = uploadedBannerUrl || existingBannerUrl || null;
   }
 
   // Preserving active_workspace only if present in payload

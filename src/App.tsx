@@ -1601,6 +1601,17 @@ export default function App() {
             try {
               profileStore.setItem('nexus_core_user_profile', merged);
               localStorage.setItem('nexus_core_user_profile', JSON.stringify(merged));
+              if (merged.avatar_url) {
+                localStorage.setItem('nexus_user_avatar', merged.avatar_url);
+                localStorage.setItem('nexus_avatar', merged.avatar_url);
+              }
+              if (merged.banner_url) {
+                localStorage.setItem('nexus_user_banner', merged.banner_url);
+                localStorage.setItem('nexus_banner', merged.banner_url);
+              }
+              if (merged.bio) {
+                localStorage.setItem('nexus_user_bio', merged.bio);
+              }
               if (merged.promoter_metadata?.bio) {
                 localStorage.setItem('nexus_promoter_bio', merged.promoter_metadata.bio);
               }

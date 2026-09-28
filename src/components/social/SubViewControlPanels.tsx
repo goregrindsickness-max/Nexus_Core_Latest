@@ -63,7 +63,12 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
   portalRole = 'band',
   userProfile,
 }) => {
-  const isBand = portalRole === 'band' || userProfile?.active_workspace === 'band';
+  const activeWorkspace = (userProfile?.active_workspace || portalRole || '').toLowerCase();
+  const isBand = activeWorkspace === 'band' || portalRole === 'band';
+  const isPromoter = activeWorkspace === 'promoter' || portalRole === 'promoter';
+  const isFan = activeWorkspace === 'fan_only' || activeWorkspace === 'fan' || portalRole === 'fan_only' || portalRole === 'fan';
+  const isIndustryPro = activeWorkspace === 'industry_pro' || activeWorkspace === 'pro' || portalRole === 'industry_pro' || portalRole === 'pro' || (!isBand && !isPromoter && !isFan);
+
   const uniqueLiveEvents = useMemo(() => {
     if (!liveEvents || !Array.isArray(liveEvents)) return [];
     const seenIds = new Set<string>();
@@ -101,11 +106,11 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                 isLiveTonightOpen
                   ? isBand
                     ? 'bg-[#39ff14] shadow-[0_0_8px_#39ff14] animate-pulse'
-                    : portalRole === 'promoter'
+                    : isPromoter
                     ? 'bg-yellow-400 animate-pulse'
-                    : portalRole === 'fan_only'
+                    : isFan
                     ? 'bg-cyan-400 animate-pulse'
-                    : 'bg-emerald-400 animate-pulse'
+                    : 'bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.8)] animate-pulse'
                   : 'bg-zinc-600'
               }`}
             />
@@ -114,11 +119,11 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                 isLiveTonightOpen
                   ? isBand
                     ? 'text-[#39ff14]'
-                    : portalRole === 'promoter'
+                    : isPromoter
                     ? 'text-yellow-400'
-                    : portalRole === 'fan_only'
+                    : isFan
                     ? 'text-cyan-400'
-                    : 'text-emerald-400'
+                    : 'text-purple-400'
                   : 'text-zinc-500'
               }`}
             >
@@ -178,6 +183,12 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                   className={`shrink-0 bg-[#0a0c10] border rounded-xl px-3 py-2 flex items-center gap-3 shadow-lg shadow-black/50 transition-all group cursor-pointer ${
                     isBand
                       ? 'border-[#39ff14]/60 hover:border-[#39ff14] bg-gradient-to-r from-[#39ff14]/10 to-[#0a0c10] shadow-[0_0_12px_rgba(57,255,20,0.15)]'
+                      : isIndustryPro
+                      ? 'border-purple-500/70 hover:border-purple-400 bg-gradient-to-r from-purple-950/40 via-[#130826] to-[#0a0c10] shadow-[0_0_14px_rgba(168,85,247,0.25)]'
+                      : isPromoter
+                      ? 'border-yellow-500/60 hover:border-yellow-400 bg-gradient-to-r from-yellow-950/20 to-[#0a0c10]'
+                      : isFan
+                      ? 'border-cyan-500/60 hover:border-cyan-400 bg-gradient-to-r from-cyan-950/20 to-[#0a0c10]'
                       : gig.isFollowed 
                       ? 'border-amber-500/50 hover:border-amber-400/80 bg-gradient-to-r from-amber-950/20 to-[#0a0c10]' 
                       : 'border-zinc-800 hover:border-zinc-700'
@@ -186,7 +197,9 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                 >
                   <div className="space-y-0.5 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <div className={`text-xs font-black text-white uppercase tracking-wide ${isBand ? 'group-hover:text-[#39ff14]' : 'group-hover:text-rose-400'} transition-colors truncate max-w-[130px] sm:max-w-[170px]`}>
+                      <div className={`text-xs font-black text-white uppercase tracking-wide ${
+                        isBand ? 'group-hover:text-[#39ff14]' : isIndustryPro ? 'group-hover:text-purple-300' : 'group-hover:text-rose-400'
+                      } transition-colors truncate max-w-[130px] sm:max-w-[170px]`}>
                         {gig.headliner}
                       </div>
 
@@ -201,7 +214,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                       {gig.date && (
                         <span className={`text-[8.5px] font-mono font-bold px-1.5 py-0.2 rounded border ${
                           isTonight 
-                            ? isBand ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 animate-pulse' : 'bg-rose-950/70 border-rose-500/50 text-rose-300 animate-pulse' 
+                            ? isBand ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 animate-pulse' : isIndustryPro ? 'bg-purple-950/80 border-purple-500/60 text-purple-200 animate-pulse' : 'bg-rose-950/70 border-rose-500/50 text-rose-300 animate-pulse' 
                             : isTomorrow
                             ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
                             : 'bg-zinc-900 border-zinc-800 text-zinc-300'
@@ -213,7 +226,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
 
                     {/* Venue & Location */}
                     <div className="text-[9px] text-zinc-400 flex items-center gap-1 font-mono truncate">
-                      <MapPin className={`w-2.5 h-2.5 ${isBand ? 'text-[#39ff14]' : 'text-rose-500'} shrink-0`} /> 
+                      <MapPin className={`w-2.5 h-2.5 ${isBand ? 'text-[#39ff14]' : isIndustryPro ? 'text-purple-400' : 'text-rose-500'} shrink-0`} /> 
                       <span className="truncate max-w-[130px] sm:max-w-[160px]">{gig.venue}{gig.city ? ` • ${gig.city}` : ''}</span>
                       {gig.distance && (
                         <span className="text-[#00ffcc] shrink-0">({gig.distance})</span>

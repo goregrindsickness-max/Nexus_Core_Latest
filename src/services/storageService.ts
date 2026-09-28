@@ -108,51 +108,24 @@ export function compressAndTranscodeImageToWebP(file: any): Promise<any> {
  */
 export function isValidStorageOrImageUrl(
   url?: string | null,
-  bucketType?: 'community-bands' | 'avatars' | 'bannersv2' | 'inventory-items' | 'any'
+  _bucketType?: 'community-bands' | 'avatars' | 'bannersv2' | 'inventory-items' | 'any'
 ): boolean {
   if (!url || typeof url !== 'string') return false;
   const trimmed = url.trim();
-  if (!trimmed) return false;
-
-  // Rule 1: Allow Valid Supabase Storage URLs
-  if (
-    trimmed.includes('/storage/v1/object/public/archives/') ||
-    trimmed.includes('/storage/v1/object/public/stories/') ||
-    trimmed.includes('/storage/v1/object/public/inventory-items/') ||
-    trimmed.includes('/storage/v1/object/public/community-bands/') ||
-    trimmed.includes('/storage/v1/object/public/avatars/') ||
-    trimmed.includes('/storage/v1/object/public/bannersv2/') ||
-    trimmed.includes('/storage/v1/object/public/clips/') ||
-    trimmed.includes('/storage/v1/object/public/') ||
-    trimmed.includes('/archives/') ||
-    trimmed.includes('/stories/') ||
-    trimmed.includes('/inventory-items/') ||
-    trimmed.includes('/community-bands/') ||
-    trimmed.includes('/avatars/') ||
-    trimmed.includes('/bannersv2/') ||
-    trimmed.includes('/clips/')
-  ) {
-    if (!trimmed.includes('Nexus%20Icon%20Circuits.png') && !trimmed.includes('Nexus Icon Circuits.png')) {
-      return true;
-    }
-  }
-
-  // Explicitly reject fallback asset and default unsplash placeholders
-  if (
-    trimmed.includes('Nexus%20Icon%20Circuits.png') ||
-    trimmed.includes('Nexus Icon Circuits.png') ||
-    trimmed.includes('unsplash.com')
-  ) {
-    return false;
-  }
+  if (!trimmed || trimmed.includes('undefined') || trimmed.includes('null')) return false;
 
   // Base64 data URIs
   if (trimmed.startsWith('data:image/')) {
     return true;
   }
 
-  // Any other valid HTTP/HTTPS image URL (not fallback or unsplash)
+  // Any valid HTTP or HTTPS image URL
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return true;
+  }
+
+  // Relative storage paths
+  if (trimmed.startsWith('/')) {
     return true;
   }
 

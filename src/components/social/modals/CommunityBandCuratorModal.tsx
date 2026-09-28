@@ -119,6 +119,10 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
   const [newMemberYears, setNewMemberYears] = useState('');
   const [editingMemberIdx, setEditingMemberIdx] = useState<number | null>(null);
 
+  // Delete Dialog Confirmation State
+  const [confirmDeleteBand, setConfirmDeleteBand] = useState<CommunityBandRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Discography Editor State
   const [albums, setAlbums] = useState<DiscographyRelease[]>([]);
   const [editingAlbumIdx, setEditingAlbumIdx] = useState<number | null>(null);
@@ -275,7 +279,54 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     setMetalArchivesUrl(band.metal_archives_url || '');
     setYoutubeUrl(band.youtube_url || band.featured_youtube_url || '');
     setCuratorHandle(band.curated_by || (userProfile?.console_handle || userProfile?.handle || '@community_archivist'));
-    setLineup(band.lineup || []);
+
+    // Resilient lineup resolution
+    let loadedLineup: LineupMember[] = [];
+    if (Array.isArray(band.lineup) && band.lineup.length > 0) {
+      loadedLineup = band.lineup;
+    } else if (typeof band.lineup === 'string' && (band.lineup as string).trim()) {
+      try {
+        const parsed = JSON.parse(band.lineup);
+        if (Array.isArray(parsed) && parsed.length > 0) loadedLineup = parsed;
+      } catch {
+        const parts = (band.lineup as string).split(',').map(s => s.trim()).filter(Boolean);
+        loadedLineup = parts.map((part, idx) => {
+          const match = part.match(/^(.*?)\s*\((.*?)\)$/);
+          if (match) {
+            return {
+              id: `mem-${idx}`,
+              name: match[1].trim(),
+              role: match[2].trim() || 'Musician',
+              status: 'active' as const,
+              years: 'Present'
+            };
+          }
+          return {
+            id: `mem-${idx}`,
+            name: part,
+            role: 'Musician',
+            status: 'active' as const,
+            years: 'Present'
+          };
+        });
+      }
+    }
+    if (loadedLineup.length === 0) {
+      const bId = band.id || '';
+      const bUUID = bId ? ensureUUID(bId) : '';
+      const bName = (band.name || (band as any).band_name || '').toLowerCase().trim();
+      const stored = (bId ? localStorage.getItem(`nexus_core_band_lineup_${bId}`) : null) ||
+                     (bUUID ? localStorage.getItem(`nexus_core_band_lineup_${bUUID}`) : null) ||
+                     (bName ? localStorage.getItem(`nexus_core_band_lineup_${bName}`) : null);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) loadedLineup = parsed;
+        } catch {}
+      }
+    }
+    setLineup(loadedLineup);
+
     setAlbums([...(band.discography || [])].sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0')));
     setEditingAlbumIdx(null);
     setEditingMemberIdx(null);
@@ -283,25 +334,37 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     setActivePage('editor');
   };
 
-  // Delete Community Band Archive with confirmation
+  // Delete Community Band Archive with clean in-app confirmation
   const handleDeleteBand = (band: CommunityBandRecord) => {
-    const bandTitle = band.name || 'this band';
-    const releaseCount = band.discography?.length || 0;
-    
-    if (!window.confirm(`🗑️ Are you sure you want to permanently delete "${bandTitle}" (${releaseCount} releases)?\n\nThis will remove it from community archives and Supabase.`)) {
-      return;
-    }
+    setConfirmDeleteBand(band);
+  };
 
-    const res = communityBandManager.deleteCommunityBand(band.id, true);
-    if (res.success) {
-      triggerNotification?.(`🗑️ Deleted community archive for "${bandTitle}".`);
-      loadBands();
-      if (selectedBand?.id === band.id) {
-        resetForm();
-        setActivePage('list');
+  const executeDeleteBand = async (band: CommunityBandRecord) => {
+    setIsDeleting(true);
+    try {
+      const bandTitle = band.name || 'this band';
+      const res = await communityBandManager.deleteCommunityBand(band.id, true);
+      if (res.success) {
+        try {
+          localStorage.removeItem(`nexus_core_band_lineup_${band.id}`);
+          localStorage.removeItem(`nexus_core_band_lineup_${ensureUUID(band.id)}`);
+          if (band.name) localStorage.removeItem(`nexus_core_band_lineup_${band.name.toLowerCase().trim()}`);
+          localStorage.removeItem(`nexus_core_band_logo_${band.id}`);
+          localStorage.removeItem(`nexus_core_band_cover_${band.id}`);
+        } catch {}
+        setBandsList(prev => prev.filter(b => b.id !== band.id && ensureUUID(b.id) !== ensureUUID(band.id) && (b.name || '').toLowerCase().trim() !== (band.name || '').toLowerCase().trim()));
+        triggerNotification?.(`🗑️ Deleted community archive for "${bandTitle}".`);
+        loadBands();
+        if (selectedBand?.id === band.id) {
+          resetForm();
+          setActivePage('list');
+        }
+      } else {
+        triggerNotification?.(`❌ Failed to delete archive: ${res.error || 'Unknown error'}`);
       }
-    } else {
-      triggerNotification?.(`❌ Failed to delete archive: ${res.error || 'Unknown error'}`);
+    } finally {
+      setIsDeleting(false);
+      setConfirmDeleteBand(null);
     }
   };
 
@@ -482,6 +545,57 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     setIsSaving(true);
 
     try {
+      // Auto-commit any currently typed lineup member in the input fields
+      let finalLineup = [...lineup];
+      if (newMemberName.trim()) {
+        const pendingMember: LineupMember = {
+          id: editingMemberIdx !== null && lineup[editingMemberIdx]?.id
+            ? lineup[editingMemberIdx].id
+            : `mem-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+          name: newMemberName.trim(),
+          role: newMemberRole.trim() || 'Musician',
+          status: newMemberStatus,
+          years: newMemberYears.trim() || 'Present'
+        };
+        if (editingMemberIdx !== null && editingMemberIdx < finalLineup.length) {
+          finalLineup[editingMemberIdx] = pendingMember;
+        } else {
+          finalLineup.push(pendingMember);
+        }
+        setLineup(finalLineup);
+        setNewMemberName('');
+        setNewMemberRole('');
+        setNewMemberYears('');
+        setEditingMemberIdx(null);
+      }
+
+      // Auto-commit any currently typed release in the input fields
+      let finalAlbums = [...albums];
+      if (releaseTitle.trim()) {
+        const releaseId = editingAlbumIdx !== null && albums[editingAlbumIdx]?.id
+          ? ensureUUID(albums[editingAlbumIdx].id)
+          : generateUUID();
+        const pendingRelease: DiscographyRelease = {
+          id: releaseId,
+          title: releaseTitle.trim(),
+          year: releaseYear.trim() || new Date().getFullYear().toString(),
+          type: releaseType,
+          image_url: releaseImageUrl.trim() || undefined,
+          label: releaseLabel.trim() || undefined,
+          release_info: releaseLabel.trim() || undefined,
+          catalog_id: releaseCatalogId.trim() || undefined,
+          tracks: releaseTracks
+        };
+        if (editingAlbumIdx !== null && editingAlbumIdx < finalAlbums.length) {
+          finalAlbums[editingAlbumIdx] = pendingRelease;
+        } else {
+          finalAlbums.push(pendingRelease);
+        }
+        finalAlbums.sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0'));
+        setAlbums(finalAlbums);
+        resetReleaseInputs();
+      }
+
       const resolvedCreatorId = selectedBand?.creator_id || userProfile?.id || (userProfile?.console_handle ? userProfile.console_handle : undefined);
 
       const parsedFoundedYear = foundedYear.trim() ? parseInt(foundedYear.trim(), 10) : undefined;
@@ -517,8 +631,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
         metal_archives_url: metalArchivesUrl.trim() || undefined,
         youtube_url: youtubeUrl.trim() || undefined,
         featured_youtube_url: youtubeUrl.trim() || undefined,
-        lineup,
-        discography: albums,
+        lineup: finalLineup,
+        discography: finalAlbums,
         creator_id: resolvedCreatorId,
         curated_by: curatorHandle || userProfile?.console_handle || userProfile?.handle || '@fan_archivist',
         curator_name: userProfile?.full_name || userProfile?.name || 'Community Archivist',
@@ -527,6 +641,23 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
 
       const savedRecord = communityBandManager.upsertCommunityBand(bandPayload, { isNew: isCreatingNew });
 
+      // Cache lineup to localStorage for immediate cross-portal availability
+      try {
+        const serializedLineup = JSON.stringify(finalLineup);
+        localStorage.setItem(`nexus_core_band_lineup_${bandId}`, serializedLineup);
+        localStorage.setItem(`nexus_core_band_lineup_${ensureUUID(bandId)}`, serializedLineup);
+        if (savedRecord?.id) {
+          localStorage.setItem(`nexus_core_band_lineup_${savedRecord.id}`, serializedLineup);
+          localStorage.setItem(`nexus_core_band_lineup_${ensureUUID(savedRecord.id)}`, serializedLineup);
+        }
+        if (name.trim()) {
+          localStorage.setItem(`nexus_core_band_lineup_${name.trim().toLowerCase()}`, serializedLineup);
+        }
+        window.dispatchEvent(new CustomEvent('nexus_band_lineup_updated', {
+          detail: { bandId: savedRecord?.id || bandId, lineup: finalLineup }
+        }));
+      } catch {}
+
       // Attempt Supabase sync with explicit isNew configuration
       try {
         const syncRes = await communityBandManager.syncToSupabaseTables(savedRecord, { isNew: isCreatingNew });
@@ -534,7 +665,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
           console.error('[CommunityBandCuratorModal] Remote Supabase sync error:', syncRes.error);
           triggerNotification?.(`⚠️ Saved locally, cloud sync notice: ${syncRes.error}`);
         } else {
-          triggerNotification?.(`⚡ Saved & synchronized "${savedRecord.name}" to cloud archive!`);
+          triggerNotification?.(`⚡ Saved & synchronized "${savedRecord.name}" (${finalLineup.length} members, ${finalAlbums.length} releases) to cloud archive!`);
         }
       } catch (syncErr: any) {
         console.warn('[CommunityBandCuratorModal] Remote Supabase sync deferred (offline / offline queue active):', syncErr);
@@ -545,13 +676,11 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
       setTimeout(() => setSavedFeedback(false), 3000);
 
       loadBands();
-      populateForm(savedRecord);
+      populateForm({
+        ...savedRecord,
+        lineup: finalLineup
+      });
       onSaved?.(savedRecord);
-      
-      // Return to archives list after successful save
-      setTimeout(() => {
-        setActivePage('list');
-      }, 800);
     } catch (error) {
       console.error('Failed to save archive:', error);
       triggerNotification?.(`❌ Failed to save band archive: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1232,6 +1361,12 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                           placeholder="e.g. Trey Williams, Chuck Schuldiner"
                           value={newMemberName}
                           onChange={(e) => setNewMemberName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddOrUpdateMember();
+                            }
+                          }}
                           className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs font-mono text-white outline-none focus:border-amber-500"
                         />
                       </div>
@@ -1243,6 +1378,12 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                           placeholder="e.g. Drums, Vocals"
                           value={newMemberRole}
                           onChange={(e) => setNewMemberRole(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddOrUpdateMember();
+                            }
+                          }}
                           className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs font-mono text-white outline-none focus:border-amber-500"
                         />
                       </div>
@@ -1254,6 +1395,12 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                           placeholder="e.g. 1993–present"
                           value={newMemberYears}
                           onChange={(e) => setNewMemberYears(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddOrUpdateMember();
+                            }
+                          }}
                           className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs font-mono text-white outline-none focus:border-amber-500"
                         />
                       </div>
@@ -1299,10 +1446,9 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                         <button
                           type="button"
                           onClick={() => {
-                            if (window.confirm(`Clear all ${lineup.length} lineup members from this form?`)) {
-                              setLineup([]);
-                              setEditingMemberIdx(null);
-                            }
+                            setLineup([]);
+                            setEditingMemberIdx(null);
+                            triggerNotification?.('Cleared lineup members from form.');
                           }}
                           className="text-[11px] font-mono text-zinc-400 hover:text-red-400 flex items-center gap-1 cursor-pointer transition-colors px-2 py-1 rounded hover:bg-red-950/20 border border-transparent hover:border-red-900/40"
                         >
@@ -1606,11 +1752,9 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                           <button
                             type="button"
                             onClick={() => {
-                              if (window.confirm(`Are you sure you want to clear all ${albums.length} releases from this archive?`)) {
-                                setAlbums([]);
-                                resetReleaseInputs();
-                                triggerNotification?.('Cleared all releases from form.');
-                              }
+                              setAlbums([]);
+                              resetReleaseInputs();
+                              triggerNotification?.('Cleared all releases from form.');
                             }}
                             className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-500/40 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
                           >
@@ -1809,6 +1953,50 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
               </button>
             </div>
 
+          </div>
+        )}
+
+        {/* In-App Delete Confirmation Modal (Replaces blocked window.confirm) */}
+        {confirmDeleteBand && (
+          <div className="fixed inset-0 z-[1000020] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-zinc-950 border border-red-500/40 rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-950/60 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-white font-display uppercase tracking-wide">
+                    Delete Community Archive
+                  </h4>
+                  <p className="text-xs text-zinc-400 font-mono">
+                    This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-zinc-300 font-mono leading-relaxed bg-red-950/20 border border-red-900/30 rounded-xl p-3">
+                Permanently delete <strong className="text-white font-bold">&quot;{confirmDeleteBand.name}&quot;</strong> ({confirmDeleteBand.discography?.length || 0} releases, {confirmDeleteBand.lineup?.length || 0} members)? This will remove it from all community band archives.
+              </p>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteBand(null)}
+                  className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-mono text-xs font-bold uppercase border border-zinc-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => executeDeleteBand(confirmDeleteBand)}
+                  className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-mono text-xs font-black uppercase tracking-wider transition-all shadow-lg flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  <span>{isDeleting ? 'Deleting...' : 'Confirm Delete'}</span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

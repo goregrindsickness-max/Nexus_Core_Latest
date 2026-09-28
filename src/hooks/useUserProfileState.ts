@@ -233,10 +233,26 @@ export function useUserProfileState({
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
   const coverFileInputRef = useRef<HTMLInputElement>(null);
 
+  const userAvatarManualRef = useRef<boolean>(false);
+  const userCoverManualRef = useRef<boolean>(false);
+
+  const customSetProfileAvatarUrl = (val: string | null) => {
+    userAvatarManualRef.current = true;
+    setProfileAvatarUrl(val);
+  };
+
+  const customSetProfileCoverUrl = (val: string | null) => {
+    userCoverManualRef.current = true;
+    setProfileCoverUrl(val);
+  };
+
   useEffect(() => {
-    const avatar = resolveEffectiveAvatar(portalRole, activeBand, userProfile);
-    if (avatar) {
-      setProfileAvatarUrl(prev => (prev === avatar ? prev : avatar));
+    // Only auto-sync avatar from props if user has NOT manually set a new avatar in this session
+    if (!userAvatarManualRef.current) {
+      const avatar = resolveEffectiveAvatar(portalRole, activeBand, userProfile);
+      if (avatar) {
+        setProfileAvatarUrl(prev => (prev === avatar ? prev : avatar));
+      }
     }
   }, [
     portalRole, 
@@ -246,6 +262,7 @@ export function useUserProfileState({
     activeBand?.avatar, 
     activeBand?.image, 
     activeBand?.name,
+    userProfile?.id,
     userProfile?.band_logo, 
     userProfile?.avatar_url, 
     userProfile?.avatar,
@@ -261,9 +278,12 @@ export function useUserProfileState({
   ]);
 
   useEffect(() => {
-    const cover = resolveEffectiveCover(portalRole, activeBand, userProfile);
-    if (cover) {
-      setProfileCoverUrl(prev => (prev === cover ? prev : cover));
+    // Only auto-sync cover from props if user has NOT manually set a new cover in this session
+    if (!userCoverManualRef.current) {
+      const cover = resolveEffectiveCover(portalRole, activeBand, userProfile);
+      if (cover) {
+        setProfileCoverUrl(prev => (prev === cover ? prev : cover));
+      }
     }
   }, [
     portalRole, 
@@ -271,6 +291,7 @@ export function useUserProfileState({
     activeBand?.cover_url, 
     activeBand?.banner_url, 
     activeBand?.name,
+    userProfile?.id,
     userProfile?.band_cover, 
     userProfile?.banner_url, 
     userProfile?.banner,
@@ -893,9 +914,9 @@ export function useUserProfileState({
     bandsDiscovered,
     setBandsDiscovered,
     profileAvatarUrl,
-    setProfileAvatarUrl,
+    setProfileAvatarUrl: customSetProfileAvatarUrl,
     profileCoverUrl,
-    setProfileCoverUrl,
+    setProfileCoverUrl: customSetProfileCoverUrl,
     cropperOpen,
     setCropperOpen,
     cropperImageSrc,

@@ -235,9 +235,17 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = (props) => 
   if (!baseTarget) return null;
   
   const targetRole = (baseTarget?.role || baseTarget?.portalRole || baseTarget?.account_type || baseTarget?.type || '').toLowerCase();
+  const currentPortal = (props.portalRole || '').toLowerCase();
+
   const isPersonal = baseTarget?.isIndustryProPersonal === true || 
     baseTarget?.isPersonal === true || 
-    (baseTarget?.isYou === true && props.portalRole !== 'band' && props.portalRole !== 'creative' && props.portalRole !== 'label' && props.portalRole !== 'promoter') ||
+    baseTarget?.account_type === 'industry_pro' ||
+    baseTarget?.account_type === 'industry pro' ||
+    targetRole.includes('industry') ||
+    targetRole.includes('pro') ||
+    currentPortal === 'industry_pro' ||
+    currentPortal === 'fan_only' ||
+    (baseTarget?.isYou === true && currentPortal !== 'band' && currentPortal !== 'creative' && currentPortal !== 'label' && currentPortal !== 'promoter') ||
     targetRole.includes('fan') || 
     targetRole === 'user' ||
     targetRole.includes('supporter') ||

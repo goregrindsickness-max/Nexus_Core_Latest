@@ -7,7 +7,7 @@ import { formatLocationDisplay } from '../../../constants/location';
 import { useUserPresence } from '../../../lib/presence';
 import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, upsertBandToDatabase, generateUUID } from '../../../supabase';
-import { formatCleanLocation } from '../../../utils/bandProfileUtils';
+import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
 import { communityBandManager, CommunityBandRecord, isCommunityBandRecord } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
@@ -663,12 +663,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const isExplicitPersonal = Boolean(
     baseTarget?.isIndustryProPersonal === true ||
     baseTarget?.isPersonal === true ||
-    (baseTarget?.isYou && (portalRole === 'fan_only' || portalRole === 'industry_pro' || userProfile?.account_type === 'fan_only' || userProfile?.account_type === 'fan' || targetRole.includes('fan'))) ||
+    (baseTarget?.isYou && (portalRole === 'fan_only' || portalRole === 'industry_pro' || userProfile?.account_type === 'fan_only' || userProfile?.account_type === 'fan' || targetRole.includes('fan') || targetRole.includes('industry') || targetRole.includes('pro'))) ||
     baseTarget?.isBandProfile === false ||
     baseTarget?.account_type === 'fan' ||
     baseTarget?.account_type === 'fan_only' ||
     baseTarget?.account_type === 'industry_pro' ||
+    baseTarget?.account_type === 'industry pro' ||
     targetRole.includes('fan') ||
+    targetRole.includes('industry') ||
+    targetRole.includes('pro') ||
     targetRole.includes('listener') ||
     targetRole.includes('supporter') ||
     (baseTarget?.type === 'user' && !baseTarget?.isBandProfile && (portalRole !== 'band' || !baseTarget?.band_name))
@@ -811,16 +814,65 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     (baseTarget.name && String(baseTarget.name).toLowerCase().includes('miguel'))
   );
 
-  const localStoredAvatar = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar') || localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_band_logo')) : null;
-  const localStoredBanner = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner') || localStorage.getItem('nexus_promoter_cover') || localStorage.getItem('nexus_band_cover')) : null;
+  const localStoredAvatar = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null;
+  const localStoredBanner = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner')) : null;
 
-  const liveUserAvatar = isSelfTarget
-    ? (localStoredAvatar || (userProfile as any)?.profileAvatarUrl || userProfile?.avatar_url || userProfile?.avatar || (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || fetchedProfileData?.avatar_url || fetchedProfileData?.avatar || baseTarget.avatar_url || baseTarget.avatar)
-    : (fetchedProfileData?.avatar_url || fetchedProfileData?.avatar || baseTarget.avatar_url || baseTarget.avatar);
+  const promoterLogo = (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url;
+  const promoterCover = (userProfile as any)?.promoter_cover_image || userProfile?.promoter_metadata?.cover_url || userProfile?.promoter_metadata?.banner_url;
 
-  const liveUserBanner = isSelfTarget
-    ? (localStoredBanner || (userProfile as any)?.profileCoverUrl || userProfile?.banner_url || userProfile?.banner || userProfile?.cover_url || (userProfile as any)?.promoter_cover_image || userProfile?.promoter_metadata?.banner_url || fetchedProfileData?.banner_url || fetchedProfileData?.cover_url || baseTarget.banner_url || baseTarget.cover_url || baseTarget.banner)
-    : (fetchedProfileData?.banner_url || fetchedProfileData?.cover_url || baseTarget.banner_url || baseTarget.cover_url || baseTarget.banner);
+  const rawUserAvatarCandidates = [
+    localStoredAvatar,
+    (userProfile as any)?.profileAvatarUrl,
+    userProfile?.avatar_url,
+    userProfile?.avatar,
+    fetchedProfileData?.avatar_url,
+    fetchedProfileData?.avatar,
+    baseTarget?.avatar_url,
+    baseTarget?.avatar
+  ];
+  let liveUserAvatarCandidate: string | null = null;
+  if (isSelfTarget) {
+    for (const cand of rawUserAvatarCandidates) {
+      if (cand && typeof cand === 'string' && cand.trim() && !isPromoterAvatarUrl(cand, userProfile) && !cand.includes('undefined') && !cand.includes('null')) {
+        liveUserAvatarCandidate = cand.trim();
+        break;
+      }
+    }
+    if (!liveUserAvatarCandidate) {
+      liveUserAvatarCandidate = DEFAULT_PERSONAL_AVATAR;
+    }
+  } else {
+    liveUserAvatarCandidate = fetchedProfileData?.avatar_url || fetchedProfileData?.avatar || baseTarget.avatar_url || baseTarget.avatar || DEFAULT_PERSONAL_AVATAR;
+  }
+  const liveUserAvatar = liveUserAvatarCandidate;
+
+  const rawUserBannerCandidates = [
+    localStoredBanner,
+    (userProfile as any)?.profileCoverUrl,
+    userProfile?.banner_url,
+    userProfile?.banner,
+    userProfile?.cover_url,
+    fetchedProfileData?.banner_url,
+    fetchedProfileData?.cover_url,
+    baseTarget?.banner_url,
+    baseTarget?.cover_url,
+    baseTarget?.banner
+  ];
+  let liveUserBannerCandidate: string | null = null;
+  if (isSelfTarget) {
+    for (const cand of rawUserBannerCandidates) {
+      if (cand && typeof cand === 'string' && cand.trim() && !isPromoterCoverUrl(cand, userProfile) && !cand.includes('undefined') && !cand.includes('null')) {
+        liveUserBannerCandidate = cand.trim();
+        break;
+      }
+    }
+    if (!liveUserBannerCandidate) {
+      liveUserBannerCandidate = DEFAULT_PERSONAL_COVER;
+    }
+  } else {
+    liveUserBannerCandidate = fetchedProfileData?.banner_url || fetchedProfileData?.cover_url || baseTarget.banner_url || baseTarget.cover_url || baseTarget.banner || DEFAULT_PERSONAL_COVER;
+  }
+  const liveUserBanner = liveUserBannerCandidate;
 
   const effTarget = {
     ...baseTarget,
@@ -844,7 +896,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       bio: isBandTarget ? (resolvedBandBio || '') : (fetchedProfileData?.bio || baseTarget?.bio || ''),
       avatar: isBandTarget && rawResolvedBandLogo ? rawResolvedBandLogo : liveUserAvatar,
       avatar_url: isBandTarget && rawResolvedBandLogo ? rawResolvedBandLogo : liveUserAvatar,
-      logo_url: isBandTarget ? (rawResolvedBandLogo || baseTarget?.logo_url) : baseTarget?.logo_url,
+      logo_url: isBandTarget ? (rawResolvedBandLogo || baseTarget?.logo_url) : (isExplicitPersonal ? null : baseTarget?.logo_url),
       top_song_url: fetchedProfileData.top_song_url !== undefined && fetchedProfileData.top_song_url !== null && fetchedProfileData.top_song_url !== '' ? fetchedProfileData.top_song_url : baseTarget?.top_song_url,
       top_song_title: fetchedProfileData.top_song_title || fetchedProfileData.favoriteSong || baseTarget?.top_song_title || baseTarget?.favoriteSong,
       favoriteSong: fetchedProfileData.favoriteSong || fetchedProfileData.top_song_title || baseTarget?.favoriteSong || baseTarget?.top_song_title,
@@ -854,18 +906,18 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     ...(bData ? {
       name: isBandTarget ? (bData.band_name || bData.name || baseTarget.name) : (fetchedProfileData?.full_name || fetchedProfileData?.name || baseTarget.name),
       band_name: bData.band_name || bData.name || baseTarget.band_name,
-      avatar: (isBandTarget && !isSelfTarget) ? (bData.logo_url || bData.avatar_url || baseTarget.avatar || baseTarget.avatar_url) : (liveUserAvatar || bData.logo_url || bData.avatar_url),
-      avatar_url: (isBandTarget && !isSelfTarget) ? (bData.logo_url || bData.avatar_url || baseTarget.avatar_url || baseTarget.avatar) : (liveUserAvatar || bData.logo_url || bData.avatar_url),
+      avatar: (isBandTarget && !isSelfTarget) ? (bData.logo_url || bData.avatar_url || baseTarget.avatar || baseTarget.avatar_url) : (liveUserAvatar || (isExplicitPersonal ? null : (bData.logo_url || bData.avatar_url))),
+      avatar_url: (isBandTarget && !isSelfTarget) ? (bData.logo_url || bData.avatar_url || baseTarget.avatar_url || baseTarget.avatar) : (liveUserAvatar || (isExplicitPersonal ? null : (bData.logo_url || bData.avatar_url))),
       banner: (isBandTarget && !isSelfTarget) 
         ? (bData.cover_url || bData.banner_url || baseTarget.banner || baseTarget.banner_url) 
-        : (liveUserBanner || bData.cover_url || bData.banner_url || baseTarget.banner),
+        : (liveUserBanner || (isExplicitPersonal ? null : (bData.cover_url || bData.banner_url || baseTarget.banner))),
       banner_url: (isBandTarget && !isSelfTarget) 
         ? (bData.cover_url || bData.banner_url || baseTarget.banner_url || baseTarget.banner) 
-        : (liveUserBanner || bData.cover_url || bData.banner_url || baseTarget.banner_url),
+        : (liveUserBanner || (isExplicitPersonal ? null : (bData.cover_url || bData.banner_url || baseTarget.banner_url))),
       cover_url: (isBandTarget && !isSelfTarget) 
         ? (bData.cover_url || baseTarget.cover_url) 
-        : (liveUserBanner || bData.cover_url || baseTarget.cover_url),
-      logo_url: isBandTarget ? (bData.logo_url || baseTarget.logo_url) : baseTarget.logo_url,
+        : (liveUserBanner || (isExplicitPersonal ? null : (bData.cover_url || baseTarget.cover_url))),
+      logo_url: isBandTarget ? (bData.logo_url || baseTarget.logo_url) : (isExplicitPersonal ? null : baseTarget.logo_url),
       city: isBandTarget ? (bData.city || baseTarget.city) : (fetchedProfileData?.city || baseTarget.city),
       state_province: isBandTarget ? (bData.state_province || baseTarget.state_province) : (fetchedProfileData?.state_province || baseTarget.state_province),
       country: isBandTarget ? (bData.country || baseTarget.country) : (fetchedProfileData?.country || baseTarget.country),
@@ -1183,8 +1235,21 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       }}
                     >
                       {(() => {
-                        const activeAvatar = effTarget.logo_url || effTarget.avatar_url || effTarget.avatar || selectedUserProfile.logo_url || selectedUserProfile.avatar_url || selectedUserProfile.avatar;
-                        const fallbackInitials = isBandTarget ? (effTarget.band_name || effTarget.name || 'B').slice(0, 2).toUpperCase() : (effTarget.full_name || effTarget.name || 'U').slice(0, 2).toUpperCase();
+                        const activeAvatar = isBandTarget 
+                          ? (effTarget.logo_url || effTarget.avatar_url || effTarget.avatar || selectedUserProfile?.logo_url || selectedUserProfile?.avatar_url || selectedUserProfile?.avatar)
+                          : (effTarget.avatar_url || effTarget.avatar || selectedUserProfile?.avatar_url || selectedUserProfile?.avatar || (isExplicitPersonal ? null : (effTarget.logo_url || selectedUserProfile?.logo_url)));
+                        const fallbackName = isBandTarget 
+                          ? (effTarget.band_name || effTarget.name || 'B') 
+                          : (effTarget.full_name || effTarget.legalName || (effTarget.name && !effTarget.name.startsWith('@') ? effTarget.name : null) || 'Miguel Goregrinder Medina');
+                        const fallbackInitials = fallbackName
+                          .replace(/^@+/, '')
+                          .trim()
+                          .split(/\s+/)
+                          .map((part: string) => part[0])
+                          .filter(Boolean)
+                          .join('')
+                          .slice(0, 2)
+                          .toUpperCase() || 'M';
                         return activeAvatar && typeof activeAvatar === 'string' && (activeAvatar.startsWith('http') || activeAvatar.startsWith('data:image') || activeAvatar.startsWith('/')) ? (
                           <img 
                             src={activeAvatar} 

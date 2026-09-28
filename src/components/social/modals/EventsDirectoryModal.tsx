@@ -334,170 +334,7 @@ export const normalizeShowToEventDirectoryItem = (show: any, idx: number = 0, us
   };
 };
 
-const DEFAULT_CURATED_EVENTS = [
-  {
-    id: 'evt_1',
-    title: 'Devourment + Mortician (Live at Reggies)',
-    venue: 'Reggies Rock Club',
-    city: 'Chicago, IL',
-    date: 'Tonight • 8:00 PM',
-    time: 'Doors 8:00 PM',
-    price: '$35',
-    lat: 41.85,
-    lng: -87.62,
-    genre: 'Death Metal / Grind',
-    headliner: 'Devourment',
-    support: ['Mortician', 'Sanguisugabogg', 'Tribal Gaze'],
-    verified: true,
-    ticketUrl: 'https://reggieschicago.com',
-    flyerUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600&auto=format&fit=crop&q=80',
-    description: 'Special co-headlining extreme underground night. Brutal death metal masters Devourment return with heavy support.',
-  },
-  {
-    id: 'evt_2',
-    title: 'Immolation (Close to a World Below Anniv)',
-    venue: 'The Metro',
-    city: 'Chicago, IL',
-    date: 'Tomorrow • 7:30 PM',
-    time: 'Doors 7:30 PM',
-    price: '$42',
-    lat: 41.94,
-    lng: -87.65,
-    genre: 'Death Metal',
-    headliner: 'Immolation',
-    support: ['Incantation', 'Fulci', 'Frozen Soul'],
-    verified: true,
-    ticketUrl: 'https://metrochicago.com',
-    flyerUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80',
-    description: 'Celebrating classic atmospheric death metal history live in full glory.',
-  },
-  {
-    id: 'evt_3',
-    title: 'Underground DIY Noise Fest III',
-    venue: 'Subterranean',
-    city: 'Chicago, IL',
-    date: 'Sat, Jul 29 • 6:00 PM',
-    time: 'Doors 6:00 PM',
-    price: '$20',
-    lat: 41.91,
-    lng: -87.67,
-    genre: 'Hardcore / Punk',
-    headliner: 'Jesus Piece',
-    support: ['Kubbik', 'Jarhead Fertilizer', 'Volcano'],
-    verified: false,
-    ticketUrl: '',
-    flyerUrl: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=600&auto=format&fit=crop&q=80',
-    description: 'DIY all-ages warehouse hardcore showcase. Bring earplugs. Respect the pit.',
-  },
-  {
-    id: 'evt_4',
-    title: 'Cannibal Corpse World Tour',
-    venue: 'Brooklyn Steel',
-    city: 'New York, NY',
-    date: 'Fri, Aug 04 • 8:00 PM',
-    time: 'Doors 7:00 PM',
-    price: '$45',
-    lat: 40.71,
-    lng: -73.93,
-    genre: 'Death Metal',
-    headliner: 'Cannibal Corpse',
-    support: ['Mayhem', 'Gorguts', 'Blood Incantation'],
-    verified: true,
-    ticketUrl: 'https://bowerypresents.com',
-    flyerUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=600&auto=format&fit=crop&q=80',
-    description: 'Global touring lineup stopping in NYC for a massive evening of relentless death & black metal.',
-  },
-  {
-    id: 'evt_5',
-    title: 'Autopsy & Repulsion Live West Coast Incursion',
-    venue: 'The Underground',
-    city: 'Los Angeles, CA',
-    date: 'Tonight • 8:00 PM',
-    time: 'Doors 8:00 PM',
-    price: '$35',
-    lat: 34.05,
-    lng: -118.25,
-    genre: 'Death Metal / Grind',
-    headliner: 'AUTOPSY',
-    support: ['Repulsion', 'Necrot', 'Cerebral Rot'],
-    verified: true,
-    ticketUrl: '',
-    flyerUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80',
-    description: 'Legendary death metal pioneers tearing through a career-spanning set with grind legends.',
-  },
-  {
-    id: 'evt_6',
-    title: 'Incantation Rotting Spiritual Invocation',
-    venue: 'Nexus Hub',
-    city: 'Long Beach, CA',
-    date: 'Tonight • 9:30 PM',
-    time: 'Set 9:30 PM',
-    price: '$30',
-    lat: 33.77,
-    lng: -118.19,
-    genre: 'Death Metal',
-    headliner: 'INCANTATION',
-    support: ['Mortiferum', 'Worm'],
-    verified: true,
-    ticketUrl: '',
-    flyerUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop&q=80',
-    description: 'Special club performance with custom sound reinforcement & exclusive live bootleg cassette drop.',
-  },
-  {
-    id: 'evt_7',
-    title: 'Cryptopsy None So Vile Retrospective',
-    venue: 'Warehouse 4',
-    city: 'Anaheim, CA',
-    date: 'Tomorrow • 7:00 PM',
-    time: 'Doors 7:00 PM',
-    price: '$28',
-    lat: 33.83,
-    lng: -117.91,
-    genre: 'Technical Death Metal',
-    headliner: 'CRYPTOPSY',
-    support: ['Dying Fetus', 'Archspire'],
-    verified: true,
-    ticketUrl: '',
-    flyerUrl: 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?w=600&auto=format&fit=crop&q=80',
-    description: 'Lightning technical extremity and blastbeats in full sonic force.',
-  },
-  {
-    id: 'evt_8',
-    title: 'Masonic Temple Thrash Assault',
-    venue: 'Masonic Temple',
-    city: 'San Francisco, CA',
-    date: 'Fri, Oct 24 • 6:30 PM',
-    time: 'Doors 6:30 PM',
-    price: '$45',
-    lat: 37.77,
-    lng: -122.41,
-    genre: 'Thrash Metal',
-    headliner: 'DEATH ANGEL',
-    support: ['Exodus', 'Vio-lence'],
-    verified: true,
-    ticketUrl: '',
-    flyerUrl: 'https://images.unsplash.com/photo-1524368535928-5b5e00ddc76b?w=600&auto=format&fit=crop&q=80',
-    description: 'Bay Area thrash legends reunite for a historic home turf showcase.',
-  },
-  {
-    id: 'evt_9',
-    title: 'Skinless & Peeling Flesh Slam Fest',
-    venue: 'The Pit Stage',
-    city: 'San Diego, CA',
-    date: 'Sat, Oct 25 • 10:00 PM',
-    time: 'Set 10:00 PM',
-    price: '$25',
-    lat: 32.71,
-    lng: -117.16,
-    genre: 'Slam / Death Metal',
-    headliner: 'SKINLESS',
-    support: ['Peeling Flesh', 'Bodybox', 'Snuffed on Sight'],
-    verified: false,
-    ticketUrl: '',
-    flyerUrl: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&auto=format&fit=crop&q=80',
-    description: 'Heavy grooves, slams, and non-stop pit action. No stage barriers.',
-  }
-];
+const DEFAULT_CURATED_EVENTS: any[] = [];
 
 export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
   isOpen,
@@ -546,6 +383,96 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
     if (ticketOnly) count++;
     return count;
   }, [selectedCityFilter, mapFilterGenre, dateFilter, verifiedOnly, ticketOnly]);
+
+  // RSVP Pit List State
+  const [rsvpedShowIds, setRsvpedShowIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('nexus_show_rsvps');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const toggleShowRsvp = (showId: string, headliner?: string) => {
+    setRsvpedShowIds(prev => {
+      const next = new Set(prev);
+      const isRsvped = next.has(showId);
+      if (isRsvped) {
+        next.delete(showId);
+        triggerNotification?.(`Removed RSVP for ${headliner || 'show'}`);
+      } else {
+        next.add(showId);
+        triggerNotification?.(`🔥 In Pit List! RSVP confirmed for ${headliner || 'show'}!`);
+      }
+      try {
+        localStorage.setItem('nexus_show_rsvps', JSON.stringify(Array.from(next)));
+      } catch (_) {}
+      return next;
+    });
+  };
+
+  // Google Calendar URL Generator
+  const getGoogleCalendarUrl = (evt: any) => {
+    if (!evt) return '#';
+    const title = encodeURIComponent(evt.title || `${evt.headliner || 'Show'} Live`);
+    const location = encodeURIComponent(`${evt.venue || ''}${evt.city ? `, ${evt.city}` : ''}`);
+    const details = encodeURIComponent(evt.description || `Live show featuring ${evt.headliner}. ${evt.ticketUrl ? `Tickets: ${evt.ticketUrl}` : ''}`);
+    
+    let datePart = '';
+    const rawDate = evt.rawDate || evt.show_date || evt.date;
+    if (rawDate && /\d{4}-\d{2}-\d{2}/.test(String(rawDate))) {
+      datePart = String(rawDate).split('T')[0].replace(/-/g, '');
+    } else {
+      const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      datePart = today;
+    }
+    const dates = `${datePart}T200000Z/${datePart}T230000Z`;
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&location=${location}&details=${details}`;
+  };
+
+  // AI Flyer Parser Modal State
+  const [isAiFlyerModalOpen, setIsAiFlyerModalOpen] = useState(false);
+  const [aiFlyerText, setAiFlyerText] = useState('');
+  const [aiFlyerImage, setAiFlyerImage] = useState<string | null>(null);
+  const [isAiParsing, setIsAiParsing] = useState(false);
+
+  const handleParseFlyerWithAi = async () => {
+    if (!aiFlyerText.trim() && !aiFlyerImage) {
+      triggerNotification?.('⚠️ Please upload a flyer photo or paste show announcement text first.');
+      return;
+    }
+    setIsAiParsing(true);
+    try {
+      const res = await fetch('/api/parse-show-flyer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: aiFlyerImage,
+          rawText: aiFlyerText
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        const parsed = data.data;
+        triggerNotification?.(`✨ AI Flyer parsed! Extracted "${parsed.headliner || 'Show'}" at ${parsed.venue_name || 'Venue'}.`);
+        setIsAiFlyerModalOpen(false);
+        setAiFlyerText('');
+        setAiFlyerImage(null);
+        if (onOpenShowCreator) {
+          onClose();
+          onOpenShowCreator();
+          window.dispatchEvent(new CustomEvent('nexus_prefill_show_creator', { detail: parsed }));
+        }
+      } else {
+        triggerNotification?.(`⚠️ AI Parsing notice: ${data.error || 'Check input text'}`);
+      }
+    } catch (err: any) {
+      triggerNotification?.(`❌ Error parsing flyer: ${err.message || err}`);
+    } finally {
+      setIsAiParsing(false);
+    }
+  };
 
   // Open Full Event Companion Page handler
   const handleOpenFullEventPage = (event: any) => {
@@ -1014,20 +941,35 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                   </button>
                 </div>
 
-                {/* Post Show Button */}
-                {onOpenShowCreator && (
+                {/* Action Buttons: AI Flyer Auto-Fill & Post Show */}
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => {
-                      setMobileDetailOpen(false);
-                      onClose();
-                      onOpenShowCreator();
+                      setIsAiFlyerModalOpen(true);
+                      triggerNotification?.('✨ AI Flyer & Text Auto-Fill Parser ready');
                     }}
-                    className="hidden sm:flex text-xs font-mono uppercase font-bold text-black bg-[#00ffcc] hover:bg-[#00ffcc]/90 px-3 py-1.5 rounded-xl items-center gap-1.5 transition-all shadow cursor-pointer"
+                    className="hidden sm:flex text-xs font-mono font-bold text-cyan-300 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/60 px-3 py-1.5 rounded-xl items-center gap-1.5 transition-all shadow cursor-pointer active:scale-95"
+                    title="Upload flyer photo or copy text to auto-fill show details using Gemini AI"
                   >
-                    + Post Show
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                    <span>AI Flyer Auto-Fill</span>
                   </button>
-                )}
+
+                  {onOpenShowCreator && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileDetailOpen(false);
+                        onClose();
+                        onOpenShowCreator();
+                      }}
+                      className="hidden sm:flex text-xs font-mono uppercase font-bold text-black bg-[#00ffcc] hover:bg-[#00ffcc]/90 px-3 py-1.5 rounded-xl items-center gap-1.5 transition-all shadow cursor-pointer active:scale-95"
+                    >
+                      + Post Show
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Pinned Upper Right Corner Close Button */}
@@ -1372,7 +1314,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                                   : `${theme.border} ${theme.glow} bg-[#090b10]`
                               }`}
                             >
-                              {/* Top Banner Tag */}
+                              {/* Top Banner Tag & Verification Badges */}
                               <div className="flex items-start justify-between gap-2 mb-2">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   {isTonight ? (
@@ -1386,6 +1328,17 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                                   ) : (
                                     <span className="bg-zinc-900 text-zinc-300 border border-zinc-800 font-mono font-bold text-[9px] px-2 py-0.5 rounded">
                                       {evt.date}
+                                    </span>
+                                  )}
+
+                                  {/* Official Verified Promoter vs Community Submitted Badge */}
+                                  {evt.isPersonallyBooked || evt.verified ? (
+                                    <span className="bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1" title="Verified show booked by official promoter/venue">
+                                      <ShieldCheck className="w-3 h-3 text-emerald-400" /> Official
+                                    </span>
+                                  ) : (
+                                    <span className="bg-amber-950/80 border border-amber-500/60 text-amber-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1" title="Community submitted show by fan/band contributor">
+                                      <Award className="w-3 h-3 text-amber-400" /> Community
                                     </span>
                                   )}
 
@@ -1438,13 +1391,43 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                                 </div>
                               )}
 
-                              {/* Card Bottom: Doors & Action CTA */}
-                              <div className="pt-2 border-t border-zinc-900/80 flex items-center justify-between mt-auto">
+                              {/* Card Bottom: Doors, RSVP Pit, Google Cal & Action CTA */}
+                              <div className="pt-2 border-t border-zinc-900/80 flex items-center justify-between mt-auto flex-wrap gap-1.5">
                                 <span className="text-[10px] font-mono text-zinc-500 flex items-center gap-1">
                                   <Clock className="w-3 h-3 text-zinc-600" /> {evt.time}
                                 </span>
 
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {/* RSVP Pit List Toggle */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleShowRsvp(evt.id, evt.headliner);
+                                    }}
+                                    className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                                      rsvpedShowIds.has(evt.id)
+                                        ? 'bg-rose-950/90 text-rose-300 border border-rose-500/70 shadow-[0_0_10px_rgba(244,63,94,0.3)] animate-pulse'
+                                        : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'
+                                    }`}
+                                    title={rsvpedShowIds.has(evt.id) ? 'You are in the pit list!' : 'RSVP and join pit list'}
+                                  >
+                                    <Flame className={`w-3 h-3 ${rsvpedShowIds.has(evt.id) ? 'text-rose-400 fill-rose-400' : 'text-zinc-500'}`} />
+                                    <span>{rsvpedShowIds.has(evt.id) ? 'In Pit 🔥' : 'Pit RSVP'}</span>
+                                  </button>
+
+                                  {/* Add to Google Calendar Link */}
+                                  <a
+                                    href={getGoogleCalendarUrl(evt)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-amber-300 border border-zinc-800 transition-colors"
+                                    title="Add show date to Google Calendar"
+                                  >
+                                    <Calendar className="w-3.5 h-3.5" />
+                                  </a>
+
                                   {evt.ticketUrl ? (
                                     <a
                                       href={evt.ticketUrl}
@@ -1460,11 +1443,13 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        triggerNotification?.(`🎟️ RSVP added for ${evt.headliner} at ${evt.venue}!`);
+                                        setSelectedMapEvent(evt);
+                                        onSelectEvent?.(evt);
+                                        setMobileDetailOpen(true);
                                       }}
                                       className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 rounded-lg text-[10px] font-mono font-bold uppercase transition-colors"
                                     >
-                                      RSVP / Door
+                                      Details
                                     </button>
                                   )}
                                   
@@ -2086,6 +2071,111 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* AI Flyer & Show Announcement Parser Modal */}
+      {isAiFlyerModalOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="w-full max-w-lg bg-[#0c0d12] border-2 border-cyan-500/60 rounded-2xl p-5 sm:p-6 shadow-[0_0_40px_rgba(6,182,212,0.3)] relative overflow-hidden font-mono space-y-4"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2 text-cyan-400 font-bold text-sm">
+                <Sparkles className="w-5 h-5 text-cyan-400 animate-pulse" />
+                <span>AI Flyer & Announcement Parser</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAiFlyerModalOpen(false)}
+                className="w-7 h-7 rounded-full bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Upload a concert flyer image or paste raw show announcement copy (e.g. from an Instagram or Facebook post). Gemini AI will extract all details (headliner, support, venue, date, doors time, ticket price, ticket URL) and pre-fill the show creator automatically!
+            </p>
+
+            {/* Image Upload Input */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-zinc-400 font-bold block">Option 1: Upload Flyer Photo</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      setAiFlyerImage(reader.result as string);
+                      triggerNotification?.('Flyer image uploaded ready for AI parsing!');
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+                className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-mono file:font-bold file:bg-cyan-950 file:text-cyan-300 hover:file:bg-cyan-900 cursor-pointer"
+              />
+              {aiFlyerImage && (
+                <div className="w-full h-28 rounded-xl border border-cyan-500/40 overflow-hidden relative mt-2 bg-black">
+                  <img src={aiFlyerImage} alt="Flyer Preview" className="w-full h-full object-contain" />
+                  <button
+                    type="button"
+                    onClick={() => setAiFlyerImage(null)}
+                    className="absolute top-1.5 right-1.5 bg-black/80 text-rose-400 p-1 rounded-full text-xs hover:bg-black"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Text Paste Input */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-zinc-400 font-bold block">Option 2: Paste Show Copy / Text</label>
+              <textarea
+                value={aiFlyerText}
+                onChange={(e) => setAiFlyerText(e.target.value)}
+                placeholder="Paste Instagram/Facebook show post copy here (e.g., 'DYING FETUS live at The Bomb Factory Oct 18 w/ Incantation & Fulci. Doors 7pm, $35 presale...')"
+                rows={4}
+                className="w-full bg-black/80 border border-zinc-800 rounded-xl p-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-cyan-500 resize-none font-mono"
+              />
+            </div>
+
+            {/* Submit Action */}
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsAiFlyerModalOpen(false)}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={isAiParsing || (!aiFlyerText.trim() && !aiFlyerImage)}
+                onClick={handleParseFlyerWithAi}
+                className="px-5 py-2 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 disabled:opacity-50 text-black font-black text-xs uppercase rounded-xl transition-all shadow-lg shadow-cyan-500/20 flex items-center gap-2 cursor-pointer"
+              >
+                {isAiParsing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-black" />
+                    <span>Parsing Flyer...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-black" />
+                    <span>Auto-Fill Show Details</span>
+                  </>
+                )}
+              </button>
             </div>
           </motion.div>
         </div>

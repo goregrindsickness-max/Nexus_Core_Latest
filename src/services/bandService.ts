@@ -475,12 +475,51 @@ export function sanitizeBandPayload(rawPayload: any): Record<string, any> {
   clean.apparel_sizes = clean.apparel_sizes || null;
   clean.user_role_in_band = clean.user_role_in_band ? String(clean.user_role_in_band).trim() : null;
 
-  // 12. Lineup sanitization
+  // 12. Lineup sanitization - preserve rich LineupMember array serialized as JSON string for PostgreSQL text column
   if (clean.lineup !== undefined && clean.lineup !== null) {
     if (Array.isArray(clean.lineup)) {
-      clean.lineup = clean.lineup.map((m: any) => typeof m === 'object' ? `${m.name || 'Member'} (${m.role || 'Performer'})` : String(m)).join(', ');
+      clean.lineup = JSON.stringify(clean.lineup);
+    } else if (typeof clean.lineup === 'string') {
+      const trimmed = clean.lineup.trim();
+      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            clean.lineup = JSON.stringify(parsed);
+          } else {
+            clean.lineup = trimmed;
+          }
+        } catch {
+          clean.lineup = trimmed;
+        }
+      } else if (trimmed) {
+        // Parse comma-delimited strings e.g. "John (Guitar), Jane (Bass)" into LineupMember JSON
+        const parts = trimmed.split(',').map((s: string) => s.trim()).filter(Boolean);
+        const parsedMembers = parts.map((part: string, idx: number) => {
+          const match = part.match(/^(.*?)\s*\((.*?)\)$/);
+          if (match) {
+            return {
+              id: `mem-${idx}-${match[1].trim().toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+              name: match[1].trim(),
+              role: match[2].trim() || 'Musician',
+              status: 'active',
+              years: 'Present'
+            };
+          }
+          return {
+            id: `mem-${idx}-${part.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+            name: part,
+            role: 'Musician',
+            status: 'active',
+            years: 'Present'
+          };
+        });
+        clean.lineup = JSON.stringify(parsedMembers);
+      } else {
+        clean.lineup = null;
+      }
     } else {
-      clean.lineup = String(clean.lineup);
+      clean.lineup = null;
     }
   } else {
     clean.lineup = null;
@@ -592,14 +631,35 @@ export async function upsertBandToDatabase(
   try {
     const bandId = cleanBand.id;
     if (bandId) {
+      // Decode lineup for local objects to preserve array representation in memory
+      let parsedLineupArray: any[] = [];
+      if (typeof cleanBand.lineup === 'string') {
+        try {
+          const parsed = JSON.parse(cleanBand.lineup);
+          if (Array.isArray(parsed)) parsedLineupArray = parsed;
+        } catch {}
+      } else if (Array.isArray(cleanBand.lineup)) {
+        parsedLineupArray = cleanBand.lineup;
+      }
+
+      if (parsedLineupArray.length > 0) {
+        localStorage.setItem(`nexus_core_band_lineup_${bandId}`, JSON.stringify(parsedLineupArray));
+        localStorage.setItem(`nexus_core_band_lineup_${ensureUUID(bandId)}`, JSON.stringify(parsedLineupArray));
+      }
+
+      const memoryBand = {
+        ...cleanBand,
+        lineup: parsedLineupArray.length > 0 ? parsedLineupArray : (cleanBand.lineup || [])
+      };
+
       // 1. Registered bands
       const regRaw = localStorage.getItem('nexus_registered_bands');
       let registered: any[] = regRaw ? JSON.parse(regRaw) : [];
       const regIdx = registered.findIndex((b: any) => b.id === bandId || ensureUUID(b.id) === bandId);
       if (regIdx >= 0) {
-        registered[regIdx] = { ...registered[regIdx], ...cleanBand };
+        registered[regIdx] = { ...registered[regIdx], ...memoryBand };
       } else {
-        registered.push(cleanBand);
+        registered.push(memoryBand);
       }
       localStorage.setItem('nexus_registered_bands', JSON.stringify(registered));
 
@@ -609,7 +669,7 @@ export async function upsertBandToDatabase(
         try {
           const activeParsed = JSON.parse(activeRaw);
           if (activeParsed.id === bandId || ensureUUID(activeParsed.id) === bandId) {
-            localStorage.setItem('nexus_active_band', JSON.stringify({ ...activeParsed, ...cleanBand }));
+            localStorage.setItem('nexus_active_band', JSON.stringify({ ...activeParsed, ...memoryBand }));
           }
         } catch (_) {}
       }
@@ -622,7 +682,7 @@ export async function upsertBandToDatabase(
           if (Array.isArray(commList)) {
             const cIdx = commList.findIndex((b: any) => b.id === bandId || ensureUUID(b.id) === bandId);
             if (cIdx >= 0) {
-              commList[cIdx] = { ...commList[cIdx], ...cleanBand };
+              commList[cIdx] = { ...commList[cIdx], ...memoryBand };
               localStorage.setItem('nexus_community_bands_v2', JSON.stringify(commList));
             }
           }

@@ -147,7 +147,14 @@ export const ProfileHubCard: React.FC<ProfileHubCardProps> = ({
                 onError={() => setAvatarError(true)}
               />
             ) : (
-              (effectiveHandle || effectiveName || 'U').replace(/^@+/, '').slice(0, 2).toUpperCase()
+              (() => {
+                const cleanName = (effectiveName && effectiveName !== 'User' ? effectiveName : (userProfile?.full_name || userProfile?.name || 'User')).replace(/^@+/, '').trim();
+                const parts = cleanName.split(/\s+/).filter(Boolean);
+                if (parts.length >= 2) {
+                  return (parts[0][0] + parts[1][0]).toUpperCase();
+                }
+                return cleanName.slice(0, 2).toUpperCase() || 'U';
+              })()
             )}
           </div>
 
