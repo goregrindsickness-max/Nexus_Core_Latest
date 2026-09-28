@@ -80,8 +80,31 @@ export function useSocialFeedSync({
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
         const raw = payload.new as any;
         if (!raw) return;
-        const matchesUser = !raw.user_id || raw.user_id === userProfile?.id || raw.user_id === userProfile?.email;
-        if (matchesUser) {
+
+        const myId = userProfile?.id;
+        const myEmail = userProfile?.email;
+
+        // Actor check: if current user is the actor who triggered this event, never notify themselves!
+        const isActor = Boolean(
+          (raw.actor_id && (raw.actor_id === myId || raw.actor_id === myEmail)) ||
+          (raw.actor_email && raw.actor_email === myEmail) ||
+          (raw.data?.actor_id && (raw.data?.actor_id === myId || raw.data?.actor_id === myEmail)) ||
+          (raw.data?.actor_email && raw.data?.actor_email === myEmail)
+        );
+        if (isActor) return;
+
+        // For reaction notifications, ensure it is strictly targeted to the post author (current user)
+        const isReaction = raw.category === 'REACTION' || raw.type === 'post_reaction' || (raw.title && String(raw.title).toUpperCase().includes('REACTION'));
+        if (isReaction) {
+          const isDirectRecipient = Boolean(
+            (myId && raw.user_id === myId) ||
+            (myEmail && (raw.user_id === myEmail || raw.data?.user_id === myEmail))
+          );
+          if (!isDirectRecipient) return;
+        } else {
+          const matchesUser = !raw.user_id || raw.user_id === myId || raw.user_id === myEmail;
+          if (!matchesUser) return;
+        }
           try {
             isIncomingNotifSync.current = true;
             const notifRow = {
@@ -105,7 +128,6 @@ export function useSocialFeedSync({
               });
             }
           } catch (e) {}
-        }
       }
     });
 

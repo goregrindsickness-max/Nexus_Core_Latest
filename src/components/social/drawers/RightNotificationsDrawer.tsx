@@ -138,8 +138,24 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
   if (!rightDrawerOpen) return null;
 
   const filteredNotifs = notifications.filter((n) => {
+    // Exclude any self-notifications where the current user was the actor
+    const myId = userProfile?.id;
+    const myEmail = userProfile?.email;
+    if (myId && (n.actor_id === myId || n.data?.actor_id === myId)) return false;
+    if (myEmail && (n.actor_email === myEmail || n.data?.actor_email === myEmail)) return false;
+
+    // For reaction notifications, ensure it is strictly intended for this user
+    const isReaction = n.category === 'REACTION' || n.type === 'post_reaction' || (n.title && String(n.title).toUpperCase().includes('REACTION'));
+    if (isReaction) {
+      const isForMe = Boolean(
+        (myId && n.user_id === myId) ||
+        (myEmail && (n.user_id === myEmail || n.data?.user_id === myEmail))
+      );
+      if (!isForMe) return false;
+    }
+
     if (notifFilter === 'unread') return !n.read;
-    if (notifFilter === 'social') return ['like', 'comment', 'mention', 'share', 'follow'].includes(n.type);
+    if (notifFilter === 'social') return ['like', 'comment', 'mention', 'share', 'follow', 'post_reaction'].includes(n.type) || n.category === 'REACTION';
     if (notifFilter === 'system') return ['system', 'alert', 'security', 'gig', 'shop'].includes(n.type);
     return true;
   });

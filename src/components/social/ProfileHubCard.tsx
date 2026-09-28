@@ -49,12 +49,47 @@ export const ProfileHubCard: React.FC<ProfileHubCardProps> = ({
   activeBand,
   userProfile,
 }) => {
-  if (activeTab !== 'feed') return null;
+  const [liveAvatar, setLiveAvatar] = React.useState<string | null>(null);
+  const [liveCover, setLiveCover] = React.useState<string | null>(null);
+  const [avatarError, setAvatarError] = React.useState(false);
 
-  const effectiveAvatar = resolveEffectiveAvatar(portalRole, activeBand, userProfile, profileAvatarUrl);
-  const effectiveCover = resolveEffectiveCover(portalRole, activeBand, userProfile, profileCoverUrl);
+  React.useEffect(() => {
+    const handleAvatarUpdated = (e: any) => {
+      const newUrl = e.detail?.avatarUrl || e.detail?.avatar_url || e.detail?.avatar;
+      if (newUrl) {
+        setLiveAvatar(newUrl);
+        setAvatarError(false);
+      }
+    };
+    const handleCoverUpdated = (e: any) => {
+      const newUrl = e.detail?.coverUrl || e.detail?.cover_url || e.detail?.banner_url || e.detail?.bannerUrl;
+      if (newUrl) {
+        setLiveCover(newUrl);
+      }
+    };
+
+    window.addEventListener('nexus_avatar_updated', handleAvatarUpdated);
+    window.addEventListener('nexus_cover_updated', handleCoverUpdated);
+
+    return () => {
+      window.removeEventListener('nexus_avatar_updated', handleAvatarUpdated);
+      window.removeEventListener('nexus_cover_updated', handleCoverUpdated);
+    };
+  }, []);
+
+  const baseAvatar = resolveEffectiveAvatar(portalRole, activeBand, userProfile, profileAvatarUrl);
+  const baseCover = resolveEffectiveCover(portalRole, activeBand, userProfile, profileCoverUrl);
+
+  const effectiveAvatar = liveAvatar || baseAvatar;
+  const effectiveCover = liveCover || baseCover;
   const effectiveName = portalRole === 'band' ? resolveBandName(activeBand, userProfile) : (profileFullLegalName || 'User');
   const effectiveHandle = portalRole === 'band' ? resolveBandHandle(activeBand, userProfile) : (profileHandle || 'user');
+
+  React.useEffect(() => {
+    setAvatarError(false);
+  }, [effectiveAvatar]);
+
+  if (activeTab !== 'feed') return null;
 
   return (
     <div className="px-4 sm:px-0 pb-4 flex justify-center shrink-0">
@@ -69,7 +104,12 @@ export const ProfileHubCard: React.FC<ProfileHubCardProps> = ({
         {/* Cover Image Background covering the entire card */}
         <div className="absolute inset-0 w-full h-full z-0 overflow-hidden">
           {effectiveCover ? (
-            <img src={effectiveCover} className="w-full h-full object-cover" alt="" />
+            <img 
+              src={effectiveCover} 
+              className="w-full h-full object-cover" 
+              alt="" 
+              referrerPolicy="no-referrer"
+            />
           ) : (
             <div className="w-full h-full bg-gradient-to-r from-rose-950/40 to-purple-950/40 relative">
               {/* Subtle red grid pattern overlay */}
@@ -78,9 +118,9 @@ export const ProfileHubCard: React.FC<ProfileHubCardProps> = ({
           )}
           {/* Overlay with radial fade to black to guarantee text legibility */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/55 to-black/90" />
-          {/* Edit overlay prompt on hover */}
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-250 z-10">
-            <span className="text-[9px] font-black uppercase text-white tracking-widest font-mono bg-rose-600/90 px-3 py-1 rounded-full shadow-lg">
+          {/* Subtle top-left edit badge on hover without obscuring avatar or cover */}
+          <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20 pointer-events-none">
+            <span className="text-[9px] font-black uppercase text-white tracking-widest font-mono bg-rose-600/90 px-2.5 py-1 rounded-md shadow-lg flex items-center gap-1">
               Edit Profile
             </span>
           </div>
@@ -98,10 +138,16 @@ export const ProfileHubCard: React.FC<ProfileHubCardProps> = ({
         <div className="relative z-10 p-5 flex flex-col items-center text-center space-y-3">
           {/* Profile Avatar Overlap - Enlarged */}
           <div className={`w-[92px] h-[92px] rounded-full bg-zinc-950 overflow-hidden flex items-center justify-center font-black ${currentTheme.textClass} text-2xl shrink-0 transition-transform duration-300 group-hover:scale-105 ${getRoleBorderAndGlowClass(userProfile?.active_workspace === 'band' ? 'band' : (portalRole || userProfile?.active_workspace), userProfile)}`}>
-            {effectiveAvatar ? (
-              <img src={effectiveAvatar} className="w-full h-full object-cover" alt="Profile" />
+            {effectiveAvatar && !avatarError ? (
+              <img 
+                src={effectiveAvatar} 
+                className="w-full h-full object-cover" 
+                alt="" 
+                referrerPolicy="no-referrer"
+                onError={() => setAvatarError(true)}
+              />
             ) : (
-              (effectiveHandle || effectiveName || 'U').replace(/^@+/, '').charAt(0).toUpperCase()
+              (effectiveHandle || effectiveName || 'U').replace(/^@+/, '').slice(0, 2).toUpperCase()
             )}
           </div>
 

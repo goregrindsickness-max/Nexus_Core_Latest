@@ -78,6 +78,7 @@ export function useSocialFeedState({
   const [newPostText, setNewPostText] = useState('');
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingPostText, setEditingPostText] = useState('');
+  const [editingPostImages, setEditingPostImages] = useState<string[]>([]);
   const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [newPostTag, setNewPostTag] = useState('');
@@ -461,20 +462,38 @@ export function useSocialFeedState({
 
         // 4. Notifications:
         // When reacting to someone else's content, ONLY send notification to the author.
-        // The reacting user does NOT need a notification toast or notification inbox entry.
+        // The reacting user does NOT receive any notification toast or notification entry.
         if (!wasActive && targetPost) {
-          const targetUserId = (targetPost as any).authorId || (targetPost.author as any)?.id || (targetPost.author as any)?.email;
-          const validReceiverUUID = (targetUserId && extractUUID(targetUserId)) || null;
+          const myIds = new Set(
+            [activeUserId, userProfile?.id, userProfile?.email, userProfile?.username, userProfile?.name, profileHandle]
+              .filter(Boolean)
+              .map(x => String(x).toLowerCase().trim())
+          );
 
-          // Only notify author if they are a different user!
-          const isReactingToSomeoneElse = validReceiverUUID && validReceiverUUID !== activeUserId && validReceiverUUID !== userProfile?.id;
-          if (isReactingToSomeoneElse) {
+          const targetAuthorRaw = (targetPost as any).authorId || (targetPost as any).profile_id || (targetPost as any).user_id || (targetPost.author as any)?.id || (targetPost.author as any)?.email;
+          const targetAuthorEmail = (targetPost.author as any)?.email;
+          const targetAuthorName = (targetPost.author as any)?.name || (targetPost as any).authorName;
+
+          const isTargetMyself = 
+            (targetAuthorRaw && myIds.has(String(targetAuthorRaw).toLowerCase().trim())) ||
+            (targetAuthorEmail && myIds.has(String(targetAuthorEmail).toLowerCase().trim())) ||
+            (targetAuthorName && myIds.has(String(targetAuthorName).toLowerCase().trim()));
+
+          const validReceiverUUID = (targetAuthorRaw && extractUUID(targetAuthorRaw)) || null;
+          const isReactingToSomeoneElse = !isTargetMyself && Boolean(validReceiverUUID && !myIds.has(validReceiverUUID.toLowerCase().trim()));
+
+          if (isReactingToSomeoneElse && validReceiverUUID) {
             const actorName = userProfile?.name || userProfile?.console_handle || profileHandle || 'A user';
             const postSnippet = (targetPost.content || (targetPost as any).message || (targetPost as any).text || 'transmission').substring(0, 50);
             const notifId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : (extractUUID(postId) || '00000000-0000-0000-0000-000000000000');
+            const currentActorId = activeUserId || userProfile?.id || null;
+            const currentActorEmail = userProfile?.email || null;
+
             const notifItem = {
               id: notifId,
               user_id: validReceiverUUID,
+              actor_id: currentActorId,
+              actor_email: currentActorEmail,
               title: `🔥 NEW REACTION`,
               message: `${actorName} reacted (${reactionKey.toUpperCase()}) to your transmission: "${postSnippet}"`,
               content: `${actorName} reacted (${reactionKey.toUpperCase()}) to your transmission: "${postSnippet}"`,
@@ -494,12 +513,18 @@ export function useSocialFeedState({
               {
                 id: notifItem.id,
                 user_id: validReceiverUUID,
+                actor_id: currentActorId,
+                actor_email: currentActorEmail,
                 title: notifItem.title,
                 message: notifItem.message,
                 category: 'REACTION',
                 type: 'post_reaction',
                 is_read: false,
-                data: notifItem,
+                data: {
+                  ...notifItem,
+                  actor_id: currentActorId,
+                  actor_email: currentActorEmail,
+                },
                 created_at: new Date().toISOString(),
               },
             ]);
@@ -511,28 +536,88 @@ export function useSocialFeedState({
     }
   };
 
-  const handleEditPost = (postId: string, currentText: string) => {
+  const handleEditPost = (postId: string, currentText: string, currentImages?: string[]) => {
     setEditingPostId(postId);
     setEditingPostText(currentText);
+    setEditingPostImages(currentImages || []);
   };
 
-  const handleSaveEdit = async (postId: string) => {
-    const updatedText = editingPostText.trim();
-    setFeed((prev) => prev.map((post) => (post.id === postId ? { ...post, content: updatedText } : post)));
+  const handleSaveEdit = async (postId: string, customText?: string, customImages?: string[]) => {
+    const updatedText = (customText !== undefined ? customText : editingPostText).trim();
+    const updatedImages = (customImages !== undefined ? customImages : editingPostImages).filter(Boolean);
+    const primaryMediaUrl = updatedImages.length > 0 ? updatedImages[0] : null;
+
+    setFeed((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              content: updatedText,
+              message: updatedText,
+              text: updatedText,
+              images: updatedImages,
+              image: primaryMediaUrl,
+              image_url: primaryMediaUrl || undefined,
+              mediaUrl: primaryMediaUrl || undefined,
+              media_url: primaryMediaUrl || undefined,
+            }
+          : post
+      )
+    );
     setEditingPostId(null);
     setEditingPostText('');
+    setEditingPostImages([]);
 
     const supabase = getSupabase();
     if (supabase) {
       try {
-        const { error } = await supabase.from('nexus_posts').update({ content: updatedText }).eq('id', postId);
-        if (error) {
-          const { data: existing } = await supabase.from('nexus_posts').select('*').or(`id.eq.${postId},id.eq.nexus_post_${postId}`).limit(1);
-          if (existing && existing[0]) {
-            const row = existing[0];
-            const postObj = typeof row.data === 'string' ? JSON.parse(row.data) : row.data || {};
-            await supabase.from('nexus_posts').update({ data: { ...postObj, content: updatedText } }).eq('id', row.id);
+        const { data: existing } = await supabase
+          .from('nexus_posts')
+          .select('*')
+          .or(`id.eq.${postId},id.eq.nexus_post_${postId}`)
+          .limit(1);
+
+        const existingRow = existing && existing[0];
+        const postObj = existingRow
+          ? (typeof existingRow.data === 'string' ? JSON.parse(existingRow.data) : (existingRow.data || {}))
+          : {};
+
+        const fullPostData = {
+          ...postObj,
+          content: updatedText,
+          message: updatedText,
+          text: updatedText,
+          images: updatedImages,
+          image: primaryMediaUrl,
+          image_url: primaryMediaUrl,
+          media_url: primaryMediaUrl,
+          mediaUrl: primaryMediaUrl,
+        };
+
+        if (existingRow) {
+          await supabase
+            .from('nexus_posts')
+            .update({
+              media_url: primaryMediaUrl,
+              content: updatedText,
+              data: fullPostData,
+            })
+            .eq('id', existingRow.id);
+        } else {
+          let activeUserId = userProfile?.id;
+          if (!activeUserId) {
+            activeUserId = localStorage.getItem('nexus_active_profile_id') || localStorage.getItem('nexus_user_profile_id') || '00000000-0000-0000-0000-000000000000';
           }
+          await supabase
+            .from('nexus_posts')
+            .upsert([{
+              id: postId,
+              profile_id: activeUserId,
+              content: updatedText,
+              media_url: primaryMediaUrl,
+              data: fullPostData,
+              created_at: new Date().toISOString()
+            }], { onConflict: 'id' });
         }
       } catch (e) {
         console.warn('Failed to sync edit to Supabase:', e);
@@ -1004,6 +1089,8 @@ export function useSocialFeedState({
     setEditingPostId,
     editingPostText,
     setEditingPostText,
+    editingPostImages,
+    setEditingPostImages,
     deleteConfirmPostId,
     setDeleteConfirmPostId,
     mentionQuery,

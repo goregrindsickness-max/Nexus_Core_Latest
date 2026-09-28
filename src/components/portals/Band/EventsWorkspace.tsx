@@ -457,10 +457,19 @@ export default function EventsWorkspace(props: any) {
                         </div>
 
                         <div className="space-y-3 text-left relative z-10">
-                          {Array.from({
-          length: 3
-        }).map((_, index) => {
-          const show = sortedShows[index];
+                          {(() => {
+                            const todayStr = new Date().toISOString().split('T')[0];
+                            const upcomingStops = (sortedShows || []).filter((s: any) => {
+                              if (!s) return false;
+                              const sDate = s.date || s.show_date;
+                              if (sDate && String(sDate).split('T')[0] < todayStr) return false;
+                              if (s.additional_notes && String(s.additional_notes).includes('"archived":true')) return false;
+                              return true;
+                            });
+                            return Array.from({
+                              length: 3
+                            }).map((_, index) => {
+                              const show = upcomingStops[index];
           if (show) {
             const {
               month,
@@ -582,7 +591,8 @@ export default function EventsWorkspace(props: any) {
                                   <Plus className="w-3.5 h-3.5 text-zinc-700 group-hover:text-[#00ffcc] group-hover:translate-x-0.5 transition-all" />
                                 </div>;
           }
-        })}
+        });
+      })()}
                         </div>
                       </div>
                     </V2ExpandableCard>

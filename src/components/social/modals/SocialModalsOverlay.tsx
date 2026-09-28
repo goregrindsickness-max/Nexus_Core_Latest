@@ -31,7 +31,7 @@ import { FanPitWallDrawer } from '../drawers/FanPitWallDrawer';
 import { InteractiveCropperModal } from '../../InteractiveCropperModal';
 import { MetalArchivesImportModal } from './MetalArchivesImportModal';
 import { profileStore } from '../../../utils/indexedDB';
-import { uploadBase64ToStorage, normalizeLoadedProfile as defaultNormalizeLoadedProfile, sanitizeCreativePayload, formatCreativePayload, extractGlobalProfilePayload, executeWithSchemaResilience, sanitizeBandPayload } from '../../../supabase';
+import { uploadBase64ToStorage, normalizeLoadedProfile as defaultNormalizeLoadedProfile, sanitizeCreativePayload, formatCreativePayload, extractGlobalProfilePayload, executeWithSchemaResilience, sanitizeBandPayload, executeSanitizedProfileUpsert } from '../../../supabase';
 import { FeedItem } from '../../../data/socialFeedMockData';
 
 export interface SocialModalsOverlayProps {
@@ -311,6 +311,7 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
         mapFilterGenre={mapFilterGenre}
         setMapFilterGenre={setMapFilterGenre}
         userProfile={userProfile}
+        promoterProfile={props.promoterProfile || props.profile}
         triggerNotification={triggerNotification}
         liveEvents={props.liveEvents}
         setLiveEvents={props.setLiveEvents}
@@ -673,16 +674,18 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
           try {
             triggerNotification?.("⏳ Saving and optimizing cropped image...");
             const userProfileId = userProfile?.id || 'profile_anonymous';
-            const bucket = 'community-bands';
-            const token = cropperType === 'avatar' ? 'profile-avatar' : 'cover-banner';
+            const bucket = cropperType === 'avatar' ? 'avatars' : 'bannersv2';
+            const token = cropperType === 'avatar' ? 'profile-avatar' : 'profile-banner';
             
             const publicUrl = await uploadBase64ToStorage(croppedBase64, bucket, userProfileId, token);
             const finalUrl = publicUrl || croppedBase64;
 
             if (cropperType === 'avatar') {
               setProfileAvatarUrl(finalUrl);
+              if (typeof window !== 'undefined') localStorage.setItem('nexus_user_avatar', finalUrl);
             } else {
               setProfileCoverUrl(finalUrl);
+              if (typeof window !== 'undefined') localStorage.setItem('nexus_user_banner', finalUrl);
             }
 
             // Immediately save to database profiles table to persist instantly
@@ -691,22 +694,15 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
               const columnToUpdate: Record<string, string> = {};
               
               if (cropperType === 'avatar') {
-                columnToUpdate.avatar_url = publicUrl;
+                columnToUpdate.avatar_url = finalUrl;
               } else {
-                columnToUpdate.banner_url = publicUrl;
+                columnToUpdate.banner_url = finalUrl;
               }
 
-              const globalPayload = extractGlobalProfilePayload({
+              await executeSanitizedProfileUpsert(supabase, {
                 id: userProfile.id,
                 ...columnToUpdate
-              }, userProfile.id);
-
-              const { data: updatedProf, error: updateErr } = await supabase
-                .from('profiles')
-                .update(globalPayload)
-                .eq('id', userProfile.id)
-                .select()
-                .single();
+              });
 
               // If portal is band or user is linked to band, sync to bands table too
               if (portalRole === 'band' || userProfile?.band_id || band?.id) {

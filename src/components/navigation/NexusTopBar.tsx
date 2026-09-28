@@ -216,23 +216,30 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
               {(() => {
                 const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
                 if (r === 'band') return activeBand?.logo_url || null;
-                if (r === 'creative') return userProfile?.creative_avatar || null;
-                if (r === 'label') return userProfile?.label_avatar || null;
-                if (r === 'promoter') return userProfile?.promoter_logo || null;
-                return userProfile?.avatar_url || null;
+                if (r === 'creative') return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || userProfile?.avatar_url || null;
+                if (r === 'label') return userProfile?.label_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_avatar') : null) || null;
+                if (r === 'promoter') return (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.avatar_url || null;
+                return userProfile?.avatar_url || (userProfile as any)?.avatar || (userProfile as any)?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null) || null;
               })() ? (
                 <img 
                   src={(() => {
                     const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
                     if (r === 'band') return activeBand?.logo_url;
-                    if (r === 'creative') return userProfile?.creative_avatar;
-                    if (r === 'label') return userProfile?.label_avatar;
-                    if (r === 'promoter') return userProfile?.promoter_logo;
-                    return userProfile?.avatar_url;
+                    if (r === 'creative') return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
+                    if (r === 'label') return userProfile?.label_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_avatar') : null);
+                    if (r === 'promoter') return (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.avatar_url;
+                    return userProfile?.avatar_url || (userProfile as any)?.avatar || (userProfile as any)?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null);
                   })() || ""} 
                   className="w-full h-full object-cover" 
                   alt="" 
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
+                    e.currentTarget.src = r === 'creative' 
+                      ? 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150' 
+                      : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+                  }}
                 />
               ) : (
                 <span className="text-emerald-400 text-sm font-bold font-mono">
@@ -262,23 +269,30 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                         {(() => {
                           const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
                           if (r === 'band') return activeBand?.logo_url || null;
-                          if (r === 'creative') return userProfile?.creative_avatar || null;
-                          if (r === 'label') return userProfile?.label_avatar || null;
-                          if (r === 'promoter') return userProfile?.promoter_logo || null;
-                          return userProfile?.avatar_url || null;
+                          if (r === 'creative') return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
+                          if (r === 'label') return userProfile?.label_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_avatar') : null) || null;
+                          if (r === 'promoter') return (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.avatar_url || null;
+                          return userProfile?.avatar_url || (userProfile as any)?.avatar || (userProfile as any)?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null) || null;
                         })() ? (
                           <img 
                             src={(() => {
                               const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
                               if (r === 'band') return activeBand?.logo_url;
-                              if (r === 'creative') return userProfile?.creative_avatar;
-                              if (r === 'label') return userProfile?.label_avatar;
-                              if (r === 'promoter') return userProfile?.promoter_logo;
-                              return userProfile?.avatar_url;
+                              if (r === 'creative') return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
+                              if (r === 'label') return userProfile?.label_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_avatar') : null);
+                              if (r === 'promoter') return (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.avatar_url;
+                              return userProfile?.avatar_url || (userProfile as any)?.avatar || (userProfile as any)?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null);
                             })() || ""} 
                             className="w-full h-full object-cover" 
                             alt="" 
                             referrerPolicy="no-referrer" 
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
+                              e.currentTarget.src = r === 'creative' 
+                                ? 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150' 
+                                : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+                            }}
                           />
                         ) : (
                           <div className="font-mono text-sm">

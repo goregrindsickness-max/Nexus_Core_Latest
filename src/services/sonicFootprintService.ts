@@ -11,10 +11,10 @@ export interface SonicActivityItem {
 }
 
 export interface SonicFootprintData {
-  show_attendance: number; // Pit Frequency (0 to 1000)
-  crate_digger: number;    // Underground Loyalty (0 to 1000)
-  physical_collector: number; // Physical Collector (0 to 1000)
-  signal_contributor: number; // Signal Contributor (0 to 1000)
+  show_attendance: number; // Pit Frequency (0 to 10000)
+  crate_digger: number;    // Underground Loyalty (0 to 10000)
+  physical_collector: number; // Physical Collector (0 to 10000)
+  signal_contributor: number; // Signal Contributor (0 to 10000)
   totalXP: number;
   activities: SonicActivityItem[];
 }
@@ -29,6 +29,8 @@ export const METRIC_LABELS: Record<SonicMetricId, string> = {
 const STORAGE_XP_KEY = 'nexus_sonic_footprint_xp';
 const STORAGE_LOG_KEY = 'nexus_sonic_activity_log';
 const RESET_FLAG_KEY = 'nexus_sonic_footprint_zero_reset_v2';
+export const MAX_METRIC_XP = 10000;
+export const MAX_TOTAL_XP = 40000;
 
 // Baseline starts strictly at 0 XP to track real user events forward
 const DEFAULT_BASELINE: Record<SonicMetricId, number> = {
@@ -151,10 +153,10 @@ export function getSonicFootprint(profile?: any): SonicFootprintData {
   const pSignal = !hasReset ? (profile?.signal_contributor ?? profile?.community_signal ?? profile?.signal_xp) : 0;
 
   // Resolve values with priority: storedXP > profile > 0 baseline
-  const show_attendance = Math.min(1000, Math.max(0, storedXP.show_attendance ?? (pPit != null && pPit > 0 ? pPit : DEFAULT_BASELINE.show_attendance)));
-  const crate_digger = Math.min(1000, Math.max(0, storedXP.crate_digger ?? (pDigger != null && pDigger > 0 ? pDigger : DEFAULT_BASELINE.crate_digger)));
-  const physical_collector = Math.min(1000, Math.max(0, storedXP.physical_collector ?? (pCollector != null && pCollector > 0 ? pCollector : DEFAULT_BASELINE.physical_collector)));
-  const signal_contributor = Math.min(1000, Math.max(0, storedXP.signal_contributor ?? (pSignal != null && pSignal > 0 ? pSignal : DEFAULT_BASELINE.signal_contributor)));
+  const show_attendance = Math.min(MAX_METRIC_XP, Math.max(0, storedXP.show_attendance ?? (pPit != null && pPit > 0 ? pPit : DEFAULT_BASELINE.show_attendance)));
+  const crate_digger = Math.min(MAX_METRIC_XP, Math.max(0, storedXP.crate_digger ?? (pDigger != null && pDigger > 0 ? pDigger : DEFAULT_BASELINE.crate_digger)));
+  const physical_collector = Math.min(MAX_METRIC_XP, Math.max(0, storedXP.physical_collector ?? (pCollector != null && pCollector > 0 ? pCollector : DEFAULT_BASELINE.physical_collector)));
+  const signal_contributor = Math.min(MAX_METRIC_XP, Math.max(0, storedXP.signal_contributor ?? (pSignal != null && pSignal > 0 ? pSignal : DEFAULT_BASELINE.signal_contributor)));
 
   const totalXP = show_attendance + crate_digger + physical_collector + signal_contributor;
 
@@ -183,14 +185,14 @@ export function awardSonicPoints(
       crate_digger: DEFAULT_BASELINE.crate_digger,
       physical_collector: DEFAULT_BASELINE.physical_collector,
       signal_contributor: DEFAULT_BASELINE.signal_contributor,
-      totalXP: 2010,
+      totalXP: 0,
       activities: []
     };
   }
 
   const current = getSonicFootprint();
   const currentXP = current[metricId] || 0;
-  const updatedXP = Math.min(1000, currentXP + amount);
+  const updatedXP = Math.min(MAX_METRIC_XP, currentXP + amount);
 
   const updatedData: SonicFootprintData = {
     ...current,
@@ -296,8 +298,8 @@ export function initializeSonicActivityListeners() {
     const hasMedia = Boolean(e.detail?.media_url || e.detail?.mediaUrl || e.detail?.bandcampUrl);
     awardSonicPoints(
       'signal_contributor',
-      10,
-      hasMedia ? 'Broadcasted release / transmission to underground network' : 'Dispatched timeline signal'
+      hasMedia ? 3 : 2,
+      hasMedia ? 'Broadcasted transmission with media to underground network' : 'Dispatched timeline signal'
     );
   });
 
@@ -305,54 +307,54 @@ export function initializeSonicActivityListeners() {
   window.addEventListener('nexus_forum_cache_updated', () => {
     // Throttled forum contribution reward
     const lastForumReward = Number(sessionStorage.getItem('last_forum_xp_time') || 0);
-    if (Date.now() - lastForumReward > 3000) {
+    if (Date.now() - lastForumReward > 5000) {
       sessionStorage.setItem('last_forum_xp_time', String(Date.now()));
-      awardSonicPoints('signal_contributor', 8, 'Contributed to underground scene forum');
+      awardSonicPoints('signal_contributor', 2, 'Contributed to underground scene forum');
     }
   });
 
   // Poll voting
   window.addEventListener('nexus_poll_voted', () => {
-    awardSonicPoints('signal_contributor', 5, 'Voted in community BDM debate poll');
+    awardSonicPoints('signal_contributor', 1, 'Voted in community BDM debate poll');
   });
 
   // Show RSVP
   window.addEventListener('nexus_show_rsvped', (e: any) => {
     const showTitle = e.detail?.title || 'Live Gig';
-    awardSonicPoints('show_attendance', 20, `Confirmed RSVP for ${showTitle}`);
+    awardSonicPoints('show_attendance', 5, `Confirmed RSVP for ${showTitle}`);
   });
 
   // Bandcamp interactions
   window.addEventListener('nexus_bandcamp_support_clicked', (e: any) => {
     const title = e.detail?.title || 'Bandcamp Release';
-    awardSonicPoints('crate_digger', 15, `Supported underground artist on Bandcamp: ${title}`);
+    awardSonicPoints('crate_digger', 10, `Supported underground artist on Bandcamp: ${title}`);
   });
 
   window.addEventListener('nexus_bandcamp_played', (e: any) => {
     const title = e.detail?.title || 'Bandcamp Player';
-    awardSonicPoints('crate_digger', 5, `Streamed direct release preview: ${title}`);
+    awardSonicPoints('crate_digger', 1, `Streamed direct release preview: ${title}`);
   });
 
   // Tape and audio listening
   window.addEventListener('nexus_tape_played', (e: any) => {
     const title = e.detail?.title || 'Live Soundboard Tape';
-    awardSonicPoints('crate_digger', 5, `Audited tape recording: ${title}`);
+    awardSonicPoints('crate_digger', 1, `Audited tape recording: ${title}`);
   });
 
   // Scene radio track
   window.addEventListener('nexus_radio_track_played', (e: any) => {
     const title = e.detail?.title || 'Scene Radio Stream';
-    awardSonicPoints('crate_digger', 2, `Tuned in to underground frequency: ${title}`);
+    awardSonicPoints('crate_digger', 1, `Tuned in to underground frequency: ${title}`);
   });
 
   // Merch order / transaction
   window.addEventListener('nexus_merch_ordered', (e: any) => {
     const item = e.detail?.name || 'Band Merch / Vinyl';
-    awardSonicPoints('physical_collector', 30, `Added to physical archive: ${item}`);
+    awardSonicPoints('physical_collector', 15, `Added to physical archive: ${item}`);
   });
 
   // Reactions
   window.addEventListener('nexus_flame_clicked', () => {
-    awardSonicPoints('signal_contributor', 3, 'Endorsed underground transmission (Flame reaction)');
+    awardSonicPoints('signal_contributor', 1, 'Endorsed underground transmission (Flame reaction)');
   });
 }

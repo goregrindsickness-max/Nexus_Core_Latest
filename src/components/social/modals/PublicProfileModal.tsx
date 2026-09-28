@@ -235,17 +235,23 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = (props) => 
   if (!baseTarget) return null;
   
   const targetRole = (baseTarget?.role || baseTarget?.portalRole || baseTarget?.account_type || baseTarget?.type || '').toLowerCase();
-  const isPersonal = baseTarget?.isIndustryProPersonal === true;
+  const isPersonal = baseTarget?.isIndustryProPersonal === true || 
+    baseTarget?.isPersonal === true || 
+    (baseTarget?.isYou === true && props.portalRole !== 'band' && props.portalRole !== 'creative' && props.portalRole !== 'label' && props.portalRole !== 'promoter') ||
+    targetRole.includes('fan') || 
+    targetRole === 'user' ||
+    targetRole.includes('supporter') ||
+    targetRole.includes('listener');
 
-  if (baseTarget?.type === 'creative' || baseTarget?.account_type === 'creative' || baseTarget?.isCreativeProfile === true || targetRole === 'creative' || targetRole.includes('creative') || targetRole.includes('designer') || targetRole.includes('photographer') || targetRole.includes('videographer')) {
+  if (!isPersonal && (baseTarget?.type === 'creative' || baseTarget?.account_type === 'creative' || baseTarget?.isCreativeProfile === true || targetRole === 'creative' || targetRole.includes('creative') || targetRole.includes('designer') || targetRole.includes('photographer') || targetRole.includes('videographer'))) {
     return <CreativeProfileCard {...props} />;
   }
 
-  if (baseTarget?.type === 'label' || baseTarget?.account_type === 'label' || baseTarget?.isLabelProfile === true || targetRole === 'label' || targetRole.includes('label')) {
+  if (!isPersonal && (baseTarget?.type === 'label' || baseTarget?.account_type === 'label' || baseTarget?.isLabelProfile === true || targetRole === 'label' || targetRole.includes('label'))) {
     return <LabelProfileCard {...props} />;
   }
 
-  const isPromoter = (
+  const isPromoter = !isPersonal && (
     baseTarget?.type === 'promoter' || 
     baseTarget?.account_type === 'promoter' || 
     baseTarget?.isPromoterProfile === true || 

@@ -114,6 +114,8 @@ export const FeedViewRouter: React.FC<any> = (props) => {
     handleAddComment,
     setEditingPostId,
     setEditingPostText,
+    editingPostImages,
+    setEditingPostImages,
     handleSaveEdit,
     handleDeletePost,
     setCheckoutItem,
@@ -708,12 +710,37 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                 setFeed(prev => prev.map(p => p.id === postId ? { ...p, is_pinned: !(p as any).is_pinned } : p));
                 setLabelPosts(prev => prev.map(p => p.id === postId ? { ...p, is_pinned: !p.is_pinned } : p));
               }}
-              onEditPost={(postId, newText) => {
+              onEditPost={(postId, newText, newImages) => {
                 setEditingPostId(postId);
                 setEditingPostText(newText);
-                handleSaveEdit(postId);
-                setFeed(prev => prev.map(p => p.id === postId ? { ...p, content: newText, message: newText } : p));
-                setLabelPosts(prev => prev.map(p => p.id === postId ? { ...p, content: newText, message: newText } : p));
+                const resolvedImages = newImages || [];
+                const primaryMedia = resolvedImages.length > 0 ? resolvedImages[0] : null;
+                if (setEditingPostImages) {
+                  setEditingPostImages(resolvedImages);
+                }
+                handleSaveEdit(postId, newText, resolvedImages);
+                setFeed(prev => prev.map(p => p.id === postId ? {
+                  ...p,
+                  content: newText,
+                  message: newText,
+                  text: newText,
+                  images: resolvedImages,
+                  image: primaryMedia,
+                  image_url: primaryMedia || undefined,
+                  mediaUrl: primaryMedia || undefined,
+                  media_url: primaryMedia || undefined
+                } : p));
+                setLabelPosts(prev => prev.map(p => p.id === postId ? {
+                  ...p,
+                  content: newText,
+                  message: newText,
+                  text: newText,
+                  images: resolvedImages,
+                  image: primaryMedia,
+                  image_url: primaryMedia || undefined,
+                  mediaUrl: primaryMedia || undefined,
+                  media_url: primaryMedia || undefined
+                } : p));
               }}
               onDeletePost={(postId) => {
                 handleDeletePost(postId, true);

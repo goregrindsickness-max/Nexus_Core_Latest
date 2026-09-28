@@ -63,6 +63,7 @@ import { UploadStoryModal } from './modals/UploadStoryModal';
 import { StoryViewerModal } from './modals/StoryViewerModal';
 import { EventCompanionModal } from './modals/EventCompanionModal';
 import { formatTimeAgo } from '../../utils/socialFeedUtils';
+import { isValidStorageOrImageUrl } from '../../services/storageService';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { InteractiveCropperModal } from '../InteractiveCropperModal';
@@ -89,6 +90,7 @@ import { SocialSubNav } from './SocialSubNav';
 import { formatTimeTo12Hour } from '../../lib/timeUtils';
 import { SocialMapOverlay } from './SocialMapOverlay';
 import { SubViewControlPanels } from './SubViewControlPanels';
+import PromoterArchivesModal from './modals/PromoterArchivesModal';
 import CreateCommunityShowModal from './modals/CreateCommunityShowModal';
 import { InlineShareModal } from './modals/InlineShareModal';
 import { InlineReactionsModal } from './modals/InlineReactionsModal';
@@ -292,6 +294,7 @@ export function UniversalSocialFeed({
   const [followingSearchQuery, setFollowingSearchQuery] = useState('');
   const [selectedGigOnMap, setSelectedGigOnMap] = useState<any>(null);
   const [showMapModal, setShowMapModal] = useState(false);
+  const [showPromoterArchivesModal, setShowPromoterArchivesModal] = useState(false);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [mapRadius, setMapRadius] = useState<number>(25);
   const [isLoading, setIsLoading] = useState(true);
@@ -1114,14 +1117,21 @@ export function UniversalSocialFeed({
               }
             });
 
+            const todayStr = new Date().toISOString().split('T')[0];
             const showsGigs = dedupedRawShows
               .filter(s => {
                 if (s.is_published === false || s.publication_status === 'embargoed_private' || s.publication_status === 'draft' || s.status === 'Draft' || s.status === 'Embargoed') {
                   return false;
                 }
+                const sDate = s.date || s.show_date;
+                // Exclude shows that have already passed from UPCOMING live feeds
+                if (sDate && String(sDate).split('T')[0] < todayStr) {
+                  return false;
+                }
                 if (s.additional_notes) {
                   try {
                     const extra = typeof s.additional_notes === 'string' ? JSON.parse(s.additional_notes) : s.additional_notes;
+                    if (extra.archived || extra.status === 'Archived' || extra.completed) return false;
                     if (extra.tour_id && isTourEmbargoed(extra.tour_id)) return false;
                   } catch (_) {}
                 }
@@ -1655,6 +1665,8 @@ export function UniversalSocialFeed({
     setEditingPostId,
     editingPostText,
     setEditingPostText,
+    editingPostImages,
+    setEditingPostImages,
     deleteConfirmPostId,
     setDeleteConfirmPostId,
     mentionQuery,
@@ -1954,24 +1966,65 @@ export function UniversalSocialFeed({
         const targetUserId = detail.id || (isUserExplicit ? userProfile?.id : null);
         const targetName = (detail.authorName || detail.name || (isUserExplicit ? userProfile?.name : '') || '').toLowerCase().trim();
 
+        if (isUserExplicit) {
+          setProfileAvatarUrl(newAvatarUrl);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('nexus_user_avatar', newAvatarUrl);
+            localStorage.setItem('nexus_avatar', newAvatarUrl);
+          }
+          if (setUserProfile) {
+            setUserProfile((prev: any) => prev ? {
+              ...prev,
+              avatar: newAvatarUrl,
+              avatar_url: newAvatarUrl,
+              logo_url: newAvatarUrl
+            } : prev);
+          }
+          setSelectedUserProfile((prev: any) => {
+            if (!prev) return prev;
+            if (prev.isYou || prev.id === userProfile?.id) {
+              return { ...prev, avatar: newAvatarUrl, avatar_url: newAvatarUrl, logo_url: newAvatarUrl };
+            }
+            return prev;
+          });
+        }
+
         if (!targetUserId && !targetName) return;
 
         // Dynamically update the author avatar across in-memory feed items without creating a duplicate post
         setFeed(prev => prev.map(item => {
           const rawItem = item as any;
-          const itemUserId = rawItem.user_id || rawItem.author_id || item.author?.id;
+          const itemUserId = rawItem.user_id || rawItem.author_id || rawItem.authorId || rawItem.profile_id || item.author?.id;
           const itemName = (item.author?.name || rawItem.authorName || '').toLowerCase().trim();
+          const itemHandle = ((item.author as any)?.handle || (item.author as any)?.console_handle || rawItem.authorHandle || '').toLowerCase().trim();
           const itemIsBand = Boolean((item.author as any)?.isBand || rawItem.isBand || rawItem.workspace_type === 'band' || rawItem.authorRole === 'Band / Artist' || item.author?.role === 'Band / Artist');
 
-          // If this is a personal user avatar update, never touch posts made by bands
-          if (isUserExplicit && itemIsBand) return item;
+          // If this is a personal user avatar update and post was made strictly by another band entity, skip
+          if (isUserExplicit && itemIsBand && !detail.authorRole?.toLowerCase().includes('band')) return item;
 
-          if ((targetUserId && itemUserId === targetUserId) || (targetName && itemName === targetName)) {
+          const isMatchingPost = Boolean(
+            (targetUserId && itemUserId === targetUserId) ||
+            (targetName && (
+              itemName === targetName ||
+              itemName.includes(targetName) ||
+              targetName.includes(itemName) ||
+              (targetName.includes('miguel') && (itemName.includes('bdmceo') || itemHandle.includes('bdmceo'))) ||
+              (targetName.includes('bdmceo') && itemName.includes('miguel'))
+            )) ||
+            (isUserExplicit && (rawItem.isYou === true || item.author?.isYou === true))
+          );
+
+          if (isMatchingPost) {
             return {
               ...item,
+              authorAvatar: newAvatarUrl,
+              avatar: newAvatarUrl,
+              avatar_url: newAvatarUrl,
+              author_avatar: newAvatarUrl,
               author: {
                 ...item.author,
-                avatar: newAvatarUrl
+                avatar: newAvatarUrl,
+                avatar_url: newAvatarUrl
               }
             };
           }
@@ -1980,9 +2033,52 @@ export function UniversalSocialFeed({
       }
     };
 
+    const handleCoverUpdateEvent = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail) return;
+      const newCoverUrl = detail.coverUrl || detail.cover_url || detail.banner_url || detail.bannerUrl;
+      if (newCoverUrl && typeof newCoverUrl === 'string') {
+        const isUserExplicit = Boolean(
+          (detail.id && userProfile?.id && detail.id === userProfile.id) ||
+          (detail.authorName && userProfile?.name && detail.authorName.toLowerCase().trim() === userProfile.name.toLowerCase().trim()) ||
+          detail.isUser ||
+          !detail.id
+        );
+
+        if (isUserExplicit) {
+          setProfileCoverUrl(newCoverUrl);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('nexus_user_banner', newCoverUrl);
+            localStorage.setItem('nexus_banner', newCoverUrl);
+            localStorage.setItem('nexus_promoter_cover', newCoverUrl);
+            localStorage.setItem('nexus_creative_banner', newCoverUrl);
+            localStorage.setItem('nexus_label_banner', newCoverUrl);
+            localStorage.setItem('nexus_band_cover', newCoverUrl);
+          }
+          if (setUserProfile) {
+            setUserProfile((prev: any) => prev ? {
+              ...prev,
+              banner: newCoverUrl,
+              banner_url: newCoverUrl,
+              cover_url: newCoverUrl,
+              promoter_cover_image: newCoverUrl,
+              creative_banner: newCoverUrl,
+              label_banner: newCoverUrl,
+              band_cover: newCoverUrl
+            } : prev);
+          }
+          setSelectedUserProfile((prev: any) => {
+            if (!prev) return prev;
+            return { ...prev, banner: newCoverUrl, banner_url: newCoverUrl, cover_url: newCoverUrl };
+          });
+        }
+      }
+    };
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     window.addEventListener('nexus_avatar_updated', handleAvatarUpdateEvent);
+    window.addEventListener('nexus_cover_updated', handleCoverUpdateEvent);
 
     const currentUserId = userProfile?.id || 'guest';
     const userChanged = lastLoadedUserIdRef.current !== currentUserId;
@@ -2044,9 +2140,9 @@ export function UniversalSocialFeed({
 
         defaultAvatar = portalRole === 'band' ? resolveBandLogo(resolvedActiveBand || activeBand, userProfile)
           : portalRole === 'label' ? (userProfile?.label_avatar || null)
-          : portalRole === 'creative' ? (userProfile?.creative_avatar || null)
+          : portalRole === 'creative' ? (userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || userProfile?.avatar_url || null)
           : portalRole === 'promoter' ? resolvePromoterLogo(userProfile)
-          : (userProfile?.avatar_url || null);
+          : (userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null) || null);
 
         defaultCover = portalRole === 'band' ? resolveBandCover(resolvedActiveBand || activeBand, userProfile)
           : portalRole === 'label' ? (userProfile?.label_banner || null)
@@ -2111,9 +2207,9 @@ try {
       }
 
       const parentAvatar = portalRole === 'label' ? userProfile?.label_avatar 
-        : portalRole === 'creative' ? userProfile?.creative_avatar || userProfile?.avatar_url
-        : portalRole === 'promoter' ? (userProfile as any)?.promoter_logo 
-        : userProfile?.avatar_url;
+        : portalRole === 'creative' ? (userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || userProfile?.avatar_url)
+        : portalRole === 'promoter' ? ((userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null))
+        : (userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null));
       
       if (parentAvatar) setProfileAvatarUrl(parentAvatar);
       else if (parsed.profileAvatarUrl) setProfileAvatarUrl(parsed.profileAvatarUrl);
@@ -2220,35 +2316,14 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
       return url;
     };
 
-    // Always restore avatar and cover urls from IndexedDB since they are excluded from localStorage
-    if (portalRole === 'band') {
-      setProfileAvatarUrl(resolveBandLogo(resolvedActiveBand || activeBand, userProfile));
-      setProfileCoverUrl(resolveBandCover(resolvedActiveBand || activeBand, userProfile));
-      setProfileFullLegalName(resolveBandName(resolvedActiveBand || activeBand, userProfile));
-      setProfileHandle(resolveBandHandle(resolvedActiveBand || activeBand, userProfile));
-      setProfileLocation(resolveBandLocation(resolvedActiveBand || activeBand, userProfile));
-      setProfileBlurb(resolveBandBio(resolvedActiveBand || activeBand, userProfile));
-    } else if (portalRole !== 'industry_pro' && portalRole !== 'fan_only') {
-      const parentAvatar = portalRole === 'label' ? userProfile?.label_avatar 
-        : portalRole === 'creative' ? userProfile?.creative_avatar || userProfile?.avatar_url
-        : portalRole === 'promoter' ? (userProfile as any)?.promoter_logo 
-        : userProfile?.avatar_url;
-      
-      setProfileAvatarUrl(getCleanUrl(parentAvatar) || getCleanUrl(data.profileAvatarUrl) || null);
-
-      const parentCover = portalRole === 'label' ? userProfile?.label_banner 
-        : portalRole === 'creative' ? userProfile?.creative_banner || userProfile?.banner_url
-        : portalRole === 'promoter' ? (userProfile as any)?.promoter_cover_image 
-        : userProfile?.banner_url;
-      
-      setProfileCoverUrl(getCleanUrl(parentCover) || getCleanUrl(data.profileCoverUrl) || null);
-    } else {
-      if (data.profileAvatarUrl && !data.profileAvatarUrl.startsWith('data:image')) {
-        setProfileAvatarUrl(data.profileAvatarUrl);
-      }
-      if (data.profileCoverUrl && !data.profileCoverUrl.startsWith('data:image')) {
-        setProfileCoverUrl(data.profileCoverUrl);
-      }
+    // Restore avatar and cover urls using centralized resolvers and only if valid
+    const resolvedHydratedAvatar = resolveEffectiveAvatar(portalRole, resolvedActiveBand || activeBand, userProfile, data?.profileAvatarUrl);
+    if (resolvedHydratedAvatar && isValidStorageOrImageUrl(resolvedHydratedAvatar)) {
+      setProfileAvatarUrl(resolvedHydratedAvatar);
+    }
+    const resolvedHydratedCover = resolveEffectiveCover(portalRole, resolvedActiveBand || activeBand, userProfile, data?.profileCoverUrl);
+    if (resolvedHydratedCover && isValidStorageOrImageUrl(resolvedHydratedCover)) {
+      setProfileCoverUrl(resolvedHydratedCover);
     }
 
     if (!loadedFromLocalStorage) {
@@ -2319,6 +2394,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('nexus_avatar_updated', handleAvatarUpdateEvent);
+      window.removeEventListener('nexus_cover_updated', handleCoverUpdateEvent);
     };
   }, [portalRole, userProfile?.id, activeBand?.id]);
 
@@ -3459,11 +3535,11 @@ const getProfileForUser = (userParam: any) => {
         creative_name: cBizName,
         creative_handle: cHandle,
         legalName: profileFullLegalName || userProfile?.full_name || userProfile?.name,
-        avatar: userProfile?.creative_avatar || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150',
-        avatar_url: userProfile?.creative_avatar || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150',
-        banner: userProfile?.creative_banner || userProfile?.banner_url || null,
-        banner_url: userProfile?.creative_banner || userProfile?.banner_url || null,
-        cover_url: userProfile?.creative_banner || userProfile?.banner_url || null,
+        avatar: profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_avatar') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.creative_avatar || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150',
+        avatar_url: profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_avatar') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.creative_avatar || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150',
+        banner: profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_user_banner')) : null) || userProfile?.creative_banner || userProfile?.banner_url || null,
+        banner_url: profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_user_banner')) : null) || userProfile?.creative_banner || userProfile?.banner_url || null,
+        cover_url: profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_user_banner')) : null) || userProfile?.creative_banner || userProfile?.banner_url || null,
         location: userProfile?.location || 'USA / Global',
         role: 'Creative',
         account_type: 'creative',
@@ -3491,11 +3567,11 @@ const getProfileForUser = (userParam: any) => {
         name: labelName,
         label_company_name: labelName,
         legalName: profileFullLegalName || userProfile?.full_name || userProfile?.name,
-        avatar: userProfile?.label_logo || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=150',
-        avatar_url: userProfile?.label_logo || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=150',
-        banner: userProfile?.label_banner || userProfile?.banner_url || null,
-        banner_url: userProfile?.label_banner || userProfile?.banner_url || null,
-        cover_url: userProfile?.label_banner || userProfile?.banner_url || null,
+        avatar: profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_label_avatar') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.label_logo || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=150',
+        avatar_url: profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_label_avatar') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.label_logo || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=150',
+        banner: profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_label_banner') || localStorage.getItem('nexus_user_banner')) : null) || userProfile?.label_banner || userProfile?.banner_url || null,
+        banner_url: profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_label_banner') || localStorage.getItem('nexus_user_banner')) : null) || userProfile?.label_banner || userProfile?.banner_url || null,
+        cover_url: profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_label_banner') || localStorage.getItem('nexus_user_banner')) : null) || userProfile?.label_banner || userProfile?.banner_url || null,
         location: userProfile?.location || 'USA / Global',
         role: 'Label',
         account_type: 'label',
@@ -3517,8 +3593,8 @@ const getProfileForUser = (userParam: any) => {
     if (activeRole === 'promoter' || userProfile?.account_type === 'promoter' || userProfile?.active_workspace === 'promoter') {
       const promoterName = userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_agency || profileFullLegalName || userProfile?.name || 'Nexus Live Productions';
       const promoterHandle = resolvePromoterHandle(userProfile) || profileHandle || 'NexusLive';
-      const promoterLogo = userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
-      const promoterCover = userProfile?.promoter_cover_image || userProfile?.promoter_metadata?.banner_url || userProfile?.promoter_metadata?.cover_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
+      const promoterLogo = profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || userProfile?.avatar_url || userProfile?.avatar || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
+      const promoterCover = profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_cover') || localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner')) : null) || userProfile?.promoter_cover_image || userProfile?.promoter_metadata?.banner_url || userProfile?.promoter_metadata?.cover_url || userProfile?.banner_url || userProfile?.banner || userProfile?.cover_url || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
       const promoterLocation = resolvePromoterLocation(userProfile);
       const promoterBioText = userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
 
@@ -3561,15 +3637,20 @@ const getProfileForUser = (userParam: any) => {
         : ((userProfile?.bio && userProfile.bio !== promoterBio)
           ? userProfile.bio
           : 'Extreme metal musician, archivist, and underground pit warrior.');
+      const effectiveBanner = profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner')) : null) || userProfile?.banner_url || userProfile?.banner || null;
+      const cleanUserBanner = effectiveBanner;
+      const effectiveUserAvatar = profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || userProfile?.avatar_url || userProfile?.avatar;
+      const cleanAvatar = (effectiveUserAvatar && isValidStorageOrImageUrl(effectiveUserAvatar)) ? effectiveUserAvatar : (userProfile?.avatar_url || profileAvatarUrl || null);
+
       return {
         id: userProfile?.id || null,
         name: pName,
         legalName: pName,
-        avatar: userProfile?.avatar_url || userProfile?.avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null) || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-        avatar_url: userProfile?.avatar_url || userProfile?.avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null) || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-        banner: userProfile?.banner_url || userProfile?.banner || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_banner') : null) || null,
-        banner_url: userProfile?.banner_url || userProfile?.banner || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_banner') : null) || null,
-        cover_url: userProfile?.banner_url || userProfile?.banner || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_banner') : null) || null,
+        avatar: cleanAvatar,
+        avatar_url: cleanAvatar,
+        banner: cleanUserBanner,
+        banner_url: cleanUserBanner,
+        cover_url: cleanUserBanner,
         location: userProfile?.location || 'USA / Global',
         role: 'Industry Pro',
         account_type: 'industry_pro',
@@ -3599,15 +3680,20 @@ const getProfileForUser = (userParam: any) => {
       : ((userProfile?.bio && userProfile.bio !== promoterBio)
         ? userProfile.bio
         : 'Extreme metal musician, archivist, and underground pit warrior.');
+    const userBannerCandF = profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner')) : null) || userProfile?.banner_url || userProfile?.banner || null;
+    const cleanUserBannerF = userBannerCandF;
+    const effectiveFanAvatar = profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || userProfile?.avatar_url || userProfile?.avatar;
+    const cleanFanAvatar = (effectiveFanAvatar && isValidStorageOrImageUrl(effectiveFanAvatar)) ? effectiveFanAvatar : (userProfile?.avatar_url || profileAvatarUrl || null);
+
     return {
       id: userProfile?.id || null,
       name: fName,
       legalName: fName,
-      avatar: userProfile?.avatar_url || userProfile?.avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null) || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-      avatar_url: userProfile?.avatar_url || userProfile?.avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null) || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-      banner: userProfile?.banner_url || userProfile?.banner || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_banner') : null) || null,
-      banner_url: userProfile?.banner_url || userProfile?.banner || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_banner') : null) || null,
-      cover_url: userProfile?.banner_url || userProfile?.banner || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_banner') : null) || null,
+      avatar: cleanFanAvatar,
+      avatar_url: cleanFanAvatar,
+      banner: cleanUserBannerF,
+      banner_url: cleanUserBannerF,
+      cover_url: cleanUserBannerF,
       location: userProfile?.location || 'USA / Global',
       role: 'Fan Listener',
       account_type: 'fan_only',
@@ -4345,7 +4431,14 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
           .order('created_at', { ascending: false });
 
         if (data && Array.isArray(data) && data.length > 0) {
-          const remoteNotifs = data.map((row: any) => ({
+          const remoteNotifs = data
+            .filter((row: any) => {
+              if (row.actor_id && (row.actor_id === userUUID || row.actor_id === userProfile?.id || row.actor_id === userProfile?.email)) return false;
+              if (row.actor_email && row.actor_email === userProfile?.email) return false;
+              if (row.data?.actor_id && (row.data?.actor_id === userUUID || row.data?.actor_id === userProfile?.id || row.data?.actor_id === userProfile?.email)) return false;
+              return true;
+            })
+            .map((row: any) => ({
             ...row,
             id: row.id,
             title: row.title || 'Notification',
@@ -4636,7 +4729,6 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
   const startLongPress = (postId: string) => {
     longPressTimer.current = setTimeout(() => {
       setReactionMenuOpenFor(postId);
-      triggerNotification?.("Reaction dock deployed");
     }, 500);
   };
 
@@ -5076,6 +5168,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
             filterShowMerchDropsOnlyFromFollowed={filterShowMerchDropsOnlyFromFollowed}
             setFilterShowMerchDropsOnlyFromFollowed={setFilterShowMerchDropsOnlyFromFollowed}
             onOpenMapModal={() => setShowMapModal(true)}
+            onOpenArchivesModal={() => setShowPromoterArchivesModal(true)}
             onOpenShowCreator={() => { setEditingCommunityShow(null); setIsCommunityShowModalOpen(true); }}
             onEditShow={(gig) => { setEditingCommunityShow(gig); setIsCommunityShowModalOpen(true); }}
             onDeleteGig={handleDeleteUpcomingShowPermanently}
@@ -5227,6 +5320,8 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
   handleAddComment={handleAddComment}
   setEditingPostId={setEditingPostId}
   setEditingPostText={setEditingPostText}
+  editingPostImages={editingPostImages}
+  setEditingPostImages={setEditingPostImages}
   handleSaveEdit={handleSaveEdit}
   handleDeletePost={handleDeletePost}
   setCheckoutItem={setCheckoutItem}
@@ -5817,6 +5912,15 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         onPrev={handlePrevStory}
         triggerNotification={triggerNotification}
         userProfile={userProfile}
+      />
+      {/* Historic Show Archives Modal */}
+      <PromoterArchivesModal
+        isOpen={showPromoterArchivesModal}
+        onClose={() => setShowPromoterArchivesModal(false)}
+        promoterProfile={userProfile}
+        userProfile={userProfile}
+        shows={liveEvents}
+        triggerNotification={triggerNotification}
       />
       </SocialThemeShell>
     </SocialRoleProvider>

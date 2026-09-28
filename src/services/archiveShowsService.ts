@@ -392,6 +392,82 @@ export async function fetchArchiveShowsFromDatabase(userId = '5403162d-1947-43aa
     } catch (err) {
       console.warn('[ARCHIVE-SHOWS-SERVICE] Supabase query exception:', err);
     }
+
+    // Automatically import past shows from the public.shows table (dates prior to today)
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const { data: pastShowsData } = await supabase
+        .from('shows')
+        .select('*');
+
+      if (pastShowsData && Array.isArray(pastShowsData)) {
+        const pastFromShowsTable: ArchiveShowItem[] = pastShowsData
+          .filter(s => {
+            // Strictly exclude community-submitted shows and shows not booked personally by this promoter
+            if (s.is_community_submitted === true || s.is_community === true || s.source === 'community') {
+              return false;
+            }
+            const isPersonallyBooked = (userId && (s.creator_id === userId || s.promoter_id === userId)) ||
+              s.is_promoter_show === true ||
+              Boolean(s.festival_name && s.festival_name.toLowerCase().includes('domination'));
+            if (!isPersonallyBooked) {
+              return false;
+            }
+
+            const sDate = s.date || s.show_date;
+            const isPast = sDate && String(sDate).split('T')[0] < todayStr;
+            const isArchived = s.additional_notes && String(s.additional_notes).includes('"archived":true');
+            return isPast || isArchived;
+          })
+          .map(s => {
+            const rawDate = s.date || s.show_date || '';
+            const dateParts = String(rawDate).split('-');
+            const y = dateParts[0] ? parseInt(dateParts[0], 10) : 2026;
+            
+            let formattedDate = 'Past Event';
+            if (dateParts.length === 3) {
+              try {
+                const d = new Date(parseInt(dateParts[0], 10), parseInt(dateParts[1], 10) - 1, parseInt(dateParts[2], 10));
+                formattedDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
+              } catch (_) {
+                formattedDate = String(rawDate);
+              }
+            }
+
+            const support = Array.isArray(s.support_lineup)
+              ? s.support_lineup.map((x: any) => typeof x === 'string' ? x : (x.name || x.band)).filter(Boolean)
+              : [];
+
+            return {
+              id: s.id,
+              user_id: s.creator_id || userId,
+              promoter_id: s.creator_id || userId,
+              year: isNaN(y) ? 2026 : y,
+              title: s.show_name 
+                ? `${s.headliner || s.name || 'Artist'} - ${s.show_name}`
+                : (s.festival_name || `${s.headliner || 'Live'} at ${s.venue || 'Venue'}`),
+              type: (s.festival_name ? 'festival' : 'club_gig') as any,
+              date: formattedDate,
+              venue: s.venue_address || s.venue || s.venue_name || 'Underground Venue',
+              city: s.city ? (s.state_province ? `${s.city}, ${s.state_province}` : s.city) : 'Haltom City, TX',
+              lineup: [s.headliner || s.name, ...support].filter(Boolean),
+              attendance: s.expected_attendance ? `${s.expected_attendance} Capacity` : 'Full House',
+              milestone: '⚡ Completed Live Performance',
+              historicalNotes: typeof s.additional_notes === 'string' ? s.additional_notes : (s.additional_notes ? JSON.stringify(s.additional_notes) : `Official headline show at ${s.venue || 'venue'}.`),
+              flyerUrl: s.flyer_url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=800',
+              photoCount: 24,
+              is_deleted: false
+            };
+          });
+
+        if (pastFromShowsTable.length > 0) {
+          tableQuerySuccess = true;
+          dbShows = [...dbShows, ...pastFromShowsTable];
+        }
+      }
+    } catch (e) {
+      console.warn('[ARCHIVE-SHOWS-SERVICE] Could not query past shows from shows table:', e);
+    }
   }
 
   // Retrieve cached records & local edits
@@ -403,7 +479,10 @@ export async function fetchArchiveShowsFromDatabase(userId = '5403162d-1947-43aa
     const rawCustom = localStorage.getItem(LOCAL_STORAGE_CUSTOM_KEY);
     if (rawCustom) {
       const parsed = JSON.parse(rawCustom);
-      if (Array.isArray(parsed)) localCustom = parsed;
+      if (Array.isArray(parsed)) {
+        // Exclude community shows (like Vader) that were temporarily stored
+        localCustom = parsed.filter(item => item.id !== '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee' && !item.title?.toLowerCase().includes('vader'));
+      }
     }
 
     const rawOverrides = localStorage.getItem(LOCAL_STORAGE_OVERRIDES_KEY);

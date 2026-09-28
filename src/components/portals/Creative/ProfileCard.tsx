@@ -983,10 +983,29 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     >
                       {(() => {
                         const resolvedAvatar = effTarget.avatar || effTarget.avatar_url || effTarget.creative_avatar || selectedUserProfile.avatar;
+                        const fallbackInitials = (effTarget.name || effTarget.full_name || 'C').slice(0, 2).toUpperCase();
                         if (resolvedAvatar && (typeof resolvedAvatar === 'string') && (resolvedAvatar.startsWith('http') || resolvedAvatar.startsWith('data:image') || resolvedAvatar.startsWith('/'))) {
-                          return <img src={resolvedAvatar} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />;
+                          return (
+                            <img 
+                              src={resolvedAvatar} 
+                              className="w-full h-full object-cover" 
+                              alt="" 
+                              referrerPolicy="no-referrer" 
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.style.display = 'none';
+                                const parent = e.currentTarget.parentElement;
+                                if (parent && !parent.querySelector('.avatar-fallback-initials')) {
+                                  const span = document.createElement('span');
+                                  span.className = 'font-bold avatar-fallback-initials';
+                                  span.innerText = fallbackInitials;
+                                  parent.appendChild(span);
+                                }
+                              }}
+                            />
+                          );
                         }
-                        return <span className="font-bold">{resolvedAvatar || (effTarget.name || 'C').slice(0, 2).toUpperCase()}</span>;
+                        return <span className="font-bold">{resolvedAvatar || fallbackInitials}</span>;
                       })()}
                       
                       {selectedUserProfile.isYou && (
@@ -1961,6 +1980,84 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   </div>
                 )}
 
+                {/* Positioned directly under Associated Entities */}
+                                   {/* Glowing Scrolling Marquee Text Box for Live Updates */}
+                  <div className="mt-3.5 space-y-1">
+                    <div className="flex items-center justify-between px-0.5">
+                      <span className="text-[10px] font-bold text-cyan-400 font-mono tracking-wider uppercase flex items-center gap-1.5">
+                        <span className="relative flex h-2 w-2 shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                        </span>
+                        📢 LIVE UPDATE
+                      </span>
+                      {selectedUserProfile.isYou && !isEditingTicker && (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingTicker(true)}
+                          title="Edit Marquee Update"
+                          className="px-2 py-0.5 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-800/60 text-cyan-300 hover:text-white rounded-md transition-all shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-semibold group"
+                        >
+                          <Pencil className="w-3 h-3 text-cyan-400 group-hover:text-cyan-300" /> Edit Update
+                        </button>
+                      )}
+                    </div>
+
+                    {isEditingTicker ? (
+                      <div className="bg-zinc-950/90 border border-cyan-500/50 rounded-xl p-3 space-y-2 shadow-[0_0_15px_rgba(6,182,212,0.15)] relative">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9.5px] font-mono text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                            ✍️ EDIT TICKER
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-mono text-zinc-400 font-bold">
+                              {tickerUpdateText.length}/200
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveTickerUpdate(tickerUpdateText)}
+                              className="px-2.5 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-cyan-300 hover:text-cyan-200 text-[9.5px] font-mono font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                            >
+                              <Check className="w-3 h-3" /> Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingTicker(false)}
+                              className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 text-[9.5px] font-mono font-bold rounded-lg transition-all cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                        <textarea
+                          maxLength={200}
+                          value={tickerUpdateText}
+                          onChange={(e) => setTickerUpdateText(e.target.value.slice(0, 200))}
+                          placeholder="Post a quick live update, gig news, tape drop, or announcement (max 200 chars)..."
+                          className="w-full bg-black/80 border border-zinc-800 focus:border-cyan-400 rounded-lg p-2.5 text-xs text-cyan-200 font-mono tracking-wide focus:outline-none focus:ring-1 focus:ring-cyan-400/30 resize-none"
+                          rows={2.5}
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex items-center border rounded-xl overflow-hidden bg-cyan-950/20 border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.15)] py-2.5 px-1 relative group/marquee cursor-default">
+                        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
+                        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
+                        <div className="w-full relative flex items-center overflow-hidden">
+                          <div className="flex whitespace-nowrap animate-[marquee_28s_linear_infinite] group-hover/marquee:[animation-play-state:paused] items-center">
+                            <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-cyan-300 px-6 drop-shadow-[0_0_6px_rgba(6,182,212,0.6)] flex items-center gap-2">
+                              ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
+                            </span>
+                            <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-cyan-300 px-6 drop-shadow-[0_0_6px_rgba(6,182,212,0.6)] flex items-center gap-2">
+                              ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+
                 {/* Label action buttons: Message and Submit EPK */}
                 {(selectedUserProfile?.role || '').toLowerCase().includes('label') && (
                   <div className="mt-4 grid grid-cols-2 gap-2 w-full">
@@ -2100,82 +2197,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                      </div>
                    </div>
                  )}
-
-                                   {/* Glowing Scrolling Marquee Text Box for Live Updates */}
-                  <div className="mt-3.5 space-y-1">
-                    <div className="flex items-center justify-between px-0.5">
-                      <span className="text-[10px] font-bold text-cyan-400 font-mono tracking-wider uppercase flex items-center gap-1.5">
-                        <span className="relative flex h-2 w-2 shrink-0">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
-                        </span>
-                        📢 LIVE UPDATE
-                      </span>
-                      {selectedUserProfile.isYou && !isEditingTicker && (
-                        <button
-                          type="button"
-                          onClick={() => setIsEditingTicker(true)}
-                          title="Edit Marquee Update"
-                          className="px-2 py-0.5 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-800/60 text-cyan-300 hover:text-white rounded-md transition-all shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-semibold group"
-                        >
-                          <Pencil className="w-3 h-3 text-cyan-400 group-hover:text-cyan-300" /> Edit Update
-                        </button>
-                      )}
-                    </div>
-
-                    {isEditingTicker ? (
-                      <div className="bg-zinc-950/90 border border-cyan-500/50 rounded-xl p-3 space-y-2 shadow-[0_0_15px_rgba(6,182,212,0.15)] relative">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9.5px] font-mono text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                            ✍️ EDIT TICKER
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-mono text-zinc-400 font-bold">
-                              {tickerUpdateText.length}/200
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleSaveTickerUpdate(tickerUpdateText)}
-                              className="px-2.5 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-cyan-300 hover:text-cyan-200 text-[9.5px] font-mono font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer"
-                            >
-                              <Check className="w-3 h-3" /> Save
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setIsEditingTicker(false)}
-                              className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 text-[9.5px] font-mono font-bold rounded-lg transition-all cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                        <textarea
-                          maxLength={200}
-                          value={tickerUpdateText}
-                          onChange={(e) => setTickerUpdateText(e.target.value.slice(0, 200))}
-                          placeholder="Post a quick live update, gig news, tape drop, or announcement (max 200 chars)..."
-                          className="w-full bg-black/80 border border-zinc-800 focus:border-cyan-400 rounded-lg p-2.5 text-xs text-cyan-200 font-mono tracking-wide focus:outline-none focus:ring-1 focus:ring-cyan-400/30 resize-none"
-                          rows={2.5}
-                          autoFocus
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex items-center border rounded-xl overflow-hidden bg-cyan-950/20 border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.15)] py-2.5 px-1 relative group/marquee cursor-default">
-                        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
-                        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
-                        <div className="w-full relative flex items-center overflow-hidden">
-                          <div className="flex whitespace-nowrap animate-[marquee_28s_linear_infinite] group-hover/marquee:[animation-play-state:paused] items-center">
-                            <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-cyan-300 px-6 drop-shadow-[0_0_6px_rgba(6,182,212,0.6)] flex items-center gap-2">
-                              ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
-                            </span>
-                            <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-cyan-300 px-6 drop-shadow-[0_0_6px_rgba(6,182,212,0.6)] flex items-center gap-2">
-                              ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
 
                   {/* Stats Ledger Row */}
                 {(() => {

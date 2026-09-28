@@ -600,19 +600,19 @@ export function AppNavigationBar({
                         {(() => {
                           const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
                           if (r === 'band') return activeBand?.logo_url || null;
-                          if (r === 'creative') return userProfile?.creative_avatar || null;
-                          if (r === 'label') return userProfile?.label_avatar || null;
-                          if (r === 'promoter') return userProfile?.promoter_logo || null;
-                          return userProfile?.avatar_url || null;
+                          if (r === 'creative') return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
+                          if (r === 'label') return userProfile?.label_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_avatar') : null) || null;
+                          if (r === 'promoter') return (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.avatar_url || null;
+                          return userProfile?.avatar_url || (userProfile as any)?.avatar || (userProfile as any)?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null) || null;
                         })() ? (
                           <img 
                             src={(() => {
                               const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
                               if (r === 'band') return activeBand?.logo_url;
-                              if (r === 'creative') return userProfile?.creative_avatar;
-                              if (r === 'label') return userProfile?.label_avatar;
-                              if (r === 'promoter') return userProfile?.promoter_logo;
-                              return userProfile?.avatar_url;
+                              if (r === 'creative') return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
+                              if (r === 'label') return userProfile?.label_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_avatar') : null);
+                              if (r === 'promoter') return (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.avatar_url;
+                              return userProfile?.avatar_url || (userProfile as any)?.avatar || (userProfile as any)?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null);
                             })() || ""} 
                             alt={userProfile?.name} 
                             referrerPolicy="no-referrer"

@@ -19,29 +19,25 @@ export const isVirulentExcisionProfile = (activeBand: any, userProfile: any): bo
   return true;
 };
 
-export const resolveBandLogo = (activeBand: any, userProfile: any): string => {
-  const isPersonalOrPromoter = (candidate?: string | null) => {
-    if (!candidate || typeof candidate !== 'string') return true;
-    if (candidate.startsWith('data:image')) return true;
-    if (candidate.includes('unsplash')) return true;
-    if (userProfile?.avatar && candidate === userProfile.avatar) return true;
-    if (userProfile?.avatar_url && candidate === userProfile.avatar_url) return true;
-    if (userProfile?.promoter_logo && candidate === userProfile.promoter_logo) return true;
-    if (userProfile?.promoter_metadata?.logo_url && candidate === userProfile.promoter_metadata.logo_url) return true;
-    return false;
-  };
-
-  if (activeBand?.id && typeof window !== 'undefined') {
-    const saved = localStorage.getItem(`nexus_core_band_logo_${activeBand.id}`) || localStorage.getItem(`nexus_band_logo_${activeBand.id}`);
-    if (saved && !isPersonalOrPromoter(saved)) return saved;
+export const resolveBandLogo = (activeBand: any, userProfile: any, profileAvatarUrl?: string | null): string => {
+  if (profileAvatarUrl && typeof profileAvatarUrl === 'string' && profileAvatarUrl.trim()) {
+    return profileAvatarUrl;
   }
-  if (activeBand?.logo_url && !isPersonalOrPromoter(activeBand.logo_url)) return activeBand.logo_url;
-  if (activeBand?.avatar_url && !isPersonalOrPromoter(activeBand.avatar_url)) return activeBand.avatar_url;
-  if (activeBand?.avatar && !isPersonalOrPromoter(activeBand.avatar)) return activeBand.avatar;
-  if (activeBand?.image && !isPersonalOrPromoter(activeBand.image)) return activeBand.image;
-  if (userProfile?.band_logo && !isPersonalOrPromoter(userProfile.band_logo)) return userProfile.band_logo;
-  if (userProfile?.bandLogo && !isPersonalOrPromoter(userProfile.bandLogo)) return userProfile.bandLogo;
-  if (userProfile?.band_metadata?.logo_url && !isPersonalOrPromoter(userProfile.band_metadata.logo_url)) return userProfile.band_metadata.logo_url;
+  if (activeBand?.id && typeof window !== 'undefined') {
+    const saved = localStorage.getItem(`nexus_core_band_logo_${activeBand.id}`) || localStorage.getItem(`nexus_band_logo_${activeBand.id}`) || localStorage.getItem('nexus_band_logo');
+    if (saved && typeof saved === 'string' && saved.trim()) return saved;
+  }
+  const userLogo = userProfile?.band_logo || userProfile?.bandLogo || (userProfile?.account_type === 'band' ? userProfile?.avatar_url : null);
+  if (userLogo && typeof userLogo === 'string' && userLogo.trim()) {
+    return userLogo;
+  }
+  if (activeBand?.logo_url && typeof activeBand.logo_url === 'string' && activeBand.logo_url.trim()) return activeBand.logo_url;
+  if (activeBand?.avatar_url && typeof activeBand.avatar_url === 'string' && activeBand.avatar_url.trim()) return activeBand.avatar_url;
+  if (activeBand?.avatar && typeof activeBand.avatar === 'string' && activeBand.avatar.trim()) return activeBand.avatar;
+  if (activeBand?.image && typeof activeBand.image === 'string' && activeBand.image.trim()) return activeBand.image;
+  if (userProfile?.band_metadata?.logo_url && typeof userProfile.band_metadata.logo_url === 'string' && userProfile.band_metadata.logo_url.trim()) {
+    return userProfile.band_metadata.logo_url;
+  }
   
   if (isVirulentExcisionProfile(activeBand, userProfile)) {
     return VIRULENT_EXCISION_DEFAULT_LOGO;
@@ -49,16 +45,21 @@ export const resolveBandLogo = (activeBand: any, userProfile: any): string => {
   return VIRULENT_EXCISION_DEFAULT_LOGO;
 };
 
-export const resolveBandCover = (activeBand: any, userProfile: any): string => {
-  if (activeBand?.id && typeof window !== 'undefined') {
-    const saved = localStorage.getItem(`nexus_core_band_cover_${activeBand.id}`) || localStorage.getItem(`nexus_band_cover_${activeBand.id}`);
-    if (saved && !saved.startsWith('data:image')) return saved;
+export const resolveBandCover = (activeBand: any, userProfile: any, profileCoverUrl?: string | null): string => {
+  if (profileCoverUrl && typeof profileCoverUrl === 'string' && profileCoverUrl.trim()) {
+    return profileCoverUrl;
   }
-  if (activeBand?.cover_url && !activeBand.cover_url.startsWith('data:image')) return activeBand.cover_url;
-  if (activeBand?.banner_url && !activeBand.banner_url.startsWith('data:image')) return activeBand.banner_url;
-  if (activeBand?.banner && !activeBand.banner.startsWith('data:image')) return activeBand.banner;
-  if (userProfile?.band_cover && !userProfile.band_cover.startsWith('data:image')) return userProfile.band_cover;
-  if (userProfile?.bandCover && !userProfile.bandCover.startsWith('data:image')) return userProfile.bandCover;
+  if (activeBand?.id && typeof window !== 'undefined') {
+    const saved = localStorage.getItem(`nexus_core_band_cover_${activeBand.id}`) || localStorage.getItem(`nexus_band_cover_${activeBand.id}`) || localStorage.getItem('nexus_band_cover');
+    if (saved && typeof saved === 'string' && saved.trim()) return saved;
+  }
+  const userCover = userProfile?.band_cover || userProfile?.bandCover || (userProfile?.account_type === 'band' ? (userProfile?.banner_url || userProfile?.banner) : null) || (typeof window !== 'undefined' ? localStorage.getItem('nexus_band_cover') : null);
+  if (userCover && typeof userCover === 'string' && userCover.trim()) {
+    return userCover;
+  }
+  if (activeBand?.cover_url && typeof activeBand.cover_url === 'string' && activeBand.cover_url.trim()) return activeBand.cover_url;
+  if (activeBand?.banner_url && typeof activeBand.banner_url === 'string' && activeBand.banner_url.trim()) return activeBand.banner_url;
+  if (activeBand?.banner && typeof activeBand.banner === 'string' && activeBand.banner.trim()) return activeBand.banner;
 
   if (isVirulentExcisionProfile(activeBand, userProfile)) {
     return VIRULENT_EXCISION_DEFAULT_COVER;
@@ -261,9 +262,13 @@ export const resolvePromoterHandle = (userProfile: any): string => {
   return raw.replace(/^@+/, '').replace(/\s+/g, '_');
 };
 
-export const resolvePromoterLogo = (userProfile: any): string => {
+export const resolvePromoterLogo = (userProfile: any, profileAvatarUrl?: string | null): string => {
+  if (profileAvatarUrl && typeof profileAvatarUrl === 'string' && profileAvatarUrl.trim()) {
+    return profileAvatarUrl;
+  }
   const pm = userProfile?.promoter_metadata;
   return (
+    (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) ||
     (userProfile as any)?.promoter_logo ||
     pm?.logo_url ||
     pm?.avatar_url ||
@@ -273,13 +278,19 @@ export const resolvePromoterLogo = (userProfile: any): string => {
   );
 };
 
-export const resolvePromoterCover = (userProfile: any): string | null => {
+export const resolvePromoterCover = (userProfile: any, profileCoverUrl?: string | null): string | null => {
+  if (profileCoverUrl && typeof profileCoverUrl === 'string' && profileCoverUrl.trim()) {
+    return profileCoverUrl;
+  }
   const pm = userProfile?.promoter_metadata;
   return (
+    (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_cover') || localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner')) : null) ||
     (userProfile as any)?.promoter_cover_image ||
     pm?.banner_url ||
     pm?.cover_url ||
     userProfile?.banner_url ||
+    userProfile?.banner ||
+    userProfile?.cover_url ||
     'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635'
   );
 };
@@ -304,33 +315,80 @@ export const resolvePromoterLocation = (userProfile: any): string => {
 };
 
 export const resolveEffectiveAvatar = (portalRole: string, activeBand: any, userProfile: any, profileAvatarUrl?: string | null): string => {
-  if (portalRole === 'band') {
-    return resolveBandLogo(activeBand, userProfile);
+  if (profileAvatarUrl && typeof profileAvatarUrl === 'string' && profileAvatarUrl.trim()) {
+    return profileAvatarUrl;
   }
-  if (portalRole === 'label') {
-    return userProfile?.label_avatar || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+  const effectiveRole = (portalRole || userProfile?.active_workspace || userProfile?.account_type || '').toLowerCase();
+  if (effectiveRole === 'band') {
+    return resolveBandLogo(activeBand, userProfile, profileAvatarUrl);
   }
-  if (portalRole === 'creative') {
-    return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+  if (effectiveRole === 'label') {
+    return (
+      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_label_avatar') || localStorage.getItem('nexus_user_avatar')) : null) ||
+      userProfile?.label_avatar || 
+      userProfile?.avatar_url ||
+      ''
+    );
   }
-  if (portalRole === 'promoter') {
-    return resolvePromoterLogo(userProfile);
+  if (effectiveRole === 'creative') {
+    return (
+      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_avatar') || localStorage.getItem('nexus_user_avatar')) : null) ||
+      userProfile?.creative_avatar || 
+      userProfile?.creative_metadata?.avatar_url || 
+      userProfile?.creative_metadata?.image || 
+      userProfile?.avatar_url ||
+      ''
+    );
   }
-  return profileAvatarUrl || userProfile?.avatar_url || userProfile?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+  if (effectiveRole === 'promoter') {
+    return resolvePromoterLogo(userProfile, profileAvatarUrl);
+  }
+
+  // If user has promoter metadata / promoter logo or storage, use it
+  const promoterCandidate = resolvePromoterLogo(userProfile, profileAvatarUrl);
+  if (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url || (typeof window !== 'undefined' && localStorage.getItem('nexus_promoter_logo'))) {
+    if (promoterCandidate && !promoterCandidate.includes('placeholder')) {
+      return promoterCandidate;
+    }
+  }
+
+  const personalCandidate =
+    userProfile?.avatar_url || 
+    userProfile?.avatar || 
+    userProfile?.profile_avatar || 
+    (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || 
+    '';
+
+  if (personalCandidate && personalCandidate.trim()) {
+    return personalCandidate;
+  }
+
+  return promoterCandidate || '';
 };
 
 export const resolveEffectiveCover = (portalRole: string, activeBand: any, userProfile: any, profileCoverUrl?: string | null): string | null => {
-  if (portalRole === 'band') {
-    return resolveBandCover(activeBand, userProfile);
+  if (profileCoverUrl && typeof profileCoverUrl === 'string' && profileCoverUrl.trim()) {
+    return profileCoverUrl;
   }
-  if (portalRole === 'label') {
-    return userProfile?.label_banner || null;
+  const effectiveRole = (portalRole || userProfile?.active_workspace || userProfile?.account_type || '').toLowerCase();
+  if (effectiveRole === 'band') {
+    return resolveBandCover(activeBand, userProfile, profileCoverUrl);
   }
-  if (portalRole === 'creative') {
-    return userProfile?.creative_banner || userProfile?.banner_url || null;
+  if (effectiveRole === 'label') {
+    return userProfile?.label_banner || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_label_banner') || localStorage.getItem('nexus_user_banner')) : null) || null;
   }
-  if (portalRole === 'promoter') {
-    return resolvePromoterCover(userProfile);
+  if (effectiveRole === 'creative') {
+    return userProfile?.creative_banner || userProfile?.creative_metadata?.banner_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_user_banner')) : null) || null;
   }
-  return profileCoverUrl || userProfile?.banner_url || null;
+  if (effectiveRole === 'promoter') {
+    return resolvePromoterCover(userProfile, profileCoverUrl);
+  }
+
+  if (userProfile?.promoter_cover_image || userProfile?.promoter_metadata?.banner_url || (typeof window !== 'undefined' && localStorage.getItem('nexus_promoter_cover'))) {
+    const promoterCov = resolvePromoterCover(userProfile, profileCoverUrl);
+    if (promoterCov) return promoterCov;
+  }
+
+  const personalCandidate = userProfile?.banner_url || userProfile?.banner || userProfile?.cover_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner')) : null) || null;
+  return personalCandidate || resolvePromoterCover(userProfile, profileCoverUrl);
 };

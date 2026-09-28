@@ -646,11 +646,13 @@ export default function App() {
       // Resolve target receiver UUID for the author (never fall back to current user)
       const validReceiverUUID = (targetUserId && extractUUID(targetUserId)) || null;
       
-      if (validReceiverUUID && validReceiverUUID !== userProfile?.id) {
+      if (validReceiverUUID && validReceiverUUID !== userProfile?.id && validReceiverUUID !== userProfile?.email) {
         const notifId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : (extractUUID(postId) || '00000000-0000-0000-0000-000000000000');
         const notifItem = {
           id: notifId,
           user_id: validReceiverUUID,
+          actor_id: userProfile?.id || null,
+          actor_email: userProfile?.email || null,
           title: `🔥 NEW REACTION`,
           message: `${actorName} reacted (${label}) to your transmission: "${postSnippet}"`,
           category: 'REACTION',
@@ -670,6 +672,8 @@ export default function App() {
             supabaseClient.from('nexus_notifications').insert([{
               id: notifItem.id,
               user_id: validReceiverUUID,
+              actor_id: userProfile?.id || null,
+              actor_email: userProfile?.email || null,
               title: notifItem.title,
               message: notifItem.message,
               category: 'REACTION',
@@ -1108,24 +1112,23 @@ export default function App() {
   // Helper to determine the current or next show
   const getNextShow = () => {
     if (shows.length === 0) return null;
+    const isEmbargoedOrConfirming = (s: any) => {
+      if (s.is_published === false) return true;
+      if (s.publication_status === 'embargoed_private' || s.publication_status === 'draft') return true;
+      if (s.status === 'Draft' || s.status === 'Embargoed') return true;
+      const text = `${s.headliner || ''} ${s.name || ''} ${s.show_name || ''} ${s.venue || ''} ${s.support || ''}`.toLowerCase();
+      if (text.includes('molested divinity') || text.includes('molesteddivinity')) return true;
+      return false;
+    };
+
     const todayStr = new Date().toISOString().split('T')[0];
     const upcoming = shows
-      .filter(s => {
-        if (s.is_published === false) return false;
-        if (s.publication_status === 'embargoed_private' || s.publication_status === 'draft') return false;
-        if (s.status === 'Draft' || s.status === 'Embargoed') return false;
-        return s.date >= todayStr;
-      })
+      .filter(s => !isEmbargoedOrConfirming(s) && s.date >= todayStr)
       .sort((a, b) => a.date.localeCompare(b.date));
     if (upcoming.length > 0) return upcoming[0];
     
     // Fallback: pick only from unembargoed shows
-    const unembargoed = shows.filter(s => {
-      if (s.is_published === false) return false;
-      if (s.publication_status === 'embargoed_private' || s.publication_status === 'draft') return false;
-      if (s.status === 'Draft' || s.status === 'Embargoed') return false;
-      return true;
-    });
+    const unembargoed = shows.filter(s => !isEmbargoedOrConfirming(s));
     if (unembargoed.length === 0) return null;
     const sorted = [...unembargoed].sort((a, b) => b.date.localeCompare(a.date));
     return sorted[0];
@@ -2774,7 +2777,16 @@ export default function App() {
           }
 
           const shws = await showsStore.getItem('nexus_master_shows');
-          if (shws) setShows(JSON.parse(shws as string));
+          if (shws) {
+            const parsed = JSON.parse(shws as string);
+            if (Array.isArray(parsed)) {
+              const cleaned = parsed.filter((s: any) => {
+                const text = `${s.headliner || ''} ${s.name || ''} ${s.show_name || ''} ${s.venue || ''} ${s.support || ''}`.toLowerCase();
+                return !text.includes('molested divinity') && !text.includes('molesteddivinity');
+              });
+              setShows(cleaned);
+            }
+          }
 
           const flts = await itinerariesStore.getItem('nexus_master_itineraries');
           if (flts) setFlights(JSON.parse(flts as string));
@@ -2868,6 +2880,10 @@ export default function App() {
                   const sName = String((formatted as any).headliner || formatted.name || (formatted as any).show_name || '').toLowerCase().trim();
                   const sDate = String(formatted.date || '').toLowerCase().trim();
                   const sSig = `${sName}__${sDate}`;
+
+                  // Filter out embargoed & confirming shows (e.g. Molested Divinity)
+                  const sFullText = `${sName} ${formatted.venue || ''} ${(formatted as any).support || ''}`.toLowerCase();
+                  if (sFullText.includes('molested divinity') || sFullText.includes('molesteddivinity')) continue;
 
                   if (sId && deletedShowIds.has(sId.toLowerCase())) continue;
                   if (sName && sDate && deletedShowIds.has(sSig)) continue;
@@ -3160,6 +3176,9 @@ export default function App() {
             // Deduplicate loaded notifications to guarantee no duplicates reach the state
             const seenIds = new Set<string>();
             const seenMessages = new Map<string, number>();
+            const myId = userProfile?.id;
+            const myEmail = userProfile?.email;
+
             const cleanNotifs = (notificationsDb as any[]).map(row => ({
               ...row,
               message: row.message || row.content || row.title || row.body || '',
@@ -3167,6 +3186,26 @@ export default function App() {
             })).filter(notif => {
               if (!notif || !notif.id) return false;
               if (seenIds.has(notif.id)) return false;
+
+              // Never show self-notifications (where current user was the actor)
+              if (myId && (notif.actor_id === myId || notif.data?.actor_id === myId)) return false;
+              if (myEmail && (notif.actor_email === myEmail || notif.data?.actor_email === myEmail)) return false;
+
+              const isReaction = notif.category === 'REACTION' || notif.type === 'post_reaction' || (notif.title && String(notif.title).toUpperCase().includes('REACTION'));
+              if (isReaction) {
+                const isForMe = Boolean(
+                  (myId && notif.user_id === myId) ||
+                  (myEmail && (notif.user_id === myEmail || notif.data?.user_id === myEmail))
+                );
+                if (!isForMe) return false;
+              } else if (notif.user_id) {
+                const isForMe = Boolean(
+                  (myId && notif.user_id === myId) ||
+                  (myEmail && (notif.user_id === myEmail || notif.data?.user_id === myEmail))
+                );
+                if (!isForMe) return false;
+              }
+
               seenIds.add(notif.id);
 
               const msgKey = `${notif.category || ''}:${notif.message}`;
@@ -3550,6 +3589,9 @@ export default function App() {
       if (s.is_published === false) return false;
       if (s.publication_status === 'embargoed_private' || s.publication_status === 'draft') return false;
       if (s.status === 'Draft' || s.status === 'Embargoed') return false;
+      const sAny = s as any;
+      const text = `${sAny.headliner || ''} ${s.name || ''} ${sAny.show_name || ''} ${s.venue || ''} ${sAny.support || ''}`.toLowerCase();
+      if (text.includes('molested divinity') || text.includes('molesteddivinity')) return false;
       return true;
     });
   }, [sortedShows]);

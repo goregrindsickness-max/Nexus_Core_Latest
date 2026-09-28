@@ -1,7 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
 import { profileStore } from '../utils/indexedDB';
 import { getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, sanitizeCreativePayload, formatCreativePayload, extractGlobalProfilePayload, sanitizeBandPayload, ensureValidSupabaseAuthSession } from '../supabase';
-import { resolveBandLogo, resolveBandCover, resolveBandHandle, resolveBandName, resolveBandBio, resolveBandLocation, resolvePromoterName, resolvePromoterHandle, resolvePromoterLogo, resolvePromoterCover, resolvePromoterBio, resolvePromoterLocation, formatCleanLocation } from '../utils/bandProfileUtils';
+import { 
+  resolveBandLogo, 
+  resolveBandCover, 
+  resolveBandHandle, 
+  resolveBandName, 
+  resolveBandBio, 
+  resolveBandLocation, 
+  resolvePromoterName, 
+  resolvePromoterHandle, 
+  resolvePromoterLogo, 
+  resolvePromoterCover, 
+  resolvePromoterBio, 
+  resolvePromoterLocation, 
+  resolveEffectiveAvatar,
+  resolveEffectiveCover,
+  formatCleanLocation 
+} from '../utils/bandProfileUtils';
 
 export interface UseUserProfileStateProps {
   portalRole: string;
@@ -202,35 +218,11 @@ export function useUserProfileState({
   }, [digitalTicketsScanned, physicalMerchBought, bandsDiscovered]);
 
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(() => {
-    if (portalRole === 'band') {
-      return resolveBandLogo(activeBand, userProfile);
-    }
-    if (portalRole === 'label') return userProfile?.label_avatar || null;
-    if (portalRole === 'creative') return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || null;
-    if (portalRole === 'promoter') return (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || null;
-    if (portalRole === 'fan_only') {
-      return userProfile?.avatar_url || 'FL';
-    }
-
-    if (userProfile?.avatar_url && userProfile.avatar_url !== 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Nexus%20Icon%20Circuits.png') {
-      return userProfile.avatar_url;
-    }
-    return userProfile?.avatar_url || null;
+    return resolveEffectiveAvatar(portalRole, activeBand, userProfile) || null;
   });
 
   const [profileCoverUrl, setProfileCoverUrl] = useState<string | null>(() => {
-    if (portalRole === 'band') {
-      return resolveBandCover(activeBand, userProfile);
-    }
-    if (portalRole === 'label') return userProfile?.label_banner || null;
-    if (portalRole === 'creative') return userProfile?.creative_banner || userProfile?.creative_metadata?.banner_url || null;
-    if (portalRole === 'promoter') return (userProfile as any)?.promoter_cover_image || userProfile?.promoter_metadata?.banner_url || null;
-    if (portalRole === 'fan_only') return userProfile?.banner_url || null;
-
-    if (userProfile?.banner_url) {
-      return userProfile.banner_url;
-    }
-    return userProfile?.banner_url || null;
+    return resolveEffectiveCover(portalRole, activeBand, userProfile) || null;
   });
 
   // Image Cropper & Adjuster States
@@ -242,22 +234,10 @@ export function useUserProfileState({
   const coverFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    let avatar: string | null = null;
-    if (portalRole === 'band') {
-      avatar = resolveBandLogo(activeBand, userProfile);
-    } else if (portalRole === 'label') {
-      avatar = userProfile?.label_avatar || null;
-    } else if (portalRole === 'creative') {
-      avatar = userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || null;
-    } else if (portalRole === 'promoter') {
-      avatar = (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || null;
-    } else if (portalRole === 'fan_only') {
-      avatar = userProfile?.avatar_url || 'FL';
-    } else {
-      avatar = userProfile?.avatar_url || null;
+    const avatar = resolveEffectiveAvatar(portalRole, activeBand, userProfile);
+    if (avatar) {
+      setProfileAvatarUrl(prev => (prev === avatar ? prev : avatar));
     }
-
-    setProfileAvatarUrl(prev => (prev === avatar ? prev : avatar));
   }, [
     portalRole, 
     activeBand?.id, 
@@ -268,29 +248,23 @@ export function useUserProfileState({
     activeBand?.name,
     userProfile?.band_logo, 
     userProfile?.avatar_url, 
+    userProfile?.avatar,
+    userProfile?.profile_avatar,
     userProfile?.label_avatar, 
     userProfile?.creative_avatar, 
+    userProfile?.creative_metadata?.avatar_url,
+    userProfile?.creative_metadata?.image,
     (userProfile as any)?.promoter_logo, 
-    userProfile?.email
+    (userProfile as any)?.promoter_metadata?.logo_url,
+    userProfile?.email,
+    userProfile?.active_workspace
   ]);
 
   useEffect(() => {
-    let cover: string | null = null;
-    if (portalRole === 'band') {
-      cover = resolveBandCover(activeBand, userProfile);
-    } else if (portalRole === 'label') {
-      cover = userProfile?.label_banner || null;
-    } else if (portalRole === 'creative') {
-      cover = userProfile?.creative_banner || userProfile?.creative_metadata?.banner_url || null;
-    } else if (portalRole === 'promoter') {
-      cover = (userProfile as any)?.promoter_cover_image || userProfile?.promoter_metadata?.banner_url || null;
-    } else if (portalRole === 'fan_only') {
-      cover = userProfile?.banner_url || null;
-    } else {
-      cover = userProfile?.banner_url || null;
+    const cover = resolveEffectiveCover(portalRole, activeBand, userProfile);
+    if (cover) {
+      setProfileCoverUrl(prev => (prev === cover ? prev : cover));
     }
-
-    setProfileCoverUrl(prev => (prev === cover ? prev : cover));
   }, [
     portalRole, 
     activeBand?.id, 
@@ -299,10 +273,14 @@ export function useUserProfileState({
     activeBand?.name,
     userProfile?.band_cover, 
     userProfile?.banner_url, 
+    userProfile?.banner,
+    userProfile?.cover_url,
     userProfile?.label_banner, 
     userProfile?.creative_banner, 
     (userProfile as any)?.promoter_cover_image, 
-    userProfile?.email
+    (userProfile as any)?.promoter_metadata?.banner_url,
+    userProfile?.email,
+    userProfile?.active_workspace
   ]);
 
   useEffect(() => {
@@ -627,6 +605,20 @@ export function useUserProfileState({
       }));
     }
 
+    if (profileCoverUrl && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nexus_cover_updated', {
+        detail: {
+          id: userProfile?.id,
+          coverUrl: profileCoverUrl,
+          cover_url: profileCoverUrl,
+          banner_url: profileCoverUrl,
+          bannerUrl: profileCoverUrl,
+          authorName: profileFullLegalName || userProfile?.name || 'User',
+          authorRole: portalRole || 'User'
+        }
+      }));
+    }
+
     if (userProfile?.id && userProfile?.id !== 'guest') {
       const supabase = getSupabase();
       if (supabase) {
@@ -787,14 +779,14 @@ export function useUserProfileState({
         // 2. Profiles Table Save: ALWAYS preserve user's global/personal identity if in a professional portal!
         const isProfessionalPortal = ['band', 'creative', 'promoter', 'label'].includes(portalRole);
         
-        let personalName = profileFullLegalName || '';
-        let personalHandle = profileHandle || '';
-        let personalAvatar = profileAvatarUrl || null;
-        let personalBanner = profileCoverUrl || null;
-        let personalBio = profileBlurb || '';
-        let personalGenres = combinedGenres;
-        let personalTopSong = fullTopSong;
-        let personalTopSongUrl = finalTopSongUrl;
+        let personalName = profileFullLegalName || userProfile?.full_name || userProfile?.name || '';
+        let personalHandle = profileHandle || userProfile?.console_handle || userProfile?.handle || '';
+        let personalAvatar = profileAvatarUrl || userProfile?.avatar_url || userProfile?.avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null);
+        let personalBanner = profileCoverUrl || userProfile?.banner_url || userProfile?.banner || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_banner') : null);
+        let personalBio = profileBlurb || userProfile?.bio || '';
+        let personalGenres = combinedGenres.length > 0 ? combinedGenres : (userProfile?.genre_tags || userProfile?.genres || []);
+        let personalTopSong = fullTopSong || profileFavoriteSong || userProfile?.top_song_title || '';
+        let personalTopSongUrl = finalTopSongUrl || profileTopSongUrl || userProfile?.top_song_url || '';
 
         if (isProfessionalPortal) {
           // Use original userProfile / localStorage values to keep personal rows strictly untouched by professional details!

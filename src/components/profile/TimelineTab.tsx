@@ -27,6 +27,7 @@ import { tapeAudioEngine } from '../social/utils/tapeAudioEngine';
 import { awardSonicPoints } from '../../services/sonicFootprintService';
 import { formatPostTimestamp } from '../../utils/socialFeedUtils';
 import { savePostReaction, mergePostWithReactions, normalizeReactionCounts } from '../social/utils/reactionStore';
+import { isValidStorageOrImageUrl } from '../../services/storageService';
 
 export interface TimelinePost {
   id: string;
@@ -279,6 +280,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+  const [failedAvatars, setFailedAvatars] = useState<Record<string, boolean>>({});
   const [rsvpedEvents, setRsvpedEvents] = useState<Record<string, boolean>>({});
   const [pollVotes, setPollVotes] = useState<Record<string, { optionId: string; totalVotes: number; options: any[] }>>(() => {
     if (typeof window !== 'undefined') {
@@ -376,12 +378,42 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
       }));
     };
 
+    const handleAvatarSync = (e: any) => {
+      const detail = e.detail;
+      const newUrl = detail?.avatarUrl || detail?.avatar_url || detail?.logo_url || detail?.avatar;
+      if (!newUrl) return;
+      setFailedAvatars({});
+      setPosts(prev => prev.map(p => {
+        const raw = p as any;
+        const postAuthorId = raw.author_id || raw.profile_id || raw.user_id || raw.authorId || p.author?.id;
+        const isSelf = Boolean(
+          p.author?.isYou ||
+          raw.isYou ||
+          (selectedUserProfile?.id && postAuthorId === selectedUserProfile.id) ||
+          (detail.id && postAuthorId === detail.id)
+        );
+        if (isSelf) {
+          return {
+            ...p,
+            author: {
+              ...(p.author || {}),
+              name: p.author?.name || 'User',
+              avatar: newUrl
+            }
+          };
+        }
+        return p;
+      }));
+    };
+
     window.addEventListener('nexus_reaction_updated', handleReactionSync as EventListener);
     window.addEventListener('nexus_comment_added', handleCommentSync as EventListener);
+    window.addEventListener('nexus_avatar_updated', handleAvatarSync as EventListener);
 
     return () => {
       window.removeEventListener('nexus_reaction_updated', handleReactionSync as EventListener);
       window.removeEventListener('nexus_comment_added', handleCommentSync as EventListener);
+      window.removeEventListener('nexus_avatar_updated', handleAvatarSync as EventListener);
     };
   }, []);
 
@@ -444,8 +476,8 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
       nextUserReacts[reactionKey] = true;
       fullCurr[reactionKey as keyof typeof fullCurr] += 1;
 
-      // Award Sonic Footprint XP for signal reaction!
-      awardSonicPoints('signal_contributor', 2, `Reacted to scene transmission with ${reactionKey === 'hype' ? 'Flame 🔥' : reactionKey}`);
+      // Award Sonic Footprint XP for signal reaction (silently, without toast interruption)
+      awardSonicPoints('signal_contributor', 1, `Reacted to scene transmission with ${reactionKey === 'hype' ? 'Flame 🔥' : reactionKey}`, false);
     } else {
       nextUserReacts[reactionKey] = false;
       if (fullCurr[reactionKey as keyof typeof fullCurr] > 0) {
@@ -612,7 +644,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     }
 
     // 5. Award Sonic Footprint points!
-    awardSonicPoints('signal_contributor', 5, `Commented on scene transmission: "${draft.substring(0, 30)}${draft.length > 30 ? '...' : ''}"`);
+    awardSonicPoints('signal_contributor', 2, `Commented on scene transmission: "${draft.substring(0, 30)}${draft.length > 30 ? '...' : ''}"`);
 
     triggerNotification?.("💬 Comment published to transmission thread.");
   };
@@ -648,7 +680,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     setTimeout(() => setCopiedPostId(null), 2500);
 
     // Award Sonic Footprint points!
-    awardSonicPoints('signal_contributor', 3, `Shared scene transmission by ${post.author?.name || 'artist'}`);
+    awardSonicPoints('signal_contributor', 1, `Shared scene transmission by ${post.author?.name || 'artist'}`);
 
     triggerNotification?.("🔗 Signal link copied to clipboard!");
 
@@ -770,6 +802,22 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         ''
       ).toLowerCase();
 
+      const isPersonalTarget = Boolean(
+        selectedUserProfile?.isIndustryProPersonal === true ||
+        selectedUserProfile?.isPersonal === true ||
+        selectedUserProfile?.type === 'user' ||
+        targetWorkspace === 'industry_pro' ||
+        targetWorkspace === 'personal' ||
+        targetWorkspace === 'user' ||
+        targetWorkspace === 'fan_only' ||
+        targetWorkspace === 'fan' ||
+        (selectedUserProfile?.account_type && (
+          selectedUserProfile.account_type === 'industry_pro' || 
+          selectedUserProfile.account_type === 'fan_only' || 
+          selectedUserProfile.account_type === 'fan'
+        ))
+      );
+
       const isMatchingWorkspacePost = (item: any, postObj: any) => {
         const postWs = String(
           postObj.workspace_type ||
@@ -798,38 +846,101 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
           ''
         ).toLowerCase();
 
-        if (targetWorkspace.includes('promoter')) {
-          if (['band', 'creative', 'label', 'fan_only', 'personal'].includes(postWs)) return false;
-          if (postWs === 'promoter' || postRole.includes('promoter')) return true;
+        const isBandPost = (
+          postWs === 'band' ||
+          postWs === 'artist' ||
+          postObj.isBand === true ||
+          postObj.isBandProfile === true ||
+          postObj.author?.isBand === true ||
+          postRole === 'band' ||
+          postRole === 'artist' ||
+          postRole.includes('band') ||
+          postRole.includes('artist') ||
+          authorName.includes('virulent excision')
+        );
+
+        const isPromoterPost = (
+          postWs === 'promoter' ||
+          postWs === 'venue' ||
+          postObj.isPromoter === true ||
+          postObj.isPromoterProfile === true ||
+          postObj.author?.isPromoter === true ||
+          postRole.includes('promoter') ||
+          postRole.includes('venue') ||
+          authorName.includes('pure domination') ||
+          authorName.includes('nexus live') ||
+          authorName.includes('promotions') ||
+          authorName.includes('booking')
+        );
+
+        const isCreativePost = (
+          postWs === 'creative' ||
+          postWs === 'design' ||
+          postObj.isCreative === true ||
+          postObj.isCreativeProfile === true ||
+          postObj.author?.isCreative === true ||
+          postRole.includes('creative') ||
+          postRole.includes('designer') ||
+          postRole.includes('photographer') ||
+          postRole.includes('videographer') ||
+          authorName.includes('vortex graphics') ||
+          authorName.includes('graphics')
+        );
+
+        const isLabelPost = (
+          postWs === 'label' ||
+          postObj.isLabel === true ||
+          postObj.isLabelProfile === true ||
+          postObj.author?.isLabel === true ||
+          postRole.includes('label') ||
+          authorName.includes('records') ||
+          authorName.includes('record label')
+        );
+
+        // 1. If viewing Personal / Industry Pro / Fan Profile Card:
+        if (isPersonalTarget || targetWorkspace.includes('industry_pro') || targetWorkspace.includes('personal') || targetWorkspace.includes('fan') || targetWorkspace === 'user') {
+          // STRICTLY filter out any non-personal posts (band, promoter, creative, label)
+          if (isBandPost || isPromoterPost || isCreativePost || isLabelPost) {
+            return false;
+          }
+          // Accept personal posts
+          if (postWs === 'industry_pro' || postWs === 'personal' || postWs === 'user' || postWs === 'fan_only' || postWs === 'fan' || !postWs) {
+            return true;
+          }
+          return false;
+        }
+
+        // 2. If viewing Promoter Workspace:
+        if (targetWorkspace.includes('promoter') || targetWorkspace.includes('venue')) {
+          if (isBandPost || isCreativePost || isLabelPost) return false;
+          if (isPromoterPost) return true;
           if (selectedUserProfile?.promoter_metadata?.brand_name && authorName.includes(selectedUserProfile.promoter_metadata.brand_name.toLowerCase())) return true;
           if (targetName && authorName.includes(targetName)) return true;
-          return !postWs;
+          return postWs === 'promoter';
         }
 
+        // 3. If viewing Band / Artist Workspace:
         if (targetWorkspace.includes('band') || targetWorkspace.includes('artist')) {
-          if (['promoter', 'creative', 'label', 'fan_only', 'personal'].includes(postWs)) return false;
-          if (postWs === 'band' || postRole.includes('artist') || postRole.includes('band') || postObj.isBand || postObj.author?.isBand) return true;
+          if (isPromoterPost || isCreativePost || isLabelPost) return false;
+          if (isBandPost) return true;
           if (targetName && authorName.includes(targetName)) return true;
-          return !postWs;
+          return postWs === 'band';
         }
 
-        if (targetWorkspace.includes('creative')) {
-          if (['promoter', 'band', 'label', 'fan_only', 'personal'].includes(postWs)) return false;
-          if (postWs === 'creative' || postRole.includes('creative')) return true;
+        // 4. If viewing Creative Hub Workspace:
+        if (targetWorkspace.includes('creative') || targetWorkspace.includes('design')) {
+          if (isBandPost || isPromoterPost || isLabelPost) return false;
+          if (isCreativePost) return true;
           if (targetName && authorName.includes(targetName)) return true;
-          return !postWs;
+          return postWs === 'creative';
         }
 
+        // 5. If viewing Record Label Workspace:
         if (targetWorkspace.includes('label')) {
-          if (['promoter', 'band', 'creative', 'fan_only', 'personal'].includes(postWs)) return false;
-          if (postWs === 'label' || postRole.includes('label')) return true;
+          if (isBandPost || isPromoterPost || isCreativePost) return false;
+          if (isLabelPost) return true;
           if (targetName && authorName.includes(targetName)) return true;
-          return !postWs;
-        }
-
-        if (targetWorkspace.includes('fan') || targetWorkspace.includes('personal')) {
-          if (['promoter', 'band', 'creative', 'label'].includes(postWs)) return false;
-          return true;
+          return postWs === 'label';
         }
 
         return true;
@@ -894,26 +1005,29 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
           }
         }
 
-        const resolvedRawAvatar = 
-          (postObj.author?.avatar && !postObj.author.avatar.includes('ui-avatars.com') ? postObj.author.avatar : null) ||
-          (postObj.authorAvatar && !postObj.authorAvatar.includes('ui-avatars.com') ? postObj.authorAvatar : null) ||
-          (postObj.author?.avatar_url && !postObj.author.avatar_url.includes('ui-avatars.com') ? postObj.author.avatar_url : null) ||
-          (postObj.author?.logo_url && !postObj.author.logo_url.includes('ui-avatars.com') ? postObj.author.logo_url : null) ||
-          (postObj.avatar && !postObj.avatar.includes('ui-avatars.com') ? postObj.avatar : null) ||
-          (postObj.avatar_url && !postObj.avatar_url.includes('ui-avatars.com') ? postObj.avatar_url : null) ||
-          (postObj.profile_avatar && !postObj.profile_avatar.includes('ui-avatars.com') ? postObj.profile_avatar : null) ||
-          (postObj.logo_url && !postObj.logo_url.includes('ui-avatars.com') ? postObj.logo_url : null) ||
-          (item.avatar && !item.avatar.includes('ui-avatars.com') ? item.avatar : null) ||
-          (item.avatar_url && !item.avatar_url.includes('ui-avatars.com') ? item.avatar_url : null) ||
-          (item.author_avatar && !item.author_avatar.includes('ui-avatars.com') ? item.author_avatar : null) ||
-          (item.profile_avatar && !item.profile_avatar.includes('ui-avatars.com') ? item.profile_avatar : null) ||
-          (selectedUserProfile?.logo_url) ||
-          (selectedUserProfile?.avatar) ||
-          (selectedUserProfile?.avatar_url) ||
-          (selectedUserProfile?.profile_avatar) ||
-          (selectedUserProfile?.profile_image) ||
-          savedLocalAvatar ||
-          null;
+        const isSelfPost = Boolean(
+          isYou ||
+          (selectedUserProfile?.id && (item.profile_id === selectedUserProfile.id || item.author_id === selectedUserProfile.id || item.user_id === selectedUserProfile.id || postObj.profile_id === selectedUserProfile.id || postObj.author_id === selectedUserProfile.id || postObj.user_id === selectedUserProfile.id || postObj.author?.id === selectedUserProfile.id || postObj.authorId === selectedUserProfile.id)) ||
+          (selectedProfileName && (postObj.author?.name?.toLowerCase() === selectedProfileName.toLowerCase() || postObj.authorName?.toLowerCase() === selectedProfileName.toLowerCase()))
+        );
+
+        const activeSelfAvatar = selectedUserProfile?.avatar_url || selectedUserProfile?.avatar || selectedUserProfile?.logo_url || savedLocalAvatar;
+
+        const resolvedRawAvatar = (isSelfPost && activeSelfAvatar && isValidStorageOrImageUrl(activeSelfAvatar))
+          ? activeSelfAvatar
+          : ((postObj.author?.avatar && isValidStorageOrImageUrl(postObj.author.avatar)) ? postObj.author.avatar : null) ||
+            ((postObj.authorAvatar && isValidStorageOrImageUrl(postObj.authorAvatar)) ? postObj.authorAvatar : null) ||
+            ((postObj.author?.avatar_url && isValidStorageOrImageUrl(postObj.author.avatar_url)) ? postObj.author.avatar_url : null) ||
+            ((postObj.author?.logo_url && isValidStorageOrImageUrl(postObj.author.logo_url)) ? postObj.author.logo_url : null) ||
+            ((postObj.avatar && isValidStorageOrImageUrl(postObj.avatar)) ? postObj.avatar : null) ||
+            ((postObj.avatar_url && isValidStorageOrImageUrl(postObj.avatar_url)) ? postObj.avatar_url : null) ||
+            ((item.avatar && isValidStorageOrImageUrl(item.avatar)) ? item.avatar : null) ||
+            ((item.avatar_url && isValidStorageOrImageUrl(item.avatar_url)) ? item.avatar_url : null) ||
+            ((selectedUserProfile?.avatar_url && isValidStorageOrImageUrl(selectedUserProfile.avatar_url)) ? selectedUserProfile.avatar_url : null) ||
+            ((selectedUserProfile?.avatar && isValidStorageOrImageUrl(selectedUserProfile.avatar)) ? selectedUserProfile.avatar : null) ||
+            ((selectedUserProfile?.logo_url && isValidStorageOrImageUrl(selectedUserProfile.logo_url)) ? selectedUserProfile.logo_url : null) ||
+            (savedLocalAvatar && isValidStorageOrImageUrl(savedLocalAvatar) ? savedLocalAvatar : null) ||
+            null;
 
         const resolvedPollData = postObj.pollData || item.poll_data || postObj.poll_data || item.pollData || null;
 
@@ -1226,18 +1340,13 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                         }}
                       >
                         <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-zinc-950 flex items-center justify-center text-xs font-black uppercase overflow-hidden border border-zinc-950">
-                          {post.author?.avatar ? (
+                          {isValidStorageOrImageUrl(post.author?.avatar) && !failedAvatars[post.id] ? (
                             <img 
                               src={post.author?.avatar} 
                               alt="" 
                               referrerPolicy="no-referrer"
-                              onError={(e) => {
-                                const fallback = selectedUserProfile?.logo_url || selectedUserProfile?.avatar || selectedUserProfile?.avatar_url;
-                                if (fallback && e.currentTarget.src !== fallback) {
-                                  e.currentTarget.src = fallback;
-                                } else {
-                                  e.currentTarget.style.display = 'none';
-                                }
+                              onError={() => {
+                                setFailedAvatars((prev) => ({ ...prev, [post.id]: true }));
                               }}
                               className="w-full h-full object-cover" 
                             />

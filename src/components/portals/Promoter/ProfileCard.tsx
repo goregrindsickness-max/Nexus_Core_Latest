@@ -1237,7 +1237,22 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           )}
                         </button>
 
-                        {/* 2. Message Button */}
+                        {/* 2. EVENTS Button (Upcoming shows, tours, festivals) */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setShowEventsModal(true);
+                            triggerNotification?.("⚡ Loading upcoming events & festival schedule...");
+                          }}
+                          className="w-full py-2.5 px-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-[0_0_15px_rgba(234,179,8,0.25)] hover:shadow-[0_0_20px_rgba(234,179,8,0.4)] cursor-pointer active:scale-95 border border-yellow-300/40"
+                          title="Upcoming shows, tours, and festivals"
+                        >
+                          <Calendar className="w-3.5 h-3.5 text-black" /> EVENTS
+                        </button>
+
+                        {/* 3. Message Button (Full width col-span-2 with Purple Glow) */}
                         <button
                           onClick={async (e) => {
                             e.stopPropagation();
@@ -1275,25 +1290,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             );
                             openFloatingChat?.(targetId, effTarget);
                           }}
-                          className="w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-colors uppercase font-mono cursor-pointer"
+                          className="col-span-2 w-full py-2.5 px-4 bg-gradient-to-r from-purple-950/60 via-[#180a29] to-purple-950/60 hover:from-purple-900/70 hover:to-purple-900/70 border border-purple-500/50 hover:border-purple-400 text-purple-200 hover:text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all uppercase font-mono cursor-pointer shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:shadow-[0_0_22px_rgba(168,85,247,0.55)] active:scale-98"
                           title="Secure Direct Message"
                         >
-                          <MessageSquare className="w-3.5 h-3.5" /> Message
-                        </button>
-
-                        {/* 3. EVENTS Button (Upcoming shows, tours, festivals) */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            setShowEventsModal(true);
-                            triggerNotification?.("⚡ Loading upcoming events & festival schedule...");
-                          }}
-                          className="w-full py-2.5 px-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-[0_0_15px_rgba(234,179,8,0.25)] hover:shadow-[0_0_20px_rgba(234,179,8,0.4)] cursor-pointer active:scale-95 border border-yellow-300/40"
-                          title="Upcoming shows, tours, and festivals"
-                        >
-                          <Calendar className="w-3.5 h-3.5 text-black" /> EVENTS
+                          <MessageSquare className="w-4 h-4 text-purple-400" /> Message
                         </button>
 
                         {/* 4. ARCHIVES Button (All past shows & historic festivals) */}
@@ -1305,7 +1305,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             setShowArchivesModal(true);
                             triggerNotification?.("📜 Accessing promoter historical show archives...");
                           }}
-                          className="w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-yellow-500/40 text-yellow-400 hover:text-yellow-300 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-md cursor-pointer active:scale-95"
+                          className="col-span-2 w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-yellow-500/40 text-yellow-400 hover:text-yellow-300 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-md cursor-pointer active:scale-95"
                           title="All past shows and historic festival archives"
                         >
                           <History className="w-3.5 h-3.5 text-yellow-400" /> ARCHIVES
@@ -1970,6 +1970,84 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   </div>
                 )}
 
+                {/* Positioned directly under Associated Entities */}
+                                   {/* Glowing Scrolling Marquee Text Box for Live Updates */}
+                  <div className="mt-3.5 space-y-1">
+                    <div className="flex items-center justify-between px-0.5">
+                      <span className="text-[10px] font-bold text-yellow-400 font-mono tracking-wider uppercase flex items-center gap-1.5">
+                        <span className="relative flex h-2 w-2 shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                        </span>
+                        📢 LIVE UPDATE
+                      </span>
+                      {selectedUserProfile.isYou && !isEditingTicker && (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingTicker(true)}
+                          title="Edit Marquee Update"
+                          className="px-2 py-0.5 bg-yellow-950/60 hover:bg-yellow-900/80 border border-yellow-800/60 text-yellow-300 hover:text-white rounded-md transition-all shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-semibold group"
+                        >
+                          <Pencil className="w-3 h-3 text-yellow-400 group-hover:text-yellow-300" /> Edit Update
+                        </button>
+                      )}
+                    </div>
+
+                    {isEditingTicker ? (
+                      <div className="bg-zinc-950/90 border border-yellow-500/50 rounded-xl p-3 space-y-2 shadow-[0_0_15px_rgba(234,179,8,0.15)] relative">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9.5px] font-mono text-yellow-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                            ✍️ EDIT TICKER
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-mono text-zinc-400 font-bold">
+                              {tickerUpdateText.length}/200
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveTickerUpdate(tickerUpdateText)}
+                              className="px-2.5 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-400/50 text-yellow-300 hover:text-yellow-200 text-[9.5px] font-mono font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                            >
+                              <Check className="w-3 h-3" /> Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingTicker(false)}
+                              className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 text-[9.5px] font-mono font-bold rounded-lg transition-all cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                        <textarea
+                          maxLength={200}
+                          value={tickerUpdateText}
+                          onChange={(e) => setTickerUpdateText(e.target.value.slice(0, 200))}
+                          placeholder="Post a quick live update, gig news, tape drop, or announcement (max 200 chars)..."
+                          className="w-full bg-black/80 border border-zinc-800 focus:border-yellow-400 rounded-lg p-2.5 text-xs text-yellow-200 font-mono tracking-wide focus:outline-none focus:ring-1 focus:ring-yellow-400/30 resize-none"
+                          rows={2.5}
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex items-center border rounded-xl overflow-hidden bg-yellow-950/20 border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.15)] py-2.5 px-1 relative group/marquee cursor-default">
+                        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
+                        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
+                        <div className="w-full relative flex items-center overflow-hidden">
+                          <div className="flex whitespace-nowrap animate-[marquee_28s_linear_infinite] group-hover/marquee:[animation-play-state:paused] items-center">
+                            <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-yellow-300 px-6 drop-shadow-[0_0_6px_rgba(234,179,8,0.6)] flex items-center gap-2">
+                              ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
+                            </span>
+                            <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-yellow-300 px-6 drop-shadow-[0_0_6px_rgba(234,179,8,0.6)] flex items-center gap-2">
+                              ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+
                 {/* Label action buttons: Message and Submit EPK */}
                 {(selectedUserProfile?.role || '').toLowerCase().includes('label') && (
                   <div className="mt-4 grid grid-cols-2 gap-2 w-full">
@@ -2141,82 +2219,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                      </div>
                    </div>
                  )}
-
-                                   {/* Glowing Scrolling Marquee Text Box for Live Updates */}
-                  <div className="mt-3.5 space-y-1">
-                    <div className="flex items-center justify-between px-0.5">
-                      <span className="text-[10px] font-bold text-yellow-400 font-mono tracking-wider uppercase flex items-center gap-1.5">
-                        <span className="relative flex h-2 w-2 shrink-0">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
-                        </span>
-                        📢 LIVE UPDATE
-                      </span>
-                      {selectedUserProfile.isYou && !isEditingTicker && (
-                        <button
-                          type="button"
-                          onClick={() => setIsEditingTicker(true)}
-                          title="Edit Marquee Update"
-                          className="px-2 py-0.5 bg-yellow-950/60 hover:bg-yellow-900/80 border border-yellow-800/60 text-yellow-300 hover:text-white rounded-md transition-all shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-semibold group"
-                        >
-                          <Pencil className="w-3 h-3 text-yellow-400 group-hover:text-yellow-300" /> Edit Update
-                        </button>
-                      )}
-                    </div>
-
-                    {isEditingTicker ? (
-                      <div className="bg-zinc-950/90 border border-yellow-500/50 rounded-xl p-3 space-y-2 shadow-[0_0_15px_rgba(234,179,8,0.15)] relative">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9.5px] font-mono text-yellow-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                            ✍️ EDIT TICKER
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-mono text-zinc-400 font-bold">
-                              {tickerUpdateText.length}/200
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleSaveTickerUpdate(tickerUpdateText)}
-                              className="px-2.5 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-400/50 text-yellow-300 hover:text-yellow-200 text-[9.5px] font-mono font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer"
-                            >
-                              <Check className="w-3 h-3" /> Save
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setIsEditingTicker(false)}
-                              className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 text-[9.5px] font-mono font-bold rounded-lg transition-all cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                        <textarea
-                          maxLength={200}
-                          value={tickerUpdateText}
-                          onChange={(e) => setTickerUpdateText(e.target.value.slice(0, 200))}
-                          placeholder="Post a quick live update, gig news, tape drop, or announcement (max 200 chars)..."
-                          className="w-full bg-black/80 border border-zinc-800 focus:border-yellow-400 rounded-lg p-2.5 text-xs text-yellow-200 font-mono tracking-wide focus:outline-none focus:ring-1 focus:ring-yellow-400/30 resize-none"
-                          rows={2.5}
-                          autoFocus
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex items-center border rounded-xl overflow-hidden bg-yellow-950/20 border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.15)] py-2.5 px-1 relative group/marquee cursor-default">
-                        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
-                        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
-                        <div className="w-full relative flex items-center overflow-hidden">
-                          <div className="flex whitespace-nowrap animate-[marquee_28s_linear_infinite] group-hover/marquee:[animation-play-state:paused] items-center">
-                            <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-yellow-300 px-6 drop-shadow-[0_0_6px_rgba(234,179,8,0.6)] flex items-center gap-2">
-                              ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
-                            </span>
-                            <span className="text-[10.5px] font-mono font-bold tracking-widest uppercase text-yellow-300 px-6 drop-shadow-[0_0_6px_rgba(234,179,8,0.6)] flex items-center gap-2">
-                              ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
 
                   {/* Stats Ledger Row */}
                 {(() => {
@@ -3019,6 +3021,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                     <div className="space-y-3">
                       {[
+                        {
+                          year: 2026,
+                          title: "Vader - Reign Forever Kingdom of Blood",
+                          lineup: "Vader",
+                          venue: "Haltom Theater, Haltom City TX",
+                          date: "SEP 24, 2026",
+                          milestone: "Texas Tour Headline Assault • 800 Capacity",
+                          thumbnail: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=200"
+                        },
                         {
                           year: 2024,
                           title: "Chicago Domination Fest 2024 (10-Year Anniversary Finale)",

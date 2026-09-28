@@ -1631,10 +1631,18 @@ export default function ShowsView({
     // Tab Filter
     const todayStr = new Date().toISOString().split('T')[0];
     if (filterTab === 'upcoming') {
-      // Strictly public/announced upcoming dates (retroactively hides embargoed tour dates)
-      result = result.filter(s => s.date >= todayStr && !isShowEmbargoed(s));
+      // Strictly public/announced upcoming dates (retroactively hides embargoed tour dates and past/archived dates)
+      result = result.filter(s => {
+        const isPast = s.date && String(s.date).split('T')[0] < todayStr;
+        const isArchived = s.additional_notes && String(s.additional_notes).includes('"archived":true');
+        return !isPast && !isArchived && !isShowEmbargoed(s);
+      });
     } else if (filterTab === 'past') {
-      result = result.filter(s => s.date < todayStr);
+      result = result.filter(s => {
+        const isPast = s.date && String(s.date).split('T')[0] < todayStr;
+        const isArchived = s.additional_notes && String(s.additional_notes).includes('"archived":true');
+        return isPast || isArchived;
+      });
     } else if (filterTab === 'embargoed') {
       // Embargoed & confidential routing only
       result = result.filter(s => isShowEmbargoed(s));
@@ -3173,7 +3181,7 @@ export default function ShowsView({
                   filterTab === 'past' ? 'bg-[#00ffcc] text-black font-extrabold' : 'text-zinc-450 hover:text-white'
                 }`}
               >
-                Past
+                Past / Archives
               </button>
               <button
                 onClick={() => setFilterTab('embargoed')}

@@ -598,7 +598,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       );
 
       const isYouMatch = Boolean(
-        (base?.isYou || selectedUserProfile?.isYou) && (newAvatar || newBanner)
+        (base?.isYou || selectedUserProfile?.isYou || (userProfile?.id && (base?.id === userProfile.id || selectedUserProfile?.id === userProfile.id))) && (newAvatar || newBanner)
       );
 
       if (isIdMatch || isNameMatch || isYouMatch) {
@@ -641,11 +641,13 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
     window.addEventListener('nexus_community_bands_updated', handleBandUpdate);
     window.addEventListener('nexus_avatar_updated', handleBandUpdate);
+    window.addEventListener('nexus_cover_updated', handleBandUpdate);
     window.addEventListener('nexus_band_updated', handleBandUpdate);
     window.addEventListener('community_band_saved', handleBandUpdate);
     return () => {
       window.removeEventListener('nexus_community_bands_updated', handleBandUpdate);
       window.removeEventListener('nexus_avatar_updated', handleBandUpdate);
+      window.removeEventListener('nexus_cover_updated', handleBandUpdate);
       window.removeEventListener('nexus_band_updated', handleBandUpdate);
       window.removeEventListener('community_band_saved', handleBandUpdate);
     };
@@ -661,14 +663,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const isExplicitPersonal = Boolean(
     baseTarget?.isIndustryProPersonal === true ||
     baseTarget?.isPersonal === true ||
-    (baseTarget?.isYou && baseTarget?.isBandProfile !== true && (portalRole === 'fan_only' || userProfile?.account_type === 'fan_only' || targetRole.includes('fan'))) ||
+    (baseTarget?.isYou && (portalRole === 'fan_only' || portalRole === 'industry_pro' || userProfile?.account_type === 'fan_only' || userProfile?.account_type === 'fan' || targetRole.includes('fan'))) ||
     baseTarget?.isBandProfile === false ||
     baseTarget?.account_type === 'fan' ||
     baseTarget?.account_type === 'fan_only' ||
+    baseTarget?.account_type === 'industry_pro' ||
     targetRole.includes('fan') ||
     targetRole.includes('listener') ||
     targetRole.includes('supporter') ||
-    (baseTarget?.type === 'user' && !baseTarget?.isBandProfile && !baseTarget?.band_name && !baseTarget?.bandName)
+    (baseTarget?.type === 'user' && !baseTarget?.isBandProfile && (portalRole !== 'band' || !baseTarget?.band_name))
   );
 
   let localSavedBand: any = null;
@@ -685,10 +688,13 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     const directMatch = communityArchiveMatch || (candidateName ? (communityBandManager.findMatch(candidateName) || communityBandManager.findByName(candidateName)) : null);
     if (!fetchedBandData && !directMatch && !(isOwnBand && localSavedBand)) return null;
 
-    const rawLogo = fetchedBandData?.logo_url || fetchedBandData?.avatar_url || (isOwnBand ? localSavedBand?.logo_url : null) || directMatch?.logo_url || directMatch?.avatar_url;
-    const rawAvatar = fetchedBandData?.avatar_url || fetchedBandData?.logo_url || (isOwnBand ? localSavedBand?.avatar_url : null) || directMatch?.avatar_url || directMatch?.logo_url;
+    const customUserLogo = isOwnBand ? (userProfile?.band_logo || userProfile?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null)) : null;
+    const rawLogo = customUserLogo || fetchedBandData?.logo_url || fetchedBandData?.avatar_url || (isOwnBand ? localSavedBand?.logo_url : null) || directMatch?.logo_url || directMatch?.avatar_url;
+    const rawAvatar = customUserLogo || fetchedBandData?.avatar_url || fetchedBandData?.logo_url || (isOwnBand ? localSavedBand?.avatar_url : null) || directMatch?.avatar_url || directMatch?.logo_url;
 
-    let rawCover = fetchedBandData?.cover_url || fetchedBandData?.banner_url;
+    const targetBandUUID = userProfile?.band_id || fetchedBandData?.id || '';
+    const customUserCover = isOwnBand ? ((typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_core_band_cover_' + targetBandUUID)) : null) || userProfile?.band_cover || userProfile?.banner_url) : null;
+    let rawCover = customUserCover || fetchedBandData?.cover_url || fetchedBandData?.banner_url;
     if ((!rawCover || (typeof rawCover === 'string' && rawCover.includes('unsplash'))) && (directMatch?.cover_url || directMatch?.banner_url)) {
       rawCover = directMatch.cover_url || directMatch.banner_url;
     }
@@ -796,6 +802,26 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     );
   })();
 
+  const isSelfTarget = Boolean(
+    baseTarget.isYou ||
+    selectedUserProfile?.isYou ||
+    (userProfile?.id && (selectedUserProfile?.id === userProfile.id || baseTarget.id === userProfile.id)) ||
+    (userProfile?.email && (selectedUserProfile?.email === userProfile.email || baseTarget.email === userProfile.email)) ||
+    (baseTarget.name && String(baseTarget.name).toLowerCase().includes('goregrinder')) ||
+    (baseTarget.name && String(baseTarget.name).toLowerCase().includes('miguel'))
+  );
+
+  const localStoredAvatar = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar') || localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_band_logo')) : null;
+  const localStoredBanner = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner') || localStorage.getItem('nexus_promoter_cover') || localStorage.getItem('nexus_band_cover')) : null;
+
+  const liveUserAvatar = isSelfTarget
+    ? (localStoredAvatar || (userProfile as any)?.profileAvatarUrl || userProfile?.avatar_url || userProfile?.avatar || (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || fetchedProfileData?.avatar_url || fetchedProfileData?.avatar || baseTarget.avatar_url || baseTarget.avatar)
+    : (fetchedProfileData?.avatar_url || fetchedProfileData?.avatar || baseTarget.avatar_url || baseTarget.avatar);
+
+  const liveUserBanner = isSelfTarget
+    ? (localStoredBanner || (userProfile as any)?.profileCoverUrl || userProfile?.banner_url || userProfile?.banner || userProfile?.cover_url || (userProfile as any)?.promoter_cover_image || userProfile?.promoter_metadata?.banner_url || fetchedProfileData?.banner_url || fetchedProfileData?.cover_url || baseTarget.banner_url || baseTarget.cover_url || baseTarget.banner)
+    : (fetchedProfileData?.banner_url || fetchedProfileData?.cover_url || baseTarget.banner_url || baseTarget.cover_url || baseTarget.banner);
+
   const effTarget = {
     ...baseTarget,
     ...(fetchedProfileData ? {
@@ -816,8 +842,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       homebase: fetchedProfileData.homebase || baseTarget.homebase,
       location: formatLocationDisplay(fetchedProfileData) || baseTarget.location,
       bio: isBandTarget ? (resolvedBandBio || '') : (fetchedProfileData?.bio || baseTarget?.bio || ''),
-      avatar: isBandTarget && rawResolvedBandLogo ? rawResolvedBandLogo : (fetchedProfileData.avatar_url || fetchedProfileData.avatar || baseTarget.avatar),
-      avatar_url: isBandTarget && rawResolvedBandLogo ? rawResolvedBandLogo : (fetchedProfileData.avatar_url || fetchedProfileData.avatar || baseTarget.avatar_url),
+      avatar: isBandTarget && rawResolvedBandLogo ? rawResolvedBandLogo : liveUserAvatar,
+      avatar_url: isBandTarget && rawResolvedBandLogo ? rawResolvedBandLogo : liveUserAvatar,
       logo_url: isBandTarget ? (rawResolvedBandLogo || baseTarget?.logo_url) : baseTarget?.logo_url,
       top_song_url: fetchedProfileData.top_song_url !== undefined && fetchedProfileData.top_song_url !== null && fetchedProfileData.top_song_url !== '' ? fetchedProfileData.top_song_url : baseTarget?.top_song_url,
       top_song_title: fetchedProfileData.top_song_title || fetchedProfileData.favoriteSong || baseTarget?.top_song_title || baseTarget?.favoriteSong,
@@ -828,11 +854,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     ...(bData ? {
       name: isBandTarget ? (bData.band_name || bData.name || baseTarget.name) : (fetchedProfileData?.full_name || fetchedProfileData?.name || baseTarget.name),
       band_name: bData.band_name || bData.name || baseTarget.band_name,
-      avatar: isBandTarget ? (bData.logo_url || bData.avatar_url || baseTarget.avatar || baseTarget.avatar_url) : (fetchedProfileData?.avatar_url || fetchedProfileData?.avatar || baseTarget.avatar),
-      avatar_url: isBandTarget ? (bData.logo_url || bData.avatar_url || baseTarget.avatar_url || baseTarget.avatar) : (fetchedProfileData?.avatar_url || fetchedProfileData?.avatar || baseTarget.avatar_url),
-      banner: isBandTarget ? (bData.cover_url || bData.banner_url || baseTarget.banner || baseTarget.banner_url) : (fetchedProfileData?.banner_url || fetchedProfileData?.banner || baseTarget.banner),
-      banner_url: isBandTarget ? (bData.cover_url || bData.banner_url || baseTarget.banner_url || baseTarget.banner) : (fetchedProfileData?.banner_url || fetchedProfileData?.banner || baseTarget.banner_url),
-      cover_url: isBandTarget ? (bData.cover_url || baseTarget.cover_url) : (fetchedProfileData?.cover_url || baseTarget.cover_url),
+      avatar: (isBandTarget && !isSelfTarget) ? (bData.logo_url || bData.avatar_url || baseTarget.avatar || baseTarget.avatar_url) : (liveUserAvatar || bData.logo_url || bData.avatar_url),
+      avatar_url: (isBandTarget && !isSelfTarget) ? (bData.logo_url || bData.avatar_url || baseTarget.avatar_url || baseTarget.avatar) : (liveUserAvatar || bData.logo_url || bData.avatar_url),
+      banner: (isBandTarget && !isSelfTarget) 
+        ? (bData.cover_url || bData.banner_url || baseTarget.banner || baseTarget.banner_url) 
+        : (liveUserBanner || bData.cover_url || bData.banner_url || baseTarget.banner),
+      banner_url: (isBandTarget && !isSelfTarget) 
+        ? (bData.cover_url || bData.banner_url || baseTarget.banner_url || baseTarget.banner) 
+        : (liveUserBanner || bData.cover_url || bData.banner_url || baseTarget.banner_url),
+      cover_url: (isBandTarget && !isSelfTarget) 
+        ? (bData.cover_url || baseTarget.cover_url) 
+        : (liveUserBanner || bData.cover_url || baseTarget.cover_url),
       logo_url: isBandTarget ? (bData.logo_url || baseTarget.logo_url) : baseTarget.logo_url,
       city: isBandTarget ? (bData.city || baseTarget.city) : (fetchedProfileData?.city || baseTarget.city),
       state_province: isBandTarget ? (bData.state_province || baseTarget.state_province) : (fetchedProfileData?.state_province || baseTarget.state_province),
@@ -862,6 +894,11 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       booking_phone: bData.booking_phone || baseTarget.booking_phone,
     } : {
       name: isBandTarget && rawResolvedBandName ? rawResolvedBandName : (baseTarget?.name || baseTarget?.legalName || baseTarget?.full_name || 'User'),
+      avatar: (isBandTarget && !isSelfTarget && rawResolvedBandLogo) ? rawResolvedBandLogo : liveUserAvatar,
+      avatar_url: (isBandTarget && !isSelfTarget && rawResolvedBandLogo) ? rawResolvedBandLogo : liveUserAvatar,
+      banner: (isBandTarget && !isSelfTarget) ? baseTarget.banner : liveUserBanner,
+      banner_url: (isBandTarget && !isSelfTarget) ? baseTarget.banner_url : liveUserBanner,
+      cover_url: (isBandTarget && !isSelfTarget) ? baseTarget.cover_url : liveUserBanner,
       console_handle: isBandTarget && resolvedBandHandle 
         ? resolvedBandHandle 
         : resolvedPersonalHandle,
@@ -1147,10 +1184,27 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     >
                       {(() => {
                         const activeAvatar = effTarget.logo_url || effTarget.avatar_url || effTarget.avatar || selectedUserProfile.logo_url || selectedUserProfile.avatar_url || selectedUserProfile.avatar;
+                        const fallbackInitials = isBandTarget ? (effTarget.band_name || effTarget.name || 'B').slice(0, 2).toUpperCase() : (effTarget.full_name || effTarget.name || 'U').slice(0, 2).toUpperCase();
                         return activeAvatar && typeof activeAvatar === 'string' && (activeAvatar.startsWith('http') || activeAvatar.startsWith('data:image') || activeAvatar.startsWith('/')) ? (
-                          <img src={activeAvatar} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                          <img 
+                            src={activeAvatar} 
+                            className="w-full h-full object-cover" 
+                            alt="" 
+                            referrerPolicy="no-referrer" 
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.style.display = 'none';
+                              const parent = e.currentTarget.parentElement;
+                              if (parent && !parent.querySelector('.avatar-fallback-initials')) {
+                                const span = document.createElement('span');
+                                span.className = 'font-bold avatar-fallback-initials';
+                                span.innerText = fallbackInitials;
+                                parent.appendChild(span);
+                              }
+                            }}
+                          />
                         ) : (
-                          <span className="font-bold">{activeAvatar || (isBandTarget ? (effTarget.band_name || effTarget.name || 'B').slice(0, 2).toUpperCase() : 'U')}</span>
+                          <span className="font-bold">{activeAvatar || fallbackInitials}</span>
                         );
                       })()}
                       
@@ -1480,7 +1534,26 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           )}
                         </button>
 
-                        {/* 2. Message Button */}
+                        {/* 2. Events Button (paired side-by-side with Follow on Row 1) */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowEventsModal(true);
+                            triggerNotification?.(isTargetPromoter ? "⚡ Loading upcoming events & festival schedule..." : "📅 Opening upcoming shows list...");
+                          }}
+                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all uppercase font-mono cursor-pointer active:scale-95 ${
+                            isTargetPromoter
+                              ? "bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black shadow-[0_0_15px_rgba(234,179,8,0.25)] hover:shadow-[0_0_20px_rgba(234,179,8,0.4)] border border-yellow-300/40"
+                              : "bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-yellow-500/40 text-yellow-400 hover:text-yellow-300 shadow-md"
+                          }`}
+                          title="Upcoming shows, tours, and festivals"
+                        >
+                          <Calendar className={`w-3.5 h-3.5 ${isTargetPromoter ? 'text-black' : 'text-yellow-400'}`} /> EVENTS
+                        </button>
+
+                        {/* 3. Message Button (Full width col-span-2 with Purple Glow) */}
                         <button
                           onClick={async (e) => {
                             e.stopPropagation();
@@ -1518,60 +1591,30 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             );
                             openFloatingChat?.(targetId, effTarget);
                           }}
-                          className="w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-colors uppercase font-mono cursor-pointer"
+                          className="col-span-2 w-full py-2.5 px-4 bg-gradient-to-r from-purple-950/60 via-[#180a29] to-purple-950/60 hover:from-purple-900/70 hover:to-purple-900/70 border border-purple-500/50 hover:border-purple-400 text-purple-200 hover:text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all uppercase font-mono cursor-pointer shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:shadow-[0_0_22px_rgba(168,85,247,0.55)] active:scale-98"
                           title="Secure Direct Message"
                         >
-                          <MessageSquare className="w-3.5 h-3.5" /> Message
+                          <MessageSquare className="w-4 h-4 text-purple-400" /> Message
                         </button>
 
-                        {/* 3. Promoter: EVENTS Button (Upcoming shows, tours, festivals) */}
+                        {/* 4. Promoter: ARCHIVES Button */}
                         {isTargetPromoter && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                setShowEventsModal(true);
-                                triggerNotification?.("⚡ Loading upcoming events & festival schedule...");
-                              }}
-                              className="w-full py-2.5 px-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-[0_0_15px_rgba(234,179,8,0.25)] hover:shadow-[0_0_20px_rgba(234,179,8,0.4)] cursor-pointer active:scale-95 border border-yellow-300/40"
-                              title="Upcoming shows, tours, and festivals"
-                            >
-                              <Calendar className="w-3.5 h-3.5 text-black" /> EVENTS
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                setShowArchivesModal(true);
-                                triggerNotification?.("📜 Accessing promoter historical show archives...");
-                              }}
-                              className="w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-yellow-500/40 text-yellow-400 hover:text-yellow-300 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-md cursor-pointer active:scale-95"
-                              title="All past shows and historic festival archives"
-                            >
-                              <History className="w-3.5 h-3.5 text-yellow-400" /> ARCHIVES
-                            </button>
-                          </>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              setShowArchivesModal(true);
+                              triggerNotification?.("📜 Accessing promoter historical show archives...");
+                            }}
+                            className={`${showStorefront ? 'col-span-1' : 'col-span-2'} w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-yellow-500/40 text-yellow-400 hover:text-yellow-300 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-md cursor-pointer active:scale-95`}
+                            title="All past shows and historic festival archives"
+                          >
+                            <History className="w-3.5 h-3.5 text-yellow-400" /> ARCHIVES
+                          </button>
                         )}
 
-                        {/* 3. Events Button */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setShowEventsModal(true);
-                            triggerNotification?.(`📅 Opening upcoming shows list...`);
-                          }}
-                          className="w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-yellow-500/40 text-yellow-400 hover:text-yellow-300 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-md cursor-pointer active:scale-95"
-                        >
-                          <Calendar className="w-3.5 h-3.5 text-yellow-400" /> EVENTS
-                        </button>
-
-                        {/* 4. Storefront Button (Non-promoter) */}
+                        {/* 5. Storefront Button (Non-promoter) */}
                         {showStorefront && (
                           <button
                             type="button"
@@ -1584,7 +1627,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               setIsIsolatedStorefrontOpen(true);
                               triggerNotification?.(`🛒 Opening ${targetBandName}'s Official Storefront...`);
                             }}
-                            className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-500 text-white text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-colors uppercase font-mono shadow-md cursor-pointer"
+                            className={`${isTargetPromoter ? 'col-span-1' : 'col-span-2'} w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-500 text-white text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-colors uppercase font-mono shadow-md cursor-pointer`}
                           >
                             <ShoppingCart className="w-3.5 h-3.5" /> Storefront
                           </button>
@@ -2429,6 +2472,111 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   </div>
                 )}
 
+                {/* Glowing Scrolling Marquee Text Box for Live Updates (Positioned directly under Associated Entities) */}
+                {(() => {
+                  const isTargetPromoter = Boolean(
+                    effTarget?.isPromoterProfile ||
+                    effTarget?.type === 'promoter' ||
+                    effTarget?.account_type === 'promoter' ||
+                    effTarget?.portalRole === 'promoter' ||
+                    (effTarget?.role || '').toLowerCase().includes('promoter') ||
+                    (effTarget?.role || '').toLowerCase().includes('venue')
+                  );
+
+                  const tickerColorClass = isTargetPromoter ? 'text-yellow-400' : 'text-cyan-400';
+                  const tickerBgPing = isTargetPromoter ? 'bg-yellow-400' : 'bg-cyan-400';
+                  const tickerBgDot = isTargetPromoter ? 'bg-yellow-500' : 'bg-cyan-500';
+                  const editBtnClass = isTargetPromoter 
+                    ? 'bg-yellow-950/60 hover:bg-yellow-900/80 border-yellow-800/60 text-yellow-300' 
+                    : 'bg-cyan-950/60 hover:bg-cyan-900/80 border-cyan-800/60 text-cyan-300';
+                  const editBoxBorder = isTargetPromoter 
+                    ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.15)]' 
+                    : 'border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)]';
+                  const marqueeContainer = isTargetPromoter
+                    ? 'bg-yellow-950/20 border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.15)]'
+                    : 'bg-cyan-950/20 border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.15)]';
+                  const marqueeTextClass = isTargetPromoter
+                    ? 'text-yellow-300 drop-shadow-[0_0_6px_rgba(234,179,8,0.6)]'
+                    : 'text-cyan-300 drop-shadow-[0_0_6px_rgba(6,182,212,0.6)]';
+
+                  return (
+                    <div className="mt-3.5 space-y-1">
+                      <div className="flex items-center justify-between px-0.5">
+                        <span className={`text-[10px] font-bold ${tickerColorClass} font-mono tracking-wider uppercase flex items-center gap-1.5`}>
+                          <span className="relative flex h-2 w-2 shrink-0">
+                            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${tickerBgPing} opacity-75`}></span>
+                            <span className={`relative inline-flex rounded-full h-2 w-2 ${tickerBgDot}`}></span>
+                          </span>
+                          📢 LIVE UPDATE
+                        </span>
+                        {selectedUserProfile.isYou && !isEditingTicker && (
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingTicker(true)}
+                            title="Edit Marquee Update"
+                            className={`px-2 py-0.5 ${editBtnClass} hover:text-white rounded-md transition-all shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-semibold group`}
+                          >
+                            <Pencil className={`w-3 h-3 ${tickerColorClass} group-hover:text-white`} /> Edit Update
+                          </button>
+                        )}
+                      </div>
+
+                      {isEditingTicker ? (
+                        <div className={`bg-zinc-950/90 border ${editBoxBorder} rounded-xl p-3 space-y-2 relative`}>
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[9.5px] font-mono ${tickerColorClass} font-bold uppercase tracking-wider flex items-center gap-1`}>
+                              ✍️ EDIT TICKER
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] font-mono text-zinc-400 font-bold">
+                                {tickerUpdateText.length}/200
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveTickerUpdate(tickerUpdateText)}
+                                className={`px-2.5 py-1 ${isTargetPromoter ? 'bg-yellow-500/20 hover:bg-yellow-500/30 border-yellow-400/50 text-yellow-300' : 'bg-cyan-500/20 hover:bg-cyan-500/30 border-cyan-400/50 text-cyan-300'} border text-[9.5px] font-mono font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer`}
+                              >
+                                <Check className="w-3 h-3" /> Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingTicker(false)}
+                                className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 text-[9.5px] font-mono font-bold rounded-lg transition-all cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                          <textarea
+                            maxLength={200}
+                            value={tickerUpdateText}
+                            onChange={(e) => setTickerUpdateText(e.target.value.slice(0, 200))}
+                            placeholder="Post a quick live update, gig news, tape drop, or announcement (max 200 chars)..."
+                            className={`w-full bg-black/80 border border-zinc-800 ${isTargetPromoter ? 'focus:border-yellow-400 focus:ring-yellow-400/30 text-yellow-200' : 'focus:border-cyan-400 focus:ring-cyan-400/30 text-cyan-200'} rounded-lg p-2.5 text-xs font-mono tracking-wide focus:outline-none focus:ring-1 resize-none`}
+                            rows={2.5}
+                            autoFocus
+                          />
+                        </div>
+                      ) : (
+                        <div className={`flex items-center border rounded-xl overflow-hidden ${marqueeContainer} py-2.5 px-1 relative group/marquee cursor-default`}>
+                          <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
+                          <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
+                          <div className="w-full relative flex items-center overflow-hidden">
+                            <div className="flex whitespace-nowrap animate-[marquee_28s_linear_infinite] group-hover/marquee:[animation-play-state:paused] items-center">
+                              <span className={`text-[10.5px] font-mono font-bold tracking-widest uppercase ${marqueeTextClass} px-6 flex items-center gap-2`}>
+                                ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
+                              </span>
+                              <span className={`text-[10.5px] font-mono font-bold tracking-widest uppercase ${marqueeTextClass} px-6 flex items-center gap-2`}>
+                                ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Label action buttons: Message and Submit EPK */}
                 {(selectedUserProfile?.role || '').toLowerCase().includes('label') && (
                   <div className="mt-4 grid grid-cols-2 gap-2 w-full">
@@ -2644,111 +2792,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                      </div>
                    </div>
                   )}
-
-                   {/* Glowing Scrolling Marquee Text Box for Live Updates */}
-                 {(() => {
-                   const isTargetPromoter = Boolean(
-                     effTarget?.isPromoterProfile ||
-                     effTarget?.type === 'promoter' ||
-                     effTarget?.account_type === 'promoter' ||
-                     effTarget?.portalRole === 'promoter' ||
-                     (effTarget?.role || '').toLowerCase().includes('promoter') ||
-                     (effTarget?.role || '').toLowerCase().includes('venue')
-                   );
-
-                   const tickerColorClass = isTargetPromoter ? 'text-yellow-400' : 'text-cyan-400';
-                   const tickerBgPing = isTargetPromoter ? 'bg-yellow-400' : 'bg-cyan-400';
-                   const tickerBgDot = isTargetPromoter ? 'bg-yellow-500' : 'bg-cyan-500';
-                   const editBtnClass = isTargetPromoter 
-                     ? 'bg-yellow-950/60 hover:bg-yellow-900/80 border-yellow-800/60 text-yellow-300' 
-                     : 'bg-cyan-950/60 hover:bg-cyan-900/80 border-cyan-800/60 text-cyan-300';
-                   const editBoxBorder = isTargetPromoter 
-                     ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.15)]' 
-                     : 'border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)]';
-                   const marqueeContainer = isTargetPromoter
-                     ? 'bg-yellow-950/20 border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.15)]'
-                     : 'bg-cyan-950/20 border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.15)]';
-                   const marqueeTextClass = isTargetPromoter
-                     ? 'text-yellow-300 drop-shadow-[0_0_6px_rgba(234,179,8,0.6)]'
-                     : 'text-cyan-300 drop-shadow-[0_0_6px_rgba(6,182,212,0.6)]';
-
-                   return (
-                     <div className="mt-3.5 space-y-1">
-                       <div className="flex items-center justify-between px-0.5">
-                         <span className={`text-[10px] font-bold ${tickerColorClass} font-mono tracking-wider uppercase flex items-center gap-1.5`}>
-                           <span className="relative flex h-2 w-2 shrink-0">
-                             <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${tickerBgPing} opacity-75`}></span>
-                             <span className={`relative inline-flex rounded-full h-2 w-2 ${tickerBgDot}`}></span>
-                           </span>
-                           📢 LIVE UPDATE
-                         </span>
-                         {selectedUserProfile.isYou && !isEditingTicker && (
-                           <button
-                             type="button"
-                             onClick={() => setIsEditingTicker(true)}
-                             title="Edit Marquee Update"
-                             className={`px-2 py-0.5 ${editBtnClass} hover:text-white rounded-md transition-all shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-semibold group`}
-                           >
-                             <Pencil className={`w-3 h-3 ${tickerColorClass} group-hover:text-white`} /> Edit Update
-                           </button>
-                         )}
-                       </div>
-
-                       {isEditingTicker ? (
-                         <div className={`bg-zinc-950/90 border ${editBoxBorder} rounded-xl p-3 space-y-2 relative`}>
-                           <div className="flex items-center justify-between">
-                             <span className={`text-[9.5px] font-mono ${tickerColorClass} font-bold uppercase tracking-wider flex items-center gap-1`}>
-                               ✍️ EDIT TICKER
-                             </span>
-                             <div className="flex items-center gap-2">
-                               <span className="text-[9px] font-mono text-zinc-400 font-bold">
-                                 {tickerUpdateText.length}/200
-                               </span>
-                               <button
-                                 type="button"
-                                 onClick={() => handleSaveTickerUpdate(tickerUpdateText)}
-                                 className={`px-2.5 py-1 ${isTargetPromoter ? 'bg-yellow-500/20 hover:bg-yellow-500/30 border-yellow-400/50 text-yellow-300' : 'bg-cyan-500/20 hover:bg-cyan-500/30 border-cyan-400/50 text-cyan-300'} border text-[9.5px] font-mono font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer`}
-                               >
-                                 <Check className="w-3 h-3" /> Save
-                               </button>
-                               <button
-                                 type="button"
-                                 onClick={() => setIsEditingTicker(false)}
-                                 className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 text-[9.5px] font-mono font-bold rounded-lg transition-all cursor-pointer"
-                               >
-                                 Cancel
-                               </button>
-                             </div>
-                           </div>
-                           <textarea
-                             maxLength={200}
-                             value={tickerUpdateText}
-                             onChange={(e) => setTickerUpdateText(e.target.value.slice(0, 200))}
-                             placeholder="Post a quick live update, gig news, tape drop, or announcement (max 200 chars)..."
-                             className={`w-full bg-black/80 border border-zinc-800 ${isTargetPromoter ? 'focus:border-yellow-400 focus:ring-yellow-400/30 text-yellow-200' : 'focus:border-cyan-400 focus:ring-cyan-400/30 text-cyan-200'} rounded-lg p-2.5 text-xs font-mono tracking-wide focus:outline-none focus:ring-1 resize-none`}
-                             rows={2.5}
-                             autoFocus
-                           />
-                         </div>
-                       ) : (
-                         <div className={`flex items-center border rounded-xl overflow-hidden ${marqueeContainer} py-2.5 px-1 relative group/marquee cursor-default`}>
-                           <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
-                           <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0b0c0e] to-transparent z-[5] pointer-events-none" />
-                           <div className="w-full relative flex items-center overflow-hidden">
-                             <div className="flex whitespace-nowrap animate-[marquee_28s_linear_infinite] group-hover/marquee:[animation-play-state:paused] items-center">
-                               <span className={`text-[10.5px] font-mono font-bold tracking-widest uppercase ${marqueeTextClass} px-6 flex items-center gap-2`}>
-                                 ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
-                               </span>
-                               <span className={`text-[10.5px] font-mono font-bold tracking-widest uppercase ${marqueeTextClass} px-6 flex items-center gap-2`}>
-                                 ⚡ {tickerUpdateText || "NAVIGATING THE NEXUS MATRIX • STAY TUNED FOR LIVE SHOWS & RELEASES"}
-                               </span>
-                             </div>
-                           </div>
-                         </div>
-                       )}
-                     </div>
-                   );
-                 })()}
 
                    {/* Stats Ledger Row */}
                  {(() => {
@@ -3718,8 +3761,24 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     profileName={selectedUserProfile?.name}
                     isYou={selectedUserProfile?.isYou}
                     selectedUserProfile={selectedUserProfile}
-                    workspaceType="band"
-                    portalRole="band"
+                    workspaceType={
+                      selectedUserProfile?.isIndustryProPersonal === true ||
+                      selectedUserProfile?.isPersonal === true ||
+                      selectedUserProfile?.type === 'user' ||
+                      selectedUserProfile?.account_type === 'industry_pro' ||
+                      selectedUserProfile?.account_type === 'fan_only'
+                        ? 'industry_pro'
+                        : 'band'
+                    }
+                    portalRole={
+                      selectedUserProfile?.isIndustryProPersonal === true ||
+                      selectedUserProfile?.isPersonal === true ||
+                      selectedUserProfile?.type === 'user' ||
+                      selectedUserProfile?.account_type === 'industry_pro' ||
+                      selectedUserProfile?.account_type === 'fan_only'
+                        ? 'industry_pro'
+                        : 'band'
+                    }
                     triggerPictureViewer={triggerPictureViewer}
                     triggerNotification={triggerNotification}
                     feed={feed}
@@ -3728,8 +3787,24 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                 {profileActiveTab === 'gallery' && (
                   <GalleryTab 
-                    workspaceType="band"
-                    portalRole="band"
+                    workspaceType={
+                      selectedUserProfile?.isIndustryProPersonal === true ||
+                      selectedUserProfile?.isPersonal === true ||
+                      selectedUserProfile?.type === 'user' ||
+                      selectedUserProfile?.account_type === 'industry_pro' ||
+                      selectedUserProfile?.account_type === 'fan_only'
+                        ? 'industry_pro'
+                        : 'band'
+                    }
+                    portalRole={
+                      selectedUserProfile?.isIndustryProPersonal === true ||
+                      selectedUserProfile?.isPersonal === true ||
+                      selectedUserProfile?.type === 'user' ||
+                      selectedUserProfile?.account_type === 'industry_pro' ||
+                      selectedUserProfile?.account_type === 'fan_only'
+                        ? 'industry_pro'
+                        : 'band'
+                    }
                     profileId={selectedUserProfile?.id || targetProfile?.id || bData?.id}
                     profileName={selectedUserProfile?.name || bData?.name}
                     selectedUserProfile={selectedUserProfile}

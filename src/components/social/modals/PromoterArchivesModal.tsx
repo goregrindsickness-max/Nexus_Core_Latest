@@ -205,24 +205,48 @@ export const PromoterArchivesModal: React.FC<PromoterArchivesModalProps> = ({
     }
   };
 
-  // Merge database archive shows with any past shows from the calendar
+  // Merge database archive shows with any past shows from the calendar booked personally by this promoter
   const pastCalendarShows: ArchiveShowItem[] = (shows || []).filter(s => {
+    // Strictly exclude community shows - community shows belong in the Community Archives of the View All Events directory
+    if (s.is_community_submitted === true || s.is_community === true || s.source === 'community') {
+      return false;
+    }
+
+    const isPersonallyBooked = (userProfile?.id && (s.creator_id === userProfile.id || s.promoter_id === userProfile.id)) ||
+      (promoterProfile?.id && (s.creator_id === promoterProfile.id || s.promoter_id === promoterProfile.id)) ||
+      s.is_promoter_show === true ||
+      Boolean(s.festival_name && s.festival_name.toLowerCase().includes('domination'));
+
+    if (!isPersonallyBooked) {
+      return false;
+    }
+
     const showDate = s.date || s.show_date || '';
-    return showDate && showDate < new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
+    const isPast = showDate && showDate < todayStr;
+    const isArchived = s.additional_notes && String(s.additional_notes).includes('"archived":true');
+    return isPast || isArchived;
   }).map(s => {
-    const dateParts = (s.date || '').split('-');
-    const y = dateParts[0] ? parseInt(dateParts[0], 10) : 2023;
+    const rawDate = s.date || s.show_date || '';
+    const dateParts = String(rawDate).split('-');
+    const y = dateParts[0] ? parseInt(dateParts[0], 10) : 2026;
+    const support = Array.isArray(s.support_lineup)
+      ? s.support_lineup.map((x: any) => typeof x === 'string' ? x : (x.name || x.band)).filter(Boolean)
+      : [];
     return {
       id: s.id,
-      year: isNaN(y) ? 2023 : y,
-      title: s.festival_name || s.name || 'Historic Show',
+      year: isNaN(y) ? 2026 : y,
+      title: s.show_name 
+        ? `${s.headliner || s.name || 'Artist'} - ${s.show_name}`
+        : (s.festival_name || s.name || `${s.headliner || 'Live'} at ${s.venue || 'Venue'}`),
       type: (s.festival_name ? 'festival' : 'club_gig') as any,
       date: s.date || 'Past Event',
-      venue: s.venue_address || s.venue || 'Underground Venue',
-      city: s.city || 'Chicago, IL',
-      lineup: [s.headliner || s.name].filter(Boolean),
-      attendance: s.expected_attendance || 'Full House',
-      historicalNotes: s.additional_notes || 'Official completed live production.'
+      venue: s.venue_address || s.venue || s.venue_name || 'Underground Venue',
+      city: s.city ? (s.state_province ? `${s.city}, ${s.state_province}` : s.city) : 'Haltom City, TX',
+      lineup: [s.headliner || s.name, ...support].filter(Boolean),
+      attendance: s.expected_attendance ? `${s.expected_attendance} Capacity` : 'Full House',
+      historicalNotes: typeof s.additional_notes === 'string' ? s.additional_notes : (s.additional_notes ? JSON.stringify(s.additional_notes) : 'Official completed live production.'),
+      flyerUrl: s.flyer_url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=800'
     };
   });
 

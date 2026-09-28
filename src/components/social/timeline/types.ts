@@ -173,7 +173,7 @@ export interface TimelineFeedProps {
   onEmojiReact: (postId: string, reactionType: string) => void;
   onAddComment: (postId: string, commentText: string, parentCommentId?: string) => void;
   onTogglePin?: (postId: string) => void;
-  onEditPost?: (postId: string, newText: string) => void;
+  onEditPost?: (postId: string, newText: string, newImages?: string[]) => void;
   onDeletePost?: (postId: string) => void;
   onOpenProfile?: (authorId: string, authorName: string) => void;
   onPlaySong?: (song: SongEmbedData) => void;

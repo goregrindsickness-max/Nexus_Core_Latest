@@ -131,8 +131,30 @@ export default function NotificationCenterView({
           };
 
           const currentUser = userProfileRef.current;
-          const matchesUser = !newNotif.user_id || newNotif.user_id === currentUser?.id || newNotif.user_id === currentUser?.email;
-          if (!matchesUser) return;
+          const myId = currentUser?.id;
+          const myEmail = currentUser?.email;
+
+          // Never notify the actor who triggered the event!
+          const isActor = Boolean(
+            (rawNotif.actor_id && (rawNotif.actor_id === myId || rawNotif.actor_id === myEmail)) ||
+            (rawNotif.actor_email && rawNotif.actor_email === myEmail) ||
+            (rawNotif.data?.actor_id && (rawNotif.data?.actor_id === myId || rawNotif.data?.actor_id === myEmail)) ||
+            (rawNotif.data?.actor_email && rawNotif.data?.actor_email === myEmail)
+          );
+          if (isActor) return;
+
+          // For reaction notifications, ensure it is strictly targeted to the post author
+          const isReaction = newNotif.category === 'REACTION' || (newNotif as any).type === 'post_reaction' || (rawNotif.title && String(rawNotif.title).toUpperCase().includes('REACTION'));
+          if (isReaction) {
+            const isDirectRecipient = Boolean(
+              (myId && newNotif.user_id === myId) ||
+              (myEmail && (newNotif.user_id === myEmail || (rawNotif.data as any)?.user_id === myEmail))
+            );
+            if (!isDirectRecipient) return;
+          } else {
+            const matchesUser = !newNotif.user_id || newNotif.user_id === myId || newNotif.user_id === myEmail;
+            if (!matchesUser) return;
+          }
 
           setNotifications(prev => {
             const exists = (prev || []).some(n => n.id === newNotif.id);

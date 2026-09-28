@@ -14,7 +14,16 @@ import {
   MessageSquare,
   X,
   Send,
+  Image as ImageIcon,
+  Upload,
+  RefreshCw,
+  Plus,
+  Link,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
+import { uploadBase64ToStorage } from '../../../supabase';
+import { isValidStorageOrImageUrl } from '../../../services/storageService';
 import {
   FeedPost,
   SongEmbedData,
@@ -39,6 +48,9 @@ import {
 } from '../embeds';
 import { GigProximityPill } from './GigProximityPill';
 
+// Global cache of failed avatar URLs across all PostCard instances to prevent remount flashing loops
+const GLOBAL_FAILED_AVATAR_URLS = new Set<string>();
+
 interface PostCardProps {
   post: FeedPost;
   currentUserId?: string;
@@ -51,6 +63,7 @@ interface PostCardProps {
   replyingTo: { commentId: string; username: string } | null;
   isEditing: boolean;
   editingText: string;
+  editingImages?: string[];
   isPostMenuOpen: boolean;
   isReactionMenuOpen: boolean;
   isHypeAnimated: boolean;
@@ -76,8 +89,9 @@ interface PostCardProps {
   onTogglePin?: (postId: string) => void;
   onStartEditing: () => void;
   onCancelEditing: () => void;
-  onSaveEditing: (text: string) => void;
+  onSaveEditing: (text: string, images?: string[]) => void;
   onSetEditingText: (text: string) => void;
+  onSetEditingImages?: (images: string[]) => void;
   onDeletePost?: (postId: string) => void;
   onShareClick: () => void;
   onOpenBoostModal: () => void;
@@ -145,6 +159,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   replyingTo,
   isEditing,
   editingText,
+  editingImages,
   isPostMenuOpen,
   isReactionMenuOpen,
   isHypeAnimated,
@@ -171,6 +186,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   onCancelEditing,
   onSaveEditing,
   onSetEditingText,
+  onSetEditingImages,
   onDeletePost,
   onShareClick,
   onOpenBoostModal,
@@ -211,25 +227,194 @@ export const PostCard: React.FC<PostCardProps> = ({
   const isLongPressRef = useRef<boolean>(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Image editing & replacement states
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+  const replaceSlotIndexRef = useRef<number | null>(null);
+  const [isProcessingEditMedia, setIsProcessingEditMedia] = useState(false);
+  const [showUrlAddInput, setShowUrlAddInput] = useState(false);
+  const [imageUrlDraft, setImageUrlDraft] = useState('');
+  const [editMediaError, setEditMediaError] = useState<string | null>(null);
+  const [isDragOverDropzone, setIsDragOverDropzone] = useState(false);
+
+  const getPostAttachedImages = React.useCallback((): string[] => {
+    if (post.images && Array.isArray(post.images) && post.images.length > 0) {
+      return post.images.filter(Boolean);
+    }
+    const single = post.image_url || post.image || post.mediaUrl || post.media_url;
+    return single ? [single] : [];
+  }, [post.images, post.image_url, post.image, post.mediaUrl, post.media_url]);
+
+  const [localEditImages, setLocalEditImages] = useState<string[]>(() => {
+    return (editingImages && editingImages.length > 0) ? editingImages : getPostAttachedImages();
+  });
+
+  React.useEffect(() => {
+    if (isEditing) {
+      if (editingImages && editingImages.length > 0) {
+        setLocalEditImages(editingImages);
+      } else {
+        const initial = getPostAttachedImages();
+        setLocalEditImages(initial);
+        if (onSetEditingImages) {
+          onSetEditingImages(initial);
+        }
+      }
+    }
+  }, [isEditing, editingImages, getPostAttachedImages, onSetEditingImages]);
+
+  const currentEditImages: string[] = localEditImages;
+
+  const handleUpdateEditImages = (next: string[]) => {
+    setLocalEditImages(next);
+    if (onSetEditingImages) {
+      onSetEditingImages(next);
+    }
+  };
+
+  const compressAndProcessImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          if (!e.target?.result) {
+            resolve('');
+            return;
+          }
+          const img = new Image();
+          img.onload = async () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const MAX_SIZE = 1920;
+            if (width > height) {
+              if (width > MAX_SIZE) {
+                height *= MAX_SIZE / width;
+                width = MAX_SIZE;
+              }
+            } else {
+              if (height > MAX_SIZE) {
+                width *= MAX_SIZE / height;
+                height = MAX_SIZE;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            let compressedBase64 = '';
+            if (ctx) {
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = 'high';
+              ctx.drawImage(img, 0, 0, width, height);
+              compressedBase64 = canvas.toDataURL('image/jpeg', 0.92);
+            } else {
+              compressedBase64 = e.target!.result as string;
+            }
+
+            try {
+              const uId = userProfile?.id || currentUserId || 'profile_anon';
+              const publicUrl = await uploadBase64ToStorage(compressedBase64, 'assets', uId, `edit-post-${Date.now()}`);
+              resolve(publicUrl || compressedBase64);
+            } catch (err) {
+              resolve(compressedBase64);
+            }
+          };
+          img.onerror = () => resolve(e.target!.result as string);
+          img.src = e.target.result as string;
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleProcessEditFiles = async (files: File[]) => {
+    if (!files || files.length === 0) return;
+    setEditMediaError(null);
+    setIsProcessingEditMedia(true);
+
+    try {
+      const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+      if (imageFiles.length === 0) {
+        setEditMediaError('Please select a valid image file (PNG, JPG, WEBP, GIF).');
+        setIsProcessingEditMedia(false);
+        return;
+      }
+
+      const oversized = imageFiles.find((f) => f.size > 15 * 1024 * 1024);
+      if (oversized) {
+        setEditMediaError('File exceeds 15MB limit. Please choose a smaller image.');
+        setIsProcessingEditMedia(false);
+        return;
+      }
+
+      const processedUrls: string[] = [];
+      for (const file of imageFiles) {
+        const url = await compressAndProcessImage(file);
+        if (url) {
+          processedUrls.push(url);
+        }
+      }
+
+      if (processedUrls.length > 0) {
+        if (replaceSlotIndexRef.current !== null && replaceSlotIndexRef.current >= 0) {
+          const next = [...currentEditImages];
+          next[replaceSlotIndexRef.current] = processedUrls[0];
+          handleUpdateEditImages(next);
+          replaceSlotIndexRef.current = null;
+        } else {
+          if (currentEditImages.length <= 1) {
+            handleUpdateEditImages(processedUrls);
+          } else {
+            handleUpdateEditImages([...currentEditImages, ...processedUrls].slice(0, 4));
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to process image attachment:', err);
+      setEditMediaError('Failed to process image. Please try another file or URL.');
+    } finally {
+      setIsProcessingEditMedia(false);
+    }
+  };
+
   const commentList = post.comments || [];
   const postRoleUpper = (post.authorRole || (post as any).author?.role || '').toUpperCase();
-  const authorNameLower = (post.authorName || (post as any).author?.name || '').toLowerCase();
-
-  // Separate Handle and Real Legal/Full Name
-  const nameMatch = post.authorName ? post.authorName.match(/^(.*?)\s*\((.*?)\)$/) : null;
-  const handleDisplay = nameMatch ? nameMatch[1].trim() : (post.authorName || 'User');
 
   // Check if current post is explicitly authored by the current logged-in user
   const targetPostAuthorId = post.authorId || (post as any).author?.id || (post as any).profile_id;
+  const postAuthorName = (post.authorName || (post as any).author?.name || '').trim();
+  const authorNameLower = postAuthorName.toLowerCase();
+
+  // Separate Handle and Real Legal/Full Name
+  const nameMatch = postAuthorName ? postAuthorName.match(/^(.*?)\s*\((.*?)\)$/) : null;
+  const handleDisplay = nameMatch ? nameMatch[1].trim() : (postAuthorName || 'User');
+
+  const isAuthorNameMatchingUser = Boolean(
+    (userProfile?.name && authorNameLower === userProfile.name.toLowerCase()) ||
+    (userProfile?.full_name && authorNameLower === userProfile.full_name.toLowerCase()) ||
+    (userProfile?.legal_name && authorNameLower === userProfile.legal_name.toLowerCase()) ||
+    (userProfile?.display_name && authorNameLower === userProfile.display_name.toLowerCase()) ||
+    (userProfile?.console_handle && (
+      handleDisplay.toLowerCase() === userProfile.console_handle.toLowerCase() ||
+      handleDisplay.toLowerCase() === userProfile.console_handle.replace(/^@/, '').toLowerCase() ||
+      authorNameLower === userProfile.console_handle.toLowerCase() ||
+      authorNameLower === userProfile.console_handle.replace(/^@/, '').toLowerCase()
+    )) ||
+    (authorNameLower.includes('goregrinder') || authorNameLower.includes('bdmceo') || authorNameLower === 'miguel medina')
+  );
+
   const isPostExplicitlyOther = Boolean(
-    (targetPostAuthorId && currentUserId && currentUserId !== 'author' && currentUserId !== 'user' && targetPostAuthorId !== currentUserId && (!userProfile?.id || targetPostAuthorId !== userProfile.id)) ||
-    ((post as any).isYou === false) ||
-    ((post as any).author?.isYou === false)
+    (targetPostAuthorId && currentUserId && currentUserId !== 'author' && currentUserId !== 'user' && targetPostAuthorId !== currentUserId && (!userProfile?.id || targetPostAuthorId !== userProfile.id) && !isAuthorNameMatchingUser) ||
+    ((post as any).isYou === false && !isAuthorNameMatchingUser) ||
+    ((post as any).author?.isYou === false && !isAuthorNameMatchingUser)
   );
 
   const isCurrentUser = !isPostExplicitlyOther && Boolean(
     (post as any).isYou === true ||
     (post as any).author?.isYou === true ||
+    isAuthorNameMatchingUser ||
     (currentUserId && currentUserId !== 'author' && currentUserId !== 'user' && (
       (post.authorId && post.authorId === currentUserId) || 
       ((post as any).author?.id && (post as any).author?.id === currentUserId)
@@ -413,6 +598,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   }
 
   const liveSelfAvatar = userProfile?.avatar || userProfile?.avatar_url || userProfile?.profile_avatar || (userProfile as any)?.profile_image || localStoredAvatar;
+  const validLiveSelfAvatar = (liveSelfAvatar && isValidStorageOrImageUrl(liveSelfAvatar)) ? liveSelfAvatar : null;
   
   const rawPostAvatar = 
     post.authorAvatar || 
@@ -432,19 +618,39 @@ export const PostCard: React.FC<PostCardProps> = ({
     postDataObj.profile_avatar ||
     postDataObj.logo_url;
 
-  const isGenericUiAvatar = typeof rawPostAvatar === 'string' && (
-    rawPostAvatar.includes('ui-avatars.com') ||
-    rawPostAvatar === 'U' ||
-    rawPostAvatar === 'Anon' ||
-    rawPostAvatar.trim() === ''
-  );
+  const validRawPostAvatar = (rawPostAvatar && isValidStorageOrImageUrl(rawPostAvatar)) ? rawPostAvatar : null;
 
-  // For current user's personal / industry pro posts, liveSelfAvatar is authoritative over any stale or corrupted cached snapshot
-  const displayAvatar = (isCurrentUser && !isArtistOrBand && liveSelfAvatar)
-    ? liveSelfAvatar
-    : ((!isGenericUiAvatar && rawPostAvatar)
-      ? rawPostAvatar
-      : (isCurrentUser ? (liveSelfAvatar || null) : null));
+  const isAuthorSelf = Boolean(isCurrentUser || isAuthorNameMatchingUser);
+  const isRawAvatarKnownFailed = Boolean(validRawPostAvatar && GLOBAL_FAILED_AVATAR_URLS.has(validRawPostAvatar));
+
+  // If author is current logged in user, validLiveSelfAvatar is authoritative over any stale or broken post snapshot
+  const displayAvatar = isAuthorSelf
+    ? (validLiveSelfAvatar || (isRawAvatarKnownFailed ? null : validRawPostAvatar))
+    : (isRawAvatarKnownFailed ? null : (validRawPostAvatar || null));
+
+  const [avatarImgSrc, setAvatarImgSrc] = useState<string | null>(() => {
+    if (displayAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar)) return displayAvatar;
+    if (isAuthorSelf && validLiveSelfAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(validLiveSelfAvatar)) return validLiveSelfAvatar;
+    return null;
+  });
+  const [hasAvatarImgError, setHasAvatarImgError] = useState<boolean>(() => {
+    if (displayAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar)) return false;
+    if (isAuthorSelf && validLiveSelfAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(validLiveSelfAvatar)) return false;
+    return Boolean(displayAvatar && GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar));
+  });
+
+  React.useEffect(() => {
+    if (displayAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar)) {
+      setAvatarImgSrc(displayAvatar);
+      setHasAvatarImgError(false);
+    } else if (isAuthorSelf && validLiveSelfAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(validLiveSelfAvatar)) {
+      setAvatarImgSrc(validLiveSelfAvatar);
+      setHasAvatarImgError(false);
+    } else {
+      setAvatarImgSrc(null);
+      setHasAvatarImgError(true);
+    }
+  }, [displayAvatar, validLiveSelfAvatar, isAuthorSelf]);
 
   const getInitials = (str?: string) => {
     if (!str) return 'NX';
@@ -693,16 +899,20 @@ export const PostCard: React.FC<PostCardProps> = ({
               }}
             >
               <div className="w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] rounded-full flex items-center justify-center font-black font-mono text-xs sm:text-sm overflow-hidden shrink-0 bg-zinc-950 border border-zinc-950">
-                {displayAvatar ? (
+                {avatarImgSrc && !hasAvatarImgError ? (
                   <img 
-                    src={displayAvatar} 
+                    src={avatarImgSrc} 
                     alt={post.authorName} 
                     referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      if (isCurrentUser && liveSelfAvatar && e.currentTarget.src !== liveSelfAvatar) {
-                        e.currentTarget.src = liveSelfAvatar;
+                    onError={() => {
+                      if (avatarImgSrc) {
+                        GLOBAL_FAILED_AVATAR_URLS.add(avatarImgSrc);
+                      }
+                      if (isAuthorSelf && validLiveSelfAvatar && avatarImgSrc !== validLiveSelfAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(validLiveSelfAvatar)) {
+                        setAvatarImgSrc(validLiveSelfAvatar);
                       } else {
-                        e.currentTarget.style.display = 'none';
+                        setAvatarImgSrc(null);
+                        setHasAvatarImgError(true);
                       }
                     }}
                     className="w-full h-full object-cover rounded-full" 
@@ -863,23 +1073,240 @@ export const PostCard: React.FC<PostCardProps> = ({
       {/* Message Content (or Edit Form) - Sits directly snug under author header */}
       <div className="-mt-1 sm:-mt-1.5">
         {isEditing ? (
-          <div className="space-y-2 bg-zinc-950 border border-amber-500/50 rounded-xl p-3">
-            <textarea
-              value={editingText}
-              onChange={(e) => onSetEditingText(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/80 font-sans min-h-[80px]"
-              placeholder="Update post content..."
-            />
-            <div className="flex items-center justify-end gap-2 pt-1">
+          <div className="space-y-3 bg-zinc-950/95 border border-amber-500/60 rounded-2xl p-3.5 sm:p-4 shadow-2xl backdrop-blur-md animate-in fade-in duration-200">
+            <div className="flex items-center justify-between pb-1.5 border-b border-zinc-800/80">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider">
+                  Edit Transmission
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-zinc-500">Post #{post.id?.slice(0, 8)}</span>
+            </div>
+
+            {/* Caption Textarea */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10px] font-mono uppercase font-bold text-zinc-400">
+                <span>Caption Text</span>
+                <span className="text-zinc-500 lowercase">{editingText.length} chars</span>
+              </div>
+              <textarea
+                value={editingText}
+                onChange={(e) => onSetEditingText(e.target.value)}
+                className="w-full bg-zinc-900/90 border border-zinc-700/80 rounded-xl p-3 text-xs sm:text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 font-sans min-h-[85px] leading-relaxed resize-y"
+                placeholder="Update post caption or announcement..."
+              />
+            </div>
+
+            {/* Image Replacement & Attachment Section */}
+            <div className="space-y-2 pt-1 border-t border-zinc-800/60">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-mono uppercase text-zinc-300 font-bold flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Attached Media & Flyers ({currentEditImages.length})</span>
+                </label>
+                {currentEditImages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateEditImages([])}
+                    className="text-[10px] font-mono text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Remove All</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Display existing or added image thumbnails with Replace & Delete buttons */}
+              {currentEditImages.length > 0 ? (
+                <div className={`grid gap-2.5 ${currentEditImages.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                  {currentEditImages.map((imgSrc, idx) => (
+                    <div
+                      key={idx}
+                      className="relative group rounded-xl overflow-hidden border border-zinc-700/80 bg-zinc-950 max-h-60 sm:max-h-72 flex items-center justify-center shadow-lg"
+                    >
+                      <img
+                        src={imgSrc}
+                        alt={`Attached image ${idx + 1}`}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 min-h-[160px]"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/70 opacity-90 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="bg-black/85 border border-zinc-700 text-[9px] font-mono font-bold text-amber-400 px-2 py-0.5 rounded-md">
+                            {currentEditImages.length > 1 ? `Image ${idx + 1} of ${currentEditImages.length}` : 'Attached Flyer'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const nextImgs = [...currentEditImages];
+                              nextImgs.splice(idx, 1);
+                              handleUpdateEditImages(nextImgs);
+                            }}
+                            title="Remove this image"
+                            className="p-1.5 rounded-lg bg-rose-950/90 border border-rose-600/80 text-rose-300 hover:bg-rose-600 hover:text-white transition-colors cursor-pointer shadow"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              replaceSlotIndexRef.current = idx;
+                              editFileInputRef.current?.click();
+                            }}
+                            className="flex-1 py-1.5 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-mono font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            <span>Replace Image</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                /* Empty state dropzone */
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragOverDropzone(true);
+                  }}
+                  onDragLeave={() => setIsDragOverDropzone(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragOverDropzone(false);
+                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                      handleProcessEditFiles(Array.from(e.dataTransfer.files));
+                    }
+                  }}
+                  onClick={() => {
+                    replaceSlotIndexRef.current = null;
+                    editFileInputRef.current?.click();
+                  }}
+                  className={`border-2 border-dashed rounded-xl p-4 sm:p-5 text-center cursor-pointer transition-all ${
+                    isDragOverDropzone
+                      ? 'border-amber-400 bg-amber-500/10'
+                      : 'border-zinc-800 hover:border-amber-500/60 bg-zinc-900/40 hover:bg-zinc-900/80'
+                  }`}
+                >
+                  {isProcessingEditMedia ? (
+                    <div className="flex flex-col items-center justify-center py-2">
+                      <Loader2 className="w-6 h-6 text-amber-400 animate-spin mb-1.5" />
+                      <p className="text-xs font-mono font-bold text-amber-300">Processing & Compressing Image...</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center">
+                      <Upload className="w-6 h-6 text-zinc-400 mb-1.5 hover:text-amber-400 transition-colors" />
+                      <p className="text-xs font-mono font-bold text-zinc-200">CLICK OR DRAG & DROP TO ATTACH FLYER / PHOTO</p>
+                      <p className="text-[10px] font-mono text-zinc-500 mt-0.5">Supports PNG, JPG, WEBP, GIF up to 15MB</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons: Add another image, Toggle URL input */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {currentEditImages.length > 0 && currentEditImages.length < 4 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      replaceSlotIndexRef.current = null;
+                      editFileInputRef.current?.click();
+                    }}
+                    disabled={isProcessingEditMedia}
+                    className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-zinc-300 hover:text-white text-[11px] font-mono font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Add Another Image</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowUrlAddInput(!showUrlAddInput)}
+                  className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-zinc-300 hover:text-white text-[11px] font-mono font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Link className="w-3.5 h-3.5 text-sky-400" />
+                  <span>{showUrlAddInput ? 'Hide URL Input' : 'Paste Image URL'}</span>
+                </button>
+
+                {isProcessingEditMedia && (
+                  <div className="flex items-center gap-1 text-[10px] font-mono text-amber-400 animate-pulse ml-auto">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Uploading Image...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Collapsible Image URL input */}
+              {showUrlAddInput && (
+                <div className="flex items-center gap-2 p-2 bg-zinc-900/90 border border-zinc-800 rounded-xl animate-in fade-in">
+                  <input
+                    type="url"
+                    value={imageUrlDraft}
+                    onChange={(e) => setImageUrlDraft(e.target.value)}
+                    placeholder="https://example.com/flyer.jpg"
+                    className="flex-1 bg-black/60 border border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!imageUrlDraft.trim()) return;
+                      if (currentEditImages.length === 0) {
+                        handleUpdateEditImages([imageUrlDraft.trim()]);
+                      } else {
+                        handleUpdateEditImages([...currentEditImages, imageUrlDraft.trim()]);
+                      }
+                      setImageUrlDraft('');
+                      setShowUrlAddInput(false);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-black text-xs font-mono font-bold transition-colors cursor-pointer"
+                  >
+                    Attach URL
+                  </button>
+                </div>
+              )}
+
+              {editMediaError && (
+                <p className="text-[10px] font-mono text-rose-400 flex items-center gap-1 pt-0.5">
+                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                  <span>{editMediaError}</span>
+                </p>
+              )}
+
+              {/* Hidden file input */}
+              <input
+                type="file"
+                ref={editFileInputRef}
+                accept="image/*"
+                multiple={replaceSlotIndexRef.current === null}
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    handleProcessEditFiles(Array.from(e.target.files));
+                  }
+                  e.target.value = '';
+                }}
+              />
+            </div>
+
+            {/* Form Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
               <button
+                type="button"
                 onClick={onCancelEditing}
-                className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-xs font-mono font-bold transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white text-xs font-mono font-bold transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
-                onClick={() => onSaveEditing(editingText)}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-mono font-bold transition-colors cursor-pointer flex items-center gap-1"
+                type="button"
+                disabled={isProcessingEditMedia || (!editingText.trim() && currentEditImages.length === 0)}
+                onClick={() => onSaveEditing(editingText, currentEditImages)}
+                className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black text-xs font-mono font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-lg shadow-amber-500/20"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Save Changes</span>
@@ -963,7 +1390,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       )}
 
       {/* Media Attachment Image(s) - Edge-to-Edge Showcase */}
-      {!post.tapeData && !(post as any).tape_data && !post.songData && !post.albumData && !post.merchData && !post.youtubeId && !post.bandcampUrl && !post.bandcamp_url && !post.bandcampData && !post.bandcamp_data && !(post.mediaUrl && post.mediaUrl.includes('bandcamp.com')) && !(post.media_url && post.media_url.includes('bandcamp.com')) && !(post.image_url && post.image_url.includes('bandcamp.com')) && !(post.image && post.image.includes('bandcamp.com')) && (
+      {!isEditing && !post.tapeData && !(post as any).tape_data && !post.songData && !post.albumData && !post.merchData && !post.youtubeId && !post.bandcampUrl && !post.bandcamp_url && !post.bandcampData && !post.bandcamp_data && !(post.mediaUrl && post.mediaUrl.includes('bandcamp.com')) && !(post.media_url && post.media_url.includes('bandcamp.com')) && !(post.image_url && post.image_url.includes('bandcamp.com')) && !(post.image && post.image.includes('bandcamp.com')) && (
         <MediaGalleryGrid
           images={post.images}
           imageUrl={post.image_url}

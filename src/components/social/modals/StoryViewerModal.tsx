@@ -267,7 +267,6 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const sendReaction = (emoji: string, label: string) => {
     setActiveReactionBurst(emoji);
     setTimeout(() => setActiveReactionBurst(null), 1200);
-    triggerNotification?.(`Reacted with ${emoji} to ${authorName}'s story!`);
   };
 
   const handleSendReply = (e: React.FormEvent) => {

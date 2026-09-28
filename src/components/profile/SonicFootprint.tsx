@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Award, Zap, Disc, ShoppingBag, Radio, ChevronRight, Info, Sparkles, Trophy, Activity, CheckCircle2, History, ArrowUpRight, RotateCcw } from 'lucide-react';
 import { 
   getSonicFootprint, 
@@ -7,60 +7,22 @@ import {
   initializeSonicActivityListeners, 
   SonicMetricId, 
   SonicActivityItem,
-  METRIC_LABELS 
+  METRIC_LABELS,
+  MAX_METRIC_XP,
+  MAX_TOTAL_XP
 } from '../../services/sonicFootprintService';
-
-const MarqueeText = ({ text, className }: { text: string; className?: string }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLSpanElement>(null);
-  const [isOverflowing, setIsOverflowing] = useState(false);
-
-  useEffect(() => {
-    const checkOverflow = () => {
-      if (containerRef.current && textRef.current) {
-        setIsOverflowing(textRef.current.scrollWidth > containerRef.current.clientWidth);
-      }
-    };
-    checkOverflow();
-    const timer = setTimeout(checkOverflow, 100);
-    window.addEventListener('resize', checkOverflow);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('resize', checkOverflow);
-    };
-  }, [text]);
-
-  return (
-    <div ref={containerRef} className={`relative overflow-hidden whitespace-nowrap w-full flex items-center ${className}`}>
-      <span
-        ref={textRef}
-        className={`inline-block ${isOverflowing ? 'animate-marquee' : ''}`}
-        style={isOverflowing ? { paddingRight: '20px' } : {}}
-      >
-        {text}
-      </span>
-      {isOverflowing && (
-        <style>{`
-          @keyframes marquee {
-            0%, 15% { transform: translateX(0); }
-            85%, 100% { transform: translateX(calc(-100% + ${containerRef.current?.clientWidth || 80}px)); }
-          }
-          .animate-marquee {
-            animation: marquee 5s linear infinite alternate;
-          }
-        `}</style>
-      )}
-    </div>
-  );
-};
 
 export interface ListenerMetric {
   id: string;
   label: string;
-  currentXP: number; // 0 to 1000
-  percentage: number; // (currentXP / 1000) * 100
+  currentXP: number; // 0 to 10,000
+  percentage: number; // progress within current level (0 to 100)
+  overallPercentage: number; // (currentXP / 10000) * 100
   levelNumber: number; // 1 to 10
   levelTitle: string;
+  currentLevelXP: number;
+  nextLevelXP: number;
+  xpToNextLevel: number;
   description: string;
   howToEarn: string;
   actionLabel?: string;
@@ -68,15 +30,56 @@ export interface ListenerMetric {
   instantActionXP?: number;
 }
 
+// 10 Progressive Milestone Thresholds per metric (Max: 10,000 XP per category)
+// Designed for long-term sustainable progression across weeks and months of genuine scene activity.
+export const MILESTONE_THRESHOLDS = [
+  0,      // Level 1: Novice / Silent Observer (0 - 99 XP)
+  100,    // Level 2: Active Participant (100 - 349 XP)
+  350,    // Level 3: Regular Contributor (350 - 799 XP)
+  800,    // Level 4: Scene Regular (800 - 1,499 XP)
+  1500,   // Level 5: Dedicated Member (1,500 - 2,599 XP)
+  2600,   // Level 6: Underground Veteran (2,600 - 4,199 XP)
+  4200,   // Level 7: Scene Archivist (4,200 - 6,199 XP)
+  6200,   // Level 8: Sub-Culture Pillar (6,200 - 8,499 XP)
+  8500,   // Level 9: Legendary Chronicler (8,500 - 9,999 XP)
+  10000   // Level 10: Master Scene Authority (10,000+ XP)
+];
+
+export const getLevelInfo = (xp: number, titles: string[]) => {
+  const safeXP = Math.max(0, xp);
+  let levelNumber = 1;
+  for (let i = MILESTONE_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (safeXP >= MILESTONE_THRESHOLDS[i]) {
+      levelNumber = i + 1;
+      break;
+    }
+  }
+  levelNumber = Math.min(Math.max(1, levelNumber), 10);
+  const levelTitle = titles[levelNumber - 1] || titles[0];
+
+  const currentLevelXP = MILESTONE_THRESHOLDS[levelNumber - 1];
+  const nextLevelXP = levelNumber < 10 ? MILESTONE_THRESHOLDS[levelNumber] : 10000;
+  
+  let percentage = 0;
+  let xpToNextLevel = 0;
+
+  if (levelNumber >= 10) {
+    percentage = 100;
+    xpToNextLevel = 0;
+  } else {
+    const progressInLevel = Math.max(0, safeXP - currentLevelXP);
+    const span = Math.max(1, nextLevelXP - currentLevelXP);
+    percentage = Math.min(100, Math.max(0, Math.round((progressInLevel / span) * 100)));
+    xpToNextLevel = Math.max(0, nextLevelXP - safeXP);
+  }
+
+  const overallPercentage = Math.min(100, Math.round((safeXP / MAX_METRIC_XP) * 100));
+
+  return { levelNumber, levelTitle, percentage, overallPercentage, currentLevelXP, nextLevelXP, xpToNextLevel };
+};
+
 export const calculateListenerMetrics = (profile: any): Record<string, ListenerMetric> => {
   const footprint = getSonicFootprint(profile);
-
-  const getLevelInfo = (xp: number, titles: string[]) => {
-    const levelNumber = Math.min(Math.floor(xp / 100) + 1, 10);
-    const levelTitle = titles[levelNumber - 1] || titles[0];
-    const percentage = Math.min(Math.round((xp / 1000) * 100), 100);
-    return { levelNumber, levelTitle, percentage };
-  };
 
   const pitInfo = getLevelInfo(footprint.show_attendance, [
     'Armchair Listener', 'Casual Attender', 'Show Regular', 'Pit Contender', 
@@ -104,52 +107,68 @@ export const calculateListenerMetrics = (profile: any): Record<string, ListenerM
       label: 'Pit Frequency',
       currentXP: footprint.show_attendance,
       percentage: pitInfo.percentage,
+      overallPercentage: pitInfo.overallPercentage,
       levelNumber: pitInfo.levelNumber,
       levelTitle: pitInfo.levelTitle,
-      description: 'Tracks your real-world attendance at live concerts, festival dates, and venue check-ins.',
-      howToEarn: 'Earn +20 XP per verified ticket stub scan/RSVP and +5 XP for daily venue check-ins.',
+      currentLevelXP: pitInfo.currentLevelXP,
+      nextLevelXP: pitInfo.nextLevelXP,
+      xpToNextLevel: pitInfo.xpToNextLevel,
+      description: 'Tracks your verified attendance at live concerts, festival check-ins, and ticket stubs over weeks and months of touring and gig-going.',
+      howToEarn: 'Earn +5 XP per verified show ticket/RSVP and +2 XP for live venue check-ins.',
       actionLabel: 'Find Upcoming Shows',
       instantActionLabel: 'Check In to Tonight\'s Gig',
-      instantActionXP: 5
+      instantActionXP: 2
     },
     crate_digger: {
       id: 'crate_digger',
       label: 'Underground Loyalty',
       currentXP: footprint.crate_digger,
       percentage: diggerInfo.percentage,
+      overallPercentage: diggerInfo.overallPercentage,
       levelNumber: diggerInfo.levelNumber,
       levelTitle: diggerInfo.levelTitle,
-      description: 'Measures active streaming of independent releases, Bandcamp audio, and underground demo reels.',
-      howToEarn: 'Earn +2 XP per local demo stream, +5 XP per Bandcamp listen, and +15 XP for Bandcamp purchases.',
+      currentLevelXP: diggerInfo.currentLevelXP,
+      nextLevelXP: diggerInfo.nextLevelXP,
+      xpToNextLevel: diggerInfo.xpToNextLevel,
+      description: 'Measures active streaming of independent demo reels, Bandcamp audio, and underground tapes.',
+      howToEarn: 'Earn +1 XP per demo/tape stream and +10 XP per direct Bandcamp purchase.',
       actionLabel: 'Explore Music Vault',
       instantActionLabel: 'Stream Underground Demo',
-      instantActionXP: 5
+      instantActionXP: 1
     },
     physical_collector: {
       id: 'physical_collector',
       label: 'Physical Collector',
       currentXP: footprint.physical_collector,
       percentage: collectorInfo.percentage,
+      overallPercentage: collectorInfo.overallPercentage,
       levelNumber: collectorInfo.levelNumber,
       levelTitle: collectorInfo.levelTitle,
-      description: 'Reflects verified physical vinyl, cassette tape, patch, and official merch order ownership.',
-      howToEarn: 'Earn +30 XP per Resale Closet order and +25 XP per official band merchandise purchase.',
+      currentLevelXP: collectorInfo.currentLevelXP,
+      nextLevelXP: collectorInfo.nextLevelXP,
+      xpToNextLevel: collectorInfo.xpToNextLevel,
+      description: 'Reflects verified physical vinyl, cassette tape, patch, and official band merchandise order ownership.',
+      howToEarn: 'Earn +15 XP per verified band merchandise order and +10 XP per Resale Closet purchase.',
       actionLabel: 'Browse Resale Closet',
       instantActionLabel: 'Log Physical Merch Scan',
-      instantActionXP: 25
+      instantActionXP: 10
     },
     signal_contributor: {
       id: 'signal_contributor',
       label: 'Signal Contributor',
       currentXP: footprint.signal_contributor,
       percentage: signalInfo.percentage,
+      overallPercentage: signalInfo.overallPercentage,
       levelNumber: signalInfo.levelNumber,
       levelTitle: signalInfo.levelTitle,
-      description: 'Measures your ongoing contributions to community transmissions, forum debates, and polls.',
-      howToEarn: 'Earn +10 XP per timeline transmission, +8 XP per forum discussion, and +3 XP per flame reaction.',
+      currentLevelXP: signalInfo.currentLevelXP,
+      nextLevelXP: signalInfo.nextLevelXP,
+      xpToNextLevel: signalInfo.xpToNextLevel,
+      description: 'Measures your ongoing scene contributions to community transmissions, photo pit drops, forum debates, and polls.',
+      howToEarn: 'Earn +2-3 XP per timeline transmission, +2 XP per forum discussion, +1 XP per comment, and +1 XP per flame reaction.',
       actionLabel: 'Post to Photo Pit',
       instantActionLabel: 'Broadcast Scene Transmission',
-      instantActionXP: 10
+      instantActionXP: 2
     }
   };
 };
@@ -208,7 +227,7 @@ export const SonicFootprint: React.FC<SonicFootprintProps> = ({ profile, onActio
 
   const handleInstantAction = (metric: ListenerMetric) => {
     const metricId = metric.id as SonicMetricId;
-    const amount = metric.instantActionXP || 5;
+    const amount = metric.instantActionXP || 2;
     const reason = metric.instantActionLabel || 'Scene interaction logged';
     
     awardSonicPoints(metricId, amount, reason);
@@ -238,7 +257,7 @@ export const SonicFootprint: React.FC<SonicFootprintProps> = ({ profile, onActio
         <div className="flex items-center gap-2 flex-wrap justify-center">
           <div className="px-3 py-1 bg-purple-950/70 border border-purple-800/70 rounded-full text-[11px] font-mono font-bold text-purple-300 shadow-sm shadow-purple-950 flex items-center gap-1.5">
             <Sparkles className="w-3 h-3 text-purple-400 animate-pulse" />
-            <span>{totalXP.toLocaleString()} / 4,000 XP</span>
+            <span>{totalXP.toLocaleString()} / {MAX_TOTAL_XP.toLocaleString()} XP</span>
           </div>
 
           <button
@@ -336,36 +355,66 @@ export const SonicFootprint: React.FC<SonicFootprintProps> = ({ profile, onActio
                 onClick={() => toggleExpand(metric.id)}
                 className="p-3 cursor-pointer select-none space-y-2"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-1">
                   <div className="flex items-center space-x-1.5 min-w-0 flex-1">
                     <span className={`w-2 h-2 rounded-full shrink-0 ${isRecentlyAwarded ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-ping' : 'bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.8)]'}`} />
-                    <MarqueeText text={metric.label} className="text-[11px] font-bold uppercase tracking-wider text-zinc-100 font-mono" />
+                    <span 
+                      className="text-[11px] font-bold uppercase tracking-wider text-zinc-100 font-mono truncate"
+                      title={metric.label}
+                    >
+                      {metric.label}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-mono font-bold text-purple-300 shrink-0 ml-1">
+                  <span className="text-[10px] font-mono font-bold text-purple-300 shrink-0 bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-800/40">
                     Lvl {metric.levelNumber}
                   </span>
                 </div>
 
-                {/* Progress Bar */}
+                {/* Progress Bar (Level Milestone Progress) */}
                 <div className="w-full bg-zinc-950 h-1.5 rounded-full overflow-hidden border border-zinc-800/80">
                   <div
                     className="bg-gradient-to-r from-purple-600 via-purple-500 to-violet-400 h-full rounded-full transition-all duration-300"
                     style={{ width: `${metric.percentage}%` }}
+                    title={`${metric.percentage}% to Level ${Math.min(metric.levelNumber + 1, 10)}`}
                   />
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 pt-0.5">
-                  <div className="min-w-0 flex-1 pr-1">
-                    <MarqueeText text={metric.levelTitle} className="text-zinc-400" />
-                  </div>
-                  <span className="shrink-0">{metric.currentXP} XP</span>
+                  <span className="text-zinc-300 font-medium truncate max-w-[105px] sm:max-w-[130px]" title={metric.levelTitle}>
+                    {metric.levelTitle}
+                  </span>
+                  <span className="shrink-0 font-bold text-zinc-300">
+                    {metric.currentXP.toLocaleString()} XP
+                  </span>
                 </div>
               </div>
 
               {/* Expanded Details Drawer */}
               {isExpanded && (
                 <div className="px-3 pb-3 pt-1 border-t border-zinc-800/60 bg-zinc-950/60 space-y-2.5 animate-in fade-in slide-in-from-top-1 text-left">
-                  <p className="text-[11px] text-zinc-300 leading-relaxed mt-1 font-mono">
+                  {/* Milestone status */}
+                  <div className="bg-purple-950/40 border border-purple-800/50 p-2.5 rounded-lg flex items-center justify-between gap-2 text-xs font-mono">
+                    <div>
+                      <span className="text-purple-300 font-bold block text-[11px]">
+                        Level {metric.levelNumber} — {metric.levelTitle}
+                      </span>
+                      <span className="text-[10px] text-zinc-400">
+                        {metric.levelNumber < 10 
+                          ? `${metric.xpToNextLevel.toLocaleString()} XP needed for Level ${metric.levelNumber + 1}`
+                          : 'Maximum mastery level reached!'}
+                      </span>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-[11px] font-bold text-purple-200 block">
+                        {metric.percentage}%
+                      </span>
+                      <span className="text-[9px] text-zinc-500">
+                        Tier Progress
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-zinc-300 leading-relaxed font-mono">
                     {metric.description}
                   </p>
 

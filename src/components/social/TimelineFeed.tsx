@@ -142,6 +142,7 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
   // Inline post edit state
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>('');
+  const [editingImages, setEditingImages] = useState<string[]>([]);
 
   // Song playback preview state
   const [playingSongId, setPlayingSongId] = useState<string | null>(null);
@@ -329,21 +330,28 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
 
   const startEditing = (post: FeedPost) => {
     setEditingPostId(post.id);
-    setEditingText(post.message);
+    setEditingText(post.message || (post as any).content || '');
+    const currentImgs = (post.images && post.images.length > 0)
+      ? post.images
+      : (post.image_url ? [post.image_url] : (post.image ? [post.image] : (post.mediaUrl ? [post.mediaUrl] : (post.media_url ? [post.media_url] : []))));
+    setEditingImages(currentImgs.filter(Boolean));
   };
 
   const cancelEditing = () => {
     setEditingPostId(null);
     setEditingText('');
+    setEditingImages([]);
   };
 
-  const saveEditing = (postId: string, newText: string) => {
-    if (!newText.trim()) return;
+  const saveEditing = (postId: string, newText: string, newImages?: string[]) => {
+    const imagesToSave = newImages !== undefined ? newImages : editingImages;
+    if (!newText.trim() && imagesToSave.length === 0) return;
     if (onEditPost) {
-      onEditPost(postId, newText.trim());
+      onEditPost(postId, newText.trim(), imagesToSave);
     }
     setEditingPostId(null);
     setEditingText('');
+    setEditingImages([]);
   };
 
   const handleShare = (postId: string) => {
@@ -448,7 +456,7 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
               }
 
               return (
-                <React.Fragment key={post.id ? `feed-post-${index}-${post.id}` : `feed-post-${index}`}>
+                <React.Fragment key={post.id ? `feed-post-${post.id}` : `feed-post-${index}`}>
                   <PostCard
                     post={post}
                     currentUserId={currentUserId}
@@ -461,6 +469,7 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
                     replyingTo={replyingToCommentId[post.id] || null}
                     isEditing={editingPostId === post.id}
                     editingText={editingText}
+                    editingImages={editingImages}
                     isPostMenuOpen={openPostMenuId === post.id}
                     isReactionMenuOpen={reactionMenuPostId === post.id}
                     isHypeAnimated={!!hypeAnimations[post.id]}
@@ -485,8 +494,9 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
                     onTogglePin={onTogglePin}
                     onStartEditing={() => startEditing(post)}
                     onCancelEditing={cancelEditing}
-                    onSaveEditing={(txt) => saveEditing(post.id, txt)}
+                    onSaveEditing={(txt, imgs) => saveEditing(post.id, txt, imgs)}
                     onSetEditingText={setEditingText}
+                    onSetEditingImages={setEditingImages}
                     onDeletePost={onDeletePost}
                     onShareClick={() => handleShare(post.id)}
                     onOpenBoostModal={() => setActiveBoostPostId(post.id)}

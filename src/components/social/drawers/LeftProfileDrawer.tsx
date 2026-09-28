@@ -3423,8 +3423,8 @@ if (!leftDrawerOpen) return null;
                   try {
                     triggerNotification?.("⏳ Processing and optimizing image...");
                     const userProfileId = userProfile?.id || 'profile_anonymous';
-                    const bucket = 'community-bands';
-                    const token = cropperType === 'avatar' ? 'profile-avatar' : 'cover-banner';
+                    const bucket = cropperType === 'avatar' ? 'avatars' : 'bannersv2';
+                    const token = cropperType === 'avatar' ? 'profile-avatar' : 'profile-banner';
                     
                     // Attempt the storage upload strictly
                     const publicUrl = await uploadBase64ToStorage(croppedBase64, bucket, userProfileId, token);
@@ -3435,17 +3435,76 @@ if (!leftDrawerOpen) return null;
 
                     if (cropperType === 'avatar') {
                       if (setProfileAvatarUrl) setProfileAvatarUrl(publicUrl);
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('nexus_user_avatar', publicUrl);
+                        localStorage.setItem('nexus_avatar', publicUrl);
+                        localStorage.setItem('nexus_promoter_logo', publicUrl);
+                        localStorage.setItem('nexus_creative_avatar', publicUrl);
+                        localStorage.setItem('nexus_label_avatar', publicUrl);
+                        localStorage.setItem('nexus_band_logo', publicUrl);
+                      }
                     } else {
                       if (setProfileCoverUrl) setProfileCoverUrl(publicUrl);
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('nexus_user_banner', publicUrl);
+                        localStorage.setItem('nexus_banner', publicUrl);
+                        localStorage.setItem('nexus_promoter_cover', publicUrl);
+                        localStorage.setItem('nexus_creative_banner', publicUrl);
+                        localStorage.setItem('nexus_label_banner', publicUrl);
+                        localStorage.setItem('nexus_band_cover', publicUrl);
+                      }
                     }
 
                     if (setUserProfile) {
-                      setUserProfile((prev: any) => prev ? {
-                        ...prev,
-                        ...(cropperType === 'avatar'
-                          ? { avatar: publicUrl, avatar_url: publicUrl, logo_url: publicUrl }
-                          : { banner: publicUrl, banner_url: publicUrl, cover_url: publicUrl })
-                      } : prev);
+                      setUserProfile((prev: any) => {
+                        const updated = prev ? {
+                          ...prev,
+                          ...(cropperType === 'avatar'
+                            ? {
+                                avatar: publicUrl,
+                                avatar_url: publicUrl,
+                                logo_url: publicUrl,
+                                promoter_logo: publicUrl,
+                                promoter_metadata: {
+                                  ...(prev.promoter_metadata || {}),
+                                  logo_url: publicUrl,
+                                  avatar_url: publicUrl
+                                },
+                                creative_avatar: publicUrl,
+                                creative_metadata: {
+                                  ...(prev.creative_metadata || {}),
+                                  avatar_url: publicUrl,
+                                  image: publicUrl
+                                },
+                                label_avatar: publicUrl,
+                                band_logo: publicUrl
+                              }
+                            : {
+                                banner: publicUrl,
+                                banner_url: publicUrl,
+                                cover_url: publicUrl,
+                                promoter_cover_image: publicUrl,
+                                promoter_metadata: {
+                                  ...(prev.promoter_metadata || {}),
+                                  banner_url: publicUrl,
+                                  cover_url: publicUrl
+                                },
+                                creative_banner: publicUrl,
+                                creative_metadata: {
+                                  ...(prev.creative_metadata || {}),
+                                  banner_url: publicUrl
+                                },
+                                label_banner: publicUrl,
+                                band_cover: publicUrl
+                              })
+                        } : prev;
+                        if (typeof window !== 'undefined' && updated) {
+                          try {
+                            localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated));
+                          } catch (_) {}
+                        }
+                        return updated;
+                      });
                     }
 
                     if (userProfile?.id) {
@@ -3457,12 +3516,31 @@ if (!leftDrawerOpen) return null;
                           await autoArchiveProfileAssets(sbClient, userProfile.id, null, publicUrl, userProfile.name);
                         }
 
-                        const columnToUpdate = cropperType === 'avatar' ? { avatar_url: publicUrl } : { banner_url: publicUrl };
-                        const globalPayload = extractGlobalProfilePayload({
+                        const columnToUpdate = cropperType === 'avatar' 
+                          ? { 
+                              avatar_url: publicUrl,
+                              ...(userProfile.promoter_metadata ? {
+                                promoter_metadata: {
+                                  ...userProfile.promoter_metadata,
+                                  logo_url: publicUrl,
+                                  avatar_url: publicUrl
+                                }
+                              } : {})
+                            } 
+                          : { 
+                              banner_url: publicUrl,
+                              ...(userProfile.promoter_metadata ? {
+                                promoter_metadata: {
+                                  ...userProfile.promoter_metadata,
+                                  banner_url: publicUrl,
+                                  cover_url: publicUrl
+                                }
+                              } : {})
+                            };
+                        await executeSanitizedProfileUpsert(sbClient, {
                           id: userProfile.id,
                           ...columnToUpdate
-                        }, userProfile.id);
-                        await executeSanitizedProfileUpsert(sbClient, globalPayload);
+                        });
 
                         // If portal is band or user is linked to band, sync to bands table too
                         if (portalRole === 'band' || (userProfile as any)?.band_id || (props as any)?.activeBand?.id) {
@@ -3487,19 +3565,34 @@ if (!leftDrawerOpen) return null;
                       }
                     }
 
-                    // Dispatch avatar update event globally
-                    window.dispatchEvent(new CustomEvent('nexus_avatar_updated', {
-                      detail: {
-                        id: userProfile?.id,
-                        avatarUrl: publicUrl,
-                        avatar_url: publicUrl,
-                        logo_url: publicUrl,
-                        logoUrl: publicUrl,
-                        authorName: profileFullLegalName || userProfile?.name || 'User',
-                        name: profileFullLegalName || userProfile?.name || 'User',
-                        authorRole: portalRole || 'User'
-                      }
-                    }));
+                    // Dispatch appropriate update event globally
+                    if (cropperType === 'avatar') {
+                      window.dispatchEvent(new CustomEvent('nexus_avatar_updated', {
+                        detail: {
+                          id: userProfile?.id,
+                          avatarUrl: publicUrl,
+                          avatar_url: publicUrl,
+                          logo_url: publicUrl,
+                          logoUrl: publicUrl,
+                          authorName: profileFullLegalName || userProfile?.name || 'User',
+                          name: profileFullLegalName || userProfile?.name || 'User',
+                          authorRole: portalRole || 'User'
+                        }
+                      }));
+                    } else {
+                      window.dispatchEvent(new CustomEvent('nexus_cover_updated', {
+                        detail: {
+                          id: userProfile?.id,
+                          coverUrl: publicUrl,
+                          cover_url: publicUrl,
+                          banner_url: publicUrl,
+                          bannerUrl: publicUrl,
+                          authorName: profileFullLegalName || userProfile?.name || 'User',
+                          name: profileFullLegalName || userProfile?.name || 'User',
+                          authorRole: portalRole || 'User'
+                        }
+                      }));
+                    }
 
                     triggerNotification?.(`✨ ${cropperType === 'avatar' ? 'Profile Avatar' : 'Cover Banner'} updated & synchronized!`);
                   } catch (err: any) {

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ChevronDown, MapPin, Ticket, Filter, Map as MapIcon, SlidersHorizontal, Calendar, Star, Clock, Trash2 } from 'lucide-react';
+import { ChevronDown, MapPin, Ticket, Filter, Map as MapIcon, SlidersHorizontal, Calendar, Star, Clock, Trash2, History } from 'lucide-react';
 import { formatTimeTo12h, hasGigTickets } from '../../utils/socialFeedUtils';
 
 export interface LiveTonightGig {
@@ -35,6 +35,7 @@ export interface SubViewControlPanelsProps {
   filterShowMerchDropsOnlyFromFollowed?: boolean;
   setFilterShowMerchDropsOnlyFromFollowed?: (val: boolean) => void;
   onOpenMapModal?: () => void;
+  onOpenArchivesModal?: () => void;
   onOpenShowCreator?: () => void;
   onEditShow?: (gig: LiveTonightGig) => void;
   onDeleteGig?: (gig: LiveTonightGig) => void;
@@ -55,6 +56,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
   filterShowMerchDropsOnlyFromFollowed = false,
   setFilterShowMerchDropsOnlyFromFollowed,
   onOpenMapModal,
+  onOpenArchivesModal,
   onOpenShowCreator,
   onEditShow,
   onDeleteGig,
