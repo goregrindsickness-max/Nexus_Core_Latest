@@ -133,6 +133,9 @@ export interface Show {
   client_id?: string;
   is_synced?: boolean;
   is_community_submitted?: boolean;
+  headliner?: string;
+  show_name?: string;
+  is_managed_client_booking?: boolean;
   external_ticket_url?: string;
   collaborator_ids?: string[];
 

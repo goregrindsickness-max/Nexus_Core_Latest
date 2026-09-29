@@ -451,7 +451,7 @@ export default function EventsWorkspace(props: any) {
                               <Plus className="w-4 h-4" />
                             </button>
                             <button type="button" onClick={() => setDashboardV2ActiveNav('EVENTS')} className="text-[10.5px] font-mono text-zinc-500 hover:text-white transition-colors cursor-pointer">
-                              Total Shows: {shows.length}
+                              Total Shows: {filteredShows.length}
                             </button>
                           </div>
                         </div>

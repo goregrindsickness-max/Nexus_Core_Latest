@@ -1,4 +1,5 @@
 import { venuesStore } from '../utils/indexedDB';
+import { getApiEndpoint, getApiFallbackEndpoints } from '../utils/apiConfig';
 
 export interface VenueResult {
   id: string;
@@ -916,6 +917,994 @@ export const BUILT_IN_BLACK_BOOK_VENUES: VenueResult[] = [
     contactPhone: '(813) 972-8184',
     contactEmail: 'brassmugtampa@gmail.com',
     parkingNotes: 'Historic Florida death metal staple.'
+  },
+
+  // ST. LOUIS, MO & GREATER METRO
+  {
+    id: 'bb_v_stl_1',
+    name: 'The Sinkhole',
+    city: 'St. Louis',
+    state: 'MO',
+    country: 'USA',
+    streetAddress: '7404 S Broadway',
+    fullAddress: '7404 S Broadway, St. Louis, MO 63111',
+    capacity: 150,
+    payoutRating: 4.9,
+    loadInRating: 4.6,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'The Sinkhole • St. Louis, MO (Cap: 150)',
+    contactName: 'Matt Harnish / Booking Team',
+    contactPhone: '(314) 328-2309',
+    contactEmail: 'sinkholestl@gmail.com',
+    parkingNotes: 'Dedicated south Broadway parking lot. Direct side door load-in. Epic underground extreme metal & grind haven.',
+    tags: ['st. louis', 'st louis', 'saint louis', 'st. louis, mo', 'st louis, mo', 'st. louis mo', 'st louis mo', 'stl', 'missouri', 'underground', 'diy', 'metal', 'grind']
+  },
+  {
+    id: 'bb_v_stl_2',
+    name: 'Red Flag',
+    city: 'St. Louis',
+    state: 'MO',
+    country: 'USA',
+    streetAddress: '3040 Locust St',
+    fullAddress: '3040 Locust St, St. Louis, MO 63103',
+    capacity: 1000,
+    payoutRating: 5.0,
+    loadInRating: 4.8,
+    genreFit: 98,
+    source: 'blackbook',
+    displayText: 'Red Flag • St. Louis, MO (Cap: 1000)',
+    contactName: 'Bob Pro Production & Talent',
+    contactPhone: '(314) 289-9050',
+    contactEmail: 'booking@redflagstl.com',
+    parkingNotes: 'Secured alley bus & trailer parking with 50A power. Ground-level double door load-in straight to stage left.',
+    tags: ['st. louis', 'st louis', 'saint louis', 'st. louis, mo', 'st louis, mo', 'st. louis mo', 'st louis mo', 'stl', 'missouri', 'touring', 'metal', 'midtown']
+  },
+  {
+    id: 'bb_v_stl_3',
+    name: "Pop's Nightclub & Concert Venue",
+    city: 'Sauget',
+    state: 'IL',
+    country: 'USA',
+    streetAddress: '401 Monsanto Ave',
+    fullAddress: '401 Monsanto Ave, Sauget, IL 62201',
+    capacity: 1200,
+    payoutRating: 4.8,
+    loadInRating: 4.7,
+    genreFit: 99,
+    source: 'blackbook',
+    displayText: "Pop's Concert Venue • St. Louis Metro (Cap: 1200)",
+    contactName: 'Production & Talent Office',
+    contactPhone: '(618) 274-6720',
+    contactEmail: 'booking@popsrocks.com',
+    parkingNotes: 'Massive private tour bus parking lot directly behind venue. Legendary 24-hour Midwest heavy metal institution.',
+    tags: ['st. louis', 'st louis', 'saint louis', 'st. louis, mo', 'st louis, mo', 'st. louis mo', 'st louis mo', 'stl', 'sauget', 'metro east', 'legendary']
+  },
+  {
+    id: 'bb_v_stl_4',
+    name: 'Off Broadway',
+    city: 'St. Louis',
+    state: 'MO',
+    country: 'USA',
+    streetAddress: '3509 Lemp Ave',
+    fullAddress: '3509 Lemp Ave, St. Louis, MO 63118',
+    capacity: 400,
+    payoutRating: 4.8,
+    loadInRating: 4.4,
+    genreFit: 90,
+    source: 'blackbook',
+    displayText: 'Off Broadway • St. Louis, MO (Cap: 400)',
+    contactName: 'Steve Pohlman',
+    contactPhone: '(314) 498-6989',
+    contactEmail: 'offbroadwaystl@gmail.com',
+    parkingNotes: 'Benton Park historic district. Front load-in, van/trailer street parking reserved with city cones.',
+    tags: ['st. louis', 'st louis', 'saint louis', 'st. louis, mo', 'st louis, mo', 'st. louis mo', 'st louis mo', 'stl', 'missouri', 'club']
+  },
+  {
+    id: 'bb_v_stl_5',
+    name: 'Delmar Hall',
+    city: 'St. Louis',
+    state: 'MO',
+    country: 'USA',
+    streetAddress: '6133 Delmar Blvd',
+    fullAddress: '6133 Delmar Blvd, St. Louis, MO 63112',
+    capacity: 800,
+    payoutRating: 5.0,
+    loadInRating: 4.9,
+    genreFit: 94,
+    source: 'blackbook',
+    displayText: 'Delmar Hall • St. Louis, MO (Cap: 800)',
+    contactName: 'The Pageant / Delmar Production Desk',
+    contactPhone: '(314) 726-6161',
+    contactEmail: 'production@thepageant.com',
+    parkingNotes: 'Rear loading dock with private tour bus parking pad and shore power.',
+    tags: ['st. louis', 'st louis', 'saint louis', 'st. louis, mo', 'st louis, mo', 'st. louis mo', 'st louis mo', 'stl', 'missouri', 'delmar loop']
+  },
+  {
+    id: 'bb_v_stl_6',
+    name: 'Blueberry Hill Duck Room',
+    city: 'St. Louis',
+    state: 'MO',
+    country: 'USA',
+    streetAddress: '6504 Delmar Blvd',
+    fullAddress: '6504 Delmar Blvd, St. Louis, MO 63130',
+    capacity: 340,
+    payoutRating: 4.7,
+    loadInRating: 4.1,
+    genreFit: 88,
+    source: 'blackbook',
+    displayText: 'Blueberry Hill Duck Room • St. Louis, MO (Cap: 340)',
+    contactName: 'Joe Edwards / Booking',
+    contactPhone: '(314) 727-4444',
+    contactEmail: 'duckroom@blueberryhill.com',
+    parkingNotes: 'Historic basement venue. Rear alley loading ramp.',
+    tags: ['st. louis', 'st louis', 'saint louis', 'st. louis, mo', 'st louis, mo', 'st. louis mo', 'st louis mo', 'stl', 'missouri', 'duck room']
+  },
+
+  // KANSAS CITY, MO & LAWRENCE, KS
+  {
+    id: 'bb_v_kc_1',
+    name: 'recordBar',
+    city: 'Kansas City',
+    state: 'MO',
+    country: 'USA',
+    streetAddress: '1520 Grand Blvd',
+    fullAddress: '1520 Grand Blvd, Kansas City, MO 64108',
+    capacity: 400,
+    payoutRating: 4.9,
+    loadInRating: 4.5,
+    genreFit: 96,
+    source: 'blackbook',
+    displayText: 'recordBar • Kansas City, MO (Cap: 400)',
+    contactName: 'Steve Tulipana',
+    contactPhone: '(816) 753-5207',
+    contactEmail: 'booking@therecordbar.com',
+    parkingNotes: 'Crossroads Arts District. Side alley load-in directly to green room / stage.',
+    tags: ['kansas city', 'kc', 'crossroads']
+  },
+  {
+    id: 'bb_v_kc_2',
+    name: 'The Rino',
+    city: 'North Kansas City',
+    state: 'MO',
+    country: 'USA',
+    streetAddress: '314 Armour Rd',
+    fullAddress: '314 Armour Rd, North Kansas City, MO 64116',
+    capacity: 150,
+    payoutRating: 4.8,
+    loadInRating: 4.3,
+    genreFit: 98,
+    source: 'blackbook',
+    displayText: 'The Rino • Kansas City, MO (Cap: 150)',
+    contactName: 'Rino Booking Team',
+    contactPhone: '(816) 945-2150',
+    contactEmail: 'booking@therinokc.com',
+    parkingNotes: 'Great DIY underground room for death metal, hardcore and touring packages. Free rear lot parking.',
+    tags: ['kansas city', 'kc', 'north kansas city', 'underground', 'diy']
+  },
+  {
+    id: 'bb_v_kc_3',
+    name: 'The Truman',
+    city: 'Kansas City',
+    state: 'MO',
+    country: 'USA',
+    streetAddress: '601 E Truman Rd',
+    fullAddress: '601 E Truman Rd, Kansas City, MO 64106',
+    capacity: 1200,
+    payoutRating: 5.0,
+    loadInRating: 4.9,
+    genreFit: 95,
+    source: 'blackbook',
+    displayText: 'The Truman • Kansas City, MO (Cap: 1200)',
+    contactName: 'Production Management',
+    contactPhone: '(816) 205-8560',
+    contactEmail: 'info@thetrumankc.com',
+    parkingNotes: 'Full tour bus parking pad on east side of building with multiple shore power tie-ins.',
+    tags: ['kansas city', 'kc', 'east crossroads', 'the truman']
+  },
+  {
+    id: 'bb_v_kc_4',
+    name: 'The Bottleneck',
+    city: 'Lawrence',
+    state: 'KS',
+    country: 'USA',
+    streetAddress: '737 New Hampshire St',
+    fullAddress: '737 New Hampshire St, Lawrence, KS 66044',
+    capacity: 450,
+    payoutRating: 4.8,
+    loadInRating: 4.5,
+    genreFit: 97,
+    source: 'blackbook',
+    displayText: 'The Bottleneck • Lawrence / KC Metro (Cap: 450)',
+    contactName: 'Brett Mosiman / Booking',
+    contactPhone: '(785) 841-5483',
+    contactEmail: 'bottleneckbooking@gmail.com',
+    parkingNotes: 'Rear parking lot off 8th St. Historic regional tour stop for heavy touring packages.',
+    tags: ['lawrence', 'kansas city', 'kc', 'bottleneck']
+  },
+  {
+    id: 'bb_v_kc_5',
+    name: 'Granada Theater',
+    city: 'Lawrence',
+    state: 'KS',
+    country: 'USA',
+    streetAddress: '1020 Massachusetts St',
+    fullAddress: '1020 Massachusetts St, Lawrence, KS 66044',
+    capacity: 900,
+    payoutRating: 4.9,
+    loadInRating: 4.6,
+    genreFit: 94,
+    source: 'blackbook',
+    displayText: 'Granada Theater • Lawrence / KC Metro (Cap: 900)',
+    contactName: 'Granada Production Desk',
+    contactPhone: '(785) 842-1390',
+    contactEmail: 'info@thegranada.com',
+    parkingNotes: 'Alley loading on 10th St. Dedicated tour bus parking permit provided.',
+    tags: ['lawrence', 'kansas city', 'kc', 'granada']
+  },
+
+  // CINCINNATI, OH & NEWPORT, KY
+  {
+    id: 'bb_v_cin_1',
+    name: "Bogart's",
+    city: 'Cincinnati',
+    state: 'OH',
+    country: 'USA',
+    streetAddress: '2621 Vine St',
+    fullAddress: '2621 Vine St, Cincinnati, OH 45219',
+    capacity: 1500,
+    payoutRating: 4.9,
+    loadInRating: 4.7,
+    genreFit: 96,
+    source: 'blackbook',
+    displayText: "Bogart's • Cincinnati, OH (Cap: 1500)",
+    contactName: 'Production & Ops Manager',
+    contactPhone: '(513) 872-8801',
+    contactEmail: 'bogartsbooking@livenation.com',
+    parkingNotes: 'Dedicated bus bay on Vine St with shore power hookups. Rear loading dock.',
+    tags: ['cincinnati', 'cincy', 'vine st']
+  },
+  {
+    id: 'bb_v_cin_2',
+    name: 'Legends Bar & Venue',
+    city: 'Cincinnati',
+    state: 'OH',
+    country: 'USA',
+    streetAddress: '3801 Harrison Ave',
+    fullAddress: '3801 Harrison Ave, Cheviot, OH 45211',
+    capacity: 300,
+    payoutRating: 4.8,
+    loadInRating: 4.4,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'Legends Bar & Venue • Cincinnati, OH (Cap: 300)',
+    contactName: 'Booking & Promotions Desk',
+    contactPhone: '(513) 662-1222',
+    contactEmail: 'legendsbarbooking@gmail.com',
+    parkingNotes: 'Premier underground metal & deathcore club in Greater Cincy. Private lot behind building.',
+    tags: ['cincinnati', 'cincy', 'cheviot', 'underground', 'metal']
+  },
+  {
+    id: 'bb_v_cin_3',
+    name: 'Southgate House Revival',
+    city: 'Newport',
+    state: 'KY',
+    country: 'USA',
+    streetAddress: '111 E 6th St',
+    fullAddress: '111 E 6th St, Newport, KY 41071',
+    capacity: 600,
+    payoutRating: 4.9,
+    loadInRating: 4.5,
+    genreFit: 95,
+    source: 'blackbook',
+    displayText: 'Southgate House Revival • Cincinnati Metro (Cap: 600)',
+    contactName: 'Morrella Raleigh / Booking',
+    contactPhone: '(859) 431-2201',
+    contactEmail: 'booking@southgatehouse.com',
+    parkingNotes: 'Historic church conversion 2 minutes across the Ohio river from downtown Cincy. Dedicated van/bus parking in gravel lot.',
+    tags: ['cincinnati', 'cincy', 'newport', 'sanctuary']
+  },
+  {
+    id: 'bb_v_cin_4',
+    name: 'Top Cats',
+    city: 'Cincinnati',
+    state: 'OH',
+    country: 'USA',
+    streetAddress: '2820 Vine St',
+    fullAddress: '2820 Vine St, Cincinnati, OH 45219',
+    capacity: 500,
+    payoutRating: 4.7,
+    loadInRating: 4.3,
+    genreFit: 94,
+    source: 'blackbook',
+    displayText: 'Top Cats • Cincinnati, OH (Cap: 500)',
+    contactName: 'Dan Mueller',
+    contactPhone: '(513) 559-0005',
+    contactEmail: 'booking@topcatscincy.com',
+    parkingNotes: 'Direct Vine street frontage near UC campus. Side stage ramp load-in.',
+    tags: ['cincinnati', 'cincy', 'top cats']
+  },
+
+  // PITTSBURGH, PA
+  {
+    id: 'bb_v_pit_1',
+    name: 'Preserving Underground',
+    city: 'New Kensington',
+    state: 'PA',
+    country: 'USA',
+    streetAddress: '1101 Pittsburgh St',
+    fullAddress: '1101 Pittsburgh St, New Kensington, PA 15068',
+    capacity: 450,
+    payoutRating: 5.0,
+    loadInRating: 4.8,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'Preserving Underground • Pittsburgh Metro (Cap: 450)',
+    contactName: 'Josh Schroeder / Preserving Records',
+    contactPhone: '(724) 472-1322',
+    contactEmail: 'preservingbooking@gmail.com',
+    parkingNotes: 'The premier national metalcore/death metal touring room in Western PA. Record store on site, massive private parking lot with trailer parking.',
+    tags: ['pittsburgh', 'pgh', 'preserving', 'metal', 'hardcore']
+  },
+  {
+    id: 'bb_v_pit_2',
+    name: 'Mr. Smalls Theatre',
+    city: 'Millvale',
+    state: 'PA',
+    country: 'USA',
+    streetAddress: '400 Lincoln Ave',
+    fullAddress: '400 Lincoln Ave, Millvale, PA 15209',
+    capacity: 800,
+    payoutRating: 4.9,
+    loadInRating: 4.6,
+    genreFit: 96,
+    source: 'blackbook',
+    displayText: 'Mr. Smalls Theatre • Pittsburgh, PA (Cap: 800)',
+    contactName: 'Liz Berlin / Mike Speranzo',
+    contactPhone: '(412) 821-4447',
+    contactEmail: 'booking@mrsmalls.com',
+    parkingNotes: 'Converted 18th-century sanctuary with legendary acoustics. Bus parking on Lincoln Ave with 50A hookup.',
+    tags: ['pittsburgh', 'pgh', 'millvale', 'mr smalls']
+  },
+  {
+    id: 'bb_v_pit_3',
+    name: 'Crafthouse Stage & Grill',
+    city: 'Pittsburgh',
+    state: 'PA',
+    country: 'USA',
+    streetAddress: '5024 Curry Rd',
+    fullAddress: '5024 Curry Rd, Pittsburgh, PA 15236',
+    capacity: 350,
+    payoutRating: 4.8,
+    loadInRating: 4.7,
+    genreFit: 97,
+    source: 'blackbook',
+    displayText: 'Crafthouse Stage & Grill • Pittsburgh, PA (Cap: 350)',
+    contactName: 'Production Management',
+    contactPhone: '(412) 653-2695',
+    contactEmail: 'booking@crafthousepgh.com',
+    parkingNotes: 'Huge private lot, direct ground load-in with no stairs. Great stage and hospitality.',
+    tags: ['pittsburgh', 'pgh', 'crafthouse']
+  },
+  {
+    id: 'bb_v_pit_4',
+    name: 'Roxian Theatre',
+    city: 'McKees Rocks',
+    state: 'PA',
+    country: 'USA',
+    streetAddress: '425 Chartiers Ave',
+    fullAddress: '425 Chartiers Ave, McKees Rocks, PA 15136',
+    capacity: 1400,
+    payoutRating: 5.0,
+    loadInRating: 4.8,
+    genreFit: 94,
+    source: 'blackbook',
+    displayText: 'Roxian Theatre • Pittsburgh, PA (Cap: 1400)',
+    contactName: 'Roxian Operations Team',
+    contactPhone: '(412) 331-1050',
+    contactEmail: 'info@roxiantheatre.com',
+    parkingNotes: 'Full modern production facility, tour bus parking with shore power.',
+    tags: ['pittsburgh', 'pgh', 'roxian']
+  },
+
+  // SALT LAKE CITY, UT
+  {
+    id: 'bb_v_slc_1',
+    name: 'The Complex',
+    city: 'Salt Lake City',
+    state: 'UT',
+    country: 'USA',
+    streetAddress: '536 W 100 S',
+    fullAddress: '536 W 100 S, Salt Lake City, UT 84101',
+    capacity: 2500,
+    payoutRating: 5.0,
+    loadInRating: 4.9,
+    genreFit: 98,
+    source: 'blackbook',
+    displayText: 'The Complex • Salt Lake City, UT (Cap: 2500)',
+    contactName: 'Production & Booking Office',
+    contactPhone: '(801) 528-9197',
+    contactEmail: 'booking@thecomplexslc.com',
+    parkingNotes: 'Multi-room facility. Gated rear tour bus staging lot with dual 50A shore power.',
+    tags: ['salt lake city', 'slc', 'utah']
+  },
+  {
+    id: 'bb_v_slc_2',
+    name: 'Metro Music Hall',
+    city: 'Salt Lake City',
+    state: 'UT',
+    country: 'USA',
+    streetAddress: '615 W 100 S',
+    fullAddress: '615 W 100 S, Salt Lake City, UT 84101',
+    capacity: 600,
+    payoutRating: 4.8,
+    loadInRating: 4.5,
+    genreFit: 99,
+    source: 'blackbook',
+    displayText: 'Metro Music Hall • Salt Lake City, UT (Cap: 600)',
+    contactName: 'Sartain & Saunders Booking',
+    contactPhone: '(801) 359-3219',
+    contactEmail: 'booking@metromusichall.com',
+    parkingNotes: 'Touring heavy metal & darkwave headquarters in SLC. Rear load-in door directly to stage.',
+    tags: ['salt lake city', 'slc', 'metro music hall']
+  },
+  {
+    id: 'bb_v_slc_3',
+    name: 'Urban Lounge',
+    city: 'Salt Lake City',
+    state: 'UT',
+    country: 'USA',
+    streetAddress: '241 S 500 E',
+    fullAddress: '241 S 500 E, Salt Lake City, UT 84102',
+    capacity: 400,
+    payoutRating: 4.8,
+    loadInRating: 4.3,
+    genreFit: 95,
+    source: 'blackbook',
+    displayText: 'Urban Lounge • Salt Lake City, UT (Cap: 400)',
+    contactName: 'Will Sartain',
+    contactPhone: '(801) 746-0504',
+    contactEmail: 'info@theurbanloungeslc.com',
+    parkingNotes: 'Central Salt Lake room. Dedicated street loading zone.',
+    tags: ['salt lake city', 'slc', 'urban lounge']
+  },
+
+  // BOISE, ID
+  {
+    id: 'bb_v_boi_1',
+    name: 'The Shredder',
+    city: 'Boise',
+    state: 'ID',
+    country: 'USA',
+    streetAddress: '430 S 10th St',
+    fullAddress: '430 S 10th St, Boise, ID 83702',
+    capacity: 250,
+    payoutRating: 4.9,
+    loadInRating: 4.5,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'The Shredder • Boise, ID (Cap: 250)',
+    contactName: 'Jeff Ament / Shredder Staff',
+    contactPhone: '(208) 345-4309',
+    contactEmail: 'shredderboise@gmail.com',
+    parkingNotes: 'All-ages underground heavy music epicenter in Idaho. Skatepark & venue. Private lot parking.',
+    tags: ['boise', 'idaho', 'shredder', 'diy', 'metal']
+  },
+  {
+    id: 'bb_v_boi_2',
+    name: 'Knitting Factory Boise',
+    city: 'Boise',
+    state: 'ID',
+    country: 'USA',
+    streetAddress: '416 S 9th St',
+    fullAddress: '416 S 9th St, Boise, ID 83702',
+    capacity: 1000,
+    payoutRating: 4.9,
+    loadInRating: 4.7,
+    genreFit: 96,
+    source: 'blackbook',
+    displayText: 'Knitting Factory • Boise, ID (Cap: 1000)',
+    contactName: 'Production Management',
+    contactPhone: '(208) 367-1212',
+    contactEmail: 'boisebooking@knittingfactory.com',
+    parkingNotes: 'Downtown Boise loading dock with tour bus shore power.',
+    tags: ['boise', 'idaho', 'knitting factory']
+  },
+
+  // SPOKANE, WA
+  {
+    id: 'bb_v_spk_1',
+    name: 'The Big Dipper',
+    city: 'Spokane',
+    state: 'WA',
+    country: 'USA',
+    streetAddress: '171 S Washington St',
+    fullAddress: '171 S Washington St, Spokane, WA 99201',
+    capacity: 250,
+    payoutRating: 4.9,
+    loadInRating: 4.6,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'The Big Dipper • Spokane, WA (Cap: 250)',
+    contactName: 'Dan Hoerner (Booking)',
+    contactPhone: '(509) 863-8098',
+    contactEmail: 'bigdipperspokane@gmail.com',
+    parkingNotes: 'Historic Spokane heavy metal and punk landmark. Rear load-in directly to stage.',
+    tags: ['spokane', 'washington', 'big dipper', 'metal', 'all ages']
+  },
+  {
+    id: 'bb_v_spk_2',
+    name: 'Knitting Factory Spokane',
+    city: 'Spokane',
+    state: 'WA',
+    country: 'USA',
+    streetAddress: '919 W Sprague Ave',
+    fullAddress: '919 W Sprague Ave, Spokane, WA 99201',
+    capacity: 1500,
+    payoutRating: 4.9,
+    loadInRating: 4.8,
+    genreFit: 95,
+    source: 'blackbook',
+    displayText: 'Knitting Factory • Spokane, WA (Cap: 1500)',
+    contactName: 'Spokane Production Desk',
+    contactPhone: '(509) 244-3277',
+    contactEmail: 'spokanebooking@knittingfactory.com',
+    parkingNotes: 'Full touring amenities, private tour bus parking pad on Sprague with shore power.',
+    tags: ['spokane', 'washington', 'knitting factory']
+  },
+
+  // ALBUQUERQUE, NM
+  {
+    id: 'bb_v_abq_1',
+    name: 'Launchpad',
+    city: 'Albuquerque',
+    state: 'NM',
+    country: 'USA',
+    streetAddress: '618 Central Ave SW',
+    fullAddress: '618 Central Ave SW, Albuquerque, NM 87102',
+    capacity: 300,
+    payoutRating: 4.9,
+    loadInRating: 4.5,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'Launchpad • Albuquerque, NM (Cap: 300)',
+    contactName: 'Joe Anderson / Booking',
+    contactPhone: '(505) 764-8887',
+    contactEmail: 'launchpadrocks@gmail.com',
+    parkingNotes: 'Historic Route 66 rock and metal mainstay. Front street loading with city parking permits.',
+    tags: ['albuquerque', 'abq', 'new mexico', 'launchpad', 'metal']
+  },
+  {
+    id: 'bb_v_abq_2',
+    name: 'Sunshine Theater',
+    city: 'Albuquerque',
+    state: 'NM',
+    country: 'USA',
+    streetAddress: '120 Central Ave SW',
+    fullAddress: '120 Central Ave SW, Albuquerque, NM 87102',
+    capacity: 1000,
+    payoutRating: 4.8,
+    loadInRating: 4.4,
+    genreFit: 97,
+    source: 'blackbook',
+    displayText: 'Sunshine Theater • Albuquerque, NM (Cap: 1000)',
+    contactName: 'Production Management',
+    contactPhone: '(505) 764-0249',
+    contactEmail: 'sunshinetheaterabq@gmail.com',
+    parkingNotes: 'Historic theater venue for national touring packages. Bus parking on 2nd St.',
+    tags: ['albuquerque', 'abq', 'sunshine theater']
+  },
+  {
+    id: 'bb_v_abq_3',
+    name: 'Sister Bar',
+    city: 'Albuquerque',
+    state: 'NM',
+    country: 'USA',
+    streetAddress: '407 Central Ave NW',
+    fullAddress: '407 Central Ave NW, Albuquerque, NM 87102',
+    capacity: 350,
+    payoutRating: 4.8,
+    loadInRating: 4.3,
+    genreFit: 94,
+    source: 'blackbook',
+    displayText: 'Sister Bar • Albuquerque, NM (Cap: 350)',
+    contactName: 'Chad / Booking',
+    contactPhone: '(505) 242-4900',
+    contactEmail: 'booking@sisterthebar.com',
+    parkingNotes: 'Downtown arcade bar & music venue with great sound system and craft beer.',
+    tags: ['albuquerque', 'abq', 'sister bar']
+  },
+
+  // BALTIMORE, MD
+  {
+    id: 'bb_v_balt_1',
+    name: 'Ottobar',
+    city: 'Baltimore',
+    state: 'MD',
+    country: 'USA',
+    streetAddress: '2549 N Howard St',
+    fullAddress: '2549 N Howard St, Baltimore, MD 21218',
+    capacity: 350,
+    payoutRating: 5.0,
+    loadInRating: 4.6,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'Ottobar • Baltimore, MD (Cap: 350)',
+    contactName: 'Te Te / Booking Team',
+    contactPhone: '(410) 662-0069',
+    contactEmail: 'theottobar@gmail.com',
+    parkingNotes: 'Home of Maryland Deathfest pre-shows and underground legends. Rear alley loading ramp directly to backstage.',
+    tags: ['baltimore', 'maryland', 'ottobar', 'deathfest', 'underground', 'metal']
+  },
+  {
+    id: 'bb_v_balt_2',
+    name: 'Baltimore Soundstage',
+    city: 'Baltimore',
+    state: 'MD',
+    country: 'USA',
+    streetAddress: '124 Market Pl',
+    fullAddress: '124 Market Pl, Baltimore, MD 21202',
+    capacity: 1000,
+    payoutRating: 4.9,
+    loadInRating: 4.8,
+    genreFit: 99,
+    source: 'blackbook',
+    displayText: 'Baltimore Soundstage • Baltimore, MD (Cap: 1000)',
+    contactName: 'Soundstage Production Office',
+    contactPhone: '(410) 244-0057',
+    contactEmail: 'booking@baltimoresoundstage.com',
+    parkingNotes: 'Full touring loading bay with dual tour bus shore power drops in Inner Harbor district.',
+    tags: ['baltimore', 'soundstage', 'deathfest']
+  },
+  {
+    id: 'bb_v_balt_3',
+    name: 'Metro Gallery',
+    city: 'Baltimore',
+    state: 'MD',
+    country: 'USA',
+    streetAddress: '1700 N Charles St',
+    fullAddress: '1700 N Charles St, Baltimore, MD 21201',
+    capacity: 250,
+    payoutRating: 4.8,
+    loadInRating: 4.4,
+    genreFit: 96,
+    source: 'blackbook',
+    displayText: 'Metro Gallery • Baltimore, MD (Cap: 250)',
+    contactName: 'Booking Office',
+    contactPhone: '(410) 244-0899',
+    contactEmail: 'booking@themetrogallery.net',
+    parkingNotes: 'Arts district DIY space for heavy and experimental acts.',
+    tags: ['baltimore', 'metro gallery']
+  },
+
+  // RICHMOND, VA
+  {
+    id: 'bb_v_ric_1',
+    name: 'The Canal Club',
+    city: 'Richmond',
+    state: 'VA',
+    country: 'USA',
+    streetAddress: '1545 E Cary St',
+    fullAddress: '1545 E Cary St, Richmond, VA 23219',
+    capacity: 650,
+    payoutRating: 4.9,
+    loadInRating: 4.5,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'The Canal Club • Richmond, VA (Cap: 650)',
+    contactName: 'Canal Club Booking',
+    contactPhone: '(804) 643-2582',
+    contactEmail: 'booking@thecanalclub.com',
+    parkingNotes: 'Historic Shockoe Bottom 2-story metal and punk venue. Side loading ramp.',
+    tags: ['richmond', 'rva', 'virginia', 'canal club', 'metal']
+  },
+  {
+    id: 'bb_v_ric_2',
+    name: 'The Broadberry',
+    city: 'Richmond',
+    state: 'VA',
+    country: 'USA',
+    streetAddress: '2729 W Broad St',
+    fullAddress: '2729 W Broad St, Richmond, VA 23220',
+    capacity: 500,
+    payoutRating: 4.8,
+    loadInRating: 4.6,
+    genreFit: 94,
+    source: 'blackbook',
+    displayText: 'The Broadberry • Richmond, VA (Cap: 500)',
+    contactName: 'Lucas Fritz / Production Desk',
+    contactPhone: '(804) 353-1888',
+    contactEmail: 'booking@thebroadberry.com',
+    parkingNotes: 'Midtown RVA venue with dedicated bus parking and great hospitality.',
+    tags: ['richmond', 'rva', 'broadberry']
+  },
+
+  // PHOENIX, MESA & TEMPE, AZ
+  {
+    id: 'bb_v_phx_1',
+    name: 'The Nile Theater',
+    city: 'Mesa',
+    state: 'AZ',
+    country: 'USA',
+    streetAddress: '105 W Main St',
+    fullAddress: '105 W Main St, Mesa, AZ 85201',
+    capacity: 800,
+    payoutRating: 4.9,
+    loadInRating: 4.6,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'The Nile Theater • Mesa / Phoenix, AZ (Cap: 800)',
+    contactName: 'Nile Production & Booking',
+    contactPhone: '(480) 559-5859',
+    contactEmail: 'booking@theniletheater.com',
+    parkingNotes: 'Dedicated rear alley parking behind the venue. Ground floor double doors into backstage.',
+    tags: ['phoenix', 'mesa', 'tempe', 'arizona', 'phx', 'nile', 'metal', 'hardcore', 'underground']
+  },
+  {
+    id: 'bb_v_phx_2',
+    name: 'The Rebel Lounge',
+    city: 'Phoenix',
+    state: 'AZ',
+    country: 'USA',
+    streetAddress: '4440 E Indian School Rd',
+    fullAddress: '4440 E Indian School Rd, Phoenix, AZ 85018',
+    capacity: 300,
+    payoutRating: 4.8,
+    loadInRating: 4.4,
+    genreFit: 95,
+    source: 'blackbook',
+    displayText: 'The Rebel Lounge • Phoenix, AZ (Cap: 300)',
+    contactName: 'Stephen Chilton / Psyko Steve Presents',
+    contactPhone: '(602) 296-7013',
+    contactEmail: 'booking@therebellounge.com',
+    parkingNotes: 'Dedicated lot in front & east side of building. Direct stage load-in.',
+    tags: ['phoenix', 'arizona', 'phx', 'rebel lounge', 'psyko steve', 'punk', 'metal']
+  },
+  {
+    id: 'bb_v_phx_3',
+    name: 'Crescent Ballroom',
+    city: 'Phoenix',
+    state: 'AZ',
+    country: 'USA',
+    streetAddress: '308 N 2nd Ave',
+    fullAddress: '308 N 2nd Ave, Phoenix, AZ 85003',
+    capacity: 550,
+    payoutRating: 5.0,
+    loadInRating: 4.8,
+    genreFit: 92,
+    source: 'blackbook',
+    displayText: 'Crescent Ballroom • Phoenix, AZ (Cap: 550)',
+    contactName: 'Charlie Levy / Stateside Presents',
+    contactPhone: '(602) 716-2222',
+    contactEmail: 'booking@crescentphx.com',
+    parkingNotes: 'Downtown Phoenix loading zone on 2nd Ave. Dedicated tour bus power connection.',
+    tags: ['phoenix', 'arizona', 'phx', 'crescent', 'downtown phoenix']
+  },
+
+  // SACRAMENTO, CA
+  {
+    id: 'bb_v_sac_1',
+    name: 'Ace of Spades',
+    city: 'Sacramento',
+    state: 'CA',
+    country: 'USA',
+    streetAddress: '1417 R St',
+    fullAddress: '1417 R St, Sacramento, CA 95811',
+    capacity: 1000,
+    payoutRating: 5.0,
+    loadInRating: 4.8,
+    genreFit: 96,
+    source: 'blackbook',
+    displayText: 'Ace of Spades • Sacramento, CA (Cap: 1000)',
+    contactName: 'Ace Production Team',
+    contactPhone: '(916) 448-8439',
+    contactEmail: 'aceofspadesevents@livenation.com',
+    parkingNotes: 'R Street corridor loading zone. Tour bus shore power available in secured alley.',
+    tags: ['sacramento', 'norcal', 'california', 'sac', 'ace of spades', 'metal', 'hard rock']
+  },
+  {
+    id: 'bb_v_sac_2',
+    name: 'Cafe Colonial & The Colony',
+    city: 'Sacramento',
+    state: 'CA',
+    country: 'USA',
+    streetAddress: '3520 Stockton Blvd',
+    fullAddress: '3520 Stockton Blvd, Sacramento, CA 95820',
+    capacity: 150,
+    payoutRating: 4.8,
+    loadInRating: 4.5,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'Cafe Colonial / The Colony • Sacramento, CA (Cap: 150)',
+    contactName: 'Colony Collective Booking',
+    contactPhone: '(916) 736-3520',
+    contactEmail: 'cafecolonial916@gmail.com',
+    parkingNotes: 'Private lot on side of building. Direct roll-in to stage. Legendary DIY all-ages extreme metal/grind institution.',
+    tags: ['sacramento', 'the colony', 'cafe colonial', 'underground', 'diy', 'grind', 'metal', 'all ages']
+  },
+  {
+    id: 'bb_v_sac_3',
+    name: 'Goldfield Trading Post',
+    city: 'Sacramento',
+    state: 'CA',
+    country: 'USA',
+    streetAddress: '1630 J St',
+    fullAddress: '1630 J St, Sacramento, CA 95814',
+    capacity: 400,
+    payoutRating: 4.8,
+    loadInRating: 4.3,
+    genreFit: 92,
+    source: 'blackbook',
+    displayText: 'Goldfield Trading Post • Sacramento, CA (Cap: 400)',
+    contactName: 'Bret LeMaster',
+    contactPhone: '(916) 476-5076',
+    contactEmail: 'booking@goldfieldtradingpost.com',
+    parkingNotes: 'Midtown J St load-in. Great sound rig and fast changeover staff.',
+    tags: ['sacramento', 'goldfield', 'midtown sacramento']
+  },
+
+  // NEW YORK CITY, BROOKLYN & QUEENS, NY
+  {
+    id: 'bb_v_nyc_1',
+    name: 'Saint Vitus Bar Presents',
+    city: 'Brooklyn',
+    state: 'NY',
+    country: 'USA',
+    streetAddress: '1120 Manhattan Ave',
+    fullAddress: '1120 Manhattan Ave, Brooklyn, NY 11222',
+    capacity: 350,
+    payoutRating: 5.0,
+    loadInRating: 4.5,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'Saint Vitus Presents • Brooklyn / New York, NY (Cap: 350)',
+    contactName: 'David Castillo / Arty Shepherd',
+    contactPhone: '(718) 389-2040',
+    contactEmail: 'booking@saintvitusbar.com',
+    parkingNotes: 'Curbside Greenpoint van/bus loading. Internationally recognized heavy metal epicenter.',
+    tags: ['new york', 'nyc', 'brooklyn', 'greenpoint', 'manhattan', 'saint vitus', 'metal', 'grind', 'death metal']
+  },
+  {
+    id: 'bb_v_nyc_2',
+    name: 'The Bowery Ballroom',
+    city: 'New York',
+    state: 'NY',
+    country: 'USA',
+    streetAddress: '6 Delancey St',
+    fullAddress: '6 Delancey St, New York, NY 10002',
+    capacity: 575,
+    payoutRating: 5.0,
+    loadInRating: 4.7,
+    genreFit: 90,
+    source: 'blackbook',
+    displayText: 'The Bowery Ballroom • New York, NY (Cap: 575)',
+    contactName: 'Bowery Presents Desk',
+    contactPhone: '(212) 533-2111',
+    contactEmail: 'booking@boweryballroom.com',
+    parkingNotes: 'Lower East Side Delancey St loading zone. Premier sound reinforcement.',
+    tags: ['new york', 'nyc', 'manhattan', 'lower east side', 'bowery']
+  },
+  {
+    id: 'bb_v_nyc_3',
+    name: 'The Meadows',
+    city: 'Brooklyn',
+    state: 'NY',
+    country: 'USA',
+    streetAddress: '17 Meadow St',
+    fullAddress: '17 Meadow St, Brooklyn, NY 11206',
+    capacity: 400,
+    payoutRating: 4.9,
+    loadInRating: 4.6,
+    genreFit: 98,
+    source: 'blackbook',
+    displayText: 'The Meadows • Brooklyn / New York, NY (Cap: 400)',
+    contactName: 'Meadows Booking Office',
+    contactPhone: '(718) 417-1118',
+    contactEmail: 'booking@themeadowsbk.com',
+    parkingNotes: 'East Williamsburg industrial zone. Easy curbside van and bus staging.',
+    tags: ['new york', 'nyc', 'brooklyn', 'williamsburg', 'metal', 'hardcore']
+  },
+  {
+    id: 'bb_v_nyc_4',
+    name: 'TV Eye',
+    city: 'Ridgewood',
+    state: 'NY',
+    country: 'USA',
+    streetAddress: '1647 Weirfield St',
+    fullAddress: '1647 Weirfield St, Ridgewood, NY 11385',
+    capacity: 250,
+    payoutRating: 4.8,
+    loadInRating: 4.6,
+    genreFit: 95,
+    source: 'blackbook',
+    displayText: 'TV Eye • Queens / Ridgewood, NY (Cap: 250)',
+    contactName: 'Jonathan Toubin / Production',
+    contactPhone: '(718) 418-4000',
+    contactEmail: 'booking@tveyenyc.com',
+    parkingNotes: 'Weirfield St ground floor roll-in through side courtyard.',
+    tags: ['new york', 'nyc', 'queens', 'ridgewood', 'brooklyn border', 'punk', 'garage', 'metal']
+  },
+
+  // TORONTO, ON & MONTREAL, QC (CANADA)
+  {
+    id: 'bb_v_tor_1',
+    name: 'The Opera House',
+    city: 'Toronto',
+    state: 'ON',
+    country: 'Canada',
+    streetAddress: '735 Queen St E',
+    fullAddress: '735 Queen St E, Toronto, ON M4M 1H1, Canada',
+    capacity: 950,
+    payoutRating: 5.0,
+    loadInRating: 4.7,
+    genreFit: 98,
+    source: 'blackbook',
+    displayText: 'The Opera House • Toronto, ON (Cap: 950)',
+    contactName: 'Athena Ellinas-Towers / Production PM',
+    contactPhone: '(416) 466-0313',
+    contactEmail: 'booking@theoperahousetoronto.com',
+    parkingNotes: 'Secured rear alley loading dock with dedicated bus pad and 50A hookup. Historic Canadian heavy touring stop.',
+    tags: ['toronto', 'ontario', 'canada', 'opera house', 'metal', 'hardcore']
+  },
+  {
+    id: 'bb_v_tor_2',
+    name: 'The Velvet Underground',
+    city: 'Toronto',
+    state: 'ON',
+    country: 'Canada',
+    streetAddress: '508 Queen St W',
+    fullAddress: '508 Queen St W, Toronto, ON M5V 2B3, Canada',
+    capacity: 355,
+    payoutRating: 4.9,
+    loadInRating: 4.4,
+    genreFit: 96,
+    source: 'blackbook',
+    displayText: 'Velvet Underground • Toronto, ON (Cap: 355)',
+    contactName: 'Embrace Presents / Velvet Desk',
+    contactPhone: '(416) 504-6688',
+    contactEmail: 'booking@thevelvet.ca',
+    parkingNotes: 'Queen St W curbside commercial loading. Top-tier intimate club sound system.',
+    tags: ['toronto', 'ontario', 'canada', 'velvet underground', 'queen west', 'metal', 'indie']
+  },
+  {
+    id: 'bb_v_tor_3',
+    name: 'Hard Luck Bar',
+    city: 'Toronto',
+    state: 'ON',
+    country: 'Canada',
+    streetAddress: '772A Dundas St W',
+    fullAddress: '772A Dundas St W, Toronto, ON M6J 1V1, Canada',
+    capacity: 200,
+    payoutRating: 4.7,
+    loadInRating: 4.2,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'Hard Luck Bar • Toronto, ON (Cap: 200)',
+    contactName: 'Mark Pesci / Booking',
+    contactPhone: '(416) 703-7722',
+    contactEmail: 'hardluckbar@gmail.com',
+    parkingNotes: 'Dundas St W loading. Intimate heavy metal, punk, and hardcore stronghold.',
+    tags: ['toronto', 'ontario', 'canada', 'hard luck bar', 'underground', 'diy', 'metal']
+  },
+  {
+    id: 'bb_v_mtl_1',
+    name: 'Les Foufounes Électriques',
+    city: 'Montreal',
+    state: 'QC',
+    country: 'Canada',
+    streetAddress: '87 Rue Sainte-Catherine E',
+    fullAddress: '87 Rue Sainte-Catherine E, Montréal, QC H2X 1K5, Canada',
+    capacity: 650,
+    payoutRating: 5.0,
+    loadInRating: 4.6,
+    genreFit: 100,
+    source: 'blackbook',
+    displayText: 'Foufounes Électriques • Montreal, QC (Cap: 650)',
+    contactName: 'Production & Programmation Foufs',
+    contactPhone: '(514) 844-0428',
+    contactEmail: 'booking@foufouneselectriques.com',
+    parkingNotes: 'Direct rear alley loading dock on Rue Sainte-Elisabeth. World-famous punk and metal institution.',
+    tags: ['montreal', 'quebec', 'canada', 'foufounes', 'foufs', 'metal', 'punk']
   }
 ];
 
@@ -991,43 +1980,52 @@ export async function getAllBlackBookVenues(): Promise<VenueResult[]> {
   const seenIds = new Set(aggregated.map((v) => v.id.toLowerCase()));
   const seenNames = new Set(aggregated.map((v) => `${v.name.toLowerCase()}_${(v.city || '').toLowerCase()}`));
 
-  // 1. Fetch live venues from persistent server API endpoint
+  // 1. Fetch live venues from persistent server API endpoint (supports Cloud Run & native APK)
   try {
-    const res = await fetch('/api/venues');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.venues)) {
-        data.venues.forEach((v: any) => {
-          if (!v?.name) return;
-          const key = `${v.name.toLowerCase()}_${(v.city || '').toLowerCase()}`;
-          if (!seenNames.has(key)) {
-            seenNames.add(key);
-            const nameSlug = (v.name || 'venue').toLowerCase().replace(/[^a-z0-9]/g, '_');
-            const citySlug = (v.city || 'city').toLowerCase().replace(/[^a-z0-9]/g, '_');
-            const vId = (v.id && typeof v.id === 'string' && v.id.trim().length > 0 && v.id !== 'undefined' && v.id !== 'null')
-              ? v.id
-              : `srv_${nameSlug}_${citySlug}_${Math.random().toString(36).substring(2, 7)}`;
-            if (!seenIds.has(vId.toLowerCase())) {
-              seenIds.add(vId.toLowerCase());
-              aggregated.push({
-                id: vId,
-                name: v.name,
-                city: v.city,
-                state: v.state_province || v.state,
-                country: v.country || 'USA',
-                streetAddress: v.street_address || v.address,
-                fullAddress: [v.street_address || v.address, v.city, v.state_province || v.state].filter(Boolean).join(', '),
-                capacity: v.capacity,
-                payoutRating: v.payout_rating || v.payoutRating || 4.5,
-                loadInRating: v.load_in_rating || v.loadInRating || 4.0,
-                genreFit: v.genre_fit || v.genreFit || 90,
-                source: 'blackbook',
-                displayText: `${v.name}${v.city ? ` • ${v.city}${v.state_province || v.state ? `, ${v.state_province || v.state}` : ''}` : ''}${v.capacity ? ` (Cap: ${v.capacity})` : ''}`
-              });
-            }
+    const endpoints = getApiFallbackEndpoints('/api/venues');
+    for (const ep of endpoints) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(ep, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.venues) && data.venues.length > 0) {
+            data.venues.forEach((v: any) => {
+              if (!v?.name) return;
+              const key = `${v.name.toLowerCase()}_${(v.city || '').toLowerCase()}`;
+              if (!seenNames.has(key)) {
+                seenNames.add(key);
+                const nameSlug = (v.name || 'venue').toLowerCase().replace(/[^a-z0-9]/g, '_');
+                const citySlug = (v.city || 'city').toLowerCase().replace(/[^a-z0-9]/g, '_');
+                const vId = (v.id && typeof v.id === 'string' && v.id.trim().length > 0 && v.id !== 'undefined' && v.id !== 'null')
+                  ? v.id
+                  : `srv_${nameSlug}_${citySlug}_${Math.random().toString(36).substring(2, 7)}`;
+                if (!seenIds.has(vId.toLowerCase())) {
+                  seenIds.add(vId.toLowerCase());
+                  aggregated.push({
+                    id: vId,
+                    name: v.name,
+                    city: v.city,
+                    state: v.state_province || v.state,
+                    country: v.country || 'USA',
+                    streetAddress: v.street_address || v.address,
+                    fullAddress: [v.street_address || v.address, v.city, v.state_province || v.state].filter(Boolean).join(', '),
+                    capacity: v.capacity,
+                    payoutRating: v.payout_rating || v.payoutRating || 4.5,
+                    loadInRating: v.load_in_rating || v.loadInRating || 4.0,
+                    genreFit: v.genre_fit || v.genreFit || 90,
+                    source: 'blackbook',
+                    displayText: `${v.name}${v.city ? ` • ${v.city}${v.state_province || v.state ? `, ${v.state_province || v.state}` : ''}` : ''}${v.capacity ? ` (Cap: ${v.capacity})` : ''}`
+                  });
+                }
+              }
+            });
+            break; // Stop after first successful response
           }
-        });
-      }
+        }
+      } catch (_) {}
     }
   } catch (_) {}
 
@@ -1112,24 +2110,93 @@ export async function getAllBlackBookVenues(): Promise<VenueResult[]> {
     }
   } catch (_) {}
 
+  // 4. Check localStorage nexus_musicbrainz_venues (Tour Hubs seeded via MusicBrainz)
+  try {
+    const mbRaw = localStorage.getItem('nexus_musicbrainz_venues');
+    if (mbRaw) {
+      const parsed = JSON.parse(mbRaw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((v: any) => {
+          if (!v?.name) return;
+          const key = `${v.name.toLowerCase()}_${(v.city || '').toLowerCase()}`;
+          if (!seenNames.has(key)) {
+            seenNames.add(key);
+            const nameSlug = (v.name || 'venue').toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const citySlug = (v.city || 'city').toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const vId = (v.id && typeof v.id === 'string' && v.id.trim().length > 0 && v.id !== 'undefined' && v.id !== 'null')
+              ? v.id
+              : `mb_${nameSlug}_${citySlug}_${Math.random().toString(36).substring(2, 7)}`;
+            if (!seenIds.has(vId.toLowerCase())) {
+              seenIds.add(vId.toLowerCase());
+              aggregated.push({
+                id: vId,
+                name: v.name,
+                city: v.city,
+                state: v.state_province || v.state || 'USA',
+                country: v.country || 'USA',
+                streetAddress: v.street_address || v.address,
+                fullAddress: [v.street_address || v.address, v.city, v.state_province || v.state].filter(Boolean).join(', '),
+                capacity: v.capacity || 350,
+                payoutRating: v.payout_rating || v.payoutRating || 4.5,
+                loadInRating: v.load_in_rating || v.loadInRating || 4.0,
+                genreFit: v.genre_fit || v.genreFit || 85,
+                source: 'blackbook',
+                displayText: `${v.name}${v.city ? ` • ${v.city}${v.state_province || v.state ? `, ${v.state_province || v.state}` : ''}` : ''}${v.capacity ? ` (Cap: ${v.capacity})` : ''}`
+              });
+            }
+          }
+        });
+      }
+    }
+  } catch (_) {}
+
   return aggregated;
 }
 
 // Search Black Book venues
 export async function searchBlackBookVenues(query: string): Promise<VenueResult[]> {
   if (!query || query.trim().length === 0) return [];
-  const cleanQ = query.toLowerCase().trim();
+  const rawQ = query.toLowerCase().trim();
+  const cleanQ = rawQ.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ').replace(/\s+/g, ' ').trim();
+  const qTokens = cleanQ.split(' ').filter(Boolean);
+
+  const isStLouisQuery = rawQ.includes('louis') || rawQ.includes('stl') || cleanQ.includes('st louis') || cleanQ.includes('saint louis') || rawQ.includes('sauget');
+  const isNycQuery = rawQ === 'nyc' || cleanQ.includes('new york') || cleanQ.includes('brooklyn') || cleanQ.includes('manhattan') || cleanQ.includes('queens');
+  const isLaQuery = rawQ === 'la' || cleanQ.includes('los angeles') || cleanQ.includes('hollywood') || cleanQ.includes('anaheim');
+  const isPhxQuery = rawQ === 'phx' || cleanQ.includes('phoenix') || cleanQ.includes('tempe') || cleanQ.includes('mesa');
+  const isDfwQuery = rawQ === 'dfw' || cleanQ.includes('dallas') || cleanQ.includes('fort worth') || cleanQ.includes('haltom');
+  const isBayAreaQuery = rawQ === 'sf' || cleanQ.includes('san francisco') || cleanQ.includes('oakland') || cleanQ.includes('berkeley');
+  const isSlcQuery = rawQ === 'slc' || cleanQ.includes('salt lake');
+  const isKcQuery = rawQ === 'kc' || cleanQ.includes('kansas city') || cleanQ.includes('lawrence');
+  const isMspQuery = rawQ === 'msp' || cleanQ.includes('minneapolis') || cleanQ.includes('st paul') || cleanQ.includes('saint paul');
+
   const all = await getAllBlackBookVenues();
 
   return all
     .filter((v) => {
-      const nameMatch = v.name.toLowerCase().includes(cleanQ);
-      const cityMatch = v.city && v.city.toLowerCase().includes(cleanQ);
-      const stateMatch = v.state && v.state.toLowerCase().includes(cleanQ);
-      const fullMatch = v.fullAddress && v.fullAddress.toLowerCase().includes(cleanQ);
-      return nameMatch || cityMatch || stateMatch || fullMatch;
+      const vName = (v.name || '').toLowerCase();
+      const vCity = (v.city || '').toLowerCase();
+      const vState = (v.state || '').toLowerCase();
+      const vFull = (v.fullAddress || v.streetAddress || '').toLowerCase();
+      const vTags = (v.tags || []).map(t => t.toLowerCase());
+
+      if (isStLouisQuery && (vCity.includes('louis') || vCity.includes('sauget') || vTags.some(t => t.includes('louis') || t.includes('sauget')))) return true;
+      if (isNycQuery && (vCity.includes('new york') || vCity.includes('brooklyn') || vCity.includes('queens') || vTags.some(t => t.includes('york') || t.includes('brooklyn')))) return true;
+      if (isLaQuery && (vCity.includes('los angeles') || vCity.includes('anaheim') || vTags.some(t => t.includes('angeles') || t.includes('anaheim')))) return true;
+      if (isPhxQuery && (vCity.includes('phoenix') || vCity.includes('tempe') || vCity.includes('mesa') || vTags.some(t => t.includes('phoenix')))) return true;
+      if (isDfwQuery && (vCity.includes('dallas') || vCity.includes('fort worth') || vCity.includes('denton') || vCity.includes('haltom'))) return true;
+      if (isBayAreaQuery && (vCity.includes('san francisco') || vCity.includes('berkeley') || vCity.includes('oakland'))) return true;
+      if (isSlcQuery && vCity.includes('salt lake')) return true;
+      if (isKcQuery && (vCity.includes('kansas city') || vCity.includes('lawrence'))) return true;
+      if (isMspQuery && (vCity.includes('minneapolis') || vCity.includes('paul'))) return true;
+
+      const searchable = `${vName} ${vCity} ${vState} ${vFull} ${vTags.join(' ')}`.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+      if (searchable.includes(cleanQ)) return true;
+      if (qTokens.length > 1 && qTokens.every(tok => searchable.includes(tok))) return true;
+
+      return false;
     })
-    .slice(0, 6);
+    .slice(0, 12);
 }
 
 // Search Places API (New) via REST

@@ -5,7 +5,7 @@ import {
   Check, ZoomIn, Layers, Music, ExternalLink 
 } from 'lucide-react';
 import { showsStore, venuesStore } from '../../../utils/indexedDB';
-import { getSupabase } from '../../../services/clientService';
+import { getSupabase, sanitizeShowForDb, generateUUID, ensureUUID } from '../../../supabase';
 import { compressImageInSocialFeed } from '../../../utils/socialFeedUtils';
 
 export interface PostCommunityShowModalProps {

@@ -7,6 +7,7 @@ import { Resend } from "resend";
 import fs from "fs";
 import webpush from "web-push";
 import { GoogleGenAI, Type } from "@google/genai";
+import { BUILT_IN_BLACK_BOOK_VENUES } from "./src/services/venueSearchService";
 
 // Load environment variables (mostly for local testing, platform handles deployment env vars)
 dotenv.config();
@@ -3290,12 +3291,12 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       if (fs.existsSync(venuesCacheFile)) {
         const content = await fs.promises.readFile(venuesCacheFile, 'utf8');
         const parsed = JSON.parse(content);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {
       console.warn('[SERVER VENUES] Local cache read warning:', e);
     }
-    return [];
+    return BUILT_IN_BLACK_BOOK_VENUES;
   }
 
   async function saveCachedVenues(venuesList: any[]): Promise<void> {
@@ -3422,12 +3423,48 @@ Return a valid JSON object matching the requested schema. If any field is not fo
    */
   const tourPackagesCacheFile = path.join(uploadsDir, 'tour_packages_cache.json');
 
+  function isServerCommunityTour(t: any): boolean {
+    if (!t) return false;
+    const title = (t.title || '').toLowerCase();
+    const headliner = (t.headlinerClientName || t.headliner_client_name || '').toLowerCase();
+    const id = (t.id || '').toLowerCase();
+    if (
+      title.includes('us and canada') || 
+      title.includes('canada tour') || 
+      headliner.includes('dying fetus') || 
+      headliner.includes('dying') ||
+      title.includes('dying') ||
+      id.includes('us-and-canada') || 
+      id.includes('us_and_canada') ||
+      id.includes('dying-fetus') ||
+      headliner.includes('vader') ||
+      title.includes('reign forever') ||
+      title.includes('kingdom of blood') ||
+      headliner.includes('nile') ||
+      headliner.includes('nekrogoblikon') ||
+      headliner.includes('havok')
+    ) {
+      return true;
+    }
+    if (Array.isArray(t.stops) && t.stops.some((s: any) => 
+      s.is_community_submitted === true || 
+      (typeof s.id === 'string' && (s.id.includes('df000') || s.id.includes('sh_comm_'))) ||
+      (typeof s.venueName === 'string' && s.venueName.toLowerCase().includes('dying fetus')) ||
+      (typeof s.name === 'string' && s.name.toLowerCase().includes('dying fetus'))
+    )) {
+      return true;
+    }
+    return false;
+  }
+
   async function loadCachedTourPackages(): Promise<any[]> {
     try {
       if (fs.existsSync(tourPackagesCacheFile)) {
         const content = await fs.promises.readFile(tourPackagesCacheFile, 'utf8');
         const parsed = JSON.parse(content);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((t: any) => !isServerCommunityTour(t));
+        }
       }
     } catch (e) {
       console.warn('[SERVER TOURS] Local cache read warning:', e);
@@ -3440,10 +3477,12 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       const existing = await loadCachedTourPackages();
       const map = new Map<string, any>();
       existing.forEach((t: any) => {
-        if (t && t.id) map.set(t.id, t);
+        if (t && t.id && !isServerCommunityTour(t)) map.set(t.id, t);
       });
       toursList.forEach((t: any) => {
-        if (t && t.id) map.set(t.id, { ...(map.get(t.id) || {}), ...t, updatedAt: new Date().toISOString() });
+        if (t && t.id && !isServerCommunityTour(t)) {
+          map.set(t.id, { ...(map.get(t.id) || {}), ...t, updatedAt: new Date().toISOString() });
+        }
       });
       await fs.promises.writeFile(tourPackagesCacheFile, JSON.stringify(Array.from(map.values()), null, 2), 'utf8');
     } catch (e) {
@@ -3504,6 +3543,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
                   is_published: isPublished,
                   publication_status: tour.publicationStatus || 'embargoed_private',
                   embargo_until_date: tour.embargoUntilDate || '',
+                  is_managed_client_booking: true,
                   additional_notes: JSON.stringify({
                     tour_id: tour.id,
                     tour_title: tour.title,
@@ -3542,6 +3582,207 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       res.json({ success: true, count: filtered.length });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to delete tour package' });
+    }
+  });
+
+  /**
+   * INVENTORY & MERCH PERSISTENCE & CROSS-DEVICE SYNC APIS
+   */
+  const inventoryCacheFile = path.join(uploadsDir, 'inventory_cache.json');
+
+  function generateServerUuid(): string {
+    const chars = '0123456789abcdef';
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return chars[v];
+    });
+  }
+
+  async function loadCachedInventory(): Promise<any[]> {
+    try {
+      if (fs.existsSync(inventoryCacheFile)) {
+        const content = await fs.promises.readFile(inventoryCacheFile, 'utf8');
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn('[SERVER INVENTORY] Cache read warning:', e);
+    }
+    return [];
+  }
+
+  async function saveCachedInventory(itemsList: any[]): Promise<void> {
+    try {
+      const existing = await loadCachedInventory();
+      const map = new Map<string, any>();
+      existing.forEach((item: any) => { if (item && item.id) map.set(item.id, item); });
+      itemsList.forEach((item: any) => {
+        if (item && item.id) {
+          map.set(item.id, { ...(map.get(item.id) || {}), ...item, updated_at: new Date().toISOString() });
+        }
+      });
+      await fs.promises.writeFile(inventoryCacheFile, JSON.stringify(Array.from(map.values()), null, 2), 'utf8');
+    } catch (e) {
+      console.warn('[SERVER INVENTORY] Cache write warning:', e);
+    }
+  }
+
+  // GET /api/inventory
+  app.get('/api/inventory', async (req: express.Request, res: express.Response) => {
+    try {
+      const bandId = req.query.band_id as string;
+      const cached = await loadCachedInventory();
+      let dbItems: any[] = [];
+      const supabase = getSupabaseService();
+      if (supabase) {
+        try {
+          let q = supabase.from('inventory').select('*');
+          if (bandId) q = q.eq('band_id', bandId);
+          const { data, error } = await q;
+          if (!error && data) dbItems = data;
+        } catch (_) {}
+      }
+
+      const map = new Map<string, any>();
+      cached.forEach(i => { if (i && i.id) map.set(i.id, i); });
+      dbItems.forEach(i => { if (i && i.id) map.set(i.id, { ...(map.get(i.id) || {}), ...i }); });
+
+      let list = Array.from(map.values());
+      if (bandId) {
+        list = list.filter(i => !i.band_id || i.band_id === bandId);
+      }
+      res.json({ success: true, items: list });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to load inventory' });
+    }
+  });
+
+  // POST /api/inventory
+  app.post('/api/inventory', express.json({ limit: '25mb' }), async (req: express.Request, res: express.Response) => {
+    try {
+      const payload = req.body?.item || req.body?.items || req.body;
+      const itemsToSave = Array.isArray(payload) ? payload : [payload];
+      if (itemsToSave.length === 0) {
+        return res.status(400).json({ error: 'Valid inventory item is required' });
+      }
+
+      const processedItems: any[] = [];
+      const supabase = getSupabaseService();
+
+      for (const rawItem of itemsToSave) {
+        if (!rawItem) continue;
+        let item = { ...rawItem };
+        if (!item.id || item.id.startsWith('temp_')) {
+          item.id = generateServerUuid();
+        }
+
+        // Process image base64 if present
+        if (item.image_url && (item.image_url.startsWith('data:') || item.image_url.startsWith('blob:'))) {
+          try {
+            const matches = item.image_url.match(/^data:([^;]+);base64,([\s\S]+)$/);
+            if (matches && matches.length === 3) {
+              const contentType = matches[1];
+              const buffer = Buffer.from(matches[2].replace(/\s+/g, ''), 'base64');
+              const fileExt = contentType.split('/')[1] || 'webp';
+              const cleanId = String(item.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+              const storagePath = `items/${cleanId}_${Date.now()}.${fileExt}`;
+
+              let uploadedPublicUrl = null;
+
+              if (supabase) {
+                try {
+                  const { data: buckets } = await supabase.storage.listBuckets();
+                  if (buckets && !buckets.some((b: any) => b.name === 'inventory-items')) {
+                    await supabase.storage.createBucket('inventory-items', { public: true });
+                  }
+                  const { error: upErr } = await supabase.storage.from('inventory-items').upload(storagePath, buffer, {
+                    contentType,
+                    upsert: true
+                  });
+                  if (!upErr) {
+                    const { data: pubData } = supabase.storage.from('inventory-items').getPublicUrl(storagePath);
+                    if (pubData?.publicUrl) uploadedPublicUrl = pubData.publicUrl;
+                  }
+                } catch (stErr) {
+                  console.warn('[SERVER INVENTORY STORAGE EXCEPTION]', stErr);
+                }
+              }
+
+              if (!uploadedPublicUrl) {
+                const fileName = `${cleanId}_${Date.now()}.${fileExt}`;
+                const localPath = path.join(uploadsDir, fileName);
+                await fs.promises.writeFile(localPath, buffer);
+                uploadedPublicUrl = `/uploads/${fileName}`;
+              }
+
+              item.image_url = uploadedPublicUrl;
+              item.image_path = storagePath;
+            }
+          } catch (imgErr) {
+            console.warn('[SERVER INVENTORY IMAGE PROC WARN]', imgErr);
+          }
+        }
+
+        // Persist into Supabase 'inventory' table
+        if (supabase) {
+          try {
+            const cleanDbItem = {
+              id: item.id,
+              name: item.name || 'Merchandise Item',
+              table_stock: item.table_stock || 0,
+              van_stock: item.van_stock || 0,
+              low_threshold: item.low_threshold || 10,
+              initial_batch_size: item.initial_batch_size || 100,
+              status: item.status || 'Healthy',
+              item_type: item.item_type || 'APPAREL',
+              price: item.price || 0,
+              image_url: item.image_url || null,
+              image_path: item.image_path || null,
+              border_color: item.border_color || '#00ffcc',
+              band_id: item.band_id || null,
+              cost: item.cost || 0,
+              sku: item.sku || null,
+              barcode: item.barcode || null,
+              variants: item.variants || null
+            };
+            const { data: savedDbData, error: dbErr } = await supabase.from('inventory').upsert([cleanDbItem], { onConflict: 'id' }).select().single();
+            if (!dbErr && savedDbData) {
+              item = { ...item, ...savedDbData };
+            }
+          } catch (dbErr) {
+            console.warn('[SERVER INVENTORY DB UPSERT EXCEPTION]', dbErr);
+          }
+        }
+
+        processedItems.push(item);
+      }
+
+      await saveCachedInventory(processedItems);
+      res.json({ success: true, count: processedItems.length, items: processedItems });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to save inventory item' });
+    }
+  });
+
+  // DELETE /api/inventory/:id
+  app.delete('/api/inventory/:id', async (req: express.Request, res: express.Response) => {
+    try {
+      const itemId = req.params.id;
+      const existing = await loadCachedInventory();
+      const filtered = existing.filter((i: any) => i.id !== itemId);
+      await fs.promises.writeFile(inventoryCacheFile, JSON.stringify(filtered, null, 2), 'utf8');
+
+      const supabase = getSupabaseService();
+      if (supabase) {
+        try {
+          await supabase.from('inventory').delete().eq('id', itemId);
+        } catch (_) {}
+      }
+
+      res.json({ success: true, itemId });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to delete inventory item' });
     }
   });
 

@@ -1,10 +1,19 @@
-import { getSupabase } from './clientService';
+import { getSupabase, ensureValidSupabaseAuthSession } from './clientService';
 import { compressAndTranscodeImageToWebP, base64ToBlob } from './storageService';
 import { sanitizeInventoryItemForDb, executeWithSchemaResilience, generateUUID } from './schemaResilienceService';
 import { InventoryItem } from '../types';
 
 export const INVENTORY_STORAGE_BUCKET = 'inventory-items';
 export const DEFAULT_INVENTORY_IMAGE = 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=200&auto=format&fit=crop';
+
+export function getApiUrl(endpoint: string): string {
+  if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) return endpoint;
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
+  }
+  const baseUrl = (typeof process !== 'undefined' && process?.env?.APP_URL) || 'http://localhost:3000';
+  return `${baseUrl.replace(/\/$/, '')}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
+}
 
 export interface InventoryImageUploadResult {
   publicUrl: string;
@@ -80,13 +89,10 @@ export async function uploadInventoryItemImage(
   };
 
   const supabase = getSupabase();
-  if (!supabase) {
-    console.warn('[INVENTORY STORAGE] Supabase client unavailable. Retaining local asset reference.');
-    return fallbackResult;
-  }
 
   try {
     let uploadBlob: Blob;
+    let base64DataStr: string | null = null;
 
     if (typeof fileOrData === 'string') {
       if (!fileOrData.startsWith('data:')) {
@@ -96,61 +102,77 @@ export async function uploadInventoryItemImage(
           imagePath: fileOrData.includes(INVENTORY_STORAGE_BUCKET) ? fileOrData.split(`${INVENTORY_STORAGE_BUCKET}/`)[1] || storagePath : storagePath
         };
       }
-      // Compress and transcode Base64
+      base64DataStr = fileOrData;
       const compressedData = await compressAndTranscodeImageToWebP(fileOrData);
       uploadBlob = base64ToBlob(compressedData);
     } else {
-      // Compress and transcode File or Blob
       const compressed = await compressAndTranscodeImageToWebP(fileOrData);
       if (typeof compressed === 'string' && compressed.startsWith('data:')) {
+        base64DataStr = compressed;
         uploadBlob = base64ToBlob(compressed);
       } else {
         uploadBlob = compressed instanceof Blob ? compressed : fileOrData;
       }
     }
 
-    // 1. Upload to Supabase 'inventory-items' storage bucket
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from(INVENTORY_STORAGE_BUCKET)
-      .upload(storagePath, uploadBlob, {
-        upsert: true,
-        cacheControl: '3600',
-        contentType: 'image/webp'
-      });
+    if (supabase) {
+      // Ensure active auth session to satisfy Supabase Storage RLS policies
+      await ensureValidSupabaseAuthSession(supabase).catch(() => {});
 
-    if (uploadError) {
-      console.warn(`[INVENTORY STORAGE] Failed uploading to '${INVENTORY_STORAGE_BUCKET}':`, uploadError.message);
-      // Fallback candidate buckets if inventory-items is temporarily unprovisioned
-      const fallbackBuckets = ['media', 'public-assets', 'community-bands'];
-      for (const fbBucket of fallbackBuckets) {
-        try {
-          const { data: fbData, error: fbErr } = await supabase.storage
-            .from(fbBucket)
-            .upload(storagePath, uploadBlob, { upsert: true, cacheControl: '3600', contentType: 'image/webp' });
-          if (!fbErr && fbData) {
-            const { data: pubData } = supabase.storage.from(fbBucket).getPublicUrl(fbData.path || storagePath);
-            if (pubData?.publicUrl) {
-              return {
-                publicUrl: pubData.publicUrl,
-                imagePath: fbData.path || storagePath
-              };
-            }
-          }
-        } catch (_) {}
+      // 1. Upload to Supabase 'inventory-items' storage bucket
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(INVENTORY_STORAGE_BUCKET)
+        .upload(storagePath, uploadBlob, {
+          upsert: true,
+          cacheControl: '3600',
+          contentType: 'image/webp'
+        });
+
+      if (!uploadError && uploadData) {
+        const finalPath = uploadData.path || storagePath;
+        const { data: pubData } = supabase.storage.from(INVENTORY_STORAGE_BUCKET).getPublicUrl(finalPath);
+        const publicUrl = pubData?.publicUrl || fallbackResult.publicUrl;
+
+        console.log(`[INVENTORY STORAGE SUCCESS] Stored image in bucket '${INVENTORY_STORAGE_BUCKET}' (${finalPath}):`, publicUrl);
+
+        return {
+          publicUrl,
+          imagePath: finalPath
+        };
+      } else if (uploadError) {
+        console.warn(`[INVENTORY STORAGE CLIENT WARN] '${INVENTORY_STORAGE_BUCKET}' upload error:`, uploadError.message);
       }
-      return fallbackResult;
     }
 
-    const finalPath = uploadData?.path || storagePath;
-    const { data: pubData } = supabase.storage.from(INVENTORY_STORAGE_BUCKET).getPublicUrl(finalPath);
-    const publicUrl = pubData?.publicUrl || fallbackResult.publicUrl;
+    // 2. Server upload fallback (routes through server service role to bypass browser restrictions)
+    if (base64DataStr || typeof fileOrData === 'string') {
+      try {
+        const rawBase64 = base64DataStr || (fileOrData as string);
+        const apiRes = await fetch(getApiUrl('/api/upload'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            base64Data: rawBase64,
+            bucket: INVENTORY_STORAGE_BUCKET,
+            userId: bandId || 'band_inventory',
+            fileNameToken: cleanId
+          })
+        });
+        if (apiRes.ok) {
+          const apiJson = await apiRes.json();
+          if (apiJson?.publicUrl) {
+            return {
+              publicUrl: apiJson.publicUrl,
+              imagePath: storagePath
+            };
+          }
+        }
+      } catch (srvErr) {
+        console.warn('[INVENTORY STORAGE SERVER FALLBACK WARN]', srvErr);
+      }
+    }
 
-    console.log(`[INVENTORY STORAGE SUCCESS] Stored image in bucket '${INVENTORY_STORAGE_BUCKET}' (${finalPath}):`, publicUrl);
-
-    return {
-      publicUrl,
-      imagePath: finalPath
-    };
+    return fallbackResult;
   } catch (err: any) {
     console.error('[INVENTORY STORAGE ERROR] Exception uploading item asset:', err?.message || err);
     return fallbackResult;
@@ -158,63 +180,97 @@ export async function uploadInventoryItemImage(
 }
 
 /**
- * Fetches all inventory items from Supabase 'inventory' table, ensuring
- * that the `image_path` database column is retrieved and routed through
+ * Fetches all inventory items from Supabase 'inventory' table and global server cache,
+ * ensuring that the `image_path` database column is retrieved and routed through
  * the 'inventory-items' storage bucket to construct accurate public image URLs.
  */
 export async function fetchInventoryItems(bandId?: string): Promise<InventoryItem[]> {
   const supabase = getSupabase();
-  if (!supabase) return [];
+  const itemsMap = new Map<string, InventoryItem>();
 
-  try {
-    let query = supabase
-      .from('inventory')
-      .select('id, created_at, name, table_stock, van_stock, low_threshold, status, item_type, price, image_url, image_path, border_color, band_id, is_exclusive, sku, initial_batch_size, cost, barcode, variants')
-      .order('created_at', { ascending: false });
+  // 1. Fetch from Supabase 'inventory' table
+  if (supabase) {
+    try {
+      await ensureValidSupabaseAuthSession(supabase).catch(() => {});
+      let query = supabase
+        .from('inventory')
+        .select('id, created_at, name, table_stock, van_stock, low_threshold, status, item_type, price, image_url, image_path, border_color, band_id, is_exclusive, sku, initial_batch_size, cost, barcode, variants')
+        .order('created_at', { ascending: false });
 
-    if (bandId) {
-      query = query.eq('band_id', bandId);
+      if (bandId) {
+        query = query.eq('band_id', bandId);
+      }
+
+      const { data, error } = await query;
+      if (!error && data) {
+        data.forEach((item: any) => {
+          if (item?.id) {
+            const resolvedUrl = resolveInventoryImageUrl(item);
+            itemsMap.set(item.id, {
+              ...item,
+              image_url: resolvedUrl,
+              image_path: item.image_path || undefined
+            } as InventoryItem);
+          }
+        });
+      }
+    } catch (err: any) {
+      console.warn('[INVENTORY SERVICE] Exception retrieving Supabase inventory records:', err?.message || err);
     }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.warn('[INVENTORY SERVICE] Error fetching inventory items:', error.message);
-      return [];
-    }
-
-    if (!data) return [];
-
-    return data.map((item: any) => {
-      const resolvedUrl = resolveInventoryImageUrl(item);
-      return {
-        ...item,
-        image_url: resolvedUrl,
-        image_path: item.image_path || undefined
-      } as InventoryItem;
-    });
-  } catch (err: any) {
-    console.error('[INVENTORY SERVICE] Exception retrieving inventory records:', err?.message || err);
-    return [];
   }
+
+  // 2. Fetch from server API global cache
+  try {
+    const endpoint = bandId ? `/api/inventory?band_id=${encodeURIComponent(bandId)}` : '/api/inventory';
+    const res = await fetch(getApiUrl(endpoint));
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.items && Array.isArray(json.items)) {
+        json.items.forEach((item: any) => {
+          if (item?.id) {
+            const resolvedUrl = resolveInventoryImageUrl(item);
+            const existing = itemsMap.get(item.id) || ({} as Partial<InventoryItem>);
+            itemsMap.set(item.id, {
+              ...existing,
+              ...item,
+              image_url: resolvedUrl,
+              image_path: item.image_path || existing.image_path || undefined
+            } as InventoryItem);
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[INVENTORY SERVICE] Server API fetch fallback warning:', err);
+  }
+
+  return Array.from(itemsMap.values());
 }
 
 /**
- * Persists an InventoryItem into the Supabase database. If an un-uploaded
- * image (data URI / local blob) is detected in image_url, it is automatically
- * routed through the 'inventory-items' bucket before writing to the database.
+ * Persists an InventoryItem into the Supabase database and global server API.
+ * If an un-uploaded image (data URI / local blob) is detected in image_url, it is
+ * automatically routed through the 'inventory-items' bucket before saving.
  */
 export async function saveInventoryItem(
   item: Partial<InventoryItem>
 ): Promise<{ data: InventoryItem | null; error: any }> {
   const supabase = getSupabase();
+  let itemId = item.id;
+
+  // Validate RFC4122 v4 UUID format for PostgreSQL compatibility
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!itemId || !uuidRegex.test(itemId)) {
+    itemId = generateUUID();
+  }
+
   let finalImagePath = item.image_path;
   let finalImageUrl = item.image_url;
 
   // 1. If image is a local base64 or blob, upload it to the 'inventory-items' bucket first
   if (finalImageUrl && (finalImageUrl.startsWith('data:') || finalImageUrl.startsWith('blob:'))) {
     try {
-      const uploadResult = await uploadInventoryItemImage(finalImageUrl, item.id, item.band_id);
+      const uploadResult = await uploadInventoryItemImage(finalImageUrl, itemId, item.band_id);
       finalImagePath = uploadResult.imagePath;
       finalImageUrl = uploadResult.publicUrl;
     } catch (e) {
@@ -224,35 +280,65 @@ export async function saveInventoryItem(
 
   const payload: Partial<InventoryItem> = {
     ...item,
+    id: itemId,
     image_url: finalImageUrl,
     image_path: finalImagePath
   };
 
   const dbItem = sanitizeInventoryItemForDb(payload);
 
-  if (!supabase) {
-    return { data: payload as InventoryItem, error: null };
-  }
+  let savedRecord: InventoryItem | null = null;
+  let saveError: any = null;
 
-  try {
-    const { data, error } = await executeWithSchemaResilience(async (cleanPayload) => {
-      return await supabase.from('inventory').upsert([cleanPayload], { onConflict: 'id' }).select('*').single();
-    }, dbItem);
+  // 2. Persist to Supabase database
+  if (supabase) {
+    try {
+      await ensureValidSupabaseAuthSession(supabase).catch(() => {});
+      const { data, error } = await executeWithSchemaResilience(async (cleanPayload) => {
+        return await supabase.from('inventory').upsert([cleanPayload], { onConflict: 'id' }).select('*').single();
+      }, dbItem);
 
-    if (error) {
-      return { data: null, error };
+      if (!error && data) {
+        savedRecord = {
+          ...data,
+          image_url: resolveInventoryImageUrl(data),
+          image_path: data.image_path || finalImagePath
+        } as InventoryItem;
+      } else if (error) {
+        saveError = error;
+        console.warn('[INVENTORY SERVICE] Supabase direct upsert error (falling back to server API):', error.message);
+      }
+    } catch (err: any) {
+      saveError = err;
+      console.warn('[INVENTORY SERVICE] Supabase direct exception:', err?.message || err);
     }
-
-    const savedRecord = data ? {
-      ...data,
-      image_url: resolveInventoryImageUrl(data),
-      image_path: data.image_path || finalImagePath
-    } : payload;
-
-    return { data: savedRecord as InventoryItem, error: null };
-  } catch (err: any) {
-    return { data: null, error: err };
   }
+
+  // 3. Persist to server API endpoint (guarantees cross-device persistence globally)
+  try {
+    const apiRes = await fetch(getApiUrl('/api/inventory'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item: payload })
+    });
+    if (apiRes.ok) {
+      const apiJson = await apiRes.json();
+      if (apiJson?.items && apiJson.items[0]) {
+        const srvItem = apiJson.items[0];
+        savedRecord = {
+          ...payload,
+          ...srvItem,
+          image_url: resolveInventoryImageUrl(srvItem),
+          image_path: srvItem.image_path || finalImagePath
+        } as InventoryItem;
+        saveError = null; // Cleared error since server persisted successfully
+      }
+    }
+  } catch (srvErr) {
+    console.warn('[INVENTORY SERVICE] Server API save endpoint exception:', srvErr);
+  }
+
+  return { data: savedRecord || (payload as InventoryItem), error: saveError };
 }
 
 /**
@@ -260,20 +346,31 @@ export async function saveInventoryItem(
  */
 export async function deleteInventoryItem(itemId: string, imagePath?: string): Promise<{ error: any }> {
   const supabase = getSupabase();
-  if (!supabase) return { error: null };
+
+  if (imagePath && !imagePath.startsWith('http') && supabase) {
+    try {
+      await ensureValidSupabaseAuthSession(supabase).catch(() => {});
+      await supabase.storage.from(INVENTORY_STORAGE_BUCKET).remove([imagePath]);
+    } catch (stErr) {
+      console.warn('[INVENTORY STORAGE] Could not delete bucket file:', stErr);
+    }
+  }
+
+  let delError = null;
+
+  if (supabase) {
+    try {
+      await ensureValidSupabaseAuthSession(supabase).catch(() => {});
+      const { error } = await supabase.from('inventory').delete().eq('id', itemId);
+      delError = error;
+    } catch (err: any) {
+      delError = err;
+    }
+  }
 
   try {
-    if (imagePath && !imagePath.startsWith('http')) {
-      try {
-        await supabase.storage.from(INVENTORY_STORAGE_BUCKET).remove([imagePath]);
-      } catch (stErr) {
-        console.warn('[INVENTORY STORAGE] Could not delete bucket file:', stErr);
-      }
-    }
+    await fetch(getApiUrl(`/api/inventory/${encodeURIComponent(itemId)}`), { method: 'DELETE' });
+  } catch (_) {}
 
-    const { error } = await supabase.from('inventory').delete().eq('id', itemId);
-    return { error };
-  } catch (err: any) {
-    return { error: err };
-  }
+  return { error: delError };
 }

@@ -243,7 +243,7 @@ import DaySheetPrintView from './DaySheetPrintView';
 import { FieldIntel } from './FieldIntel';
 import CoOpRouteStagingView from './CoOpRouteStagingView';
 import PostShowReview from './PostShowReview';
-import { tourPackageManager, TourPackageRecord, TourPackageStop } from '../../../lib/tourPackageManager';
+import { tourPackageManager, TourPackageRecord, TourPackageStop, isCommunityTourPackage } from '../../../lib/tourPackageManager';
 import { saveVenueToBlackBook, isVenueInBlackBook } from '../../../services/venueSearchService';
 import { resolveLocationCoordinates, getProceduralLatLng } from '../../../lib/geoResolution';
 
@@ -487,10 +487,14 @@ export default function ShowsView({
   const [mapError, setMapError] = useState(false);
 
   // Tour Package Layers & Separate Tour Management State
-  const [allTourPackages, setAllTourPackages] = useState<TourPackageRecord[]>(() => tourPackageManager.getAllTours());
+  const [allTourPackages, setAllTourPackages] = useState<TourPackageRecord[]>(() => 
+    tourPackageManager.getAllTours().filter(t => !isCommunityTourPackage(t))
+  );
   const [selectedTourId, setSelectedTourId] = useState<string | null>(null);
   const [showPersonalShowsLayer, setShowPersonalShowsLayer] = useState<boolean>(true);
-  const [activeTourLayerIds, setActiveTourLayerIds] = useState<Set<string>>(() => new Set(tourPackageManager.getAllTours().map(t => t.id)));
+  const [activeTourLayerIds, setActiveTourLayerIds] = useState<Set<string>>(() => 
+    new Set(tourPackageManager.getAllTours().filter(t => !isCommunityTourPackage(t)).map(t => t.id))
+  );
   const [isLayersPanelOpen, setIsLayersPanelOpen] = useState<boolean>(false);
   const [isMapLoaded, setIsMapLoaded] = useState<boolean>(false);
   const [selectedTourStopPopup, setSelectedTourStopPopup] = useState<{
@@ -505,10 +509,13 @@ export default function ShowsView({
   // Sync allTourPackages whenever tourManager fires events
   useEffect(() => {
     const handleUpdate = () => {
-      const fresh = tourPackageManager.getAllTours();
+      const fresh = tourPackageManager.getAllTours().filter(t => !isCommunityTourPackage(t));
       setAllTourPackages(fresh);
       setActiveTourLayerIds(prev => {
-        const next = new Set(prev);
+        const next = new Set<string>();
+        prev.forEach(id => {
+          if (fresh.some(t => t.id === id)) next.add(id);
+        });
         fresh.forEach(t => next.add(t.id));
         return next;
       });
@@ -598,19 +605,104 @@ export default function ShowsView({
     }
   }, [initialSettlementShowId, shows]);
 
+  // Compile active personal shows list strictly for the band workspace (excluding community directory shows and tour package stops)
+  const personalShows = useMemo(() => {
+    const curBandName = (bandName || 'Virulent Excision').trim().toLowerCase();
+    
+    // Set of stop IDs and date+city signatures that belong to any currently loaded tour package
+    const tourPackageStopIds = new Set<string>();
+    const tourPackageStopSigs = new Set<string>();
+    allTourPackages.forEach(tour => {
+      (tour.stops || []).forEach(st => {
+        if (st.id) tourPackageStopIds.add(st.id);
+        const hexId = (st.id || '').replace(/[^a-f0-9]/gi, '').padEnd(32, '0').slice(0, 32);
+        const stopUuid = hexId.slice(0, 8) + '-' + hexId.slice(8, 12) + '-4' + hexId.slice(13, 16) + '-a' + hexId.slice(17, 20) + '-' + hexId.slice(20, 32);
+        tourPackageStopIds.add(stopUuid);
+        if (st.date && st.city) {
+          tourPackageStopSigs.add(`${st.date.toLowerCase().trim()}__${st.city.toLowerCase().trim()}`);
+        }
+      });
+    });
+
+    return shows.filter(show => {
+      // 1. Exclude community-submitted directory shows
+      if (
+        show.is_community_submitted || 
+        show.band_id === 'community_hub' || 
+        (typeof show.id === 'string' && (show.id.includes('sh_comm_') || show.id.includes('df000')))
+      ) {
+        return false;
+      }
+
+      // 2. Exclude stops that are already part of an active tour package (they have their own tour layer, preventing duplicates!)
+      if (show.id && tourPackageStopIds.has(show.id)) {
+        return false;
+      }
+
+      let tourId = '';
+      let tourHeadliner = '';
+      if (show.additional_notes) {
+        try {
+          const extra = typeof show.additional_notes === 'string' ? JSON.parse(show.additional_notes) : show.additional_notes;
+          tourId = extra.tour_id || '';
+          tourHeadliner = extra.headliner || '';
+        } catch (_) {}
+      }
+      if (tourId) {
+        return false;
+      }
+
+      const showSig = `${(show.date || '').toLowerCase().trim()}__${(show.city || '').toLowerCase().trim()}`;
+      if (tourPackageStopSigs.has(showSig)) {
+        return false;
+      }
+
+      // 3. Exclude shows where headliner is a different band (e.g. Molested Divinity, Dying Fetus, Vader)
+      const headliner = (show.headliner || tourHeadliner || '').toLowerCase();
+      if (headliner && curBandName && !headliner.includes(curBandName) && !curBandName.includes(headliner)) {
+        return false;
+      }
+
+      // 4. Exclude shows with title referencing other tours
+      const showName = (show.name || show.show_name || show.festival_name || '').toLowerCase();
+      if (
+        showName.includes('primordial hatred') || 
+        showName.includes('dying fetus') || 
+        showName.includes('reign forever kingdom') ||
+        showName.includes('us and canada')
+      ) {
+        if (!curBandName.includes('molested') && !curBandName.includes('dying fetus') && !curBandName.includes('vader')) {
+          return false;
+        }
+      }
+
+      // 5. Exclude managed client bookings for other tours (they belong in Tour Manager / Tour Layers, not personal shows)
+      if (show.is_managed_client_booking && show.band_id !== activeBandId) {
+        return false;
+      }
+
+      // 6. If show belongs to a different band specifically
+      if (show.band_id && activeBandId && show.band_id !== activeBandId && show.band_id !== 'b1') {
+        return false;
+      }
+
+      return true;
+    });
+  }, [shows, allTourPackages, bandName, activeBandId]);
+
   // Dynamic Tour Progression Metrics Dashboard calculation
   const tourProgression = useMemo(() => {
-    const total = shows.length;
-    const completed = shows.filter(s => s.status === 'Closed').length;
+    const total = personalShows.length;
+    const completed = personalShows.filter(s => s.status === 'Closed').length;
     const progressPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
     
     // Sum show.revenue if defined, or sum sales matching each show
-    let totalProjectedRevenue = shows.reduce((acc, s) => acc + (s.revenue || 0), 0);
+    let totalProjectedRevenue = personalShows.reduce((acc, s) => acc + (s.revenue || 0), 0);
     if (totalProjectedRevenue === 0 && sales.length > 0) {
       totalProjectedRevenue = sales.reduce((acc, s) => acc + (s.amount * (s.quantity || 1)), 0);
     }
     
-    const nextShow = [...shows]
+    const nextShow = [...personalShows]
       .filter(s => s.status === 'Active' && new Date(s.date) >= new Date())
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
 
@@ -621,7 +713,7 @@ export default function ShowsView({
       totalProjectedRevenue,
       nextShow
     };
-  }, [shows, sales]);
+  }, [personalShows, sales]);
 
   // Milestone checklist state management with localStorage serialization
   const [showMilestones, setShowMilestones] = useState<Record<string, string[]>>(() => {
@@ -694,16 +786,16 @@ export default function ShowsView({
 
   // Compile active show list with precise GIS longitude and lat pairs
   const showsWithGeoCoords = useMemo(() => {
-    return shows.map((show, idx) => {
+    return personalShows.map((show, idx) => {
       const geo = findShowGeoLocation(show, idx);
       return {
         ...show,
         lng: geo.lng,
         lat: geo.lat,
-        label: show.name.split(',')[0]
+        label: show.name ? show.name.split(',')[0] : 'Show'
       };
     });
-  }, [shows]);
+  }, [personalShows]);
 
   // Mapbox initialization logic
   useEffect(() => {
@@ -1135,7 +1227,7 @@ export default function ShowsView({
 
   // Determine coordinates for each show in list to support SVG map fallback beautifully
   const showsWithCoords = useMemo(() => {
-    return shows.map((show, idx) => {
+    return personalShows.map((show, idx) => {
       const geo = findShowGeoLocation(show, idx);
       // Scale to SVG 800x450: US longitude -125 to -66, latitude 24 to 50
       const x = Math.max(50, Math.min(750, ((geo.lng + 125) / 59) * 700 + 50));
@@ -1145,10 +1237,10 @@ export default function ShowsView({
         ...show,
         x,
         y,
-        label: show.name.split(',')[0]
+        label: show.name ? show.name.split(',')[0] : 'Show'
       };
     });
-  }, [shows]);
+  }, [personalShows]);
 
   // Derived coordinates sorted chronologically for path connecting line
   const chronologicalShowCoords = useMemo(() => {
@@ -1230,7 +1322,15 @@ export default function ShowsView({
   const handleFocusPersonalShows = () => {
     setSelectedTourId(null);
     setShowPersonalShowsLayer(true);
-    if (!mapRef.current || showsWithGeoCoords.length === 0) return;
+    if (!mapRef.current) return;
+    if (showsWithGeoCoords.length === 0) {
+      mapRef.current.flyTo({
+        center: [-98.5795, 39.8283],
+        zoom: 3.5,
+        duration: 1200
+      });
+      return;
+    }
     if (showsWithGeoCoords.length === 1) {
       mapRef.current.flyTo({
         center: [showsWithGeoCoords[0].lng, showsWithGeoCoords[0].lat],
@@ -1541,7 +1641,7 @@ export default function ShowsView({
       const dayDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), d);
       const isoStr = `${dayDate.getFullYear()}-${String(dayDate.getMonth() + 1).padStart(2, '0')}-${String(dayDate.getDate()).padStart(2, '0')}`;
       
-      const dayShows = shows.filter(s => s.date === isoStr);
+      const dayShows = personalShows.filter(s => s.date === isoStr);
       
       daysArr.push({
         date: dayDate,
@@ -1552,25 +1652,25 @@ export default function ShowsView({
     }
 
     return daysArr;
-  }, [currentDate, shows]);
+  }, [currentDate, personalShows]);
 
   // Selected date's list of shows
   const showsOnSelectedDate = useMemo(() => {
     if (!selectedDate) return [];
     const isoStr = selectedDate.toISOString().split('T')[0];
-    return shows.filter(s => s.date === isoStr);
-  }, [selectedDate, shows]);
+    return personalShows.filter(s => s.date === isoStr);
+  }, [selectedDate, personalShows]);
 
   // 5 metrics calculations based on user instructions and active lists
   const stats = useMemo(() => {
     // Specifically track aggregate gross of merch sales only, not guarantees
     const totalSales = sales.reduce((sum, s) => sum + (s.amount * (s.quantity || 1)), 0);
-    const avgPerShow = shows.length > 0 ? totalSales / shows.length : 0;
-    const totalGuarantees = shows.reduce((sum, s) => sum + (s.guarantee_amount || 0), 0);
+    const avgPerShow = personalShows.length > 0 ? totalSales / personalShows.length : 0;
+    const totalGuarantees = personalShows.reduce((sum, s) => sum + (s.guarantee_amount || 0), 0);
     
     // Calculate Cities count (extract unique places)
     const uniqueCities = new Set(
-      shows.map(s => {
+      personalShows.map(s => {
         const parts = s.name.split(',');
         return parts.length > 1 ? parts[1].trim() : s.name.trim();
       })
@@ -1586,7 +1686,7 @@ export default function ShowsView({
       citiesCount: uniqueCities.size,
       totalGuarantees
     };
-  }, [shows, sales]);
+  }, [personalShows, sales]);
 
   // Helper to check if a show is currently embargoed or confidential
   const isShowEmbargoed = (s: Show) => {
@@ -1610,12 +1710,12 @@ export default function ShowsView({
   };
 
   const embargoedCount = useMemo(() => {
-    return shows.filter(isShowEmbargoed).length;
-  }, [shows, allTourPackages]);
+    return personalShows.filter(isShowEmbargoed).length;
+  }, [personalShows, allTourPackages]);
 
   // Filter shows for rendering lists
   const filteredShows = useMemo(() => {
-    let result = [...shows];
+    let result = [...personalShows];
 
     // Search query match
     if (searchQuery.trim().length > 0) {
@@ -1656,13 +1756,13 @@ export default function ShowsView({
     }
 
     return result;
-  }, [shows, searchQuery, filterTab, sortBy, allTourPackages]);
+  }, [personalShows, searchQuery, filterTab, sortBy, allTourPackages]);
 
   const activeSelectedTour = useMemo(() => {
     if (selectedTourId) {
       return allTourPackages.find(t => t.id === selectedTourId) || null;
     }
-    return allTourPackages[0] || null;
+    return null;
   }, [selectedTourId, allTourPackages]);
 
   const displayedTourHeaderTitle = activeSelectedTour?.title || (bandName ? `${bandName} Tour 2026` : 'Virulent Excision Tour 2026');
@@ -1798,7 +1898,7 @@ export default function ShowsView({
                 Personal Shows
               </span>
               <span className="text-[9px] font-mono text-cyan-300 bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800">
-                {shows.length} stops
+                {personalShows.length} stops
               </span>
             </div>
           </div>
@@ -3250,7 +3350,7 @@ export default function ShowsView({
 
       {/* SHOW CARDS LIST */}
       <div className="grid grid-cols-1 gap-4 pb-6 animate-fadeIn" id="shows-listing-flow">
-        {shows.length === 0 ? (
+        {personalShows.length === 0 ? (
           <div 
             className="p-5 text-left border border-zinc-800 bg-[#0e1014] rounded-2xl font-mono text-zinc-300 space-y-3 shadow-lg md:col-span-2"
           >

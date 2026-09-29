@@ -606,7 +606,7 @@ export async function ensureImagesUploadedToStorage(payload: any): Promise<any> 
   for (const item of items) {
     if (!item || typeof item !== 'object') continue;
 
-    if (import.meta.env.DEV && false) {
+    if (typeof import.meta !== 'undefined' && (import.meta as any)?.env?.DEV && false) {
       console.log('[Debug Payload Incoming]:', item);
     }
 

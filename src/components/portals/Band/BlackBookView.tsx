@@ -8,6 +8,7 @@ import { handleSendMessage as sendDbMessage } from '../../../store/useChatStore'
 import VenueReputationCard from './VenueReputationCard';
 import { seedVenuesForCities, classifyPlace, isIrrelevantPlace } from '../../../services/musicBrainzSeederService';
 import { getAllBlackBookVenues, BUILT_IN_BLACK_BOOK_VENUES } from '../../../services/venueSearchService';
+import { getApiEndpoint } from '../../../utils/apiConfig';
 
 /**
  * Detect if an existing place record appears to be closed, defunct, or former
@@ -343,6 +344,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
   const [customCityInput, setCustomCityInput] = useState('');
 
   const TOUR_HUB_PRESETS = [
+    { city: 'St. Louis', state: 'MO', label: 'St. Louis, MO' },
     { city: 'Austin', state: 'TX', label: 'Austin, TX' },
     { city: 'Dallas', state: 'TX', label: 'Dallas, TX' },
     { city: 'Oklahoma City', state: 'OK', label: 'Oklahoma City, OK' },
@@ -351,6 +353,9 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     { city: 'Chicago', state: 'IL', label: 'Chicago, IL' },
     { city: 'Denver', state: 'CO', label: 'Denver, CO' },
     { city: 'Los Angeles', state: 'CA', label: 'Los Angeles, CA' },
+    { city: 'Phoenix', state: 'AZ', label: 'Phoenix, AZ' },
+    { city: 'Sacramento', state: 'CA', label: 'Sacramento, CA' },
+    { city: 'Salt Lake City', state: 'UT', label: 'Salt Lake City, UT' },
     { city: 'Seattle', state: 'WA', label: 'Seattle, WA' },
     { city: 'Nashville', state: 'TN', label: 'Nashville, TN' },
     { city: 'Atlanta', state: 'GA', label: 'Atlanta, GA' },
@@ -358,7 +363,9 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
     { city: 'Philadelphia', state: 'PA', label: 'Philadelphia, PA' },
     { city: 'Portland', state: 'OR', label: 'Portland, OR' },
     { city: 'Minneapolis', state: 'MN', label: 'Minneapolis, MN' },
-    { city: 'Detroit', state: 'MI', label: 'Detroit, MI' }
+    { city: 'Detroit', state: 'MI', label: 'Detroit, MI' },
+    { city: 'Baltimore', state: 'MD', label: 'Baltimore, MD' },
+    { city: 'Toronto', state: 'ON', label: 'Toronto, ON' }
   ];
 
   const availablePresets = TOUR_HUB_PRESETS.filter(
@@ -531,7 +538,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
       // Fetch server-persisted venues cache
       let serverVenues: any[] = [];
       try {
-        const res = await fetch('/api/venues');
+        const res = await fetch(getApiEndpoint('/api/venues'));
         if (res.ok) {
           const sData = await res.json();
           if (sData.success && Array.isArray(sData.venues)) {
@@ -707,7 +714,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
 
     // 1. Post batch to server-side persistent endpoint (works across all devices & APK)
     try {
-      await fetch('/api/venues/batch', {
+      await fetch(getApiEndpoint('/api/venues/batch'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ venues: venuesList })
@@ -762,7 +769,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
       // 1. Try server-side API endpoint
       try {
         setSeedingLogs(prev => [...prev, `[SERVER] Calling /api/venues/seed-musicbrainz...`]);
-        const res = await fetch('/api/venues/seed-musicbrainz', {
+        const res = await fetch(getApiEndpoint('/api/venues/seed-musicbrainz'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ cities: selectedHubs })

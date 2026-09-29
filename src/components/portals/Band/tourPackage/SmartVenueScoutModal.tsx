@@ -19,18 +19,24 @@ interface SmartVenueScoutModalProps {
 }
 
 const POPULAR_TOUR_CITIES = [
-  'Nashville, TN',
-  'Joliet, IL',
+  'St. Louis, MO',
   'Chicago, IL',
+  'Dallas, TX',
   'Denver, CO',
   'Austin, TX',
   'Los Angeles, CA',
+  'Phoenix, AZ',
+  'Sacramento, CA',
   'Seattle, WA',
   'Portland, OR',
-  'Dallas, TX',
-  'Phoenix, AZ',
-  'Detroit, MI',
-  'Philadelphia, PA'
+  'New York, NY',
+  'Toronto, ON',
+  'Nashville, TN',
+  'Philadelphia, PA',
+  'Minneapolis, MN',
+  'Atlanta, GA',
+  'Salt Lake City, UT',
+  'Kansas City, MO'
 ];
 
 export const SmartVenueScoutModal: React.FC<SmartVenueScoutModalProps> = ({
@@ -62,15 +68,18 @@ export const SmartVenueScoutModal: React.FC<SmartVenueScoutModalProps> = ({
   });
   const [expandedVenueId, setExpandedVenueId] = useState<string | null>(null);
 
-  // Sync initial city when targetCity changes
+  // Sync initial city when targetCity changes or modal opens
   React.useEffect(() => {
-    if (targetCity) {
-      const cityPart = targetCity.split(',')[0].trim();
-      setSearchQuery(cityPart);
-    } else if (targetStop?.city) {
-      setSearchQuery(targetStop.city);
+    if (!isOpen) return;
+    const rawTarget = targetCity || targetStop?.city || '';
+    if (rawTarget) {
+      let cleaned = rawTarget.split(',')[0].trim();
+      cleaned = cleaned.replace(/\s+(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|ON|QC|BC|AB|MB|SK|USA|US)$/i, '').trim();
+      setSearchQuery(cleaned || rawTarget);
+    } else {
+      setSearchQuery('');
     }
-  }, [targetCity, targetStop]);
+  }, [isOpen, targetCity, targetStop]);
 
   // Load all available venues from Black Book & Built-in Database
   React.useEffect(() => {
@@ -82,20 +91,60 @@ export const SmartVenueScoutModal: React.FC<SmartVenueScoutModalProps> = ({
     });
   }, [isOpen]);
 
-  // Filtered results
+  // Robust, normalized multi-strategy search filter
   const filteredVenues = useMemo(() => {
     let list = [...allVenues];
 
     // Search query
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter(v => 
-        v.name.toLowerCase().includes(q) ||
-        (v.city && v.city.toLowerCase().includes(q)) ||
-        (v.state && v.state.toLowerCase().includes(q)) ||
-        (v.fullAddress && v.fullAddress.toLowerCase().includes(q)) ||
-        (v.tags && v.tags.some(t => t.toLowerCase().includes(q)))
-      );
+      const rawQ = searchQuery.toLowerCase().trim();
+      const cleanQ = rawQ.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ').replace(/\s+/g, ' ').trim();
+      const qTokens = cleanQ.split(' ').filter(Boolean);
+
+      const isStLouisQuery = rawQ.includes('louis') || rawQ.includes('stl') || cleanQ.includes('st louis') || cleanQ.includes('saint louis') || rawQ.includes('sauget');
+      const isNycQuery = rawQ === 'nyc' || cleanQ.includes('new york') || cleanQ.includes('brooklyn') || cleanQ.includes('manhattan') || cleanQ.includes('queens');
+      const isLaQuery = rawQ === 'la' || cleanQ.includes('los angeles') || cleanQ.includes('hollywood') || cleanQ.includes('anaheim');
+      const isPhxQuery = rawQ === 'phx' || cleanQ.includes('phoenix') || cleanQ.includes('tempe') || cleanQ.includes('mesa');
+      const isSacQuery = rawQ === 'sac' || cleanQ.includes('sacramento');
+      const isDfwQuery = rawQ === 'dfw' || cleanQ.includes('dallas') || cleanQ.includes('fort worth') || cleanQ.includes('haltom') || cleanQ.includes('denton');
+      const isBayAreaQuery = rawQ === 'sf' || cleanQ.includes('san francisco') || cleanQ.includes('oakland') || cleanQ.includes('berkeley');
+      const isSlcQuery = rawQ === 'slc' || cleanQ.includes('salt lake');
+      const isKcQuery = rawQ === 'kc' || cleanQ.includes('kansas city') || cleanQ.includes('lawrence');
+      const isMspQuery = rawQ === 'msp' || cleanQ.includes('minneapolis') || cleanQ.includes('st paul') || cleanQ.includes('saint paul');
+      const isTorQuery = cleanQ.includes('toronto') || cleanQ.includes('montreal') || cleanQ.includes('canada');
+
+      list = list.filter(v => {
+        const vName = (v.name || '').toLowerCase();
+        const vCity = (v.city || '').toLowerCase();
+        const vState = (v.state || '').toLowerCase();
+        const vFull = (v.fullAddress || v.streetAddress || '').toLowerCase();
+        const vTags = (v.tags || []).map(t => t.toLowerCase());
+
+        // Alias matching
+        if (isStLouisQuery && (vCity.includes('louis') || vCity.includes('sauget') || vTags.some(t => t.includes('louis') || t.includes('sauget')))) return true;
+        if (isNycQuery && (vCity.includes('new york') || vCity.includes('brooklyn') || vCity.includes('queens') || vTags.some(t => t.includes('york') || t.includes('brooklyn')))) return true;
+        if (isLaQuery && (vCity.includes('los angeles') || vCity.includes('anaheim') || vTags.some(t => t.includes('angeles') || t.includes('anaheim')))) return true;
+        if (isPhxQuery && (vCity.includes('phoenix') || vCity.includes('tempe') || vCity.includes('mesa') || vTags.some(t => t.includes('phoenix')))) return true;
+        if (isSacQuery && (vCity.includes('sacramento') || vTags.some(t => t.includes('sacramento')))) return true;
+        if (isDfwQuery && (vCity.includes('dallas') || vCity.includes('fort worth') || vCity.includes('denton') || vCity.includes('haltom'))) return true;
+        if (isBayAreaQuery && (vCity.includes('san francisco') || vCity.includes('berkeley') || vCity.includes('oakland'))) return true;
+        if (isSlcQuery && vCity.includes('salt lake')) return true;
+        if (isKcQuery && (vCity.includes('kansas city') || vCity.includes('lawrence'))) return true;
+        if (isMspQuery && (vCity.includes('minneapolis') || vCity.includes('paul'))) return true;
+        if (isTorQuery && (vCity.includes('toronto') || vCity.includes('montreal') || (v.country && v.country.toLowerCase().includes('canada')))) return true;
+
+        const haystack = `${vName} ${vCity} ${vState} ${vFull} ${vTags.join(' ')}`.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+
+        // Direct clean substring
+        if (haystack.includes(cleanQ)) return true;
+
+        // All tokens match in haystack (e.g. "St. Louis, MO" matches because "st", "louis", "mo" are in haystack)
+        if (qTokens.length > 1 && qTokens.every(tok => haystack.includes(tok))) {
+          return true;
+        }
+
+        return false;
+      });
     }
 
     // Capacity filter
@@ -254,31 +303,76 @@ export const SmartVenueScoutModal: React.FC<SmartVenueScoutModalProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Quick Hub Filter Pills & Status Bar */}
+          <div className="mt-2.5 pt-2 border-t border-zinc-850 flex items-center justify-between gap-2 overflow-x-auto text-[10px] font-mono">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+              <span className="text-zinc-500 uppercase font-bold shrink-0">Hubs:</span>
+              {POPULAR_TOUR_CITIES.slice(0, 10).map((cityStr) => {
+                const cityNameOnly = cityStr.split(',')[0].trim();
+                const isActive = searchQuery.toLowerCase().includes(cityNameOnly.toLowerCase());
+                return (
+                  <button
+                    key={`quick-hub-${cityStr}`}
+                    type="button"
+                    onClick={() => setSearchQuery(cityNameOnly)}
+                    className={`px-2 py-0.5 rounded-full border whitespace-nowrap transition cursor-pointer ${
+                      isActive
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-bold'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
+                    }`}
+                  >
+                    {cityStr}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-zinc-500 shrink-0 hidden sm:block">
+              <span className="text-amber-400 font-bold">{filteredVenues.length}</span> / {allVenues.length} venues
+            </div>
+          </div>
         </div>
 
         {/* Results List */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5">
           {filteredVenues.length === 0 ? (
-            <div className="py-12 text-center space-y-3">
+            <div className="py-10 text-center space-y-3">
               <Building2 className="w-10 h-10 text-zinc-600 mx-auto" />
               <div className="space-y-1">
                 <p className="text-sm font-mono font-bold text-zinc-300 uppercase">
                   No venues found matching "{searchQuery}"
                 </p>
                 <p className="text-xs text-zinc-500 font-mono max-w-md mx-auto">
-                  Try searching for another city, clearing capacity filters, or enter custom details directly.
+                  Try searching for another city, clearing capacity filters, or explore our top tour hubs below.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery('');
-                  setCapacityFilter('all');
-                }}
-                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 font-mono text-xs uppercase cursor-pointer"
-              >
-                Reset All Filters
-              </button>
+
+              {/* Suggestions */}
+              <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-lg mx-auto pt-1">
+                {POPULAR_TOUR_CITIES.slice(0, 8).map((cityStr) => (
+                  <button
+                    key={`empty-sug-${cityStr}`}
+                    type="button"
+                    onClick={() => setSearchQuery(cityStr.split(',')[0].trim())}
+                    className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-amber-300 hover:border-amber-500/40 text-[10px] font-mono transition cursor-pointer"
+                  >
+                    {cityStr}
+                  </button>
+                ))}
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCapacityFilter('all');
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-mono text-xs uppercase cursor-pointer transition font-bold"
+                >
+                  View All ({allVenues.length}) Black Book Venues
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

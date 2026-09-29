@@ -104,10 +104,6 @@ export const isEmbargoedShow = (show: any): boolean => {
   if (show.status === 'Embargoed' || show.status === 'Draft' || show.publication_status === 'embargoed_private' || show.publication_status === 'draft' || show.is_published === false) {
     return true;
   }
-  const text = `${show.headliner || ''} ${show.band_name || ''} ${show.band || ''} ${show.name || ''} ${show.show_name || ''} ${show.title || ''} ${show.notes || ''} ${show.description || ''} ${Array.isArray(show.support) ? show.support.join(' ') : (show.support || '')} ${Array.isArray(show.lineup) ? show.lineup.map((l: any) => typeof l === 'string' ? l : (l.band || l.name)).join(' ') : ''}`.toLowerCase();
-  if (text.includes('molested divinity') || text.includes('molesteddivinity') || text.includes('molested-divinity')) {
-    return true;
-  }
   return false;
 };
 
@@ -363,6 +359,8 @@ export const normalizeShowToEventDirectoryItem = (show: any, idx: number = 0, us
     isPersonallyBooked,
     isCommunityShow,
     is_community_submitted: Boolean(show.is_community_submitted || isCommunityShow),
+    tour_name: show.tour_name || show.festival_name || resolvedTourName || extraNotes.tour_name || extraNotes.tour_title,
+    festival_name: show.festival_name || resolvedTourName || show.tour_name,
     time: timeDisplay,
     price: priceDisplay,
     genre,
@@ -412,6 +410,8 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
     if (initialViewMode === 'community_archives') return 'community_archives';
     return 'single';
   });
+  // Community Archives 2-tab split: Single Shows vs Concluded Tours
+  const [archiveSubTab, setArchiveSubTab] = useState<'single' | 'tours'>('single');
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [expandedTourIds, setExpandedTourIds] = useState<Set<string>>(new Set());
@@ -971,6 +971,121 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
     });
   }, [communityArchiveEvents, archiveSearchQuery, searchQuery, selectedCityFilter, mapFilterGenre, archiveYearFilter]);
 
+  // Split community archives into Single Shows vs Concluded Tours
+  const { archiveToursList, archiveSingleShowsList } = useMemo(() => {
+    const isGeneric = (val?: string) => {
+      if (!val || typeof val !== 'string') return true;
+      const l = val.trim().toLowerCase();
+      return !l || l === 'tour show' || l === 'live show' || l === 'show' || l === 'gig' || l === 'single';
+    };
+
+    const parseShowTs = (item: any): number => {
+      if (!item) return 0;
+      const raw = String(item.rawDate || item.date || item.show_date || '').trim();
+      if (!raw) return 0;
+      const isoMatch = raw.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
+      if (isoMatch) {
+        return new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10)).getTime();
+      }
+      const myMatch = raw.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})[,\s]+(20\d{2})\b/i);
+      if (myMatch) {
+        const ts = Date.parse(`${myMatch[1]} ${myMatch[2]}, ${myMatch[3]}`);
+        if (!isNaN(ts)) return ts;
+      }
+      const mMatch = raw.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i);
+      if (mMatch) {
+        const ts = Date.parse(`${mMatch[1]} ${mMatch[2]}, ${new Date().getFullYear()}`);
+        if (!isNaN(ts)) return ts;
+      }
+      const fallback = Date.parse(raw);
+      return !isNaN(fallback) ? fallback : 0;
+    };
+
+    const tourMap = new Map<string, {
+      id: string;
+      tourName: string;
+      headliner: string;
+      supportBands: string[];
+      flyerUrl?: string;
+      genre: string;
+      stops: any[];
+      startDate?: string;
+      endDate?: string;
+    }>();
+
+    const standaloneSingle: any[] = [];
+
+    filteredCommunityArchives.forEach(evt => {
+      let extraNotes: any = {};
+      if (typeof evt.additional_notes === 'string') {
+        try { extraNotes = JSON.parse(evt.additional_notes); } catch (_) {}
+      } else if (evt.additional_notes && typeof evt.additional_notes === 'object') {
+        extraNotes = evt.additional_notes;
+      }
+
+      let tourName = evt.tour_name || evt.festival_name || extraNotes.tour_name || extraNotes.tour_title || extraNotes.tourTitle || evt.tourName || evt.tourTitle;
+
+      if (!tourName && evt.show_name && evt.show_name.includes(' - ')) {
+        const p = evt.show_name.split(' - ')[0].trim();
+        if (p.length > 3 && !isGeneric(p)) tourName = p;
+      }
+      if (!tourName && evt.title && evt.title.includes(' - ')) {
+        const p = evt.title.split(' - ')[0].trim();
+        if (p.length > 3 && !isGeneric(p)) tourName = p;
+      }
+
+      if (!isGeneric(tourName)) {
+        const key = tourName!.trim().toLowerCase();
+        if (!tourMap.has(key)) {
+          tourMap.set(key, {
+            id: `arch_tour_${key.replace(/[^a-z0-9]/g, '_')}`,
+            tourName: tourName!.trim(),
+            headliner: (!isGeneric(evt.headliner) ? evt.headliner : (extraNotes.headliner || tourName!.trim())),
+            supportBands: Array.isArray(evt.support) ? [...evt.support] : [],
+            flyerUrl: evt.flyerUrl || evt.flyer_url,
+            genre: evt.genre || 'Extreme Metal / Archive Tour',
+            stops: []
+          });
+        }
+        const entry = tourMap.get(key)!;
+        const stopCityLower = String(evt.city || '').toLowerCase().trim();
+        const stopDateLower = String(evt.rawDate || evt.date || evt.show_date || '').toLowerCase().trim();
+
+        const isDuplicateStop = entry.stops.some(existing => {
+          if (existing.id && evt.id && existing.id === evt.id) return true;
+          const exCity = String(existing.city || '').toLowerCase().trim();
+          const exDate = String(existing.rawDate || existing.date || existing.show_date || '').toLowerCase().trim();
+          return exCity && exDate && exCity === stopCityLower && exDate === stopDateLower;
+        });
+
+        if (!isDuplicateStop) {
+          entry.stops.push(evt);
+        }
+        if (Array.isArray(evt.support)) {
+          evt.support.forEach((b: string) => {
+            if (b && !entry.supportBands.includes(b)) entry.supportBands.push(b);
+          });
+        }
+        if (!entry.flyerUrl && (evt.flyerUrl || evt.flyer_url)) {
+          entry.flyerUrl = evt.flyerUrl || evt.flyer_url;
+        }
+      } else {
+        standaloneSingle.push(evt);
+      }
+    });
+
+    const archiveToursList = Array.from(tourMap.values()).map(tour => {
+      tour.stops.sort((a, b) => parseShowTs(a) - parseShowTs(b));
+      if (tour.stops.length > 0) {
+        tour.startDate = tour.stops[0].date || tour.stops[0].rawDate;
+        tour.endDate = tour.stops[tour.stops.length - 1].date || tour.stops[tour.stops.length - 1].rawDate;
+      }
+      return tour;
+    });
+
+    return { archiveToursList, archiveSingleShowsList: standaloneSingle };
+  }, [filteredCommunityArchives]);
+
   // Extract unique cities & genres for quick filtering
   const { uniqueCities, uniqueGenres } = useMemo(() => {
     const cities = new Set<string>();
@@ -1127,7 +1242,25 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
     const standaloneSingleShows: any[] = [];
 
     filteredEvents.forEach(evt => {
-      const tourName = evt.tour_name || (evt.additional_notes && typeof evt.additional_notes === 'object' ? evt.additional_notes.tour_name : undefined);
+      let extraNotes: any = {};
+      if (typeof evt.additional_notes === 'string') {
+        try {
+          extraNotes = JSON.parse(evt.additional_notes);
+        } catch (_) {}
+      } else if (evt.additional_notes && typeof evt.additional_notes === 'object') {
+        extraNotes = evt.additional_notes;
+      }
+
+      let tourName = evt.tour_name || evt.festival_name || extraNotes.tour_name || extraNotes.tour_title || extraNotes.tourTitle || evt.tourName || evt.tourTitle;
+
+      if (!tourName && evt.show_name && evt.show_name.includes(' - ')) {
+        const p = evt.show_name.split(' - ')[0].trim();
+        if (p.length > 3 && !isGeneric(p)) tourName = p;
+      }
+      if (!tourName && evt.title && evt.title.includes(' - ')) {
+        const p = evt.title.split(' - ')[0].trim();
+        if (p.length > 3 && !isGeneric(p)) tourName = p;
+      }
 
       if (!isGeneric(tourName)) {
         const key = tourName!.trim().toLowerCase();
@@ -1135,7 +1268,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
           tourMap.set(key, {
             id: `tour_${key.replace(/[^a-z0-9]/g, '_')}`,
             tourName: tourName!.trim(),
-            headliner: (!isGeneric(evt.headliner) ? evt.headliner : tourName!.trim()),
+            headliner: (!isGeneric(evt.headliner) ? evt.headliner : (extraNotes.headliner || tourName!.trim())),
             supportBands: Array.isArray(evt.support) ? [...evt.support] : [],
             flyerUrl: evt.flyerUrl || evt.flyer_url,
             genre: evt.genre || 'Extreme Metal / Touring',
@@ -2124,204 +2257,438 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                   </div>
                 </div>
               ) : viewMode === 'community_archives' ? (
-                /* ======================== COMMUNITY ARCHIVES VIEW ======================== */
+                /* ======================== COMMUNITY ARCHIVES VIEW (2-TAB SPLIT) ======================== */
                 <div className="flex-1 min-h-0 min-w-0 flex flex-col md:flex-row overflow-hidden w-full h-full">
-                  {/* Left Column: Community Archive Shows Grid / List */}
+                  {/* Left Column: Archive Content */}
                   <div className={`${mobileDetailOpen ? 'hidden md:block' : 'block'} flex-1 min-h-0 min-w-0 h-full overflow-y-auto overscroll-contain p-3 sm:p-5 space-y-3.5 bg-black/50 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent`}>
-                    {filteredCommunityArchives.length === 0 ? (
-                      <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-6 space-y-3">
-                        <div className="w-12 h-12 rounded-full bg-amber-950/40 border border-amber-500/40 flex items-center justify-center text-amber-400">
-                          <History className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h4 className="text-white font-mono font-bold text-sm">No Community Archives Found</h4>
-                          <p className="text-xs font-mono text-zinc-500 max-w-sm mt-1">
-                            No past community-submitted gigs match your search or filters.
-                          </p>
-                        </div>
+                    
+                    {/* Sub-tab Navigation Bar for Community Archives */}
+                    <div className="flex items-center justify-between pb-3 border-b border-zinc-850 gap-2 flex-wrap sticky top-0 bg-[#08090d]/95 backdrop-blur-md z-10 pt-0.5">
+                      <div className="flex items-center bg-zinc-950 border border-amber-500/30 rounded-xl p-1 shadow-inner">
                         <button
                           type="button"
                           onClick={() => {
-                            setSearchQuery('');
-                            setArchiveSearchQuery('');
-                            setArchiveYearFilter('all');
-                            setSelectedCityFilter('all');
-                            setMapFilterGenre('all');
+                            setArchiveSubTab('single');
+                            setMobileDetailOpen(false);
                           }}
-                          className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-xs font-mono font-bold text-amber-400 border border-amber-500/40 cursor-pointer"
+                          className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                            archiveSubTab === 'single'
+                              ? 'bg-amber-400 text-black shadow-md font-black'
+                              : 'text-amber-400/70 hover:text-amber-300 hover:bg-amber-950/40'
+                          }`}
                         >
-                          Reset Archive Filters
+                          <List className="w-3.5 h-3.5" />
+                          <span>Single Shows {archiveSingleShowsList.length > 0 ? `(${archiveSingleShowsList.length})` : ''}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setArchiveSubTab('tours');
+                            setMobileDetailOpen(false);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                            archiveSubTab === 'tours'
+                              ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-black shadow-md font-black'
+                              : 'text-amber-400/70 hover:text-amber-300 hover:bg-amber-950/40'
+                          }`}
+                        >
+                          <Radio className="w-3.5 h-3.5" />
+                          <span>Archived Tours {archiveToursList.length > 0 ? `(${archiveToursList.length})` : ''}</span>
                         </button>
                       </div>
-                    ) : (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 pb-8 sm:pb-0">
-                        {filteredCommunityArchives.map((evt, idx) => {
-                          const isSelected = selectedMapEvent?.id === evt.id;
-                          const theme = getShowBorderTheme(evt.id || `arch-${idx}`);
-                          return (
-                            <div
-                              key={`comm-arch-${evt.id || 'arch'}-${idx}`}
+
+                      <span className="text-[10px] font-mono text-amber-400/90 bg-amber-950/40 border border-amber-500/30 px-2.5 py-1 rounded-lg">
+                        {archiveSubTab === 'single'
+                          ? `${archiveSingleShowsList.length} Archived Single Gigs`
+                          : `${archiveToursList.length} Concluded Multi-City Tours`}
+                      </span>
+                    </div>
+
+                    {/* SUB-TAB 1: ARCHIVED SINGLE SHOWS */}
+                    {archiveSubTab === 'single' && (
+                      <>
+                        {archiveSingleShowsList.length === 0 ? (
+                          <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-6 space-y-3">
+                            <div className="w-12 h-12 rounded-full bg-amber-950/40 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                              <History className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <h4 className="text-white font-mono font-bold text-sm">No Archived Single Shows Found</h4>
+                              <p className="text-xs font-mono text-zinc-500 max-w-sm mt-1">
+                                No past standalone community gigs match your search or filters.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
                               onClick={() => {
-                                setSelectedMapEvent(evt);
-                                onSelectEvent?.(evt);
-                                setMobileDetailOpen(true);
+                                setSearchQuery('');
+                                setArchiveSearchQuery('');
+                                setArchiveYearFilter('all');
+                                setSelectedCityFilter('all');
+                                setMapFilterGenre('all');
                               }}
-                              className={`group bg-[#0c0d12] border-2 rounded-2xl p-4 transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
-                                isSelected
-                                  ? theme.selectedBorder
-                                  : `${theme.border} ${theme.glow} bg-[#0c0d12]`
-                              }`}
+                              className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-xs font-mono font-bold text-amber-400 border border-amber-500/40 cursor-pointer"
                             >
-                              {/* Top Banner Tag */}
-                              <div className="flex items-start justify-between gap-2 mb-2">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="bg-amber-950/80 border border-amber-500/60 text-amber-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1">
-                                    <CheckCircle2 className="w-3 h-3 text-amber-400" /> CONCLUDED • {evt.date}
-                                  </span>
-                                  <span className="bg-zinc-900 text-zinc-400 border border-zinc-800 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1">
-                                    <Tag className="w-3 h-3 text-zinc-400" /> Community Gig
-                                  </span>
-                                </div>
-                                <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest px-1.5 py-0.5 rounded bg-black/60 border border-zinc-850">
-                                  Archived
-                                </span>
-                              </div>
-
-                              {/* Headliner & Show Title */}
-                              <div className="space-y-1 mb-2.5">
-                                <h3 className="text-sm sm:text-base font-black text-white group-hover:text-amber-300 transition-colors font-mono tracking-tight leading-snug">
-                                  {evt.headliner}
-                                </h3>
-                                {evt.show_name && evt.show_name !== evt.headliner && (
-                                  <p className="text-xs font-mono text-amber-400/80 font-bold truncate">
-                                    {evt.show_name}
-                                  </p>
-                                )}
-                                <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-mono">
-                                  <Building className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                                  <span className="text-zinc-300 font-bold">{evt.venue}</span>
-                                  <span className="text-zinc-600">•</span>
-                                  <span className="text-zinc-400">{evt.city}</span>
-                                </div>
-                              </div>
-
-                              {/* Description / Archive notes */}
-                              {evt.description && (
-                                <p className="text-[11px] font-mono text-zinc-400 bg-black/40 border border-zinc-900 rounded-xl p-2.5 mb-3 line-clamp-2 leading-relaxed">
-                                  {evt.description}
-                                </p>
-                              )}
-
-                              {/* Support Bands Lineup Chips */}
-                              {evt.support && evt.support.length > 0 && (
-                                <div className="mb-3">
-                                  <span className="text-[9px] font-mono text-zinc-500 uppercase font-bold block mb-1">
-                                    Bands on Bill:
-                                  </span>
-                                  <div className="flex flex-wrap gap-1">
-                                    <span className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-amber-950/30 border border-amber-500/40 text-amber-300">
-                                      {evt.headliner}
-                                    </span>
-                                    {evt.support.map((band: string, bIdx: number) => (
-                                      <span
-                                        key={`comm-supp-${band}-${bIdx}`}
-                                        className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-black/60 border border-zinc-800 text-zinc-400"
-                                      >
-                                        +{band}
+                              Reset Archive Filters
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 pb-8 sm:pb-0">
+                            {archiveSingleShowsList.map((evt, idx) => {
+                              const isSelected = selectedMapEvent?.id === evt.id;
+                              const theme = getShowBorderTheme(evt.id || `arch-${idx}`);
+                              return (
+                                <div
+                                  key={`comm-arch-${evt.id || 'arch'}-${idx}`}
+                                  onClick={() => {
+                                    setSelectedMapEvent(evt);
+                                    onSelectEvent?.(evt);
+                                    setMobileDetailOpen(true);
+                                  }}
+                                  className={`group bg-[#0c0d12] border-2 rounded-2xl p-4 transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                                    isSelected
+                                      ? theme.selectedBorder
+                                      : `${theme.border} ${theme.glow} bg-[#0c0d12]`
+                                  }`}
+                                >
+                                  {/* Top Banner Tag */}
+                                  <div className="flex items-start justify-between gap-2 mb-2">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="bg-amber-950/80 border border-amber-500/60 text-amber-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1">
+                                        <CheckCircle2 className="w-3 h-3 text-amber-400" /> CONCLUDED • {evt.date}
                                       </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Card Bottom: Archive Status & Actions */}
-                              <div className="pt-2 border-t border-zinc-900 flex items-center justify-between mt-auto">
-                                <span className="text-[10px] font-mono text-zinc-500 flex items-center gap-1">
-                                  <Clock className="w-3 h-3 text-zinc-600" /> Preserved in Scene Records
-                                </span>
-
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenFullEventPage(evt);
-                                    }}
-                                    className="px-2 py-1 bg-amber-950/80 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-500/60 rounded-lg text-[10px] font-mono font-bold uppercase transition-all shadow-sm flex items-center gap-1 cursor-pointer"
-                                  >
-                                    <Sparkles className="w-3 h-3" /> Event Page
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleEditArchiveShow(evt);
-                                    }}
-                                    className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-cyan-300 border border-zinc-700/80 rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
-                                    title="Edit show details in community archive"
-                                  >
-                                    <Edit3 className="w-3 h-3 text-cyan-400" /> Edit
-                                  </button>
-
-                                  {deleteConfirmId === evt.id ? (
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleDeleteArchiveShow(evt, true);
-                                        }}
-                                        className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white font-mono text-[9.5px] font-bold uppercase rounded flex items-center gap-1 animate-pulse cursor-pointer shadow-lg"
-                                        title="Click to confirm permanent deletion"
-                                      >
-                                        <Trash2 className="w-3 h-3" /> Confirm Delete
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setDeleteConfirmId(null);
-                                        }}
-                                        className="px-1.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-[9.5px] font-bold rounded cursor-pointer"
-                                      >
-                                        Cancel
-                                      </button>
+                                      <span className="bg-zinc-900 text-zinc-400 border border-zinc-800 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1">
+                                        <Tag className="w-3 h-3 text-zinc-400" /> Community Gig
+                                      </span>
                                     </div>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDeleteArchiveShow(evt);
-                                      }}
-                                      className="px-2 py-1 bg-rose-950/40 hover:bg-rose-900/80 text-rose-300 border border-rose-500/50 rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
-                                      title="Permanently delete this show from archives"
-                                    >
-                                      <Trash2 className="w-3 h-3 text-rose-400" /> Delete
-                                    </button>
+                                    <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest px-1.5 py-0.5 rounded bg-black/60 border border-zinc-850">
+                                      Archived
+                                    </span>
+                                  </div>
+
+                                  {/* Headliner & Show Title */}
+                                  <div className="space-y-1 mb-2.5">
+                                    <h3 className="text-sm sm:text-base font-black text-white group-hover:text-amber-300 transition-colors font-mono tracking-tight leading-snug">
+                                      {evt.headliner}
+                                    </h3>
+                                    {evt.show_name && evt.show_name !== evt.headliner && (
+                                      <p className="text-xs font-mono text-amber-400/80 font-bold truncate">
+                                        {evt.show_name}
+                                      </p>
+                                    )}
+                                    <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-mono">
+                                      <Building className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                      <span className="text-zinc-300 font-bold">{evt.venue}</span>
+                                      <span className="text-zinc-600">•</span>
+                                      <span className="text-zinc-400">{evt.city}</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Description / Archive notes */}
+                                  {evt.description && (
+                                    <p className="text-[11px] font-mono text-zinc-400 bg-black/40 border border-zinc-900 rounded-xl p-2.5 mb-3 line-clamp-2 leading-relaxed">
+                                      {evt.description}
+                                    </p>
                                   )}
 
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedMapEvent(evt);
-                                      onSelectEvent?.(evt);
-                                      setMobileDetailOpen(true);
-                                    }}
-                                    className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 flex items-center gap-1 font-mono text-[10px] cursor-pointer"
-                                    title="View Archive Dossier"
-                                  >
-                                    <span>Dossier</span>
-                                    <ChevronRight className="w-4 h-4" />
-                                  </button>
+                                  {/* Support Bands Lineup Chips */}
+                                  {evt.support && evt.support.length > 0 && (
+                                    <div className="mb-3">
+                                      <span className="text-[9px] font-mono text-zinc-500 uppercase font-bold block mb-1">
+                                        Bands on Bill:
+                                      </span>
+                                      <div className="flex flex-wrap gap-1">
+                                        <span className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-amber-950/30 border border-amber-500/40 text-amber-300">
+                                          {evt.headliner}
+                                        </span>
+                                        {evt.support.map((band: string, bIdx: number) => (
+                                          <span
+                                            key={`comm-supp-${band}-${bIdx}`}
+                                            className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-black/60 border border-zinc-800 text-zinc-400"
+                                          >
+                                            +{band}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Card Bottom: Archive Status & Actions */}
+                                  <div className="pt-2 border-t border-zinc-900 flex items-center justify-between mt-auto">
+                                    <span className="text-[10px] font-mono text-zinc-500 flex items-center gap-1">
+                                      <Clock className="w-3 h-3 text-zinc-600" /> Preserved Record
+                                    </span>
+
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenFullEventPage(evt);
+                                        }}
+                                        className="px-2 py-1 bg-amber-950/80 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-500/60 rounded-lg text-[10px] font-mono font-bold uppercase transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <Sparkles className="w-3 h-3" /> Event Page
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleEditArchiveShow(evt);
+                                        }}
+                                        className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-cyan-300 border border-zinc-700/80 rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
+                                        title="Edit show details in community archive"
+                                      >
+                                        <Edit3 className="w-3 h-3 text-cyan-400" /> Edit
+                                      </button>
+
+                                      {deleteConfirmId === evt.id ? (
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleDeleteArchiveShow(evt, true);
+                                            }}
+                                            className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white font-mono text-[9.5px] font-bold uppercase rounded flex items-center gap-1 animate-pulse cursor-pointer shadow-lg"
+                                            title="Click to confirm permanent deletion"
+                                          >
+                                            <Trash2 className="w-3 h-3" /> Confirm Delete
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setDeleteConfirmId(null);
+                                            }}
+                                            className="px-1.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-[9.5px] font-bold rounded cursor-pointer"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteArchiveShow(evt);
+                                          }}
+                                          className="px-2 py-1 bg-rose-950/40 hover:bg-rose-900/80 text-rose-300 border border-rose-500/50 rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
+                                          title="Permanently delete this show from archives"
+                                        >
+                                          <Trash2 className="w-3 h-3 text-rose-400" /> Delete
+                                        </button>
+                                      )}
+
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedMapEvent(evt);
+                                          onSelectEvent?.(evt);
+                                          setMobileDetailOpen(true);
+                                        }}
+                                        className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 flex items-center gap-1 font-mono text-[10px] cursor-pointer"
+                                        title="View Archive Dossier"
+                                      >
+                                        <span>Dossier</span>
+                                        <ChevronRight className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* SUB-TAB 2: ARCHIVED TOURS */}
+                    {archiveSubTab === 'tours' && (
+                      <>
+                        {archiveToursList.length === 0 ? (
+                          <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-6 space-y-3">
+                            <div className="w-12 h-12 rounded-full bg-amber-950/40 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                              <Radio className="w-6 h-6" />
                             </div>
-                          );
-                        })}
-                      </div>
+                            <div>
+                              <h4 className="text-white font-mono font-bold text-sm">No Concluded Tours Found</h4>
+                              <p className="text-xs font-mono text-zinc-500 max-w-sm mt-1">
+                                No past multi-date tours currently match your search query or location filter.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSearchQuery('');
+                                setArchiveSearchQuery('');
+                                setArchiveYearFilter('all');
+                                setSelectedCityFilter('all');
+                                setMapFilterGenre('all');
+                              }}
+                              className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-xs font-mono font-bold text-amber-400 border border-amber-500/40 cursor-pointer"
+                            >
+                              Reset Archive Filters
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-4 pb-8 sm:pb-0">
+                            {archiveToursList.map((tour, tIdx) => {
+                              const isExpanded = expandedTourIds.has(tour.id);
+                              const uniqueCities = Array.from(new Set(tour.stops.map((s: any) => s.city).filter(Boolean)));
+                              const citiesPreview = uniqueCities.slice(0, 5).join(' • ') + (uniqueCities.length > 5 ? ` +${uniqueCities.length - 5} more` : '');
+                              const isSelected = selectedMapEvent && tour.stops.some((s: any) => s.id === selectedMapEvent.id);
+
+                              return (
+                                <div
+                                  key={`arch-tour-card-${tour.id || 'tour'}-${tIdx}`}
+                                  className={`bg-[#0c0d14] border-2 rounded-2xl p-4 sm:p-5 transition-all relative overflow-hidden ${
+                                    isSelected
+                                      ? 'border-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.35)]'
+                                      : 'border-amber-900/50 hover:border-amber-500/60 shadow-lg'
+                                  }`}
+                                >
+                                  {/* Top Banner Badges */}
+                                  <div className="flex items-start justify-between gap-2 mb-3">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="bg-gradient-to-r from-amber-950 to-yellow-950 border border-amber-500/60 text-amber-300 font-mono font-bold text-[9.5px] px-2.5 py-0.5 rounded flex items-center gap-1.5 shadow-sm">
+                                        <History className="w-3 h-3 text-amber-400" /> CONCLUDED TOUR
+                                      </span>
+                                      <span className="bg-amber-950/80 border border-amber-700/60 text-amber-200 font-mono font-black text-[9.5px] px-2 py-0.5 rounded flex items-center gap-1">
+                                        {tour.stops.length} {tour.stops.length === 1 ? 'DATE' : 'DATES'}
+                                      </span>
+                                      {(tour.startDate || tour.endDate) && (
+                                        <span className="bg-black/60 border border-zinc-800 text-zinc-300 font-mono text-[9px] px-2 py-0.5 rounded flex items-center gap-1">
+                                          <Calendar className="w-3 h-3 text-amber-400" />
+                                          {tour.startDate}{tour.endDate && tour.endDate !== tour.startDate ? ` — ${tour.endDate}` : ''}
+                                        </span>
+                                      )}
+                                      <span className="bg-zinc-900 text-zinc-400 border border-zinc-800 font-mono text-[9px] px-2 py-0.5 rounded">
+                                        {tour.genre}
+                                      </span>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleTourExpand(tour.id)}
+                                      className="px-2.5 py-1 bg-amber-950/60 hover:bg-amber-900 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                                    >
+                                      <span>{isExpanded ? 'Hide Schedule' : `View Schedule (${tour.stops.length})`}</span>
+                                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                    </button>
+                                  </div>
+
+                                  {/* Tour Package Title & Headliner */}
+                                  <div className="space-y-1 mb-2">
+                                    <h3 className="text-base sm:text-lg font-black text-white font-mono tracking-tight">
+                                      {tour.tourName}
+                                    </h3>
+                                    <div className="flex items-center gap-2 text-xs font-mono">
+                                      <span className="text-amber-400 font-bold flex items-center gap-1">
+                                        <Music className="w-3.5 h-3.5" /> Headliner: {tour.headliner}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Cities Visited Summary */}
+                                  <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-mono mb-3">
+                                    <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                    <span className="truncate">{citiesPreview}</span>
+                                  </div>
+
+                                  {/* Lineup Chips */}
+                                  {tour.supportBands.length > 0 && (
+                                    <div className="mb-3">
+                                      <span className="text-[9.5px] font-mono text-zinc-500 uppercase font-bold block mb-1">
+                                        Touring Support:
+                                      </span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {tour.supportBands.map((band: string, sIdx: number) => (
+                                          <span
+                                            key={`arch-tour-supp-${tour.id}-${band}-${sIdx}`}
+                                            className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-black/60 border border-zinc-800 text-zinc-300"
+                                          >
+                                            {band}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Collapsible Full Itinerary Dropdown */}
+                                  <AnimatePresence>
+                                    {isExpanded && (
+                                      <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="pt-3 border-t border-zinc-800/80 space-y-2 mt-3"
+                                      >
+                                        <div className="flex items-center justify-between text-[10px] font-mono text-amber-400 uppercase font-bold px-1">
+                                          <span>Complete Concluded Itinerary ({tour.stops.length} Dates)</span>
+                                          <span className="text-zinc-500">Tap date to view archive dossier</span>
+                                        </div>
+
+                                        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                          {tour.stops.map((stop: any, sIdx: number) => {
+                                            const isStopSelected = selectedMapEvent?.id === stop.id;
+                                            return (
+                                              <div
+                                                key={`arch-tour-stop-${stop.id || sIdx}`}
+                                                onClick={() => {
+                                                  setSelectedMapEvent(stop);
+                                                  onSelectEvent?.(stop);
+                                                  setMobileDetailOpen(true);
+                                                }}
+                                                className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 cursor-pointer font-mono ${
+                                                  isStopSelected
+                                                    ? 'bg-amber-950/50 border-amber-400 text-white shadow-md'
+                                                    : 'bg-black/60 border-zinc-850 hover:border-zinc-700 text-zinc-300 hover:bg-zinc-900/60'
+                                                }`}
+                                              >
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                  <span className="text-[10px] text-amber-500/80 font-bold shrink-0 w-6">
+                                                    #{sIdx + 1}
+                                                  </span>
+                                                  <span className="text-amber-300 font-bold text-xs shrink-0">
+                                                    {stop.date}
+                                                  </span>
+                                                  <span className="text-white text-xs truncate">
+                                                    {stop.city}
+                                                  </span>
+                                                  <span className="text-zinc-500 text-xs truncate hidden sm:inline">
+                                                    @ {stop.venue}
+                                                  </span>
+                                                </div>
+
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleOpenFullEventPage(stop);
+                                                    }}
+                                                    className="px-2 py-0.5 bg-amber-950/80 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-500/50 rounded text-[9.5px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
+                                                  >
+                                                    <Sparkles className="w-2.5 h-2.5" /> Event Page
+                                                  </button>
+                                                  <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 

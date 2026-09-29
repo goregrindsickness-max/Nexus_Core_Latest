@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { compressImageInSocialFeed } from '../../../utils/socialFeedUtils';
 import { showsStore, venuesStore } from '../../../utils/indexedDB';
-import { getSupabase } from '../../../services/clientService';
+import { getSupabase, sanitizeShowForDb, generateUUID, ensureUUID } from '../../../supabase';
 
 export interface CreateCommunityShowModalProps {
   isOpen: boolean;
@@ -388,7 +388,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
   };
 
   // Submit Handler for Single Show Tab
-  const handleSingleShowSubmit = (e: React.FormEvent) => {
+  const handleSingleShowSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const headlinerVal = name.trim();
@@ -430,8 +430,9 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       computedPrice = 'External Tickets';
     }
 
+    const showId = editingShow?.id ? ensureUUID(editingShow.id) : generateUUID();
     const showPayload = {
-      id: editingShow?.id || ('sh_comm_' + Math.random().toString(36).substring(2, 9)),
+      id: showId,
       name: finalShowName,
       show_name: finalShowName,
       headliner: headlinerVal,
@@ -467,8 +468,23 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       support_bands: supportBands.join(', '),
       is_time_24h: isTime24Hour,
       is_community_submitted: true,
+      additional_notes: JSON.stringify({
+        tour_name: trimmedFestival || undefined,
+        tour_title: trimmedFestival || undefined,
+      }),
       created_at: editingShow?.created_at || new Date().toISOString()
     };
+
+    // Also sync to Supabase directly
+    try {
+      const supabase = getSupabase();
+      if (supabase) {
+        const sanitized = sanitizeShowForDb(showPayload);
+        await supabase.from('shows').upsert([sanitized]);
+      }
+    } catch (err) {
+      console.warn('Direct show sync notice:', err);
+    }
 
     onSubmit(showPayload);
   };
@@ -520,7 +536,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
           existingShowsMap.get(`${hLower}__${stopCityLower}`) ||
           existingShowsMap.get(`${tLower}__${stopCityLower}`);
 
-        const showId = existingShow ? existingShow.id : ('sh_tour_' + Math.random().toString(36).substring(2, 9));
+        const showId = ensureUUID(existingShow?.id || generateUUID());
         const venueVal = stop.venue_name || existingShow?.venue_name || existingShow?.venue || 'Live Venue';
         const finalName = `${headlinerVal} at ${venueVal}`;
 
@@ -542,6 +558,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
         const showPayload: any = {
           ...(existingShow || {}),
           id: showId,
+          creator_id: existingShow?.creator_id || '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
           name: finalName,
           show_name: finalName,
           headliner: headlinerVal,
@@ -566,6 +583,11 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
           support_bands: sharedSupport || existingShow?.support_bands,
           support_lineup: sharedLineup.length > 0 ? sharedLineup : existingShow?.support_lineup,
           is_community_submitted: true,
+          additional_notes: JSON.stringify({
+            tour_name: activeTourName,
+            tour_title: activeTourName,
+            stop_id: showId
+          }),
           updated_at: new Date().toISOString()
         };
 
@@ -576,24 +598,8 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
         try {
           const supabase = getSupabase();
           if (supabase) {
-            await supabase.from('shows').upsert([{
-              id: showId,
-              headliner: headlinerVal,
-              show_name: finalName,
-              tour_name: activeTourName,
-              show_date: stop.show_date,
-              date: stop.show_date,
-              doors_time: stop.doors_time || '19:00',
-              venue_name: venueVal,
-              city: showPayload.city,
-              state_province: stop.state || showPayload.state || 'TX',
-              price: showPayload.price,
-              flyer_url: tourFlyerUrl || null,
-              ticket_url: stop.ticket_url || null,
-              support_bands: sharedSupport,
-              is_community_submitted: true,
-              updated_at: new Date().toISOString()
-            }]);
+            const dbSanitized = sanitizeShowForDb(showPayload);
+            await supabase.from('shows').upsert([dbSanitized]);
           }
         } catch (sbErr) {
           console.warn('Supabase tour show sync notice:', sbErr);

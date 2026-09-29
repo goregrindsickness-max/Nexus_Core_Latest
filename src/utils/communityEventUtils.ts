@@ -188,29 +188,21 @@ export function normalizeDate(dateStr?: string): string {
  * filtering out any embargoed or unconfirmed events (e.g. Molested Divinity).
  */
 export function getExistingCommunityEvents(): CommunityEventRecord[] {
-  const isEmbargoed = (evt: any) => {
-    if (!evt) return false;
-    const txt = `${evt.name || ''} ${evt.headliner || ''} ${evt.venue_name || ''} ${Array.isArray(evt.lineup) ? evt.lineup.join(' ') : (evt.lineup || '')} ${evt.description || ''}`.toLowerCase();
-    return txt.includes('molested divinity') || txt.includes('molesteddivinity');
-  };
-
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) {
-      const validSeeds = SEEDED_EVENTS.filter(e => !isEmbargoed(e));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(validSeeds));
-      return validSeeds;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEEDED_EVENTS));
+      return SEEDED_EVENTS;
     }
     const parsed = JSON.parse(stored);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed.filter(e => !isEmbargoed(e));
+      return parsed;
     }
-    const validSeeds = SEEDED_EVENTS.filter(e => !isEmbargoed(e));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(validSeeds));
-    return validSeeds;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(SEEDED_EVENTS));
+    return SEEDED_EVENTS;
   } catch (err) {
     console.warn('Error reading community events:', err);
-    return SEEDED_EVENTS.filter(e => !isEmbargoed(e));
+    return SEEDED_EVENTS;
   }
 }
 

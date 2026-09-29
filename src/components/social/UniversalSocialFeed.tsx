@@ -339,7 +339,7 @@ export function UniversalSocialFeed({
       name: finalShowName,
       show_name: finalShowName,
       headliner: headlinerVal,
-      festival_name: payload.festival_name,
+      festival_name: payload.festival_name || payload.tour_name || payload.tourTitle || payload.tour_title,
       date: payload.date,
       show_date: payload.show_date || payload.date,
       status: payload.status || 'Active',

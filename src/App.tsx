@@ -128,7 +128,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Sale, Show, InventoryItem, TourNote, Band, UserProfile, ChecklistItem, BankItem, Flight, InventoryAudit, UserReview, LoyaltyMember, Offer, DbNotification, SubscriptionTier, StagedDistroItem, AssetRevenueSplit, CashTransaction, BandJoinRequest, RegisteredWorkspaceRef, hasRegisteredWorkspace, normalizeRegisteredWorkspaces } from './types';
 import { communityBandManager, isCommunityBandRecord } from './lib/communityBands';
 import { isMiguelNameOrProfile } from './components/social/utils/profileUtils';
-import { initOfflineQueue, getSupabase, testSupabaseConnection, getSupabaseUrl, getSupabaseAnonKey, subscribeToTable, sanitizeInventoryItemForDb, executeWithSchemaResilience, getOfflineQueue, processOfflineQueue, isBypassRequiredError, handleDatabaseFailover, saveToFailoverCache, generateUUID, uploadBase64ToStorage, fetchUserBands, sanitizeBandPayload, ensureValidSupabaseAuthSession, autoSyncCreativeProfile, autoSyncPromoterProfile, normalizeLoadedProfile, fetchUserCreatives, resolveInventoryImageUrl } from './supabase';
+import { initOfflineQueue, getSupabase, testSupabaseConnection, getSupabaseUrl, getSupabaseAnonKey, subscribeToTable, sanitizeInventoryItemForDb, executeWithSchemaResilience, getOfflineQueue, processOfflineQueue, isBypassRequiredError, handleDatabaseFailover, saveToFailoverCache, generateUUID, uploadBase64ToStorage, fetchUserBands, sanitizeBandPayload, ensureValidSupabaseAuthSession, autoSyncCreativeProfile, autoSyncPromoterProfile, normalizeLoadedProfile, fetchUserCreatives, resolveInventoryImageUrl, fetchInventoryItems } from './supabase';
 import AlbumArt from './components/AlbumArt';
 import { useOfflineSync } from './hooks/useOfflineSync';
 import { useSubscriptionTimer } from './hooks/useSubscriptionTimer';
@@ -1116,8 +1116,6 @@ export default function App() {
       if (s.is_published === false) return true;
       if (s.publication_status === 'embargoed_private' || s.publication_status === 'draft') return true;
       if (s.status === 'Draft' || s.status === 'Embargoed') return true;
-      const text = `${s.headliner || ''} ${s.name || ''} ${s.show_name || ''} ${s.venue || ''} ${s.support || ''}`.toLowerCase();
-      if (text.includes('molested divinity') || text.includes('molesteddivinity')) return true;
       return false;
     };
 
@@ -2138,21 +2136,61 @@ export default function App() {
 
   // Filtered lists for the active band context
   const filteredShows = useMemo(() => {
+    const curBandName = (activeBand?.name || 'Virulent Excision').trim().toLowerCase();
+    const curBandId = (activeBandId || 'b1').trim();
+
     return shows.filter(show => {
       // 1. If marked as community-submitted, or created via community hub (sh_comm_), or band_id is 'community_hub' / starts with 'community':
       const isCommunityOnly = show.is_community_submitted === true || 
-        (typeof show.id === 'string' && show.id.startsWith('sh_comm_')) || 
+        (typeof show.id === 'string' && (show.id.startsWith('sh_comm_') || show.id.startsWith('df000000'))) || 
         (show.band_id && (show.band_id === 'community_hub' || show.band_id.startsWith('community')));
 
       if (isCommunityOnly) {
         // Only include in band workspace if explicitly assigned to this specific band's ID
-        return Boolean(show.band_id && show.band_id === activeBandId && show.band_id !== 'community_hub');
+        return Boolean(show.band_id && show.band_id === curBandId && show.band_id !== 'community_hub');
       }
 
-      // 2. Regular band shows: belong to this band or legacy show without band_id
-      return !show.band_id || show.band_id === activeBandId;
+      // Check additional_notes for tour package metadata or external band info
+      let tourId = '';
+      let tourHeadliner = '';
+      let tourTitle = '';
+      if (show.additional_notes) {
+        try {
+          const extra = typeof show.additional_notes === 'string' ? JSON.parse(show.additional_notes) : show.additional_notes;
+          tourId = extra.tour_id || '';
+          tourHeadliner = extra.headliner || '';
+          tourTitle = extra.tour_title || extra.tour_name || '';
+        } catch (_) {}
+      }
+
+      // If show has a headliner that is explicitly another band (e.g. Molested Divinity, Dying Fetus, Vader):
+      const showHeadliner = (show.headliner || tourHeadliner || '').toLowerCase().trim();
+      const showTitle = (show.name || show.show_name || show.festival_name || tourTitle || '').toLowerCase().trim();
+
+      if (showHeadliner && !showHeadliner.includes(curBandName) && !curBandName.includes(showHeadliner)) {
+        return false;
+      }
+
+      // Specific check for Primordial Hatred Tour, Dying Fetus, or Reign Forever Kingdom
+      if (showTitle.includes('primordial hatred') || showTitle.includes('dying fetus') || showTitle.includes('reign forever kingdom')) {
+        if (!curBandName.includes('molested') && !curBandName.includes('dying fetus') && !curBandName.includes('vader')) {
+          return false;
+        }
+      }
+
+      // 2. Regular band shows: belong to this band
+      if (show.band_id) {
+        return show.band_id === curBandId;
+      }
+
+      // If show has no band_id, check that it is not a managed client tour stop belonging to another tour
+      if (show.is_managed_client_booking || tourId) {
+        return false;
+      }
+
+      return true;
     });
-  }, [shows, activeBandId]);
+  }, [shows, activeBandId, activeBand?.name]);
 
   const filteredSales = useMemo(() => {
     return sales.filter(sale => !sale.band_id || sale.band_id === activeBandId);
@@ -2791,11 +2829,7 @@ export default function App() {
           if (shws) {
             const parsed = JSON.parse(shws as string);
             if (Array.isArray(parsed)) {
-              const cleaned = parsed.filter((s: any) => {
-                const text = `${s.headliner || ''} ${s.name || ''} ${s.show_name || ''} ${s.venue || ''} ${s.support || ''}`.toLowerCase();
-                return !text.includes('molested divinity') && !text.includes('molesteddivinity');
-              });
-              setShows(cleaned);
+              setShows(parsed);
             }
           }
 
@@ -2892,10 +2926,6 @@ export default function App() {
                   const sDate = String(formatted.date || '').toLowerCase().trim();
                   const sSig = `${sName}__${sDate}`;
 
-                  // Filter out embargoed & confirming shows (e.g. Molested Divinity)
-                  const sFullText = `${sName} ${formatted.venue || ''} ${(formatted as any).support || ''}`.toLowerCase();
-                  if (sFullText.includes('molested divinity') || sFullText.includes('molesteddivinity')) continue;
-
                   if (sId && deletedShowIds.has(sId.toLowerCase())) continue;
                   if (sName && sDate && deletedShowIds.has(sSig)) continue;
 
@@ -2912,6 +2942,7 @@ export default function App() {
               showsStore.setItem('nexus_master_shows', JSON.stringify(mergedShows)).catch(console.warn);
               try {
                 tourPackageManager.incorporateShowsFromDb(showsDb);
+                tourPackageManager.purgeCommunityTours();
               } catch (_) {}
               addLog(`Synchronized ${realShows.length} tours from database table.`);
             } else {
@@ -2968,53 +2999,43 @@ export default function App() {
 
         // Try load inventory
         try {
-          const { data: inventoryDb, error: inventoryErr } = await supabase
-            .from('inventory')
-            .select('id, name, table_stock, van_stock, low_threshold, status, item_type, price, image_url, image_path, border_color, band_id, is_exclusive, sku, initial_batch_size, cost, barcode, variants');
-          if (!inventoryErr && inventoryDb) {
-            let cachedVariants: Record<string, any> = {};
-            try {
-              const cvStr = localStorage.getItem('nexus_core_variants_cache');
-              if (cvStr) cachedVariants = JSON.parse(cvStr);
-            } catch (_) {}
+          const fetchedItems = await fetchInventoryItems(activeBandIdRef.current || undefined);
+          let cachedVariants: Record<string, any> = {};
+          try {
+            const cvStr = localStorage.getItem('nexus_core_variants_cache');
+            if (cvStr) cachedVariants = JSON.parse(cvStr);
+          } catch (_) {}
 
-            const formatted = inventoryDb.map((item: any) => ({
-              ...item,
-              image_url: resolveInventoryImageUrl(item),
-              image_path: item.image_path || undefined,
-              variants: item.variants || cachedVariants[item.id],
-              band_id: item.band_id || activeBandIdRef.current
-            }));
+          const formatted = (fetchedItems || []).map((item: any) => ({
+            ...item,
+            image_url: resolveInventoryImageUrl(item),
+            image_path: item.image_path || undefined,
+            variants: item.variants || cachedVariants[item.id],
+            band_id: item.band_id || activeBandIdRef.current
+          }));
 
-            // --- OFFLINE/BYPASS UNION MERGE ---
-            const suffix = activeBandIdRef.current || userProfileRef.current?.id || 'offline';
-            let existingLocal: InventoryItem[] = [];
-            try {
-              const cachedStr = localStorage.getItem(`nexus_core_${suffix}_inventory_offline`);
-              if (cachedStr) existingLocal = JSON.parse(cachedStr);
-            } catch (_) {}
+          // --- OFFLINE/BYPASS UNION MERGE ---
+          const suffix = activeBandIdRef.current || userProfileRef.current?.id || 'offline';
+          let existingLocal: InventoryItem[] = [];
+          try {
+            const cachedStr = localStorage.getItem(`nexus_core_${suffix}_inventory_offline`);
+            if (cachedStr) existingLocal = JSON.parse(cachedStr);
+          } catch (_) {}
 
-            const dbIdSet = new Set(formatted.map(item => item.id));
-            const localOnlyItems = existingLocal.filter(item => item && item.id && !dbIdSet.has(item.id));
-            const merged = [...formatted, ...localOnlyItems];
+          const dbIdSet = new Set(formatted.map(item => item.id));
+          const localOnlyItems = existingLocal.filter(item => item && item.id && !dbIdSet.has(item.id));
+          const merged = [...formatted, ...localOnlyItems];
 
-            setInventory(merged as InventoryItem[]);
-            inventoryStore.setItem('nexus_master_inventory', JSON.stringify(merged)).catch(console.warn);
+          setInventory(merged as InventoryItem[]);
+          inventoryStore.setItem('nexus_master_inventory', JSON.stringify(merged)).catch(console.warn);
 
-            if (formatted.length > 0) {
-              if (localOnlyItems.length > 0) {
-                addLog(`Synchronized ${formatted.length} inventory products from Supabase. Merged and preserved ${localOnlyItems.length} unsynced local items.`);
-              } else {
-                addLog(`Synchronized ${formatted.length} inventory products from Supabase.`);
-              }
-            } else {
-              addLog(`Inventory table is empty in live database. Restored ${localOnlyItems.length} cached items.`);
-            }
-          } else if (inventoryErr) {
-            // Silently catch egress block, preserving UI state!
+          if (formatted.length > 0) {
+            addLog(`Synchronized ${formatted.length} inventory products from Supabase and global cloud sync.`);
+          } else {
+            addLog(`Inventory synced. Loaded ${localOnlyItems.length} cached items.`);
           }
         } catch (e: any) {
-          // Silently catch egress block, preserving UI state!
+          console.warn('Inventory loading warning:', e);
         }
 
         // Try load inventory audits
@@ -3600,9 +3621,6 @@ export default function App() {
       if (s.is_published === false) return false;
       if (s.publication_status === 'embargoed_private' || s.publication_status === 'draft') return false;
       if (s.status === 'Draft' || s.status === 'Embargoed') return false;
-      const sAny = s as any;
-      const text = `${sAny.headliner || ''} ${s.name || ''} ${sAny.show_name || ''} ${s.venue || ''} ${sAny.support || ''}`.toLowerCase();
-      if (text.includes('molested divinity') || text.includes('molesteddivinity')) return false;
       return true;
     });
   }, [sortedShows]);
