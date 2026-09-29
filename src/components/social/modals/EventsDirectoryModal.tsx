@@ -54,7 +54,7 @@ export interface EventsDirectoryModalProps {
   setMapFilterGenre: (genre: string) => void;
   userProfile: any;
   promoterProfile?: any;
-  initialViewMode?: 'list' | 'map' | 'community_archives';
+  initialViewMode?: 'single' | 'tours' | 'community_archives' | 'list' | 'map';
   triggerNotification?: (msg: string) => void;
   liveEvents?: any[];
   setLiveEvents?: React.Dispatch<React.SetStateAction<any[]>>;
@@ -406,10 +406,24 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
   onSelectEvent,
   onOpenEventPage
 }) => {
-  // View mode toggle: List (default upcoming) vs Map vs Community Archives
-  const [viewMode, setViewMode] = useState<'list' | 'map' | 'community_archives'>(initialViewMode || 'list');
+  // View mode toggle: Single Shows vs Upcoming Tours vs Community Archives
+  const [viewMode, setViewMode] = useState<'single' | 'tours' | 'community_archives'>(() => {
+    if (initialViewMode === 'tours' || initialViewMode === 'map') return 'tours';
+    if (initialViewMode === 'community_archives') return 'community_archives';
+    return 'single';
+  });
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [expandedTourIds, setExpandedTourIds] = useState<Set<string>>(new Set());
+
+  const toggleTourExpand = useCallback((tourId: string) => {
+    setExpandedTourIds(prev => {
+      const next = new Set(prev);
+      if (next.has(tourId)) next.delete(tourId);
+      else next.add(tourId);
+      return next;
+    });
+  }, []);
 
   // Search & Filter States (Collapsed by default for maximum show list viewability)
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
@@ -1043,8 +1057,184 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
     });
   }, [normalizedEvents, searchQuery, selectedCityFilter, mapFilterGenre, dateFilter, verifiedOnly, ticketOnly]);
 
+  // Group upcoming shows into Tour Packages and Single Standalone Shows (including closest tour stops for user proximity)
+  const { toursList, singleShowsList } = useMemo(() => {
+    const isGeneric = (val?: string) => {
+      if (!val || typeof val !== 'string') return true;
+      const l = val.trim().toLowerCase();
+      return !l || l === 'tour show' || l === 'live show' || l === 'show' || l === 'gig' || l === 'single';
+    };
+
+    // Determine active reference user location & coords
+    const userCityHint = (
+      (selectedCityFilter && selectedCityFilter.toLowerCase() !== 'all' ? selectedCityFilter : '') ||
+      userProfile?.location ||
+      userProfile?.city ||
+      userProfile?.hometown ||
+      promoterProfile?.location ||
+      promoterProfile?.city ||
+      promoterProfile?.default_city ||
+      (() => {
+        try {
+          return localStorage.getItem('nexus_user_city') || localStorage.getItem('nexus_user_location') || '';
+        } catch {
+          return '';
+        }
+      })()
+    ).toLowerCase().trim();
+
+    const userLat = typeof userProfile?.lat === 'number' ? userProfile.lat : 30.2672;
+    const userLng = typeof userProfile?.lng === 'number' ? userProfile.lng : -97.7431;
+
+    const parseShowTs = (item: any): number => {
+      if (!item) return 0;
+      const raw = String(item.rawDate || item.date || item.show_date || '').trim();
+      if (!raw) return 0;
+      const lower = raw.toLowerCase();
+      if (lower.includes('tonight')) return Date.now();
+      if (lower.includes('tomorrow')) return Date.now() + 86400000;
+
+      const isoMatch = raw.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
+      if (isoMatch) {
+        return new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10)).getTime();
+      }
+      const myMatch = raw.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})[,\s]+(20\d{2})\b/i);
+      if (myMatch) {
+        const ts = Date.parse(`${myMatch[1]} ${myMatch[2]}, ${myMatch[3]}`);
+        if (!isNaN(ts)) return ts;
+      }
+      const mMatch = raw.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i);
+      if (mMatch) {
+        const ts = Date.parse(`${mMatch[1]} ${mMatch[2]}, ${new Date().getFullYear()}`);
+        if (!isNaN(ts)) return ts;
+      }
+      const fallback = Date.parse(raw);
+      return !isNaN(fallback) ? fallback : 0;
+    };
+
+    const tourMap = new Map<string, {
+      id: string;
+      tourName: string;
+      headliner: string;
+      supportBands: string[];
+      flyerUrl?: string;
+      genre: string;
+      stops: any[];
+      startDate?: string;
+      endDate?: string;
+    }>();
+
+    const standaloneSingleShows: any[] = [];
+
+    filteredEvents.forEach(evt => {
+      const tourName = evt.tour_name || (evt.additional_notes && typeof evt.additional_notes === 'object' ? evt.additional_notes.tour_name : undefined);
+
+      if (!isGeneric(tourName)) {
+        const key = tourName!.trim().toLowerCase();
+        if (!tourMap.has(key)) {
+          tourMap.set(key, {
+            id: `tour_${key.replace(/[^a-z0-9]/g, '_')}`,
+            tourName: tourName!.trim(),
+            headliner: (!isGeneric(evt.headliner) ? evt.headliner : tourName!.trim()),
+            supportBands: Array.isArray(evt.support) ? [...evt.support] : [],
+            flyerUrl: evt.flyerUrl || evt.flyer_url,
+            genre: evt.genre || 'Extreme Metal / Touring',
+            stops: []
+          });
+        }
+        const entry = tourMap.get(key)!;
+        const stopCityLower = String(evt.city || '').toLowerCase().trim();
+        const stopDateLower = String(evt.rawDate || evt.date || evt.show_date || '').toLowerCase().trim();
+
+        const isDuplicateStop = entry.stops.some(existing => {
+          if (existing.id && evt.id && existing.id === evt.id) return true;
+          const exCity = String(existing.city || '').toLowerCase().trim();
+          const exDate = String(existing.rawDate || existing.date || existing.show_date || '').toLowerCase().trim();
+          return exCity && exDate && exCity === stopCityLower && exDate === stopDateLower;
+        });
+
+        if (!isDuplicateStop) {
+          entry.stops.push(evt);
+        }
+        if (Array.isArray(evt.support)) {
+          evt.support.forEach((b: string) => {
+            if (b && !entry.supportBands.includes(b)) entry.supportBands.push(b);
+          });
+        }
+        if (!entry.flyerUrl && (evt.flyerUrl || evt.flyer_url)) {
+          entry.flyerUrl = evt.flyerUrl || evt.flyer_url;
+        }
+      } else {
+        standaloneSingleShows.push(evt);
+      }
+    });
+
+    const tours = Array.from(tourMap.values()).map(tour => {
+      tour.stops.sort((a, b) => {
+        return parseShowTs(a) - parseShowTs(b);
+      });
+      if (tour.stops.length > 0) {
+        tour.startDate = tour.stops[0].date || tour.stops[0].rawDate;
+        tour.endDate = tour.stops[tour.stops.length - 1].date || tour.stops[tour.stops.length - 1].rawDate;
+      }
+      return tour;
+    });
+
+    // Build the final single shows list: Standalone shows + the closest tour stop for every tour package
+    const combinedSingleShows = [...standaloneSingleShows];
+
+    tours.forEach(tour => {
+      if (tour.stops.length === 0) return;
+
+      // Find the closest stop to user's location or next upcoming date
+      let bestStop = tour.stops[0];
+      let bestScore = Infinity;
+
+      tour.stops.forEach((stop, stopIdx) => {
+        let score = 10000;
+        const stopCity = String(stop.city || stop.state_province || '').toLowerCase();
+
+        // Exact city match with filter or user hometown is top rank
+        if (userCityHint && stopCity.includes(userCityHint)) {
+          score = 0 + stopIdx;
+        } else if (typeof stop.lat === 'number' && typeof stop.lng === 'number') {
+          // Geographic distance
+          const dist = Math.hypot(stop.lat - userLat, stop.lng - userLng);
+          score = 100 + dist;
+        } else {
+          // Chronological fallback
+          score = 500 + stopIdx;
+        }
+
+        if (score < bestScore) {
+          bestScore = score;
+          bestStop = stop;
+        }
+      });
+
+      if (bestStop) {
+        combinedSingleShows.push({
+          ...bestStop,
+          isTourStop: true,
+          tourId: tour.id,
+          tourName: tour.tourName,
+          totalTourDates: tour.stops.length,
+          tourStartDate: tour.startDate,
+          tourEndDate: tour.endDate,
+          isClosestTourStop: true,
+          otherTourStopsCount: Math.max(0, tour.stops.length - 1)
+        });
+      }
+    });
+
+    // Chronologically sort all single shows & closest tour stops
+    combinedSingleShows.sort((a, b) => parseShowTs(a) - parseShowTs(b));
+
+    return { toursList: tours, singleShowsList: combinedSingleShows };
+  }, [filteredEvents, selectedCityFilter, userProfile, promoterProfile]);
+
   const activeEvent = selectedMapEvent ||
-    (viewMode === 'community_archives' ? filteredCommunityArchives[0] : filteredEvents[0]) ||
+    (viewMode === 'community_archives' ? filteredCommunityArchives[0] : (viewMode === 'single' ? (singleShowsList[0] || filteredEvents[0]) : (toursList[0]?.stops[0] || filteredEvents[0]))) ||
     null;
 
   return (
@@ -1063,10 +1253,14 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 transition-all ${
                   viewMode === 'community_archives'
                     ? 'bg-amber-500/10 border border-amber-500/40 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                    : viewMode === 'tours'
+                    ? 'bg-purple-500/10 border border-purple-500/40 text-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
                     : 'bg-cyan-500/10 border border-cyan-500/40 text-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
                 }`}>
                   {viewMode === 'community_archives' ? (
                     <History className="w-5 h-5" />
+                  ) : viewMode === 'tours' ? (
+                    <Radio className="w-5 h-5" />
                   ) : (
                     <Calendar className="w-5 h-5" />
                   )}
@@ -1077,65 +1271,79 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                     <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1.5 w-fit ${
                       viewMode === 'community_archives'
                         ? 'bg-amber-950 text-amber-300 border border-amber-500/50 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
+                        : viewMode === 'tours'
+                        ? 'bg-purple-950 text-purple-300 border border-purple-500/50 shadow-[0_0_10px_rgba(168,85,247,0.2)]'
                         : 'bg-cyan-950 text-cyan-300 border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.2)]'
                     }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${viewMode === 'community_archives' ? 'bg-amber-400 animate-pulse' : 'bg-cyan-400 animate-pulse'}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        viewMode === 'community_archives'
+                          ? 'bg-amber-400 animate-pulse'
+                          : viewMode === 'tours'
+                          ? 'bg-purple-400 animate-pulse'
+                          : 'bg-cyan-400 animate-pulse'
+                      }`} />
                       {viewMode === 'community_archives'
                         ? `${filteredCommunityArchives.length} Concluded Shows`
-                        : `${filteredEvents.length} Shows`}
+                        : viewMode === 'tours'
+                        ? `${toursList.length} Tour Packages`
+                        : `${singleShowsList.length > 0 ? singleShowsList.length : filteredEvents.length} Single Shows & Fests`}
                     </span>
                   </div>
 
                   <h2 className="text-white font-black uppercase text-sm sm:text-base tracking-widest font-mono flex items-center gap-2">
                     {viewMode === 'community_archives'
                       ? 'Community & Scene Show Archives'
-                      : viewMode === 'map'
-                      ? 'Radar Map Directory'
-                      : 'Live Events & Gigs Directory'}
+                      : viewMode === 'tours'
+                      ? 'Upcoming Tours & Itineraries'
+                      : 'Upcoming Single Shows & Festivals'}
                   </h2>
 
                   <p className="text-[10px] text-zinc-400 font-mono hidden sm:block">
                     {viewMode === 'community_archives'
                       ? 'Archived and completed performances submitted by community bands and local scenes — kept separate from your personal promoter archives'
-                      : 'Search upcoming tours, booked shows, local club dates, DIY gigs & festivals by city or band'}
+                      : viewMode === 'tours'
+                      ? 'Full multi-city tour packages, routing itineraries, and supporting lineups — click any tour to open its complete schedule'
+                      : 'One-off concerts, club gigs, and standalone festivals'}
                   </p>
                 </div>
               </div>
 
-              {/* View Mode Toggle (List vs Map vs Community Archives) & Action Controls */}
+              {/* View Mode Toggle (Single vs Tours vs Community Archives) & Action Controls */}
               <div className="flex items-center gap-2 flex-wrap">
-                {/* List / Map / Community Archives View Switch */}
+                {/* Single / Tours / Community Archives View Switch */}
                 <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-xl p-0.5">
                   <button
                     type="button"
                     onClick={() => {
-                      setViewMode('list');
+                      setViewMode('single');
                       if (dateFilter === 'archives') setDateFilter('all');
                       setMobileDetailOpen(false);
                     }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                      viewMode === 'list'
+                      viewMode === 'single'
                         ? 'bg-cyan-500 text-black shadow-md'
                         : 'text-zinc-400 hover:text-white'
                     }`}
                   >
                     <List className="w-3.5 h-3.5" />
-                    <span>Upcoming</span>
+                    <span>Upcoming Single</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      setViewMode('map');
+                      setViewMode('tours');
+                      if (dateFilter === 'archives') setDateFilter('all');
                       setMobileDetailOpen(false);
+                      triggerNotification?.('Viewing Upcoming Tour Itineraries');
                     }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                      viewMode === 'map'
-                        ? 'bg-cyan-500 text-black shadow-md'
-                        : 'text-zinc-400 hover:text-white'
+                      viewMode === 'tours'
+                        ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-md shadow-purple-500/25'
+                        : 'text-purple-400/90 hover:text-purple-300 hover:bg-purple-950/30'
                     }`}
                   >
-                    <MapIcon className="w-3.5 h-3.5" />
-                    <span>Radar Map</span>
+                    <Radio className="w-3.5 h-3.5" />
+                    <span>Upcoming Tours {toursList.length > 0 ? `(${toursList.length})` : ''}</span>
                   </button>
                   <button
                     type="button"
@@ -1411,7 +1619,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                           onClick={() => {
                             setDateFilter(preset.id as any);
                             if (viewMode === 'community_archives') {
-                              setViewMode('list');
+                              setViewMode('single');
                             }
                           }}
                           className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
@@ -1475,14 +1683,14 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
               )}
             </div>
 
-            {/* MAIN CONTENT AREA: LIST DIRECTORY OR RADAR MAP */}
+            {/* MAIN CONTENT AREA: SINGLE SHOWS, TOURS ITINERARIES, OR COMMUNITY ARCHIVES */}
             <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col md:flex-row relative">
-              {viewMode === 'list' ? (
-                /* ======================== LIST / DIRECTORY VIEW ======================== */
+              {viewMode === 'single' ? (
+                /* ======================== 1. UPCOMING SINGLE SHOWS & FESTIVALS VIEW ======================== */
                 <div className="flex-1 min-h-0 min-w-0 flex flex-col md:flex-row overflow-hidden w-full h-full">
                   {/* Left Column: Events Grid / List (Hidden on mobile when detailed view is open) */}
                   <div className={`${mobileDetailOpen ? 'hidden md:block' : 'block'} flex-1 min-h-0 min-w-0 h-full overflow-y-auto overscroll-contain p-3 sm:p-5 space-y-3.5 bg-black/40 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent`}>
-                    {filteredEvents.length === 0 ? (
+                    {singleShowsList.length === 0 ? (
                       <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-6 space-y-3">
                         <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
                           <Filter className="w-6 h-6" />
@@ -1510,7 +1718,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 pb-8 sm:pb-0">
-                        {filteredEvents.map((evt, idx) => {
+                        {singleShowsList.map((evt, idx) => {
                           const isSelected = selectedMapEvent?.id === evt.id;
                           const isTonight = evt.date.toLowerCase().includes('tonight');
                           const isTomorrow = evt.date.toLowerCase().includes('tomorrow');
@@ -1518,7 +1726,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
 
                           return (
                             <div
-                              key={evt.id}
+                              key={`single-show-${evt.id || 'show'}-${idx}`}
                               onClick={() => {
                                 setSelectedMapEvent(evt);
                                 onSelectEvent?.(evt);
@@ -1547,6 +1755,19 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                                     </span>
                                   )}
 
+                                  {/* Tour Stop Indicator */}
+                                  {evt.isTourStop || evt.tour_name ? (
+                                    <span className="bg-purple-950/80 border border-purple-500/60 text-purple-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1" title={evt.totalTourDates && evt.totalTourDates > 1 ? `Part of ${evt.totalTourDates}-city tour: "${evt.tourName || evt.tour_name}". Showing nearest date.` : 'Tour stop'}>
+                                      <Radio className="w-3 h-3 text-purple-400" /> Tour Stop
+                                    </span>
+                                  ) : null}
+
+                                  {evt.isClosestTourStop && evt.totalTourDates && evt.totalTourDates > 1 ? (
+                                    <span className="bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 font-mono text-[9px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                                      📍 Nearest Date
+                                    </span>
+                                  ) : null}
+
                                   {/* Official Verified Promoter vs Community Submitted Badge */}
                                   {evt.isPersonallyBooked || evt.verified ? (
                                     <span className="bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1" title="Verified show booked by official promoter/venue">
@@ -1569,7 +1790,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                               </div>
 
                               {/* Headliner & Title */}
-                              <div className="space-y-1 mb-3">
+                              <div className="space-y-1 mb-2">
                                 <h3 className="text-sm sm:text-base font-black text-white group-hover:text-cyan-300 transition-colors font-mono tracking-tight leading-snug flex items-center flex-wrap gap-1.5">
                                   <span>{evt.headliner}</span>
                                   {evt.tour_name && !evt.headliner.toLowerCase().includes(evt.tour_name.toLowerCase()) && evt.tour_name.toLowerCase() !== 'tour show' && (
@@ -1588,7 +1809,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
 
                               {/* Support Bands Lineup Chips */}
                               {evt.support && evt.support.length > 0 && (
-                                <div className="mb-3">
+                                <div className="mb-2.5">
                                   <span className="text-[9px] font-mono text-zinc-500 uppercase font-bold block mb-1">
                                     Lineup Support:
                                   </span>
@@ -1609,6 +1830,33 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                                       </button>
                                     ))}
                                   </div>
+                                </div>
+                              )}
+
+                              {/* Quick Jump to Full Tour Itinerary if part of a tour package */}
+                              {evt.isTourStop && evt.totalTourDates && evt.totalTourDates > 1 && (
+                                <div className="mb-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setViewMode('tours');
+                                      if (evt.tourId) {
+                                        setExpandedTourIds(prev => new Set(prev).add(evt.tourId));
+                                      }
+                                      triggerNotification?.(`Opened tour itinerary for "${evt.tourName || evt.headliner}" (${evt.totalTourDates} dates)`);
+                                    }}
+                                    className="w-full py-1.5 px-2.5 rounded-lg bg-purple-950/40 hover:bg-purple-900/60 text-purple-300 border border-purple-500/40 text-[10px] font-mono font-bold flex items-center justify-between transition-all cursor-pointer shadow-[0_0_10px_rgba(168,85,247,0.15)] group/tourbtn"
+                                    title="Switch to Upcoming Tours tab and drop down the full itinerary"
+                                  >
+                                    <span className="flex items-center gap-1.5">
+                                      <Radio className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                                      <span>Tour Route ({evt.totalTourDates} Dates)</span>
+                                    </span>
+                                    <span className="text-[9.5px] text-purple-400 group-hover/tourbtn:translate-x-0.5 transition-transform">
+                                      View All Dates ➔
+                                    </span>
+                                  </button>
                                 </div>
                               )}
 
@@ -1742,6 +1990,35 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                             {activeEvent.title}
                           </h3>
                         </div>
+
+                        {/* Tour Date Banner if part of a multi-city tour */}
+                        {(activeEvent.isTourStop || activeEvent.tour_name || activeEvent.tourName) && (
+                          <div className="bg-gradient-to-r from-purple-950/70 to-indigo-950/60 border border-purple-500/40 p-3 rounded-xl flex items-center justify-between gap-2 shadow-[0_0_15px_rgba(168,85,247,0.15)]">
+                            <div className="space-y-0.5 min-w-0">
+                              <div className="flex items-center gap-1.5 text-purple-300 font-mono font-bold text-[10px] uppercase">
+                                <Radio className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                                <span className="truncate">Official Tour Package</span>
+                              </div>
+                              <p className="text-[11px] font-mono text-zinc-300 truncate">
+                                Part of <strong>{activeEvent.tourName || activeEvent.tour_name}</strong>
+                                {activeEvent.totalTourDates ? ` (${activeEvent.totalTourDates} Dates)` : ''}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setViewMode('tours');
+                                if (activeEvent.tourId) {
+                                  setExpandedTourIds(prev => new Set(prev).add(activeEvent.tourId));
+                                }
+                                triggerNotification?.(`Opened tour route for "${activeEvent.tourName || activeEvent.headliner}"`);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-mono font-bold text-[10px] uppercase shrink-0 cursor-pointer shadow transition-all"
+                            >
+                              Tour Route ➔
+                            </button>
+                          </div>
+                        )}
 
                         {/* Quick Spec Box */}
                         <div className="space-y-2 bg-black/60 p-3 rounded-xl border border-zinc-900 text-xs font-mono">
@@ -1883,7 +2160,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                           const theme = getShowBorderTheme(evt.id || `arch-${idx}`);
                           return (
                             <div
-                              key={`comm-arch-${evt.id}`}
+                              key={`comm-arch-${evt.id || 'arch'}-${idx}`}
                               onClick={() => {
                                 setSelectedMapEvent(evt);
                                 onSelectEvent?.(evt);
@@ -2216,126 +2493,383 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                   </div>
                 </div>
               ) : (
-                /* ======================== RADAR MAP VIEW (SECONDARY TOGGLE) ======================== */
-                <div className="flex-1 min-h-0 min-w-0 flex flex-col md:flex-row overflow-hidden relative w-full h-full">
-                  {/* Canvas */}
-                  <div className={`${mobileDetailOpen ? 'hidden md:flex' : 'flex'} flex-1 bg-zinc-950 relative overflow-hidden items-center justify-center p-4`}>
-                    {/* Grid Background Effect */}
-                    <div
-                      className="absolute inset-0 opacity-20 pointer-events-none"
-                      style={{
-                        backgroundImage: 'radial-gradient(#06b6d4 1px, transparent 1px)',
-                        backgroundSize: '24px 24px',
-                      }}
-                    />
-
-                    {/* Concentric Radar Rings */}
-                    <div className="absolute w-[440px] h-[440px] rounded-full border border-cyan-500/10 animate-ping pointer-events-none" />
-                    <div className="absolute w-[300px] h-[300px] rounded-full border border-cyan-500/20 pointer-events-none" />
-                    <div className="absolute w-72 h-72 rounded-full bg-gradient-to-tr from-cyan-500/10 to-transparent animate-spin duration-10000 pointer-events-none" />
-
-                    {/* Interactive Event Pins Canvas */}
-                    <div className="relative w-full h-full max-w-xl max-h-[440px] border border-zinc-900 rounded-2xl bg-black/50 backdrop-blur-sm p-4 flex flex-col justify-between">
-                      <div className="flex justify-between items-center text-[10px] font-mono text-zinc-400">
-                        <span className="flex items-center gap-1">
-                          <Navigation className="w-3 h-3 text-cyan-400" /> GEOLOCATED RADAR ACTIVE
-                        </span>
-                        <span>{filteredEvents.length} PINS IN SCOPE</span>
+                /* ======================== 2. UPCOMING TOURS & ITINERARIES VIEW ======================== */
+                <div className="flex-1 min-h-0 min-w-0 flex flex-col md:flex-row overflow-hidden w-full h-full">
+                  {/* Left Column: Tour Packages List (Collapsed by default with expandable dropdowns) */}
+                  <div className={`${mobileDetailOpen ? 'hidden md:block' : 'block'} flex-1 min-h-0 min-w-0 h-full overflow-y-auto overscroll-contain p-3 sm:p-5 space-y-3.5 bg-black/40 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent`}>
+                    {toursList.length === 0 ? (
+                      <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-6 space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-purple-950/40 border border-purple-500/40 flex items-center justify-center text-purple-400">
+                          <Radio className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h4 className="text-white font-mono font-bold text-sm">No Upcoming Tours Found</h4>
+                          <p className="text-xs font-mono text-zinc-500 max-w-sm mt-1">
+                            No multi-date tour packages currently match your search query or location filter.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('');
+                            setSelectedCityFilter('all');
+                            setMapFilterGenre('all');
+                            setDateFilter('all');
+                            setVerifiedOnly(false);
+                            setTicketOnly(false);
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-xs font-mono font-bold text-purple-400 border border-purple-500/40 cursor-pointer"
+                        >
+                          Clear Tour Filters
+                        </button>
                       </div>
+                    ) : (
+                      <div className="space-y-4 pb-8 sm:pb-0">
+                        {toursList.map((tour, tIdx) => {
+                          const isExpanded = expandedTourIds.has(tour.id);
+                          const uniqueCities = Array.from(new Set(tour.stops.map((s: any) => s.city).filter(Boolean)));
+                          const citiesPreview = uniqueCities.slice(0, 5).join(' • ') + (uniqueCities.length > 5 ? ` +${uniqueCities.length - 5} more` : '');
+                          const isSelected = selectedMapEvent && tour.stops.some((s: any) => s.id === selectedMapEvent.id);
 
-                      {/* Pins */}
-                      <div className="relative flex-1 my-4 flex items-center justify-center flex-wrap gap-4 overflow-y-auto p-2 max-h-[340px]">
-                        {filteredEvents.map((evt, idx) => {
-                          const isSelected = selectedMapEvent?.id === evt.id;
                           return (
-                            <motion.button
-                              key={`pin-${evt.id}-${idx}`}
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={() => {
-                                setSelectedMapEvent(evt);
-                                setMobileDetailOpen(true);
-                              }}
-                              className="relative group cursor-pointer flex flex-col items-center max-w-[130px]"
+                            <div
+                              key={`tour-card-${tour.id || 'tour'}-${tIdx}`}
+                              className={`bg-[#0c0d14] border-2 rounded-2xl p-4 sm:p-5 transition-all relative overflow-hidden ${
+                                isSelected
+                                  ? 'border-purple-400 shadow-[0_0_30px_rgba(168,85,247,0.35)]'
+                                  : 'border-purple-900/50 hover:border-purple-500/60 shadow-lg'
+                              }`}
                             >
-                              <div
-                                className={`p-2.5 rounded-full border shadow-xl transition-all ${
-                                  isSelected
-                                    ? 'bg-cyan-500 text-black border-white shadow-[0_0_20px_rgba(6,182,212,0.8)] scale-125 z-20'
-                                    : 'bg-zinc-900 text-cyan-400 border-cyan-500/40 hover:border-cyan-400 hover:bg-zinc-800'
-                                }`}
-                              >
-                                <Music className="w-4 h-4" />
+                              {/* Top Banner Badges */}
+                              <div className="flex items-start justify-between gap-2 mb-3">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="bg-gradient-to-r from-purple-950 to-indigo-950 border border-purple-500/60 text-purple-300 font-mono font-bold text-[9.5px] px-2.5 py-0.5 rounded flex items-center gap-1.5 shadow-sm">
+                                    <Radio className="w-3 h-3 text-purple-400 animate-pulse" /> MULTI-CITY TOUR
+                                  </span>
+                                  <span className="bg-purple-950/80 border border-purple-700/60 text-purple-200 font-mono font-black text-[9.5px] px-2 py-0.5 rounded flex items-center gap-1">
+                                    {tour.stops.length} {tour.stops.length === 1 ? 'DATE' : 'DATES'}
+                                  </span>
+                                  {(tour.startDate || tour.endDate) && (
+                                    <span className="bg-black/60 border border-zinc-800 text-zinc-300 font-mono text-[9px] px-2 py-0.5 rounded flex items-center gap-1">
+                                      <Calendar className="w-3 h-3 text-purple-400" />
+                                      {tour.startDate}{tour.endDate && tour.endDate !== tour.startDate ? ` — ${tour.endDate}` : ''}
+                                    </span>
+                                  )}
+                                  <span className="bg-zinc-900 text-zinc-400 border border-zinc-800 font-mono text-[9px] px-2 py-0.5 rounded">
+                                    {tour.genre}
+                                  </span>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => toggleTourExpand(tour.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-purple-950/90 hover:bg-purple-900 border border-purple-500/60 text-purple-300 hover:text-white font-mono text-[10px] font-black uppercase flex items-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+                                >
+                                  {isExpanded ? (
+                                    <>
+                                      <ChevronUp className="w-3.5 h-3.5 text-purple-300" /> Hide Schedule
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ChevronDown className="w-3.5 h-3.5 text-purple-300" /> View Schedule ({tour.stops.length})
+                                    </>
+                                  )}
+                                </button>
                               </div>
 
-                              <span
-                                className={`mt-1.5 px-2 py-0.5 rounded text-[9px] font-mono font-bold truncate max-w-full shadow-md ${
-                                  isSelected
-                                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/50'
-                                    : 'bg-black/80 text-zinc-400 border border-zinc-800 group-hover:text-white'
-                                }`}
-                                title={evt.venue}
-                              >
-                                {evt.headliner}
-                              </span>
-                            </motion.button>
+                              {/* Tour Title & Headliner Info */}
+                              <div className="space-y-1.5 mb-3">
+                                <h3 className="text-base sm:text-lg font-black text-white font-mono tracking-tight leading-snug flex items-center gap-2 flex-wrap">
+                                  <span>{tour.tourName}</span>
+                                </h3>
+                                {tour.headliner && tour.headliner.toLowerCase() !== tour.tourName.toLowerCase() && (
+                                  <p className="text-xs sm:text-sm font-mono text-purple-400 font-bold flex items-center gap-1.5">
+                                    <Music className="w-3.5 h-3.5 text-purple-400" /> Headliner: {tour.headliner}
+                                  </p>
+                                )}
+                                {citiesPreview && (
+                                  <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-mono">
+                                    <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                    <span className="text-zinc-300">{citiesPreview}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Tour Package Lineup Chips */}
+                              {tour.supportBands && tour.supportBands.length > 0 && (
+                                <div className="mb-3">
+                                  <span className="text-[9px] font-mono text-zinc-500 uppercase font-bold block mb-1">
+                                    Tour Package Lineup:
+                                  </span>
+                                  <div className="flex flex-wrap gap-1">
+                                    <span className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-purple-950/60 border border-purple-500/50 text-purple-300 font-bold">
+                                      {tour.headliner}
+                                    </span>
+                                    {tour.supportBands.map((band: string, bIdx: number) => (
+                                      <span
+                                        key={`tour-supp-${band}-${bIdx}`}
+                                        className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300"
+                                      >
+                                        +{band}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Collapsible Dropdown Schedule Container */}
+                              <AnimatePresence>
+                                {isExpanded && (
+                                  <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="overflow-hidden mt-3 pt-3 border-t border-purple-900/40"
+                                  >
+                                    <div className="flex items-center justify-between mb-2.5">
+                                      <span className="text-[10px] font-mono font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                                        <Calendar className="w-3.5 h-3.5 text-purple-400" /> Complete Tour Routing Itinerary ({tour.stops.length} Shows)
+                                      </span>
+                                      <span className="text-[9px] font-mono text-zinc-500 hidden sm:inline">
+                                        Click any stop to inspect dossier & ticket links
+                                      </span>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                      {tour.stops.map((stop: any, sIdx: number) => {
+                                        const isStopSelected = selectedMapEvent?.id === stop.id;
+                                        const isTonight = (stop.date || '').toLowerCase().includes('tonight');
+                                        const isTomorrow = (stop.date || '').toLowerCase().includes('tomorrow');
+                                        const isRsvped = rsvpedShowIds.has(stop.id);
+
+                                        return (
+                                          <div
+                                            key={`tour-stop-${tour.id}-${stop.id || 'stop'}-${sIdx}`}
+                                            onClick={() => {
+                                              setSelectedMapEvent(stop);
+                                              onSelectEvent?.(stop);
+                                              setMobileDetailOpen(true);
+                                            }}
+                                            className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                                              isStopSelected
+                                                ? 'bg-purple-950/40 border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)]'
+                                                : 'bg-black/50 border-zinc-800/80 hover:border-purple-500/50 hover:bg-black/70'
+                                            }`}
+                                          >
+                                            {/* Stop Number, Date & Venue */}
+                                            <div className="flex items-start gap-2.5 min-w-0">
+                                              <span className="bg-zinc-900 border border-purple-500/40 text-purple-300 text-[10px] font-mono font-black px-2 py-1 rounded shrink-0">
+                                                #{sIdx + 1}
+                                              </span>
+                                              <div className="min-w-0">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                  {isTonight ? (
+                                                    <span className="bg-rose-950 text-rose-300 border border-rose-500/50 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded animate-pulse">
+                                                      TONIGHT
+                                                    </span>
+                                                  ) : isTomorrow ? (
+                                                    <span className="bg-amber-950 text-amber-300 border border-amber-500/50 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded">
+                                                      TOMORROW
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-zinc-200 font-mono font-bold text-xs">
+                                                      {stop.date}
+                                                    </span>
+                                                  )}
+                                                  <span className="text-zinc-600 font-mono">•</span>
+                                                  <span className="text-cyan-400 font-mono font-bold text-xs truncate">
+                                                    {stop.city}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 mt-0.5 truncate">
+                                                  <Building className="w-3 h-3 text-rose-400 shrink-0" />
+                                                  <span className="text-zinc-300 font-bold truncate">{stop.venue}</span>
+                                                  {stop.price && (
+                                                    <>
+                                                      <span className="text-zinc-600">•</span>
+                                                      <span className="text-emerald-400 font-bold">{stop.price}</span>
+                                                    </>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            {/* Stop Actions: Ticket, RSVP, Event Page, Edit, Delete */}
+                                            <div className="flex items-center gap-1.5 flex-wrap shrink-0 sm:self-center" onClick={(e) => e.stopPropagation()}>
+                                              <button
+                                                type="button"
+                                                onClick={() => toggleShowRsvp(stop.id, stop.headliner)}
+                                                className={`px-2 py-1 rounded text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                                                  isRsvped
+                                                    ? 'bg-rose-600 text-white shadow-sm'
+                                                    : 'bg-zinc-900 text-zinc-400 hover:text-rose-400 border border-zinc-800'
+                                                }`}
+                                                title="RSVP / In the Pit"
+                                              >
+                                                <Flame className={`w-3 h-3 ${isRsvped ? 'fill-white text-white' : 'text-zinc-500'}`} />
+                                                <span>{isRsvped ? 'In Pit' : 'RSVP'}</span>
+                                              </button>
+
+                                              <button
+                                                type="button"
+                                                onClick={() => handleOpenFullEventPage(stop)}
+                                                className="px-2 py-1 rounded bg-purple-950/80 hover:bg-purple-900 text-purple-300 hover:text-white border border-purple-500/50 text-[10px] font-mono font-bold uppercase flex items-center gap-1 cursor-pointer transition-all"
+                                              >
+                                                <Sparkles className="w-3 h-3 text-purple-400" /> Event Page
+                                              </button>
+
+                                              {stop.ticketUrl && (
+                                                <a
+                                                  href={stop.ticketUrl}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="px-2 py-1 rounded bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 hover:text-white border border-emerald-500/50 text-[10px] font-mono font-bold uppercase flex items-center gap-1"
+                                                >
+                                                  <Ticket className="w-3 h-3" /> Tickets
+                                                </a>
+                                              )}
+
+                                              <button
+                                                type="button"
+                                                onClick={() => handleEditArchiveShow(stop)}
+                                                className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-cyan-300 border border-zinc-800 text-[10px] font-mono cursor-pointer"
+                                                title="Edit this tour stop"
+                                              >
+                                                <Edit3 className="w-3 h-3 text-cyan-400" />
+                                              </button>
+
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteArchiveShow(stop)}
+                                                className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-rose-950/80 text-zinc-400 hover:text-rose-400 border border-zinc-800 text-[10px] font-mono cursor-pointer"
+                                                title="Delete this tour stop"
+                                              >
+                                                <Trash2 className="w-3 h-3 text-rose-400" />
+                                              </button>
+
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setSelectedMapEvent(stop);
+                                                  onSelectEvent?.(stop);
+                                                  setMobileDetailOpen(true);
+                                                }}
+                                                className="p-1 rounded text-zinc-500 hover:text-white"
+                                                title="View Stop Details"
+                                              >
+                                                <ChevronRight className="w-4 h-4" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
                           );
                         })}
                       </div>
-
-                      <div className="text-[9px] font-mono text-zinc-500 text-center">
-                        Click any pin to inspect the event details and lineup
-                      </div>
-                    </div>
+                    )}
                   </div>
 
-                  {/* Sidebar for Map */}
-                  <div className={`${mobileDetailOpen ? 'flex' : 'hidden md:flex'} w-full md:w-80 bg-[#07080a] border-t md:border-t-0 md:border-l border-zinc-900 p-4 flex-col justify-between overflow-y-auto shrink-0 h-full`}>
-                    {/* Mobile Back Button for Map */}
+                  {/* Right Column: Selected Tour / Stop Detail Panel */}
+                  <div className={`${mobileDetailOpen ? 'flex' : 'hidden md:flex'} w-full md:w-80 lg:w-96 bg-[#08090d] border-t md:border-t-0 md:border-l border-zinc-900 p-4 sm:p-5 flex-col justify-between overflow-y-auto overscroll-contain shrink-0 min-h-0 h-full scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent`}>
+                    {/* Mobile Back Button */}
                     <div className="flex items-center justify-between pb-3 mb-2 border-b border-zinc-900 md:hidden shrink-0">
                       <button
                         type="button"
                         onClick={() => setMobileDetailOpen(false)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 font-mono text-xs font-bold cursor-pointer hover:bg-cyan-900 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-950/80 border border-purple-500/50 text-purple-300 font-mono text-xs font-bold cursor-pointer hover:bg-purple-900 transition-colors"
                       >
-                        <ArrowLeft className="w-4 h-4" /> Back to Radar Map
+                        <ArrowLeft className="w-4 h-4" /> Back to Tours List
                       </button>
-                      <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Pin Dossier</span>
+                      <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Tour Dossier</span>
                     </div>
 
                     {activeEvent ? (
                       <div className="space-y-4 pb-8 sm:pb-0">
-                        <div>
-                          <div className="flex items-center gap-1.5 text-cyan-400 text-[10px] font-mono uppercase tracking-wider font-bold mb-1">
-                            {activeEvent.verified && <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />}
-                            <span>{activeEvent.genre}</span>
+                        {/* Event Flyer / Photo Banner */}
+                        {activeEvent.flyerUrl && (
+                          <div className="w-full h-36 rounded-xl overflow-hidden bg-black border border-zinc-800 relative group">
+                            <img
+                              src={activeEvent.flyerUrl}
+                              alt={activeEvent.title}
+                              className="w-full h-full object-cover grayscale-[30%] group-hover:grayscale-0 transition-all duration-500"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                            <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] font-mono font-bold text-white">
+                              <span className="bg-black/80 px-2 py-0.5 rounded border border-zinc-800">
+                                {activeEvent.city}
+                              </span>
+                              <span className="text-purple-300 bg-purple-950/90 border border-purple-500/40 px-2 py-0.5 rounded font-bold">
+                                TOUR STOP
+                              </span>
+                            </div>
                           </div>
-                          <h3 className="text-sm font-black text-white font-mono leading-snug">
+                        )}
+
+                        <div>
+                          <div className="flex items-center gap-1.5 text-purple-400 text-[10px] font-mono uppercase tracking-wider font-bold mb-1 flex-wrap">
+                            <Radio className="w-3.5 h-3.5 text-purple-400" />
+                            <span>Tour Itinerary Dossier</span>
+                            <span className="text-zinc-600">•</span>
+                            <span className="text-zinc-400">{activeEvent.genre}</span>
+                          </div>
+                          <h3 className="text-base font-black text-white font-mono leading-tight">
                             {activeEvent.title}
                           </h3>
                         </div>
 
-                        <div className="space-y-2 bg-zinc-950 p-3 rounded-xl border border-zinc-900 text-xs font-mono">
+                        {/* Quick Spec Box */}
+                        <div className="space-y-2 bg-black/60 p-3 rounded-xl border border-zinc-900 text-xs font-mono">
                           <div className="flex items-center gap-2 text-zinc-300">
-                            <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                            <span>{activeEvent.venue} ({activeEvent.city})</span>
+                            <Building className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                            <span>
+                              {activeEvent.venue} ({activeEvent.city})
+                            </span>
                           </div>
                           <div className="flex items-center gap-2 text-zinc-300">
-                            <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                            <span>{activeEvent.date}</span>
+                            <Calendar className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                            <span>Scheduled for {activeEvent.date}</span>
                           </div>
-                          <div className="flex items-center gap-2 text-zinc-300">
-                            <Ticket className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                            <span>Price: <strong className="text-emerald-400">{activeEvent.price}</strong></span>
-                          </div>
+                          {activeEvent.price && (
+                            <div className="flex items-center gap-2 text-zinc-300">
+                              <Ticket className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span>Admission: <strong className="text-emerald-400">{activeEvent.price}</strong></span>
+                            </div>
+                          )}
                         </div>
 
+                        {/* Description */}
+                        {activeEvent.description && (
+                          <div className="bg-zinc-950/60 p-3 rounded-xl border border-zinc-900/80">
+                            <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold block mb-1">
+                              Tour Stop Notes
+                            </span>
+                            <p className="text-xs text-zinc-400 font-mono leading-relaxed">
+                              {activeEvent.description}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Full Lineup */}
                         {activeEvent.support && activeEvent.support.length > 0 && (
                           <div>
-                            <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold block mb-1">Support</span>
-                            <div className="flex flex-wrap gap-1">
+                            <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold block mb-1.5">
+                              Lineup on Tour Stop
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className="px-2 py-0.5 rounded bg-purple-950/60 border border-purple-800/80 text-purple-300 text-xs font-mono font-bold">
+                                {activeEvent.headliner} (Headliner)
+                              </span>
                               {activeEvent.support.map((act: string, i: number) => (
-                                <span key={`map-act-${act}-${i}`} className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 text-[10px] font-mono border border-zinc-800">
+                                <span
+                                  key={`tour-lineup-act-${act}-${i}`}
+                                  className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 text-xs font-mono border border-zinc-800"
+                                >
                                   {act}
                                 </span>
                               ))}
@@ -2343,28 +2877,47 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                           </div>
                         )}
 
+                        {/* Actions */}
                         <div className="pt-2 space-y-2">
                           <button
                             type="button"
                             onClick={() => handleOpenFullEventPage(activeEvent)}
-                            className="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:via-orange-400 hover:to-amber-400 text-black font-mono uppercase font-black text-xs py-2.5 rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.35)] flex items-center justify-center gap-2 cursor-pointer border border-amber-300/80 active:scale-[0.98]"
+                            className="w-full bg-gradient-to-r from-purple-500 via-indigo-500 to-purple-500 hover:from-purple-400 hover:via-indigo-400 hover:to-purple-400 text-white font-mono uppercase font-black text-xs py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(168,85,247,0.35)] flex items-center justify-center gap-2 cursor-pointer border border-purple-300/60 active:scale-[0.98]"
                           >
-                            <Sparkles className="w-4 h-4 text-black animate-pulse" /> Open Full Event Page
+                            <Sparkles className="w-4 h-4 text-white animate-pulse" /> Open Event Page
                           </button>
 
                           <button
                             type="button"
-                            onClick={() => triggerNotification?.(`🎟️ Reserved pass for ${activeEvent.title}!`)}
-                            className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-mono uppercase font-black text-xs py-2.5 rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] flex items-center justify-center gap-2 cursor-pointer"
+                            onClick={() => toggleShowRsvp(activeEvent.id, activeEvent.headliner)}
+                            className={`w-full font-mono uppercase font-black text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer border ${
+                              rsvpedShowIds.has(activeEvent.id)
+                                ? 'bg-rose-600 text-white border-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.4)]'
+                                : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border-zinc-700'
+                            }`}
                           >
-                            <Ticket className="w-4 h-4" /> Claim Presale Pass
+                            <Flame className={`w-4 h-4 ${rsvpedShowIds.has(activeEvent.id) ? 'fill-white text-white' : 'text-rose-500'}`} />
+                            <span>{rsvpedShowIds.has(activeEvent.id) ? 'In Pit (RSVP Confirmed)' : 'RSVP to Pit List'}</span>
                           </button>
+
+                          {activeEvent.ticketUrl && (
+                            <a
+                              href={activeEvent.ticketUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 hover:text-white font-mono uppercase font-bold text-xs py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-emerald-500/50"
+                            >
+                              <Ticket className="w-3.5 h-3.5" /> Official Ticket Link
+                            </a>
+                          )}
                         </div>
                       </div>
                     ) : (
                       <div className="h-full flex flex-col items-center justify-center text-center p-4 space-y-2">
-                        <MapPin className="w-8 h-8 text-zinc-700" />
-                        <p className="text-xs font-mono text-zinc-500">Select a radar pin to view venue and line-up.</p>
+                        <Radio className="w-8 h-8 text-zinc-700" />
+                        <p className="text-xs font-mono text-zinc-500">
+                          Select a tour package or stop to view lineup and venue records.
+                        </p>
                       </div>
                     )}
                   </div>

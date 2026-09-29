@@ -449,7 +449,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       capacity: explicitCapacity || undefined,
       venue_capacity: explicitCapacity || undefined,
       expected_attendance: explicitCapacity || undefined,
-      city: city.trim(),
+      city: city.trim() || stateProvince.trim() || 'Austin, TX',
       state_province: stateProvince.trim() || undefined,
       state: stateProvince.trim() || undefined,
       country: country.trim() || undefined,
@@ -492,9 +492,36 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
     const sharedLineup = tourSupportBands.map(b => ({ band_name: b, set_duration: '35 mins' }));
 
     try {
+      // Load existing shows to detect and reuse already saved local dates (e.g. Dallas, Austin)
+      const existingShowsMap = new Map<string, any>();
+      try {
+        await showsStore.iterate((val: any) => {
+          if (val) {
+            const h = String(val.headliner || val.name || '').toLowerCase().trim();
+            const c = String(val.city || '').toLowerCase().trim();
+            const d = String(val.date || val.show_date || '').toLowerCase().trim();
+            const t = String(val.tour_name || val.festival_name || '').toLowerCase().trim();
+            if (h && d) existingShowsMap.set(`${h}__${d}`, val);
+            if (h && c) existingShowsMap.set(`${h}__${c}`, val);
+            if (t && c) existingShowsMap.set(`${t}__${c}`, val);
+          }
+        });
+      } catch (_) {}
+
       for (const stop of tourStops) {
-        const showId = 'sh_tour_' + Math.random().toString(36).substring(2, 9);
-        const venueVal = stop.venue_name || 'Live Venue';
+        const stopCityLower = stop.city.toLowerCase().trim();
+        const stopDateLower = stop.show_date.toLowerCase().trim();
+        const hLower = headlinerVal.toLowerCase();
+        const tLower = activeTourName.toLowerCase();
+
+        // Check if this date / city is already saved in the system
+        const existingShow = 
+          existingShowsMap.get(`${hLower}__${stopDateLower}`) ||
+          existingShowsMap.get(`${hLower}__${stopCityLower}`) ||
+          existingShowsMap.get(`${tLower}__${stopCityLower}`);
+
+        const showId = existingShow ? existingShow.id : ('sh_tour_' + Math.random().toString(36).substring(2, 9));
+        const venueVal = stop.venue_name || existingShow?.venue_name || existingShow?.venue || 'Live Venue';
         const finalName = `${headlinerVal} at ${venueVal}`;
 
         // Auto-stub venue in local Black Book
@@ -513,6 +540,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
         }
 
         const showPayload: any = {
+          ...(existingShow || {}),
           id: showId,
           name: finalName,
           show_name: finalName,
@@ -521,27 +549,27 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
           tour_name: activeTourName,
           date: stop.show_date,
           show_date: stop.show_date,
-          doors_time: stop.doors_time || '19:00',
+          doors_time: stop.doors_time || existingShow?.doors_time || '19:00',
           set_time: '20:00',
           venue_name: venueVal,
           venue: venueVal,
-          city: stop.city,
-          state_province: stop.state || undefined,
-          state: stop.state || undefined,
+          city: (stop.city && String(stop.city).trim()) || existingShow?.city || 'Austin, TX',
+          state_province: stop.state || existingShow?.state_province || undefined,
+          state: stop.state || existingShow?.state || undefined,
           country: 'United States',
-          price: 'Cover at Door',
-          day_of_show_price: 'Cover at Door',
-          age_restriction: 'All Ages',
-          ticket_url: stop.ticket_url || undefined,
-          external_ticket_url: stop.ticket_url || undefined,
-          flyer_url: tourFlyerUrl || undefined,
-          support_bands: sharedSupport,
-          support_lineup: sharedLineup,
+          price: existingShow?.price || 'Cover at Door',
+          day_of_show_price: existingShow?.day_of_show_price || 'Cover at Door',
+          age_restriction: existingShow?.age_restriction || 'All Ages',
+          ticket_url: stop.ticket_url || existingShow?.ticket_url || undefined,
+          external_ticket_url: stop.ticket_url || existingShow?.external_ticket_url || undefined,
+          flyer_url: tourFlyerUrl || existingShow?.flyer_url || undefined,
+          support_bands: sharedSupport || existingShow?.support_bands,
+          support_lineup: sharedLineup.length > 0 ? sharedLineup : existingShow?.support_lineup,
           is_community_submitted: true,
-          created_at: new Date().toISOString()
+          updated_at: new Date().toISOString()
         };
 
-        // 1. Save to local IndexedDB store
+        // 1. Save / Update in local IndexedDB store
         await showsStore.setItem(showId, showPayload);
 
         // 2. Sync to Supabase if connected
@@ -557,14 +585,14 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
               date: stop.show_date,
               doors_time: stop.doors_time || '19:00',
               venue_name: venueVal,
-              city: stop.city,
-              state_province: stop.state,
-              price: 'Cover at Door',
+              city: showPayload.city,
+              state_province: stop.state || showPayload.state || 'TX',
+              price: showPayload.price,
               flyer_url: tourFlyerUrl || null,
               ticket_url: stop.ticket_url || null,
               support_bands: sharedSupport,
               is_community_submitted: true,
-              created_at: new Date().toISOString()
+              updated_at: new Date().toISOString()
             }]);
           }
         } catch (sbErr) {

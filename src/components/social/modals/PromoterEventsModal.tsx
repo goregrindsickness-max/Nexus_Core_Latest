@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, 
@@ -16,7 +16,10 @@ import {
   Music,
   Users,
   Building,
-  AlertCircle
+  AlertCircle,
+  CalendarPlus,
+  Bell,
+  Download
 } from 'lucide-react';
 
 export interface PromoterEventsModalProps {
@@ -49,74 +52,8 @@ export interface PromoterEventItem {
   isFeatured?: boolean;
 }
 
-const DEFAULT_NEXUS_UPCOMING_EVENTS: PromoterEventItem[] = [
-  {
-    id: 'cdf-next-gen-2026',
-    title: 'Chicago Domination Fest: Next Generation 2026',
-    type: 'festival',
-    date: 'OCT 23 - 25, 2026',
-    dateRaw: '2026-10-23',
-    venue: 'Reggies Rock Club',
-    city: 'Chicago, IL',
-    lineup: ['Analepsy', 'Devourment', 'Cephalotripsy', 'Gorgasm', 'Vulvodynia', 'Putrid Pile', 'Disgorge'],
-    doorsTime: '4:00 PM',
-    setTime: '4:30 PM - 1:00 AM',
-    price: '$110 3-Day Pass / $45 Single Day',
-    ticketStatus: 'selling_fast',
-    isFeatured: true,
-    description: 'The premier extreme metal gathering returns to Chicago. 3 days of unrelenting slam, brutal death metal, and international headliners across two stages.',
-    bannerUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=600'
-  },
-  {
-    id: 'tdf-showcase-2026',
-    title: 'Texas Domination Showcase 2026',
-    type: 'festival',
-    date: 'NOV 14, 2026',
-    dateRaw: '2026-11-14',
-    venue: 'Subterranean / North Texas Circuit',
-    city: 'Denison / Dallas, TX',
-    lineup: ['Stabbing', 'Malignancy', 'Kraanium', 'Short Bus Pile Up', 'Viral Load'],
-    doorsTime: '5:30 PM',
-    setTime: '6:00 PM',
-    price: '$35 Advance / $40 Door',
-    ticketStatus: 'on_sale',
-    isFeatured: true,
-    description: 'Nexus Live Productions presents the high-voltage Texas Domination showcase featuring legendary slam pioneers and regional heavyweights.',
-    bannerUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=600'
-  },
-  {
-    id: 'midwest-slam-assault-2026',
-    title: 'Midwest Slam Assault: Winter Tour Stop',
-    type: 'tour',
-    date: 'DEC 05, 2026',
-    dateRaw: '2026-12-05',
-    venue: 'Cobra Lounge',
-    city: 'Chicago, IL',
-    lineup: ['Virulent Excision', 'Internal Bleeding', 'Organectomy', 'Embryectomy'],
-    doorsTime: '6:30 PM',
-    setTime: '7:00 PM',
-    price: '$28 Advance / $32 Door',
-    ticketStatus: 'on_sale',
-    description: 'Official tour package promoted by Nexus Live. Maximum sonic brutality and pit warfare.',
-    bannerUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&q=80&w=600'
-  },
-  {
-    id: 'winter-grind-massacre-2027',
-    title: 'Winter Grind & Core Massacre',
-    type: 'club_gig',
-    date: 'JAN 16, 2027',
-    dateRaw: '2027-01-16',
-    venue: 'WC Social Club',
-    city: 'West Chicago, IL',
-    lineup: ['Pyrexia', 'Cognizant', 'PeelingFlesh', 'Sanguisugabogg'],
-    doorsTime: '6:00 PM',
-    setTime: '6:45 PM',
-    price: '$30 Advance',
-    ticketStatus: 'presale',
-    description: 'Heavy underground club takeover featuring crushing breakdowns and relentless blastbeats.',
-    bannerUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=600'
-  }
-];
+// Default upcoming anchor events are empty so non-real mock events are removed
+const DEFAULT_NEXUS_UPCOMING_EVENTS: PromoterEventItem[] = [];
 
 export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
   isOpen,
@@ -138,16 +75,36 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
   const [newEventVenue, setNewEventVenue] = useState(
     Array.isArray(promoterProfile?.active_venues) && promoterProfile.active_venues.length > 0 
       ? promoterProfile.active_venues[0] 
-      : 'Reggies Rock Club'
+      : 'Live Venue'
   );
   const [newEventCity, setNewEventCity] = useState(promoterProfile?.location || 'Chicago, IL');
   const [newLineupText, setNewLineupText] = useState('');
   const [newEventType, setNewEventType] = useState<'festival' | 'tour' | 'club_gig'>('festival');
-  const [newEventPrice, setNewEventPrice] = useState('$30.00');
+  const [newEventPrice, setNewEventPrice] = useState('$25.00');
   const [localCustomEvents, setLocalCustomEvents] = useState<PromoterEventItem[]>([]);
 
+  // RSVP'd Shows State (stored in localStorage)
+  const [rsvpedShowIds, setRsvpedShowIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_rsvped_shows');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  // Reminders Set State
+  const [remindedShowIds, setRemindedShowIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_show_reminders');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
   // Load custom stored promoter events
-  React.useEffect(() => {
+  useEffect(() => {
     try {
       const stored = localStorage.getItem('nexus_promoter_custom_events');
       if (stored) {
@@ -161,7 +118,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const promoterName = promoterProfile?.entity_name || promoterProfile?.corporate_name || promoterProfile?.name || 'Nexus Live Productions';
+  const promoterName = promoterProfile?.entity_name || promoterProfile?.corporate_name || promoterProfile?.band_name || promoterProfile?.name || 'Live Calendar';
   const promoterAvatar = promoterProfile?.promoter_logo || promoterProfile?.avatar_url || promoterProfile?.avatar || '';
   const isOwner = Boolean(
     promoterProfile?.isYou || 
@@ -178,35 +135,149 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
       if (s.is_published === false || s.publication_status === 'embargoed_private' || s.publication_status === 'draft' || s.status === 'Draft' || s.status === 'Embargoed') {
         return false;
       }
-      const showDate = s.date || s.show_date || '';
-      return showDate >= new Date().toISOString().split('T')[0];
-    }).map(s => ({
-      id: s.id,
-      title: s.festival_name || s.name || 'Upcoming Show',
-      type: (s.festival_name ? 'festival' : (s.tour_name ? 'tour' : 'club_gig')) as any,
-      date: s.date || 'TBA',
-      dateRaw: s.date,
-      venue: s.venue_address || s.venue || 'Underground Venue',
-      city: s.city ? (s.state_province ? `${s.city}, ${s.state_province}` : s.city) : 'Chicago, IL',
-      lineup: [s.headliner || s.name].filter(Boolean),
-      doorsTime: s.doors_time || '7:00 PM',
-      setTime: s.set_time || '8:00 PM',
-      price: s.price ? `$${s.price}` : '$25.00',
-      ticketStatus: 'on_sale' as const,
-      description: s.additional_notes || 'Confirmed underground live show.'
-    }))
+      return true;
+    }).map(s => {
+      const lineupArray = Array.isArray(s.lineup)
+        ? s.lineup
+        : (s.lineup ? String(s.lineup).split(',').map((x: string) => x.trim()) : [s.headliner || s.name].filter(Boolean));
+
+      return {
+        id: String(s.id || Math.random().toString(36).substring(2, 9)),
+        title: s.festival_name || s.tour_name || s.name || s.title || 'Upcoming Live Show',
+        type: (s.festival_name ? 'festival' : (s.tour_name ? 'tour' : 'club_gig')) as any,
+        date: s.date || s.show_date || 'TBA',
+        dateRaw: s.date || s.show_date,
+        venue: s.venue_address || s.venue_name || s.venue || 'Underground Venue',
+        city: s.city ? (s.state_province ? `${s.city}, ${s.state_province}` : s.city) : 'Chicago, IL',
+        lineup: lineupArray,
+        doorsTime: s.doors_time || '7:00 PM',
+        setTime: s.set_time || '8:00 PM',
+        price: s.price ? (String(s.price).startsWith('$') ? String(s.price) : `$${s.price}`) : '$25.00',
+        ticketStatus: (s.ticket_status || 'on_sale') as any,
+        ticketUrl: s.ticket_url || s.ticket_link,
+        description: s.additional_notes || s.description || 'Confirmed live extreme metal show.'
+      };
+    })
   ];
 
   // Deduplicate by title + date
   const seenKeys = new Set<string>();
   const deduplicatedEvents = allEvents.filter(ev => {
-    const key = `${ev.title.toLowerCase().trim()}_${ev.date}`;
+    const key = `${ev.title.toLowerCase().trim()}_${ev.date.toLowerCase().trim()}`;
     if (seenKeys.has(key)) return false;
     seenKeys.add(key);
     return true;
   });
 
+  // Toggle RSVP for a show
+  const toggleRsvp = (event: PromoterEventItem) => {
+    setRsvpedShowIds(prev => {
+      const next = new Set(prev);
+      const isRsvped = next.has(event.id);
+      if (isRsvped) {
+        next.delete(event.id);
+        triggerNotification?.(`Cancelled RSVP for "${event.title}"`);
+      } else {
+        next.add(event.id);
+        triggerNotification?.(`🔥 RSVP Confirmed! Added "${event.title}" to your Pit List.`);
+        
+        // Dispatch global event for Sonic XP & timeline feeds
+        try {
+          window.dispatchEvent(new CustomEvent('nexus_show_rsvped', {
+            detail: { showId: event.id, title: event.title }
+          }));
+        } catch (_) {}
+      }
+      try {
+        localStorage.setItem('nexus_rsvped_shows', JSON.stringify(Array.from(next)));
+      } catch (_) {}
+      return next;
+    });
+  };
+
+  // Toggle Reminder
+  const toggleReminder = (event: PromoterEventItem) => {
+    setRemindedShowIds(prev => {
+      const next = new Set(prev);
+      const isReminded = next.has(event.id);
+      if (isReminded) {
+        next.delete(event.id);
+        triggerNotification?.(`⏰ Reminder removed for "${event.title}"`);
+      } else {
+        next.add(event.id);
+        triggerNotification?.(`⏰ Show reminder scheduled for "${event.title}"!`);
+      }
+      try {
+        localStorage.setItem('nexus_show_reminders', JSON.stringify(Array.from(next)));
+      } catch (_) {}
+      return next;
+    });
+  };
+
+  // Add to Google Calendar / Apple Calendar
+  const handleAddToCalendar = (event: PromoterEventItem) => {
+    const rawDateStr = event.dateRaw || event.date || '';
+    let startIso = rawDateStr.replace(/[^0-9]/g, '').slice(0, 8);
+    if (startIso.length < 8) {
+      const now = new Date();
+      startIso = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    }
+
+    const title = encodeURIComponent(event.title);
+    const location = encodeURIComponent(`${event.venue}, ${event.city}`);
+    const details = encodeURIComponent(
+      `${event.description || 'Live Show'}\n\nLineup: ${event.lineup?.join(', ')}\nDoors: ${event.doorsTime || '6:00 PM'}\nTickets: ${event.price || 'GA'}`
+    );
+
+    const googleUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startIso}T200000Z/${startIso}T235900Z&details=${details}&location=${location}`;
+    window.open(googleUrl, '_blank', 'noopener,noreferrer');
+    triggerNotification?.(`📅 Opening Calendar export for "${event.title}"...`);
+  };
+
+  // Download .ics file
+  const handleDownloadIcs = (event: PromoterEventItem) => {
+    const rawDateStr = event.dateRaw || event.date || '';
+    let startIso = rawDateStr.replace(/[^0-9]/g, '').slice(0, 8);
+    if (startIso.length < 8) {
+      const now = new Date();
+      startIso = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    }
+
+    const icsContent = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Nexus Extreme Metal//Live Shows Calendar//EN',
+      'BEGIN:VEVENT',
+      `UID:${event.id}-${Date.now()}@nexuslive.app`,
+      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+      `DTSTART:${startIso}T200000Z`,
+      `DTEND:${startIso}T235900Z`,
+      `SUMMARY:${event.title.replace(/,/g, '\\,')}`,
+      `DESCRIPTION:${(event.description || '').replace(/\n/g, '\\n')}\\nLineup: ${(event.lineup || []).join(', ')}`,
+      `LOCATION:${event.venue.replace(/,/g, '\\,')}\\, ${event.city.replace(/,/g, '\\,')}`,
+      'STATUS:CONFIRMED',
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ].join('\r\n');
+
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${event.title.toLowerCase().replace(/[^a-z0-9]/g, '_')}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    triggerNotification?.(`📅 Downloaded "${event.title}.ics" calendar invite!`);
+  };
+
+  const myRsvpCount = deduplicatedEvents.filter(ev => rsvpedShowIds.has(ev.id)).length;
+
   const filteredEvents = deduplicatedEvents.filter(ev => {
+    if (filterType === 'rsvps') {
+      return rsvpedShowIds.has(ev.id);
+    }
     if (filterType !== 'all') {
       if (filterType === 'festival' && ev.type !== 'festival') return false;
       if (filterType === 'tour' && ev.type !== 'tour') return false;
@@ -294,11 +365,11 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                   {promoterName}
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase font-mono bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                  ⚡ UPCOMING SHOWS & FESTIVALS
+                  ⚡ UPCOMING SHOWS & LIVE CALENDAR
                 </span>
               </div>
               <p className="text-xs text-zinc-400 font-mono mt-0.5 truncate">
-                Official live calendar • Confirmed tours, multi-day festivals, and underground dates
+                Confirmed gigs, festival dates, personal RSVP tracking & calendar reminders
               </p>
             </div>
           </div>
@@ -308,7 +379,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowAddForm(!showAddForm)}
-                className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black text-xs font-black rounded-lg uppercase font-mono flex items-center gap-1.5 transition-colors shadow-md"
+                className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black text-xs font-black rounded-lg uppercase font-mono flex items-center gap-1.5 transition-colors shadow-md cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Add Event</span>
@@ -317,7 +388,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+              className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
               title="Close Events"
             >
               <X className="w-5 h-5" />
@@ -342,7 +413,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAddForm(false)}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 font-mono"
+                  className="text-xs text-zinc-500 hover:text-zinc-300 font-mono cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -354,7 +425,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Chicago Domination Fest: Winter Warmup"
+                    placeholder="e.g. Underground Metal Showcase"
                     value={newEventTitle}
                     onChange={(e) => setNewEventTitle(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-yellow-500"
@@ -378,7 +449,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                   <label className="text-[10px] uppercase font-mono text-zinc-400 block mb-1">Venue</label>
                   <input
                     type="text"
-                    placeholder="e.g. Reggies Rock Club"
+                    placeholder="e.g. Live Music Club"
                     value={newEventVenue}
                     onChange={(e) => setNewEventVenue(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-yellow-500"
@@ -398,7 +469,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                   <label className="text-[10px] uppercase font-mono text-zinc-400 block mb-1">Ticket Price</label>
                   <input
                     type="text"
-                    placeholder="e.g. $35 GA / $75 VIP"
+                    placeholder="e.g. $25 Advance / $30 Door"
                     value={newEventPrice}
                     onChange={(e) => setNewEventPrice(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-yellow-500"
@@ -410,7 +481,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                 <label className="text-[10px] uppercase font-mono text-zinc-400 block mb-1">Lineup Bands (comma separated)</label>
                 <input
                   type="text"
-                  placeholder="e.g. Analepsy, Devourment, Cephalotripsy, Gorgasm"
+                  placeholder="e.g. Headliner Band, Support 1, Support 2"
                   value={newLineupText}
                   onChange={(e) => setNewLineupText(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-yellow-500"
@@ -424,7 +495,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                       key={t}
                       type="button"
                       onClick={() => setNewEventType(t)}
-                      className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase transition-colors ${
+                      className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase transition-colors cursor-pointer ${
                         newEventType === t 
                           ? 'bg-yellow-500 text-black' 
                           : 'bg-zinc-800 text-zinc-400 hover:text-white'
@@ -436,7 +507,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                 </div>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black text-xs font-black uppercase font-mono rounded-lg transition-colors shadow-md flex items-center gap-1.5"
+                  className="px-4 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black text-xs font-black uppercase font-mono rounded-lg transition-colors shadow-md flex items-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" /> Publish to Live Events
                 </button>
@@ -450,6 +521,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
           <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
             {[
               { id: 'all', label: 'All Upcoming' },
+              { id: 'rsvps', label: `🔥 My RSVPs (${myRsvpCount})` },
               { id: 'festival', label: 'Festivals' },
               { id: 'tour', label: 'Tours' },
               { id: 'club_gig', label: 'Club Gigs' }
@@ -458,7 +530,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                 key={pill.id}
                 type="button"
                 onClick={() => setFilterType(pill.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase font-mono transition-all whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase font-mono transition-all whitespace-nowrap cursor-pointer ${
                   filterType === pill.id
                     ? 'bg-yellow-500 text-black font-black shadow-md'
                     : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
@@ -484,22 +556,40 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
         {/* Events Content List */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           {filteredEvents.length === 0 ? (
-            <div className="text-center py-16 space-y-3">
-              <Calendar className="w-12 h-12 text-zinc-600 mx-auto" />
-              <h3 className="text-sm font-mono font-black text-zinc-400 uppercase tracking-wider">
-                No shows currently listed, check back later
+            <div className="text-center py-16 space-y-3 bg-zinc-900/30 rounded-2xl border border-zinc-850 p-6">
+              <Calendar className="w-12 h-12 text-zinc-600 mx-auto animate-pulse" />
+              <h3 className="text-sm font-mono font-black text-zinc-300 uppercase tracking-wider">
+                {filterType === 'rsvps' ? 'No RSVPs Yet' : 'No upcoming shows currently scheduled'}
               </h3>
+              <p className="text-xs text-zinc-500 font-mono max-w-md mx-auto">
+                {filterType === 'rsvps'
+                  ? "You haven't RSVP'd to any shows yet. Click the 'RSVP / Pit List' flame icon on any event to build your personal live calendar and set reminders."
+                  : "Confirmed tour dates and festival appearances will automatically appear here once published."}
+              </p>
+              {isOwner && filterType !== 'rsvps' && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(true)}
+                  className="mt-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xs uppercase font-mono rounded-xl inline-flex items-center gap-1.5 shadow-md cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Announce First Show
+                </button>
+              )}
             </div>
           ) : (
             filteredEvents.map((event) => {
               const isFest = event.type === 'festival';
               const isTour = event.type === 'tour';
+              const isRsvped = rsvpedShowIds.has(event.id);
+              const isReminded = remindedShowIds.has(event.id);
 
               return (
                 <div
                   key={event.id}
                   onClick={() => onSelectEvent?.(event)}
-                  className="group bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 hover:border-yellow-500/50 rounded-xl p-4 transition-all duration-200 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+                  className={`group bg-zinc-900/60 hover:bg-zinc-900 border ${
+                    isRsvped ? 'border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.15)]' : 'border-zinc-800 hover:border-yellow-500/50'
+                  } rounded-xl p-4 transition-all duration-200 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4`}
                 >
                   <div className="flex items-start gap-4 min-w-0 flex-1">
                     {/* Date Block */}
@@ -511,7 +601,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                         {event.date.split(' ')[1]?.replace(',', '') || '—'}
                       </div>
                       <div className="text-[9px] font-mono text-zinc-500 mt-1">
-                        {event.date.includes('202') ? event.date.slice(-4) : '2026'}
+                        {event.date.includes('202') ? event.date.slice(-4) : (event.dateRaw ? event.dateRaw.slice(0, 4) : '2026')}
                       </div>
                     </div>
 
@@ -527,6 +617,13 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                         }`}>
                           {isFest ? 'FESTIVAL' : isTour ? 'TOUR STOP' : 'CLUB GIG'}
                         </span>
+
+                        {isRsvped && (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-sm">
+                            <Flame className="w-3 h-3 fill-amber-400 text-amber-400" />
+                            RSVP Confirmed
+                          </span>
+                        )}
 
                         <span className="text-[10px] font-mono text-zinc-400 font-semibold flex items-center gap-1">
                           <Clock className="w-3 h-3 text-zinc-500" /> Doors {event.doorsTime || '6:00 PM'}
@@ -574,6 +671,72 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                           {event.description}
                         </p>
                       )}
+
+                      {/* Calendar & Reminder Quick-Actions */}
+                      <div className="mt-3 flex items-center gap-2 flex-wrap">
+                        {/* RSVP Action */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleRsvp(event);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-black uppercase transition-all flex items-center gap-1 cursor-pointer border ${
+                            isRsvped
+                              ? 'bg-amber-500 text-black border-amber-400 shadow-md shadow-amber-950/40'
+                              : 'bg-zinc-950 hover:bg-zinc-800 text-zinc-300 border-zinc-800 hover:border-amber-500/40'
+                          }`}
+                        >
+                          <Flame className={`w-3.5 h-3.5 ${isRsvped ? 'fill-black text-black' : 'text-amber-400'}`} />
+                          <span>{isRsvped ? 'In Pit (RSVP’d)' : 'RSVP to Show'}</span>
+                        </button>
+
+                        {/* Add to Google Calendar */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddToCalendar(event);
+                          }}
+                          className="px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-700 flex items-center gap-1 cursor-pointer"
+                          title="Add event to Google Calendar"
+                        >
+                          <CalendarPlus className="w-3.5 h-3.5 text-yellow-400" />
+                          <span>Google Cal</span>
+                        </button>
+
+                        {/* Download .ICS File */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownloadIcs(event);
+                          }}
+                          className="px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-700 flex items-center gap-1 cursor-pointer"
+                          title="Download .ICS file for Apple/Outlook Calendar"
+                        >
+                          <Download className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>.ICS</span>
+                        </button>
+
+                        {/* Set Reminder */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleReminder(event);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer border ${
+                            isReminded
+                              ? 'bg-purple-950/80 text-purple-300 border-purple-500/60'
+                              : 'bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white border-zinc-800'
+                          }`}
+                          title="Set show reminder"
+                        >
+                          <Bell className={`w-3.5 h-3.5 ${isReminded ? 'fill-purple-400 text-purple-400' : 'text-zinc-400'}`} />
+                          <span>{isReminded ? 'Reminder Set' : 'Remind Me'}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -616,13 +779,13 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
         <div className="p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950 flex items-center justify-between text-zinc-500 text-xs font-mono">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Showing {filteredEvents.length} upcoming confirmed events</span>
+            <span>Showing {filteredEvents.length} {filterType === 'rsvps' ? 'RSVP’d' : 'confirmed'} live dates</span>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded font-mono text-xs transition-colors"
+            className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded font-mono text-xs transition-colors cursor-pointer"
           >
             Close View
           </button>

@@ -257,10 +257,10 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
                   comments: Math.max(Number(local.comments) || 0, Number(dbClip.comments) || 0),
                   videoUrl: (dbClip.videoUrl && !dbClip.videoUrl.startsWith('blob:') && dbClip.videoUrl.startsWith('http'))
                     ? dbClip.videoUrl
-                    : (local.videoUrl || dbClip.videoUrl),
+                    : (local?.videoUrl && !local.videoUrl.startsWith('blob:') ? local.videoUrl : dbClip.videoUrl),
                   video_url: (dbClip.video_url && !dbClip.video_url.startsWith('blob:') && dbClip.video_url.startsWith('http'))
                     ? dbClip.video_url
-                    : (local.video_url || dbClip.video_url),
+                    : (local?.video_url && !local.video_url.startsWith('blob:') ? local.video_url : dbClip.video_url),
                 };
               });
 

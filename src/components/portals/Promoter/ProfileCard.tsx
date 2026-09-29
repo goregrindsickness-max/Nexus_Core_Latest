@@ -1319,7 +1319,19 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                 {/* Dynamic Workspace / Pro Badges */}
                 {(() => {
                   const prof = effTarget;
-                  const workspaces = prof?.registered_workspaces || [];
+                  const isTargetSelf = Boolean(
+                    effTarget?.isYou ||
+                    baseTarget?.isYou ||
+                    selectedUserProfile?.isYou ||
+                    (userProfile?.id && effTarget?.id && String(effTarget.id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+                    (userProfile?.id && baseTarget?.id && String(baseTarget.id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+                    (userProfile?.email && effTarget?.email && String(effTarget.email).toLowerCase() === String(userProfile.email).toLowerCase()) ||
+                    (userProfile?.email && baseTarget?.email && String(baseTarget.email).toLowerCase() === String(userProfile.email).toLowerCase())
+                  );
+                  const rawWs = prof?.registered_workspaces || prof?.allowed_workspaces || prof?.workspaces || (isTargetSelf ? (userProfile?.registered_workspaces || userProfile?.allowed_workspaces || userProfile?.workspaces) : []) || [];
+                  const workspaces = Array.isArray(rawWs)
+                    ? rawWs.map((w: any) => (typeof w === 'string' ? w.toLowerCase() : w?.type?.toLowerCase() || ''))
+                    : [];
                   const isPro = prof?.is_pro === true;
                   const badgesToRender: Array<{ label: string; classes: string }> = [];
 
@@ -1357,19 +1369,39 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     });
                   }
 
-                  if (workspaces.includes('promoter')) {
+                  // 🎸 Musician Badge: Associated with anyone tied to a band profile
+                  const isTiedToBand = Boolean(
+                    workspaces.includes('band') ||
+                    prof?.band_id ||
+                    prof?.band_profile_id ||
+                    prof?.band_name ||
+                    prof?.is_musician ||
+                    prof?.isMusician ||
+                    (prof?.role && (prof.role.toLowerCase().includes('musician') || prof.role.toLowerCase().includes('band') || prof.role.toLowerCase().includes('guitar') || prof.role.toLowerCase().includes('drum') || prof.role.toLowerCase().includes('vocal') || prof.role.toLowerCase().includes('bass'))) ||
+                    (isTargetSelf && (userProfile?.band_id || userProfile?.band_name || userProfile?.band_profile_id)) ||
+                    isMiguelProfile
+                  );
+
+                  if (isTiedToBand) {
+                    badgesToRender.push({
+                      label: '🎸 Musician',
+                      classes: 'bg-emerald-950/80 border border-emerald-500 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.25)]'
+                    });
+                  }
+
+                  if (workspaces.includes('promoter') || prof?.promoter_id || prof?.promoter_name || prof?.promoter_metadata) {
                     badgesToRender.push({
                       label: '🏟️ Promoter',
                       classes: 'bg-yellow-950/80 border border-yellow-500 text-yellow-400 shadow-[0_0_8px_rgba(245,158,11,0.2)]'
                     });
                   }
-                  if (workspaces.includes('label')) {
+                  if (workspaces.includes('label') || prof?.label_id || prof?.label_name) {
                     badgesToRender.push({
                       label: '💿 Record Label',
                       classes: 'bg-orange-950/80 border border-orange-500 text-orange-400 shadow-[0_0_8px_rgba(249,115,22,0.2)]'
                     });
                   }
-                  if (workspaces.includes('creative')) {
+                  if (workspaces.includes('creative') || prof?.creative_id || prof?.creative_name || prof?.category === 'creative') {
                     badgesToRender.push({
                       label: '🎨 Creative',
                       classes: 'bg-fuchsia-950/80 border border-fuchsia-500 text-fuchsia-400 shadow-[0_0_8px_rgba(217,70,239,0.2)]'
@@ -2939,62 +2971,90 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     </div>
 
                     <div className="space-y-3">
-                      {[
-                        {
-                          title: "Chicago Domination Fest: Next Generation 2026",
-                          lineup: "Analepsy, Devourment, Cephalotripsy, Gorgasm, Vulvodynia, Putrid Pile, Disgorge",
-                          venue: "Reggies Rock Club, Chicago IL",
-                          date: "OCT 23 - 25, 2026 • 4:00 PM",
-                          price: "$110 3-Day Pass / $45 Single Day",
-                          status: "Selling Fast",
-                          thumbnail: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=200"
-                        },
-                        {
-                          title: "Texas Domination Showcase 2026",
-                          lineup: "Stabbing, Malignancy, Kraanium, Short Bus Pile Up, Viral Load",
-                          venue: "Subterranean / North Texas Circuit, Denison / Dallas TX",
-                          date: "NOV 14, 2026 • 5:30 PM",
-                          price: "$35.00 Advance",
-                          status: "Presale Active",
-                          thumbnail: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=200"
-                        },
-                        {
-                          title: "Midwest Slam Assault: Winter Tour Stop",
-                          lineup: "Virulent Excision, Internal Bleeding, Organectomy, Embryectomy",
-                          venue: "Cobra Lounge, Chicago IL",
-                          date: "DEC 05, 2026 • 6:30 PM",
-                          price: "$28.00 Advance",
-                          status: "Confirmed",
-                          thumbnail: "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&q=80&w=200"
+                      {(() => {
+                        let customStored: any[] = [];
+                        try {
+                          const stored = localStorage.getItem('nexus_promoter_custom_events');
+                          if (stored) customStored = JSON.parse(stored);
+                        } catch (_) {}
+
+                        let dbShowsStored: any[] = [];
+                        try {
+                          const dbRaw = localStorage.getItem('nexus_db_shows') || localStorage.getItem('nexus_community_shows_cache');
+                          if (dbRaw) dbShowsStored = JSON.parse(dbRaw);
+                        } catch (_) {}
+
+                        const activeLiveShows = [
+                          ...customStored,
+                          ...(Array.isArray(dbShowsStored) ? dbShowsStored : []).filter((s: any) => {
+                            if (s.is_published === false || s.publication_status === 'embargoed_private' || s.publication_status === 'draft' || s.status === 'Draft' || s.status === 'Embargoed') {
+                              return false;
+                            }
+                            return true;
+                          }).map((s: any) => {
+                            const lineupStr = Array.isArray(s.lineup) ? s.lineup.join(', ') : (s.lineup || s.headliner || s.name || 'Live Lineup');
+                            return {
+                              title: s.festival_name || s.tour_name || s.name || s.title || 'Upcoming Live Show',
+                              lineup: lineupStr,
+                              venue: `${s.venue_address || s.venue_name || s.venue || 'Underground Venue'}, ${s.city || 'Chicago IL'}`,
+                              date: `${s.date || s.show_date || 'TBA'}${s.doors_time ? ` • ${s.doors_time}` : ''}`,
+                              price: s.price ? (String(s.price).startsWith('$') ? String(s.price) : `$${s.price}`) : '$25.00',
+                              status: s.ticket_status ? String(s.ticket_status).replace('_', ' ').toUpperCase() : 'ON SALE',
+                              thumbnail: s.flyer_url || s.image_url || s.cover_url || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=200'
+                            };
+                          })
+                        ];
+
+                        if (activeLiveShows.length === 0) {
+                          return (
+                            <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-8 text-center space-y-3">
+                              <Calendar className="w-10 h-10 text-zinc-600 mx-auto animate-pulse" />
+                              <h4 className="text-xs font-mono font-bold text-zinc-400 uppercase tracking-wider">No Upcoming Shows Currently Listed</h4>
+                              <p className="text-[10px] text-zinc-500 font-mono max-w-sm mx-auto">
+                                Confirmed tour dates, club gigs, and festival appearances will appear here once announced.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => setShowEventsModal(true)}
+                                className="mt-2 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-[10px] uppercase font-mono rounded-lg transition-colors shadow-md cursor-pointer"
+                              >
+                                Open Live Calendar
+                              </button>
+                            </div>
+                          );
                         }
-                      ].map((event, idx) => (
-                        <div key={`promoter-ticket-${event.title}-${idx}`} className="bg-zinc-950 border border-zinc-900 hover:border-yellow-500/40 rounded-xl p-3.5 flex flex-col sm:flex-row items-center gap-4 transition-all">
-                          <img src={event.thumbnail} alt={event.title} className="w-20 h-20 rounded-lg object-cover border border-zinc-800 shrink-0" />
-                          <div className="flex-1 min-w-0 text-left">
-                            <div className="flex items-center gap-2">
-                              <span className="px-1.5 py-0.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded text-[8px] font-mono font-bold uppercase">{event.status}</span>
-                              <span className="text-[10px] font-mono text-zinc-500">{event.date}</span>
+
+                        return activeLiveShows.map((event, idx) => (
+                          <div key={`promoter-ticket-${event.title}-${idx}`} className="bg-zinc-950 border border-zinc-900 hover:border-yellow-500/40 rounded-xl p-3.5 flex flex-col sm:flex-row items-center gap-4 transition-all">
+                            {event.thumbnail && (
+                              <img src={event.thumbnail} alt={event.title} className="w-20 h-20 rounded-lg object-cover border border-zinc-800 shrink-0" />
+                            )}
+                            <div className="flex-1 min-w-0 text-left">
+                              <div className="flex items-center gap-2">
+                                <span className="px-1.5 py-0.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded text-[8px] font-mono font-bold uppercase">{event.status}</span>
+                                <span className="text-[10px] font-mono text-zinc-500">{event.date}</span>
+                              </div>
+                              <h4 className="text-sm font-bold text-white uppercase tracking-wider mt-1 truncate">{event.title}</h4>
+                              <div className="text-[11px] text-zinc-300 font-mono mt-0.5 truncate">{event.lineup}</div>
+                              <div className="text-[10px] text-zinc-500 font-mono mt-0.5 flex items-center gap-1">
+                                <MapPin className="w-3 h-3 text-yellow-500" /> {event.venue}
+                              </div>
                             </div>
-                            <h4 className="text-sm font-bold text-white uppercase tracking-wider mt-1 truncate">{event.title}</h4>
-                            <div className="text-[11px] text-zinc-300 font-mono mt-0.5 truncate">{event.lineup}</div>
-                            <div className="text-[10px] text-zinc-500 font-mono mt-0.5 flex items-center gap-1">
-                              <MapPin className="w-3 h-3 text-yellow-500" /> {event.venue}
+                            <div className="flex flex-col items-center sm:items-end justify-between w-full sm:w-auto border-t sm:border-t-0 border-zinc-900 pt-2 sm:pt-0">
+                              <span className="text-sm font-mono font-black text-yellow-400">{event.price}</span>
+                              <button
+                                onClick={() => {
+                                  openCheckout?.('ticket', { name: event.title, price: parseFloat(String(event.price).replace(/[^0-9.]/g, '')) || 25, venue: event.venue });
+                                  triggerNotification?.(`Adding ticket for ${event.title} to checkout...`);
+                                }}
+                                className="mt-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded text-[10px] uppercase font-mono transition-colors shadow-lg cursor-pointer"
+                              >
+                                Buy Tickets
+                              </button>
                             </div>
                           </div>
-                          <div className="flex flex-col items-center sm:items-end justify-between w-full sm:w-auto border-t sm:border-t-0 border-zinc-900 pt-2 sm:pt-0">
-                            <span className="text-sm font-mono font-black text-yellow-400">{event.price}</span>
-                            <button
-                              onClick={() => {
-                                openCheckout?.('ticket', { name: event.title, price: parseFloat(event.price.replace(/[^0-9.]/g, '')) || 35, venue: event.venue });
-                                triggerNotification?.(`Adding ticket for ${event.title} to checkout...`);
-                              }}
-                              className="mt-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded text-[10px] uppercase font-mono transition-colors shadow-lg cursor-pointer"
-                            >
-                              Buy Tickets
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        ));
+                      })()}
                     </div>
                   </div>
                 )}

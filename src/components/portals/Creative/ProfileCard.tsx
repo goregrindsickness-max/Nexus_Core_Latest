@@ -1373,6 +1373,41 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     selectedUserProfile.email?.toLowerCase().includes('goregrindsickness')
                   );
 
+                  const isTargetSelf = Boolean(
+                    effTarget?.isYou ||
+                    baseTarget?.isYou ||
+                    selectedUserProfile?.isYou ||
+                    (userProfile?.id && effTarget?.id && String(effTarget.id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+                    (userProfile?.id && baseTarget?.id && String(baseTarget.id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+                    (userProfile?.email && effTarget?.email && String(effTarget.email).toLowerCase() === String(userProfile.email).toLowerCase()) ||
+                    (userProfile?.email && baseTarget?.email && String(baseTarget.email).toLowerCase() === String(userProfile.email).toLowerCase())
+                  );
+
+                  // 🎸 Musician Badge: Associated with anyone tied to a band profile
+                  const rawWs = prof?.registered_workspaces || prof?.allowed_workspaces || prof?.workspaces || (isTargetSelf ? (userProfile?.registered_workspaces || userProfile?.allowed_workspaces || userProfile?.workspaces) : []) || [];
+                  const workspaces = Array.isArray(rawWs)
+                    ? rawWs.map((w: any) => (typeof w === 'string' ? w.toLowerCase() : w?.type?.toLowerCase() || ''))
+                    : [];
+                  const isTiedToBand = Boolean(
+                    workspaces.includes('band') ||
+                    prof?.band_id ||
+                    prof?.band_profile_id ||
+                    prof?.band_name ||
+                    prof?.is_musician ||
+                    prof?.isMusician ||
+                    (prof?.role && (prof.role.toLowerCase().includes('musician') || prof.role.toLowerCase().includes('band') || prof.role.toLowerCase().includes('guitar') || prof.role.toLowerCase().includes('drum') || prof.role.toLowerCase().includes('vocal') || prof.role.toLowerCase().includes('bass'))) ||
+                    (isTargetSelf && (userProfile?.band_id || userProfile?.band_name || userProfile?.band_profile_id)) ||
+                    isMiguelProfile
+                  );
+
+                  if (isTiedToBand && !seenLabels.has('🎸 Musician')) {
+                    seenLabels.add('🎸 Musician');
+                    badgesToRender.push({
+                      label: '🎸 Musician',
+                      classes: 'bg-emerald-950/80 border border-emerald-500 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.25)]'
+                    });
+                  }
+
                   if (isMiguelProfile) {
                     badgesToRender.unshift({
                       label: '🌀 Nexus Overlord',

@@ -24,6 +24,11 @@ import {
 } from 'lucide-react';
 import { RADIO_PLAYLISTS, FRONTEND_FALLBACK_PLAYLISTS } from '../../../data/socialFeedMockData';
 import {
+  getPlaylistTracksResilient,
+  enrichTrackBatchDirect,
+  persistSingleTrackMeta
+} from '../../../services/sceneRadioMetadataService';
+import {
   initGlobalMediaInterceptors,
   SCENE_RADIO_PAUSE_EVENT,
   LEGACY_RADIO_PAUSE_EVENT,
@@ -314,6 +319,22 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
 
   const enrichPlaylistBatch = async (playlistId: string, nativeIds: string[]) => {
     if (!playlistId || nativeIds.length === 0) return;
+    
+    // 1. Direct resilient client-side enricher (oEmbed / Supabase / localStorage)
+    try {
+      await enrichTrackBatchDirect(
+        playlistId,
+        nativeIds,
+        playlistVideos,
+        (updatedList) => {
+          setPlaylistVideos(updatedList);
+        }
+      );
+    } catch (e) {
+      console.warn("[RADIO PLAYER] Direct batch enrichment note:", e);
+    }
+
+    // 2. Also attempt server-side batch route if running with active Node backend
     try {
       const resp = await fetch(`/api/playlist/${playlistId}/enrich`, {
         method: 'POST',
@@ -326,8 +347,8 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
           setPlaylistVideos(data.videos);
         }
       }
-    } catch (e) {
-      console.warn("[RADIO PLAYER] Failed to enrich playlist:", e);
+    } catch {
+      // Expected in standalone APK where no local Node server is running
     }
   };
 
@@ -363,8 +384,9 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
            };
            merged[currentIndex] = updatedTrack;
 
-           // Sync newly retrieved title back to server database cache asynchronously
+           // Persist retrieved track metadata directly to cache and Supabase
            if (videoData.title && !videoData.title.startsWith("Track ")) {
+             persistSingleTrackMeta(currentPlaylistId, updatedTrack);
              fetch(`/api/playlist/${currentPlaylistId}/tracks`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
@@ -732,14 +754,12 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
       setRadioPlayerError(null);
 
       try {
-        const response = await fetch(`/api/playlist/${playlistId}`);
-        if (!response.ok) throw new Error("Could not fetch playlist feed");
-        const data = await response.json();
+        const tracks = await getPlaylistTracksResilient(playlistId);
 
-        if (active && data && data.videos && data.videos.length > 0) {
-          setPlaylistVideos(data.videos);
+        if (active && tracks && tracks.length > 0) {
+          setPlaylistVideos(tracks);
           if (!userSelectedTrackRef.current) {
-            const randIdx = getRandomTrackIndex(data.videos.length, currentVideoIndexRef.current);
+            const randIdx = getRandomTrackIndex(tracks.length, currentVideoIndexRef.current);
             setCurrentVideoIndex(randIdx);
             currentVideoIndexRef.current = randIdx;
           }

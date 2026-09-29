@@ -56,7 +56,7 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
 }) => {
   const [isUploadingClip, setIsUploadingClip] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadInBackground, setUploadInBackground] = useState(true);
+  const [uploadInBackground, setUploadInBackground] = useState(false);
   const [uploadStatusText, setUploadStatusText] = useState('');
 
   const handlePostClip = async () => {
@@ -92,7 +92,7 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
       finalVideoUrl = localPreviewUrl;
     }
     if (!finalVideoUrl) {
-      finalVideoUrl = 'https://assets.mixkit.co/videos/preview/mixkit-rock-band-performing-on-stage-41584-large.mp4';
+      finalVideoUrl = 'https://vjs.zencdn.net/v/oceans.mp4';
     }
 
     const cleanTags = newClipTags

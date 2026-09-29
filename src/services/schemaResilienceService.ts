@@ -168,6 +168,25 @@ export function sanitizeShowForDb(show: any): any {
     dbShow.price = show.price || (show.presale_price ? (show.day_of_show_price ? `$${show.presale_price} / $${show.day_of_show_price}` : `$${show.presale_price}`) : (show.day_of_show_price ? `$${show.day_of_show_price}` : (show.ticket_price ? `$${show.ticket_price}` : undefined)));
   }
 
+  // City handling: Postgres 'shows' table enforces a NOT NULL constraint on 'city'
+  let resolvedCity = (dbShow.city || show.city || show.location || show.city_state || show.venue_city || '').trim();
+  if (!resolvedCity && (show.venue_address || show.address)) {
+    const rawAddr = String(show.venue_address || show.address).trim();
+    const parts = rawAddr.split(',');
+    if (parts.length >= 2) {
+      resolvedCity = parts[parts.length - 2].trim();
+    } else {
+      resolvedCity = rawAddr;
+    }
+  }
+  if (!resolvedCity && show.state_province) {
+    resolvedCity = String(show.state_province).trim();
+  }
+  if (!resolvedCity) {
+    resolvedCity = 'Austin, TX';
+  }
+  dbShow.city = resolvedCity;
+
   // ID Handling: Preserve deterministic UUID so client and database remain synchronized
   if (dbShow.id) {
     dbShow.id = ensureUUID(dbShow.id);

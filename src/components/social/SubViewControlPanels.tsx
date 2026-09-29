@@ -161,7 +161,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                   onOpenMapModal();
                 }}
                 className="text-[9px] font-mono uppercase text-cyan-300 hover:text-black bg-cyan-950/60 hover:bg-cyan-400 border border-cyan-800/80 hover:border-cyan-400 px-2 py-0.5 rounded-md flex items-center gap-1 transition-all cursor-pointer shadow-sm"
-                title="Explore all upcoming events, filter by band, city, date, or radar map"
+                title="Explore all upcoming events, single shows, multi-city tours, and scene archives"
               >
                 <Calendar className="w-3 h-3 text-cyan-400 group-hover:text-black" /> View All Events
               </button>

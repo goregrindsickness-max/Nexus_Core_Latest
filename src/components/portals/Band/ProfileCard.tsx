@@ -1706,7 +1706,19 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                 {/* Dynamic Workspace / Pro Badges */}
                 {(() => {
                   const prof = effTarget;
-                  const workspaces = prof?.registered_workspaces || [];
+                  const isTargetSelf = Boolean(
+                    effTarget?.isYou ||
+                    baseTarget?.isYou ||
+                    selectedUserProfile?.isYou ||
+                    (userProfile?.id && effTarget?.id && String(effTarget.id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+                    (userProfile?.id && baseTarget?.id && String(baseTarget.id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+                    (userProfile?.email && effTarget?.email && String(effTarget.email).toLowerCase() === String(userProfile.email).toLowerCase()) ||
+                    (userProfile?.email && baseTarget?.email && String(baseTarget.email).toLowerCase() === String(userProfile.email).toLowerCase())
+                  );
+                  const rawWs = prof?.registered_workspaces || prof?.allowed_workspaces || prof?.workspaces || (isTargetSelf ? (userProfile?.registered_workspaces || userProfile?.allowed_workspaces || userProfile?.workspaces) : []) || [];
+                  const workspaces = Array.isArray(rawWs)
+                    ? rawWs.map((w: any) => (typeof w === 'string' ? w.toLowerCase() : w?.type?.toLowerCase() || ''))
+                    : [];
                   const isPro = prof?.is_pro === true;
                   const badgesToRender: Array<{ label: string; classes: string }> = [];
 
@@ -1744,19 +1756,39 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     });
                   }
 
-                  if (workspaces.includes('promoter')) {
+                  // 🎸 Musician Badge: Associated with anyone tied to a band profile
+                  const isTiedToBand = Boolean(
+                    workspaces.includes('band') ||
+                    prof?.band_id ||
+                    prof?.band_profile_id ||
+                    prof?.band_name ||
+                    prof?.is_musician ||
+                    prof?.isMusician ||
+                    (prof?.role && (prof.role.toLowerCase().includes('musician') || prof.role.toLowerCase().includes('band') || prof.role.toLowerCase().includes('guitar') || prof.role.toLowerCase().includes('drum') || prof.role.toLowerCase().includes('vocal') || prof.role.toLowerCase().includes('bass'))) ||
+                    (isTargetSelf && (userProfile?.band_id || userProfile?.band_name || userProfile?.band_profile_id)) ||
+                    isMiguelProfile
+                  );
+
+                  if (isTiedToBand) {
+                    badgesToRender.push({
+                      label: '🎸 Musician',
+                      classes: 'bg-emerald-950/80 border border-emerald-500 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.25)]'
+                    });
+                  }
+
+                  if (workspaces.includes('promoter') || prof?.promoter_id || prof?.promoter_name || prof?.promoter_metadata) {
                     badgesToRender.push({
                       label: '🏟️ Promoter',
                       classes: 'bg-yellow-950/80 border border-yellow-500 text-yellow-400 shadow-[0_0_8px_rgba(245,158,11,0.2)]'
                     });
                   }
-                  if (workspaces.includes('label')) {
+                  if (workspaces.includes('label') || prof?.label_id || prof?.label_name) {
                     badgesToRender.push({
                       label: '💿 Record Label',
                       classes: 'bg-orange-950/80 border border-orange-500 text-orange-400 shadow-[0_0_8px_rgba(249,115,22,0.2)]'
                     });
                   }
-                  if (workspaces.includes('creative')) {
+                  if (workspaces.includes('creative') || prof?.creative_id || prof?.creative_name || prof?.category === 'creative') {
                     badgesToRender.push({
                       label: '🎨 Creative',
                       classes: 'bg-fuchsia-950/80 border border-fuchsia-500 text-fuchsia-400 shadow-[0_0_8px_rgba(217,70,239,0.2)]'

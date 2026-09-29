@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { requestPauseSceneRadio } from './utils/mediaPlaybackCoordinator';
 import {
@@ -22,7 +22,13 @@ import {
   Send,
   Eye,
   RefreshCw,
-  TrendingUp
+  TrendingUp,
+  Volume2,
+  VolumeX,
+  Play,
+  Pause,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { uploadClipVideoFile } from '../../supabase';
 import { UploadClipModal } from './modals/UploadClipModal';
@@ -31,11 +37,12 @@ import {
   generateVideoThumbnail,
   resolveClipVideoPlaybackUrl,
   trackRealClipView,
-  calculateClipsDashboardStats
+  calculateClipsDashboardStats,
+  SCENE_PERFORMANCE_VIDEOS
 } from './utils/clipsPersistenceService';
 import { extractYouTubeId } from './utils/postSyncUtils';
 
-interface ClipItem {
+export interface ClipItem {
   id: any;
   creator: string;
   role: string;
@@ -43,17 +50,29 @@ interface ClipItem {
   caption: string;
   title?: string;
   videoUrl: string;
+  video_url?: string;
   likes: number;
+  likes_count?: number;
   comments: number;
+  comments_count?: number;
   shares: number;
+  shares_count?: number;
   reposts: number;
   views: number;
+  views_count?: number;
   audio: string;
   hasLiked: boolean;
   thumbnailUrl?: string;
+  thumbnail_url?: string;
   created_at?: string;
   user_id?: string;
+  profile_id?: string;
   isFollowed?: boolean;
+  bandName?: string;
+  band_name?: string;
+  songTitle?: string;
+  song_title?: string;
+  tags?: string[];
 }
 
 interface ClipsViewProps {
@@ -71,17 +90,17 @@ interface ClipsViewProps {
 const DEFAULT_CLIPS: ClipItem[] = [
   {
     id: 'c1',
-    creator: 'Dying Fetus',
+    creator: 'Virulent Excision',
     role: '💀 Band',
     avatar: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100',
-    caption: 'Live breakdown in Montreal! Technical slam riffs in full force. 🔥 #DyingFetus #DeathMetal',
-    videoUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800',
+    caption: 'Live breakdown in Texas! Technical slam riffs in full force. 🔥 #VirulentExcision #DeathMetal',
+    videoUrl: 'https://vjs.zencdn.net/v/oceans.mp4',
     likes: 1420,
     comments: 89,
     shares: 210,
     reposts: 45,
     views: 8900,
-    audio: 'Dying Fetus - Grotesque Impalement (Live)',
+    audio: 'Virulent Excision - Grotesque Impalement (Live)',
     hasLiked: false,
     isFollowed: false,
   },
@@ -91,7 +110,7 @@ const DEFAULT_CLIPS: ClipItem[] = [
     role: '💀 Band',
     avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=100',
     caption: 'New drum playthrough teaser! Pitch shifted vocal gargles and gravity blasts. 🥁',
-    videoUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800',
+    videoUrl: 'https://media.w3.org/2010/05/sintel/trailer_hd.mp4',
     likes: 980,
     comments: 42,
     shares: 112,
@@ -102,6 +121,499 @@ const DEFAULT_CLIPS: ClipItem[] = [
     isFollowed: true,
   },
 ];
+
+/**
+ * Individual Single Clip Player Card Component
+ * Handles video lifecycle, playback state, tap-to-play/pause, sound toggle, progress bar, and error self-healing.
+ */
+const SingleClipPlayerCard: React.FC<{
+  clip: ClipItem;
+  index: number;
+  isActive: boolean;
+  isMuted: boolean;
+  onToggleMute: () => void;
+  userProfile?: any;
+  onSelectProfile?: (userPayload: any) => void;
+  handleLikeClip: (clipId: any) => void;
+  setActiveClipComments: (clipId: any) => void;
+  setActiveClipShare: (clipId: any) => void;
+  setActiveClipMetrics: (clipId: any) => void;
+  deleteClip?: (id: any) => Promise<void>;
+  setClips: React.Dispatch<React.SetStateAction<ClipItem[]>>;
+  triggerNotification?: (msg: string) => void;
+  setShowSongModal: (show: boolean) => void;
+}> = ({
+  clip,
+  index,
+  isActive,
+  isMuted,
+  onToggleMute,
+  userProfile,
+  onSelectProfile,
+  handleLikeClip,
+  setActiveClipComments,
+  setActiveClipShare,
+  setActiveClipMetrics,
+  deleteClip,
+  setClips,
+  triggerNotification,
+  setShowSongModal,
+}) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isBuffering, setIsBuffering] = useState<boolean>(false);
+  const [hasError, setHasError] = useState<boolean>(false);
+  const [currentSrc, setCurrentSrc] = useState<string>(clip.videoUrl || (clip as any).video_url || '');
+  const [progress, setProgress] = useState<number>(0);
+  const [playPauseAnim, setPlayPauseAnim] = useState<'play' | 'pause' | null>(null);
+  const animTimeoutRef = useRef<any>(null);
+
+  // Sync currentSrc when clip prop updates
+  useEffect(() => {
+    const rawUrl = clip.videoUrl || (clip as any).video_url || '';
+    if (rawUrl) {
+      setCurrentSrc(rawUrl);
+      setHasError(false);
+    }
+  }, [clip.videoUrl, (clip as any).video_url]);
+
+  // Autoplay / Pause management based on viewport intersection
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (isActive) {
+      video.muted = isMuted;
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsPlaying(true);
+            setIsBuffering(false);
+            setHasError(false);
+            requestPauseSceneRadio('clips_video_play');
+            trackRealClipView(clip.id, clip.views, (newViews) => {
+              setClips((prev) => prev.map((c) => (c.id === clip.id ? { ...c, views: newViews, views_count: newViews } : c)));
+            });
+          })
+          .catch((err) => {
+            console.warn(`[ClipPlayer] Autoplay prevented for clip "${clip.id}":`, err?.message || err);
+            // If unmuted autoplay was blocked by browser, try muted autoplay as fallback
+            if (!video.muted) {
+              video.muted = true;
+              video.play().then(() => {
+                setIsPlaying(true);
+              }).catch(() => {
+                setIsPlaying(false);
+              });
+            } else {
+              setIsPlaying(false);
+            }
+          });
+      }
+    } else {
+      video.pause();
+      setIsPlaying(false);
+    }
+  }, [isActive, isMuted, currentSrc, clip.id]);
+
+  // Update muted property on video element
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
+  // Handle tap on screen to toggle Play / Pause
+  const handleTogglePlayPause = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
+
+    if (video.paused) {
+      video.muted = isMuted;
+      video.play().then(() => {
+        setIsPlaying(true);
+        setPlayPauseAnim('play');
+        requestPauseSceneRadio('clips_video_play');
+        animTimeoutRef.current = setTimeout(() => setPlayPauseAnim(null), 700);
+      }).catch((err) => {
+        console.warn("[ClipPlayer] Play error:", err);
+      });
+    } else {
+      video.pause();
+      setIsPlaying(false);
+      setPlayPauseAnim('pause');
+      animTimeoutRef.current = setTimeout(() => setPlayPauseAnim(null), 700);
+    }
+  };
+
+  // Self-heal when video element errors
+  const handleVideoError = async () => {
+    console.warn(`[ClipPlayer] Video playback error for clip "${clip.id}" (src: ${currentSrc}). Attempting self-healing...`);
+    setIsBuffering(false);
+    
+    try {
+      const fallback = await resolveClipVideoPlaybackUrl(clip.id, currentSrc);
+      if (fallback && fallback !== currentSrc) {
+        console.log(`[ClipPlayer] Applying fallback video URL for clip "${clip.id}" -> ${fallback}`);
+        setCurrentSrc(fallback);
+        setHasError(false);
+        if (videoRef.current) {
+          videoRef.current.src = fallback;
+          videoRef.current.load();
+          if (isActive) {
+            videoRef.current.play().catch(() => {});
+          }
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn("[ClipPlayer] Fallback error:", e);
+    }
+
+    // Secondary fallback to standard rock performance clip
+    const secondary = SCENE_PERFORMANCE_VIDEOS[0];
+    if (currentSrc !== secondary) {
+      setCurrentSrc(secondary);
+      setHasError(false);
+      if (videoRef.current) {
+        videoRef.current.src = secondary;
+        videoRef.current.load();
+        if (isActive) {
+          videoRef.current.play().catch(() => {});
+        }
+      }
+    } else {
+      setHasError(true);
+    }
+  };
+
+  const ytId = extractYouTubeId(currentSrc);
+
+  return (
+    <div
+      className="h-full w-full shrink-0 snap-start snap-always relative flex items-center justify-center bg-zinc-950/90 border-b border-zinc-900 group select-none overflow-hidden"
+      data-clip-index={index}
+    >
+      {/* Video Content Container */}
+      <div
+        className="absolute inset-0 flex items-center justify-center bg-black overflow-hidden cursor-pointer"
+        onClick={handleTogglePlayPause}
+      >
+        {ytId ? (
+          <iframe
+            src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=${isActive ? 1 : 0}&mute=${isMuted ? 1 : 0}&loop=1&playlist=${ytId}&controls=1&modestbranding=1&rel=0`}
+            className="w-full h-full object-cover"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            title={clip.title || clip.caption || 'Clip'}
+          />
+        ) : currentSrc && !currentSrc.match(/\.(jpg|jpeg|png|webp|gif|svg)$/i) ? (
+          <>
+            <video
+              ref={videoRef}
+              src={currentSrc}
+              poster={clip.thumbnailUrl || (clip as any).thumbnail_url || undefined}
+              className="w-full h-full object-cover"
+              loop
+              playsInline
+              crossOrigin="anonymous"
+              preload="auto"
+              onWaiting={() => setIsBuffering(true)}
+              onPlaying={() => {
+                setIsBuffering(false);
+                setIsPlaying(true);
+                setHasError(false);
+              }}
+              onTimeUpdate={() => {
+                const v = videoRef.current;
+                if (v && v.duration > 0) {
+                  setProgress((v.currentTime / v.duration) * 100);
+                }
+              }}
+              onError={handleVideoError}
+            />
+
+            {/* Poster fallback image behind video if video is loading */}
+            {(clip.thumbnailUrl || (clip as any).thumbnail_url) && !isPlaying && (
+              <div
+                className="absolute inset-0 bg-cover bg-center -z-10"
+                style={{ backgroundImage: `url('${clip.thumbnailUrl || (clip as any).thumbnail_url}')` }}
+              />
+            )}
+          </>
+        ) : (
+          <div className="relative w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-900 via-zinc-950 to-black">
+            <div
+              className="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-overlay"
+              style={{ backgroundImage: `url('${currentSrc || clip.thumbnailUrl || (clip as any).thumbnail_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800'}')` }}
+            />
+            <PlayCircle className="w-20 h-20 text-rose-500/80 drop-shadow-[0_0_20px_rgba(244,63,94,0.6)]" />
+          </div>
+        )}
+
+        {/* Buffering Spinner */}
+        {isBuffering && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
+            <Loader2 className="w-12 h-12 text-rose-500 animate-spin drop-shadow-md" />
+          </div>
+        )}
+
+        {/* Play / Pause Tap Feedback Icon Animation */}
+        <AnimatePresence>
+          {playPauseAnim && (
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1.1, opacity: 1 }}
+              exit={{ scale: 1.3, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
+            >
+              <div className="w-20 h-20 rounded-full bg-black/60 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-2xl">
+                {playPauseAnim === 'play' ? (
+                  <Play className="w-10 h-10 text-white fill-white ml-1" />
+                ) : (
+                  <Pause className="w-10 h-10 text-white fill-white" />
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Playback Error Overlay / Self-Healing Trigger */}
+        {hasError && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/75 p-4 text-center z-20 space-y-3">
+            <AlertCircle className="w-12 h-12 text-rose-500" />
+            <p className="text-xs text-zinc-300 max-w-[260px]">
+              Stream connection interrupted.
+            </p>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleVideoError();
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-lg"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry Clip</span>
+            </button>
+          </div>
+        )}
+
+        {/* Floating Sound Toggle Button (Top Right) */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleMute();
+          }}
+          className="absolute top-4 right-4 z-40 p-2.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white transition-all hover:scale-105 shadow-lg flex items-center gap-1.5"
+          title={isMuted ? "Unmute Sound" : "Mute Sound"}
+        >
+          {isMuted ? (
+            <>
+              <VolumeX className="w-4 h-4 text-rose-400" />
+              <span className="text-[10px] font-mono font-bold text-rose-300 pr-1">Muted</span>
+            </>
+          ) : (
+            <>
+              <Volume2 className="w-4 h-4 text-emerald-400" />
+              <span className="text-[10px] font-mono font-bold text-emerald-300 pr-1">Sound On</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Content Overlay */}
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/80 to-transparent flex items-end justify-between pointer-events-none z-20">
+        <div className="flex-1 max-w-[80%] pr-4 pointer-events-auto">
+          <div
+            className="flex items-center gap-3 mb-2.5 cursor-pointer group/prof"
+            onClick={() => {
+              const profilePayload = {
+                id: (clip as any).creator_id || clip.user_id || (clip as any).profile_id,
+                name: clip.creator,
+                avatar: clip?.avatar,
+                role: clip?.role || "Member",
+                isYou: clip.creator === userProfile?.name,
+              };
+              if (onSelectProfile) {
+                onSelectProfile(profilePayload);
+              } else {
+                window.dispatchEvent(
+                  new CustomEvent('openPublicProfile', {
+                    detail: profilePayload,
+                  })
+                );
+              }
+            }}
+          >
+            <div className="w-10 h-10 rounded-full bg-zinc-800 border-2 border-rose-500 overflow-hidden flex items-center justify-center shadow-[0_0_12px_rgba(244,63,94,0.5)] shrink-0 group-hover/prof:scale-105 transition-transform">
+              {clip?.avatar ? (
+                <img src={clip?.avatar} className="w-full h-full object-cover" alt="" />
+              ) : (
+                <User className="w-5 h-5 text-zinc-400" />
+              )}
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="font-bold text-sm text-white drop-shadow-md group-hover/prof:underline truncate">{clip.creator}</span>
+              <span className="text-[10px] font-black uppercase text-rose-400 tracking-wider truncate">{clip?.role || "Member"}</span>
+            </div>
+            <button
+              className={`text-[10px] border px-3 py-1 rounded-full font-bold uppercase transition-all ml-1.5 shrink-0 ${
+                clip.isFollowed ? 'bg-white text-black border-white' : 'border-white/40 hover:bg-white hover:text-black text-white'
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!clip.isFollowed) {
+                  triggerNotification?.(`Followed ${clip.creator}`);
+                  setClips((prev) =>
+                    prev.map((c) => (c.id === clip.id ? { ...c, isFollowed: true } : c))
+                  );
+                }
+              }}
+            >
+              {clip.isFollowed ? 'Followed' : 'Follow'}
+            </button>
+          </div>
+
+          <p className="text-sm text-zinc-100 drop-shadow-md leading-snug line-clamp-3">
+            {clip.caption ? clip.caption.replace(/#\w+/g, '').trim() : (clip.title || 'Live Clip')}
+          </p>
+
+          {/* View Metrics / Reactions Link */}
+          <div
+            className="mt-2 text-[10px] font-bold text-zinc-300 flex items-center gap-2 cursor-pointer hover:text-white group/metrics"
+            onClick={() => setActiveClipMetrics(clip.id)}
+          >
+            <Eye className="w-3.5 h-3.5 text-zinc-400" />
+            <span className="group-hover/metrics:underline decoration-white/50 underline-offset-2">
+              {(clip.views || (clip as any).views_count || 0).toLocaleString()} views • See details
+            </span>
+          </div>
+
+          <div className="mt-2.5 text-xs text-zinc-300 flex items-center gap-2 font-mono bg-black/60 inline-flex px-3 py-1.5 rounded-full border border-white/15 max-w-full">
+            <Music className="w-3.5 h-3.5 text-rose-400 shrink-0 animate-pulse" />
+            <span className="truncate">{clip.audio || `${clip.creator} - Original Audio`}</span>
+          </div>
+        </div>
+
+        {/* Actions Column */}
+        <div className="flex flex-col items-center gap-3.5 pb-2 pointer-events-auto">
+          {/* Like Button */}
+          <button
+            onClick={() => handleLikeClip(clip.id)}
+            className="flex flex-col items-center gap-1 group/btn"
+          >
+            <div
+              className={`w-11 h-11 rounded-full flex items-center justify-center border backdrop-blur-md group-hover/btn:scale-110 transition-all ${
+                clip.hasLiked ? 'bg-rose-500/25 border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.4)]' : 'bg-black/50 border-zinc-700 hover:border-zinc-500'
+              }`}
+            >
+              <Heart
+                className={`w-5 h-5 transition-colors ${
+                  clip.hasLiked ? 'text-rose-500 fill-rose-500' : 'text-white group-hover/btn:text-rose-500'
+                }`}
+              />
+            </div>
+            <span className="text-[10px] font-bold text-white drop-shadow-md">
+              {(clip.likes || (clip as any).likes_count || 0).toLocaleString()}
+            </span>
+          </button>
+
+          {/* Comments Button */}
+          <button
+            onClick={() => setActiveClipComments(clip.id)}
+            className="flex flex-col items-center gap-1 group/btn"
+          >
+            <div className="w-11 h-11 rounded-full bg-black/50 flex items-center justify-center border border-zinc-700 backdrop-blur-md group-hover/btn:border-cyan-400 group-hover/btn:bg-zinc-800 transition-all group-hover/btn:scale-110">
+              <MessageSquare className="w-5 h-5 text-white group-hover/btn:text-cyan-400 transition-colors" />
+            </div>
+            <span className="text-[10px] font-bold text-white drop-shadow-md">
+              {(clip.comments || (clip as any).comments_count || 0).toLocaleString()}
+            </span>
+          </button>
+
+          {/* Repost Button */}
+          <button
+            onClick={() => {
+              setClips((prev) =>
+                prev.map((c) => (c.id === clip.id ? { ...c, reposts: (c.reposts || 0) + 1 } : c))
+              );
+              triggerNotification?.("Reposted to your feed!");
+            }}
+            className="flex flex-col items-center gap-1 group/btn"
+          >
+            <div className="w-11 h-11 rounded-full bg-black/50 flex items-center justify-center border border-zinc-700 backdrop-blur-md group-hover/btn:border-emerald-400 group-hover/btn:bg-zinc-800 transition-all group-hover/btn:scale-110">
+              <Repeat className="w-5 h-5 text-white group-hover/btn:text-emerald-400 transition-colors" />
+            </div>
+            <span className="text-[10px] font-bold text-white drop-shadow-md">
+              {clip.reposts?.toLocaleString() || '0'}
+            </span>
+          </button>
+
+          {/* Share Button */}
+          <button
+            onClick={() => setActiveClipShare(clip.id)}
+            className="flex flex-col items-center gap-1 group/btn"
+          >
+            <div className="w-11 h-11 rounded-full bg-black/50 flex items-center justify-center border border-zinc-700 backdrop-blur-md group-hover/btn:border-cyan-400 group-hover/btn:bg-zinc-800 transition-all group-hover/btn:scale-110">
+              <Share2 className="w-5 h-5 text-white group-hover/btn:text-cyan-400 transition-colors" />
+            </div>
+            <span className="text-[10px] font-bold text-white drop-shadow-md">
+              {(clip.shares || (clip as any).shares_count || 0).toLocaleString()}
+            </span>
+          </button>
+
+          {/* Delete Button for Creator */}
+          {((clip.user_id && userProfile?.id && clip.user_id === userProfile.id) ||
+            ((clip as any).profile_id && userProfile?.id && (clip as any).profile_id === userProfile.id) ||
+            (clip.creator && userProfile?.name && clip.creator === userProfile.name)) && (
+            <button
+              onClick={async () => {
+                if (window.confirm("Are you sure you want to permanently delete this clip?")) {
+                  if (deleteClip) {
+                    await deleteClip(clip.id);
+                  } else {
+                    setClips((prev) => prev.filter((c) => c.id !== clip.id));
+                  }
+                }
+              }}
+              className="flex flex-col items-center gap-1 group/btn mt-1 text-rose-500 hover:text-rose-400 cursor-pointer"
+              title="Delete clip"
+            >
+              <div className="w-11 h-11 rounded-full bg-rose-950/40 hover:bg-rose-900 border border-rose-900 flex items-center justify-center backdrop-blur-md group-hover/btn:scale-110 transition-all shadow-[0_0_10px_rgba(239,68,68,0.2)]">
+                <Trash2 className="w-4 h-4 text-rose-400" />
+              </div>
+              <span className="text-[10px] font-bold drop-shadow-md text-rose-400">Delete</span>
+            </button>
+          )}
+
+          {/* Audio Disc Spinner */}
+          <button
+            onClick={() => setShowSongModal(true)}
+            className="flex flex-col items-center gap-1 mt-1.5 cursor-pointer group/disc"
+            title="Use this audio"
+          >
+            <div className={`w-11 h-11 rounded-lg bg-zinc-900 border-2 border-rose-500/50 ${isPlaying ? 'animate-[spin_4s_linear_infinite]' : ''} group-hover/disc:border-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.3)] group-hover/disc:shadow-[0_0_20px_rgba(244,63,94,0.6)] flex items-center justify-center overflow-hidden transition-all`}>
+              <Disc className="w-6 h-6 text-rose-400 group-hover/disc:text-white transition-colors" />
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* Glowing Bottom Video Progress Bar */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-900/60 z-30 overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-rose-600 via-rose-500 to-amber-400 transition-all duration-100 shadow-[0_0_8px_#f43f5e]"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  );
+};
 
 export const ClipsView: React.FC<ClipsViewProps> = ({
   userProfile,
@@ -118,6 +630,11 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
   const clips = propClips && propClips.length > 0 ? propClips : internalClips;
   const setClips = propSetClips || setInternalClips;
 
+  // Active clip index in viewport and global mute state
+  const [activeClipIndex, setActiveClipIndex] = useState<number>(0);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   // Modals & Drawers inside Clips view
   const [showUploadClipModal, setShowUploadClipModal] = useState(false);
   const [showClipsAnalyticsModal, setShowClipsAnalyticsModal] = useState(false);
@@ -129,10 +646,8 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
   // New clip form states
   const [newClipVideoUrl, setNewClipVideoUrl] = useState('');
   const [selectedClipFile, setSelectedClipFile] = useState<File | null>(null);
-  const [shouldCompressClip, setShouldCompressClip] = useState(true);
   const [newClipCaption, setNewClipCaption] = useState('');
   const [newClipSong, setNewClipSong] = useState('Original Audio');
-  const [isUploadingClip, setIsUploadingClip] = useState(false);
 
   // Comment input
   const [commentInput, setCommentInput] = useState('');
@@ -143,12 +658,45 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
     ]
   });
 
+  // Track viewport intersection to update active clip
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const children = Array.from(container.children) as HTMLElement[];
+      const containerTop = container.scrollTop;
+      const containerHeight = container.clientHeight;
+      const centerPos = containerTop + containerHeight / 2;
+
+      let closestIndex = 0;
+      let minDistance = Infinity;
+
+      children.forEach((child, idx) => {
+        const childTop = child.offsetTop;
+        const childCenter = childTop + child.clientHeight / 2;
+        const distance = Math.abs(centerPos - childCenter);
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestIndex = idx;
+        }
+      });
+
+      if (closestIndex !== activeClipIndex) {
+        setActiveClipIndex(closestIndex);
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [activeClipIndex]);
+
   const handleLikeClip = (clipId: any) => {
     setClips((prev) => {
       const updated = prev.map((c) => {
         if (c.id === clipId) {
           const nextHasLiked = !c.hasLiked;
-          const nextLikesCount = nextHasLiked ? c.likes + 1 : Math.max(0, c.likes - 1);
+          const nextLikesCount = nextHasLiked ? (c.likes || 0) + 1 : Math.max(0, (c.likes || 1) - 1);
           if (!c.hasLiked) triggerNotification?.("Liked clip!");
           return { ...c, hasLiked: nextHasLiked, likes: nextLikesCount, likes_count: nextLikesCount };
         }
@@ -185,7 +733,7 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
       [clipId]: [...(prev[clipId] || []), newComm]
     }));
     setClips(prev => {
-      const updated = prev.map(c => c.id === clipId ? { ...c, comments: c.comments + 1, comments_count: (c.comments || 0) + 1 } : c);
+      const updated = prev.map(c => c.id === clipId ? { ...c, comments: (c.comments || 0) + 1, comments_count: ((c as any).comments_count || 0) + 1 } : c);
       try {
         localStorage.setItem('nexus_saved_clips', JSON.stringify(updated));
       } catch (_) {}
@@ -241,229 +789,29 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
       </div>
 
       {/* Main Reels Container */}
-      <div className="w-full max-w-[480px] h-[calc(100vh-140px)] max-h-[900px] relative bg-black sm:rounded-2xl overflow-hidden shadow-2xl flex flex-col snap-y snap-mandatory overflow-y-scroll no-scrollbar mb-8 border border-zinc-900">
-        {/* Clips Loop */}
+      <div
+        ref={containerRef}
+        className="w-full max-w-[480px] h-[calc(100vh-140px)] max-h-[900px] relative bg-black sm:rounded-2xl overflow-hidden shadow-2xl flex flex-col snap-y snap-mandatory overflow-y-scroll no-scrollbar mb-8 border border-zinc-900"
+      >
         {clips.map((clip, cIdx) => (
-          <div
+          <SingleClipPlayerCard
             key={clip.id ? `clip-${clip.id}-${cIdx}` : `clip-${cIdx}`}
-            className="h-full w-full shrink-0 snap-start snap-always relative flex items-center justify-center bg-zinc-950/80 border-b border-zinc-900 group"
-          >
-            {/* Video Placeholder or Player */}
-            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-900 to-black overflow-hidden">
-              {(() => {
-                const ytId = extractYouTubeId(clip.videoUrl);
-                if (ytId) {
-                  return (
-                    <iframe
-                      src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&mute=0&loop=1&playlist=${ytId}&controls=1&modestbranding=1&rel=0`}
-                      className="w-full h-full object-cover"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      title={clip.title || clip.caption || 'Clip'}
-                    />
-                  );
-                }
-
-                if (clip.videoUrl && !clip.videoUrl.match(/\.(jpg|jpeg|png|webp|gif|svg)$/i)) {
-                  return (
-                    <video
-                      src={clip.videoUrl}
-                      poster={clip.thumbnailUrl || undefined}
-                      className="w-full h-full object-cover opacity-90"
-                      autoPlay
-                      loop
-                      playsInline
-                      controls
-                      onPlay={() => {
-                        requestPauseSceneRadio('clips_video_play');
-                        trackRealClipView(clip.id, clip.views, (newViews) => {
-                          setClips(prev => prev.map(c => c.id === clip.id ? { ...c, views: newViews } : c));
-                        });
-                      }}
-                      onError={async (e) => {
-                        const el = e.currentTarget;
-                        const fallback = await resolveClipVideoPlaybackUrl(clip.id, clip.videoUrl);
-                        if (el.src !== fallback) {
-                          el.src = fallback;
-                          el.load();
-                          el.play().catch(() => {});
-                        }
-                      }}
-                    />
-                  );
-                }
-
-                return (
-                  <>
-                    <div
-                      className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-overlay"
-                      style={{ backgroundImage: `url('${clip.videoUrl}')` }}
-                    />
-                    <PlayCircle
-                      className="w-20 h-20 text-white/20 group-hover:text-white/40 transition-colors cursor-pointer"
-                      onClick={() => triggerNotification?.("Video played")}
-                    />
-                  </>
-                );
-              })()}
-            </div>
-
-            {/* Content Overlay */}
-            <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/80 to-transparent flex items-end justify-between">
-              <div className="flex-1 max-w-[80%] pr-4">
-                <div
-                  className="flex items-center gap-3 mb-3 cursor-pointer"
-                  onClick={() => {
-                    const profilePayload = {
-                      id: (clip as any).creator_id || clip.user_id,
-                      name: clip.creator,
-                      avatar: clip?.avatar,
-                      role: clip?.role || "Member",
-                      isYou: clip.creator === userProfile?.name,
-                    };
-                    if (onSelectProfile) {
-                      onSelectProfile(profilePayload);
-                    } else {
-                      window.dispatchEvent(
-                        new CustomEvent('openPublicProfile', {
-                          detail: profilePayload,
-                        })
-                      );
-                    }
-                  }}
-                >
-                  <div className="w-10 h-10 rounded-full bg-zinc-800 border-2 border-rose-500 overflow-hidden flex items-center justify-center shadow-[0_0_10px_#f43f5e]">
-                    {clip?.avatar ? (
-                      <img src={clip?.avatar} className="w-full h-full object-cover" alt="" />
-                    ) : (
-                      <User className="w-5 h-5 text-zinc-400" />
-                    )}
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-bold text-sm text-white drop-shadow-md hover:underline">{clip.creator}</span>
-                    <span className="text-[10px] font-black uppercase text-rose-400 tracking-wider">{clip?.role || "Member"}</span>
-                  </div>
-                  <button
-                    className={`text-[10px] border px-3 py-1 rounded-full font-bold uppercase transition-colors ml-2 ${
-                      clip.isFollowed ? 'bg-white text-black border-white' : 'border-white/40 hover:bg-white hover:text-black text-white'
-                    }`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!clip.isFollowed) {
-                        triggerNotification?.(`Followed ${clip.creator}`);
-                        setClips((prev) =>
-                          prev.map((c) => (c.id === clip.id ? { ...c, isFollowed: true } : c))
-                        );
-                      }
-                    }}
-                  >
-                    {clip.isFollowed ? 'Followed' : 'Follow'}
-                  </button>
-                </div>
-                <p className="text-sm text-zinc-100 drop-shadow-md leading-snug">{clip.caption.replace(/#\w+/g, '').trim()}</p>
-
-                {/* View Metrics / Reactions Link */}
-                <div
-                  className="mt-2 text-[10px] font-bold text-zinc-300 flex items-center gap-2 cursor-pointer hover:text-white group/metrics"
-                  onClick={() => setActiveClipMetrics(clip.id)}
-                >
-                  <Eye className="w-3.5 h-3.5 text-zinc-400" />
-                  <span className="group-hover/metrics:underline decoration-white/50 underline-offset-2">See who viewed & reacted</span>
-                </div>
-
-                <div className="mt-3 text-xs text-zinc-300 flex items-center gap-2 font-mono bg-black/40 inline-flex px-3 py-1.5 rounded-full border border-white/10">
-                  <Music className="w-3.5 h-3.5 text-rose-400" /> {clip.audio}
-                </div>
-              </div>
-
-              {/* Actions Column */}
-              <div className="flex flex-col items-center gap-4 pb-2">
-                <button
-                  onClick={() => handleLikeClip(clip.id)}
-                  className="flex flex-col items-center gap-1 group/btn"
-                >
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center border backdrop-blur-md group-hover/btn:scale-110 transition-all ${
-                      clip.hasLiked ? 'bg-rose-500/20 border-rose-500' : 'bg-black/40 border-zinc-700 group-hover/btn:bg-zinc-800'
-                    }`}
-                  >
-                    <Heart
-                      className={`w-5 h-5 transition-colors ${
-                        clip.hasLiked ? 'text-rose-500 fill-rose-500' : 'text-white group-hover/btn:text-rose-500'
-                      }`}
-                    />
-                  </div>
-                  <span className="text-[10px] font-bold text-white drop-shadow-md">{clip.likes.toLocaleString()}</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveClipComments(clip.id)}
-                  className="flex flex-col items-center gap-1 group/btn"
-                >
-                  <div className="w-10 h-10 rounded-full bg-black/40 flex items-center justify-center border border-zinc-700 backdrop-blur-md group-hover/btn:bg-zinc-800 transition-colors">
-                    <MessageSquare className="w-5 h-5 text-white group-hover/btn:text-cyan-400 group-hover/btn:scale-110 transition-all" />
-                  </div>
-                  <span className="text-[10px] font-bold text-white drop-shadow-md">{clip.comments.toLocaleString()}</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setClips((prev) =>
-                      prev.map((c) => (c.id === clip.id ? { ...c, reposts: (c.reposts || 0) + 1 } : c))
-                    );
-                    triggerNotification?.("Reposted to your feed!");
-                  }}
-                  className="flex flex-col items-center gap-1 group/btn"
-                >
-                  <div className="w-10 h-10 rounded-full bg-black/40 flex items-center justify-center border border-zinc-700 backdrop-blur-md group-hover/btn:bg-zinc-800 transition-colors">
-                    <Repeat className="w-5 h-5 text-white group-hover/btn:text-emerald-400 group-hover/btn:scale-110 transition-all" />
-                  </div>
-                  <span className="text-[10px] font-bold text-white drop-shadow-md">{clip.reposts?.toLocaleString() || '0'}</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveClipShare(clip.id)}
-                  className="flex flex-col items-center gap-1 group/btn"
-                >
-                  <div className="w-10 h-10 rounded-full bg-black/40 flex items-center justify-center border border-zinc-700 backdrop-blur-md group-hover/btn:bg-zinc-800 transition-colors">
-                    <Share2 className="w-5 h-5 text-white group-hover/btn:text-cyan-400 group-hover/btn:scale-110 transition-all" />
-                  </div>
-                  <span className="text-[10px] font-bold text-white drop-shadow-md">{clip.shares?.toLocaleString() || '0'}</span>
-                </button>
-
-                {clip.user_id === userProfile?.id && (
-                  <button
-                    onClick={async () => {
-                      if (window.confirm("Are you sure you want to permanently delete this clip?")) {
-                        if (deleteClip) {
-                          await deleteClip(clip.id);
-                        } else {
-                          setClips((prev) => prev.filter((c) => c.id !== clip.id));
-                        }
-                      }
-                    }}
-                    className="flex flex-col items-center gap-1 group/btn mt-1 text-rose-500 hover:text-rose-400 cursor-pointer"
-                    title="Delete clip"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-rose-950/40 hover:bg-rose-900 border border-rose-900 flex items-center justify-center backdrop-blur-md group-hover/btn:scale-110 transition-all shadow-[0_0_10px_rgba(239,68,68,0.2)]">
-                      <Trash2 className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] font-bold drop-shadow-md text-rose-400">Delete</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={() => setShowSongModal(true)}
-                  className="flex flex-col items-center gap-1 mt-2 cursor-pointer group/disc"
-                  title="Use this audio"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-zinc-800 border-2 border-rose-500/50 animate-[spin_6s_linear_infinite] group-hover/disc:border-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.3)] group-hover/disc:shadow-[0_0_20px_rgba(244,63,94,0.6)] flex items-center justify-center overflow-hidden transition-all">
-                    <Disc className="w-6 h-6 text-rose-400 group-hover/disc:text-white transition-colors" />
-                  </div>
-                </button>
-              </div>
-            </div>
-          </div>
+            clip={clip}
+            index={cIdx}
+            isActive={cIdx === activeClipIndex}
+            isMuted={isMuted}
+            onToggleMute={() => setIsMuted((prev) => !prev)}
+            userProfile={userProfile}
+            onSelectProfile={onSelectProfile}
+            handleLikeClip={handleLikeClip}
+            setActiveClipComments={setActiveClipComments}
+            setActiveClipShare={setActiveClipShare}
+            setActiveClipMetrics={setActiveClipMetrics}
+            deleteClip={deleteClip}
+            setClips={setClips}
+            triggerNotification={triggerNotification}
+            setShowSongModal={setShowSongModal}
+          />
         ))}
       </div>
 
@@ -547,7 +895,7 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
       {/* CLIPS ANALYTICS DASHBOARD MODAL */}
       <AnimatePresence>
         {showClipsAnalyticsModal && (() => {
-          const stats = calculateClipsDashboardStats(clips, userProfile?.id);
+          const stats = calculateClipsDashboardStats(clips as any, userProfile?.id, userProfile);
           return (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex justify-center items-center p-4">
               <motion.div

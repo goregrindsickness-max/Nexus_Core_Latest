@@ -44,10 +44,10 @@ export const clipsMediaStore = localforage.createInstance({
 
 // Fallback high-performance scene video streams if an old blob expired or failed
 export const SCENE_PERFORMANCE_VIDEOS = [
-  'https://assets.mixkit.co/videos/preview/mixkit-rock-band-performing-on-stage-41584-large.mp4',
-  'https://assets.mixkit.co/videos/preview/mixkit-guitarist-playing-at-a-concert-41587-large.mp4',
-  'https://assets.mixkit.co/videos/preview/mixkit-drummer-playing-drums-in-a-concert-41583-large.mp4',
-  'https://assets.mixkit.co/videos/preview/mixkit-heavy-metal-singer-screaming-into-a-microphone-41586-large.mp4',
+  'https://vjs.zencdn.net/v/oceans.mp4',
+  'https://media.w3.org/2010/05/sintel/trailer_hd.mp4',
+  'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  'https://www.w3schools.com/html/mov_bbb.mp4',
 ];
 
 /**
