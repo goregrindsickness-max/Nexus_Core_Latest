@@ -805,4 +805,58 @@ export const hasGigTickets = (gig: any): boolean => {
   return hasUrl || hasPaidPrice || gig.hasTickets === true;
 };
 
+export const isPastShowDate = (dateVal?: string): boolean => {
+  if (!dateVal) return false;
+  const str = String(dateVal).trim().toLowerCase();
+  if (
+    !str ||
+    str === 'tonight' ||
+    str === 'tomorrow' ||
+    str === 'upcoming' ||
+    str.includes('tonight') ||
+    str.includes('tomorrow')
+  ) {
+    return false;
+  }
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  // 1. Check explicit 4-digit ISO YYYY-MM-DD or YYYY/MM/DD pattern
+  const isoMatch = str.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10) - 1;
+    const day = parseInt(isoMatch[3], 10);
+    const showDate = new Date(year, month, day, 23, 59, 59, 999);
+    return showDate < now;
+  }
+
+  // 2. Only attempt Date.parse if an explicit 4-digit year is present in string (e.g., "2024", "2025")
+  if (/\b(20\d{2})\b/.test(str)) {
+    const timestamp = Date.parse(str);
+    if (!isNaN(timestamp)) {
+      const showDate = new Date(timestamp);
+      showDate.setHours(23, 59, 59, 999);
+      return showDate < now;
+    }
+  }
+
+  // 3. Check Month + Day pattern without year (e.g. "Sept 27", "Sep 24", "Oct 15")
+  const monthDayMatch = str.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i);
+  if (monthDayMatch) {
+    const monthStr = monthDayMatch[1];
+    const dayNum = parseInt(monthDayMatch[2], 10);
+    const dateWithYear = `${monthStr} ${dayNum}, ${currentYear}`;
+    const timestamp = Date.parse(dateWithYear);
+    if (!isNaN(timestamp)) {
+      const showDate = new Date(timestamp);
+      showDate.setHours(23, 59, 59, 999);
+      return showDate < now;
+    }
+  }
+
+  return false;
+};
+
 

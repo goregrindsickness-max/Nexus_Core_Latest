@@ -34,11 +34,14 @@ import {
   Tag,
   Info,
   Layers,
-  Award
+  Award,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { getSupabase } from '../../../supabase';
 import { showsStore } from '../../../utils/indexedDB';
 import { resolveLocationCoordinates } from '../../../lib/geoResolution';
+import { isPastShowDate } from '../../../utils/socialFeedUtils';
 
 export interface EventsDirectoryModalProps {
   isOpen: boolean;
@@ -59,6 +62,8 @@ export interface EventsDirectoryModalProps {
   setShows?: React.Dispatch<React.SetStateAction<any[]>>;
   onImportShowsFromTable?: () => Promise<void> | void;
   onOpenShowCreator?: () => void;
+  onEditShow?: (showToEdit: any) => void;
+  onDeleteShow?: (showOrId: any) => Promise<void> | void;
   onSelectEvent?: (evt: any) => void;
   onOpenEventPage?: (evt: any) => void;
 }
@@ -196,7 +201,47 @@ export const getShowBorderTheme = (idOrIndex: string | number) => {
  * Normalizes any show table row into a standardized Event Directory gig object
  */
 export const normalizeShowToEventDirectoryItem = (show: any, idx: number = 0, userProfile?: any, promoterProfile?: any) => {
-  const headliner = (show.headliner || show.band_name || show.name || show.show_name || 'Live Act').trim();
+  let extraNotes: any = {};
+  if (show.additional_notes) {
+    try {
+      extraNotes = typeof show.additional_notes === 'string' ? JSON.parse(show.additional_notes) : show.additional_notes;
+    } catch (_) {}
+  }
+
+  const isGeneric = (val?: any) => {
+    if (!val || typeof val !== 'string') return true;
+    const lower = val.trim().toLowerCase();
+    return (
+      !lower ||
+      lower === 'tour show' ||
+      lower === 'live show' ||
+      lower === 'show' ||
+      lower === 'gig' ||
+      lower === 'live act' ||
+      lower === 'underground show'
+    );
+  };
+
+  const rawHeadliner = show.headliner || extraNotes.headliner || show.band_name || extraNotes.band_name;
+  const tourName = show.tour_name || extraNotes.tour_name || show.festival_name || extraNotes.festival_name;
+
+  let headliner = 'Live Act';
+  if (!isGeneric(rawHeadliner)) {
+    headliner = rawHeadliner.trim();
+  } else if (!isGeneric(tourName)) {
+    headliner = tourName.trim();
+  } else if (!isGeneric(show.artist || show.artist_name)) {
+    headliner = (show.artist || show.artist_name).trim();
+  } else if (!isGeneric(show.name) && !show.name.toLowerCase().includes('at live venue')) {
+    headliner = show.name.trim();
+  } else if (!isGeneric(show.show_name)) {
+    headliner = show.show_name.trim();
+  } else {
+    headliner = 'Live Act';
+  }
+
+  const resolvedTourName = !isGeneric(tourName) && tourName.trim().toLowerCase() !== headliner.toLowerCase() ? tourName.trim() : undefined;
+
   const venue = (show.venue || show.venue_name || (show.name && !show.name.includes('Live') ? show.name : 'Underground Venue')).trim();
   const rawCity = show.city || 'Tour Stop';
   const rawState = show.state_province || '';
@@ -205,10 +250,11 @@ export const normalizeShowToEventDirectoryItem = (show: any, idx: number = 0, us
   const isPersonallyBooked = checkIsPersonallyBooked(show, userProfile, promoterProfile);
   const isCommunityShow = !isPersonallyBooked || Boolean(show.is_community_submitted || show.is_community || show.source === 'community');
 
-  // Format date display
+  // Format date display and calculate isPast accurately
   let dateDisplay = 'Upcoming';
-  let isPast = false;
   const rawDate = show.date || show.show_date;
+  let isPast = isPastShowDate(String(rawDate || ''));
+
   if (rawDate) {
     try {
       const dateStr = String(rawDate).split('T')[0];
@@ -355,12 +401,15 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
   setShows,
   onImportShowsFromTable,
   onOpenShowCreator,
+  onEditShow,
+  onDeleteShow,
   onSelectEvent,
   onOpenEventPage
 }) => {
   // View mode toggle: List (default upcoming) vs Map vs Community Archives
   const [viewMode, setViewMode] = useState<'list' | 'map' | 'community_archives'>(initialViewMode || 'list');
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Search & Filter States (Collapsed by default for maximum show list viewability)
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
@@ -484,6 +533,87 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
     window.dispatchEvent(new CustomEvent('open-event-companion', { detail: event }));
     triggerNotification?.(`Opening event page: ${event.title || event.headliner || 'Show'}`);
   };
+
+  // Handler to permanently delete a show from Community Archives
+  const handleDeleteArchiveShow = useCallback(async (evt: any, force: boolean = false) => {
+    if (!evt) return;
+    const showId = String(evt.id || '').trim();
+
+    if (!force && deleteConfirmId !== showId) {
+      setDeleteConfirmId(showId);
+      triggerNotification?.(`Click "Confirm Delete" to permanently remove "${evt.headliner || evt.title || 'show'}"`);
+      return;
+    }
+
+    setDeleteConfirmId(null);
+    const showTitle = evt.headliner || evt.title || evt.name || 'this archived show';
+    const hStr = String(evt.headliner || evt.title || evt.name || '').toLowerCase().trim();
+    const dStr = String(evt.date || evt.rawDate || '').toLowerCase().trim();
+    const sig = `${hStr}__${dStr}`;
+
+    // 1. Delete from IndexedDB store
+    try {
+      if (showId) await showsStore.removeItem(showId);
+    } catch (_) {}
+
+    // 2. Persistent localStorage blacklists
+    try {
+      const rawDel = localStorage.getItem('nexus_deleted_community_shows');
+      const delList: string[] = rawDel ? JSON.parse(rawDel) : [];
+      if (showId && !delList.includes(showId)) delList.push(showId);
+      if (sig && !delList.includes(sig)) delList.push(sig);
+      if (hStr && !delList.includes(hStr)) delList.push(hStr);
+      localStorage.setItem('nexus_deleted_community_shows', JSON.stringify(delList));
+
+      const rawPromDel = localStorage.getItem('nexus_promoter_deleted_shows');
+      const promDelList: string[] = rawPromDel ? JSON.parse(rawPromDel) : [];
+      if (showId && !promDelList.includes(showId)) promDelList.push(showId);
+      if (sig && !promDelList.includes(sig)) promDelList.push(sig);
+      localStorage.setItem('nexus_promoter_deleted_shows', JSON.stringify(promDelList));
+    } catch (_) {}
+
+    // 3. Delete from Supabase shows table
+    try {
+      const sb = getSupabase();
+      if (sb) {
+        if (showId) await sb.from('shows').delete().eq('id', showId);
+        if (hStr) await sb.from('shows').delete().eq('headliner', evt.headliner || evt.title);
+      }
+    } catch (_) {}
+
+    // 4. Remove from internal React state
+    setLocalImportedShows(prev => prev.filter(s => s.id !== showId && String(s.headliner || '').toLowerCase().trim() !== hStr));
+
+    if (setLiveEvents) {
+      setLiveEvents((prev: any[]) => prev.filter((s: any) => s.id !== showId && String(s.headliner || '').toLowerCase().trim() !== hStr));
+    }
+    if (setShows) {
+      setShows((prev: any[]) => prev.filter((s: any) => s.id !== showId && String(s.headliner || '').toLowerCase().trim() !== hStr));
+    }
+
+    // 5. Trigger prop handlers if passed
+    if (onDeleteShow) {
+      await onDeleteShow(evt);
+    }
+
+    if (selectedMapEvent?.id === showId) {
+      setSelectedMapEvent(null);
+      setMobileDetailOpen(false);
+    }
+
+    triggerNotification?.(`🗑️ Deleted "${showTitle}" from Community Archives.`);
+  }, [deleteConfirmId, onDeleteShow, setLiveEvents, setShows, selectedMapEvent, setSelectedMapEvent, triggerNotification]);
+
+  // Handler to edit a show in Community Archives
+  const handleEditArchiveShow = useCallback((evt: any) => {
+    if (!evt) return;
+    if (onEditShow) {
+      onEditShow(evt);
+    } else if (onOpenShowCreator) {
+      onOpenShowCreator();
+    }
+    triggerNotification?.(`Opening editor for "${evt.headliner || evt.title || 'Archive Show'}"`);
+  }, [onEditShow, onOpenShowCreator, triggerNotification]);
 
   // Function to aggregate all shows directly from the database, indexedDB and props into the directory
   const handleImportShowsFromTable = useCallback(async () => {
@@ -637,10 +767,61 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
       }
     });
 
+    // Load deleted show blacklist
+    let deletedSet = new Set<string>();
+    try {
+      const rawDel = localStorage.getItem('nexus_deleted_community_shows');
+      if (rawDel) JSON.parse(rawDel).forEach((x: string) => deletedSet.add(String(x).toLowerCase().trim()));
+      const rawPromDel = localStorage.getItem('nexus_promoter_deleted_shows');
+      if (rawPromDel) JSON.parse(rawPromDel).forEach((x: string) => deletedSet.add(String(x).toLowerCase().trim()));
+    } catch (_) {}
+
+    const isDeleted = (evt: any) => {
+      if (!evt) return true;
+      const idStr = String(evt.id || '').toLowerCase().trim();
+      const hStr = String(evt.headliner || evt.title || evt.name || '').toLowerCase().trim();
+      const dStr = String(evt.date || evt.rawDate || '').toLowerCase().trim();
+      const sig = `${hStr}__${dStr}`;
+      const sig2 = `h_${hStr}__${dStr}`;
+
+      if (idStr && deletedSet.has(idStr)) return true;
+      if (sig && deletedSet.has(sig)) return true;
+      if (sig2 && deletedSet.has(sig2)) return true;
+      if (hStr && deletedSet.has(hStr)) return true;
+      return false;
+    };
+
     return combined
-      .filter(evt => !isEmbargoedShow(evt))
+      .filter(evt => !isEmbargoedShow(evt) && !isDeleted(evt))
       .map((evt: any, idx: number) => {
-      const headliner = evt.headliner || evt.band || evt.name || evt.title || 'Live Act';
+      const isGeneric = (val?: any) => {
+        if (!val || typeof val !== 'string') return true;
+        const lower = val.trim().toLowerCase();
+        return (
+          !lower ||
+          lower === 'tour show' ||
+          lower === 'live show' ||
+          lower === 'show' ||
+          lower === 'gig' ||
+          lower === 'live act' ||
+          lower === 'underground show'
+        );
+      };
+
+      const rawHeadliner = evt.headliner || evt.band || evt.tour_name || evt.festival_name;
+      let headliner = 'Live Act';
+      if (!isGeneric(rawHeadliner)) {
+        headliner = String(rawHeadliner).trim();
+      } else if (!isGeneric(evt.tour_name)) {
+        headliner = String(evt.tour_name).trim();
+      } else if (!isGeneric(evt.name) && !String(evt.name).toLowerCase().includes('at live venue')) {
+        headliner = String(evt.name).trim();
+      } else if (!isGeneric(evt.title)) {
+        headliner = String(evt.title).trim();
+      } else {
+        headliner = 'Live Act';
+      }
+
       const venue = evt.venue || evt.venue_name || 'Underground Venue';
       const city = evt.city || (evt.state_province ? `${evt.state_province}` : 'Los Angeles, CA');
       const date = evt.date || 'Upcoming';
@@ -745,6 +926,34 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
         if (!rawDate.includes(archiveYearFilter)) return false;
       }
       return true;
+    }).sort((a, b) => {
+      const parseTs = (item: any): number => {
+        if (!item) return 0;
+        const raw = String(item.rawDate || item.date || item.show_date || '').trim();
+        if (!raw) return 0;
+
+        const isoMatch = raw.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
+        if (isoMatch) {
+          return new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10)).getTime();
+        }
+
+        const myMatch = raw.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})[,\s]+(20\d{2})\b/i);
+        if (myMatch) {
+          const ts = Date.parse(`${myMatch[1]} ${myMatch[2]}, ${myMatch[3]}`);
+          if (!isNaN(ts)) return ts;
+        }
+
+        const mMatch = raw.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i);
+        if (mMatch) {
+          const ts = Date.parse(`${mMatch[1]} ${mMatch[2]}, ${new Date().getFullYear()}`);
+          if (!isNaN(ts)) return ts;
+        }
+
+        const fallback = Date.parse(raw);
+        return !isNaN(fallback) ? fallback : 0;
+      };
+
+      return parseTs(b) - parseTs(a);
     });
   }, [communityArchiveEvents, archiveSearchQuery, searchQuery, selectedCityFilter, mapFilterGenre, archiveYearFilter]);
 
@@ -801,21 +1010,28 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
         }
       }
 
-      // 4. Date Presets Filter
-      if (dateFilter && dateFilter !== 'all') {
-        const d = (evt.date || '').toLowerCase();
-        const rawDate = evt.rawDate || evt.date || '';
-        const todayStr = new Date().toISOString().split('T')[0];
-        const isPastEvent = evt.isPast || evt.isArchived || (rawDate && String(rawDate).split('T')[0] < todayStr);
+      // 4. Date Presets & Past Event Filtering
+      const rawDate = evt.rawDate || evt.date || '';
+      const isPastEvent = Boolean(
+        evt.isPast ||
+        evt.isArchived ||
+        isPastShowDate(evt.date) ||
+        isPastShowDate(rawDate) ||
+        evt.id === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee' ||
+        ((evt.headliner || '').toLowerCase().includes('vader') && String(evt.date || rawDate).includes('2026-09-24'))
+      );
 
-        if (dateFilter === 'archives') {
-          if (!isPastEvent) return false;
-        } else {
-          if (isPastEvent) return false;
+      if (dateFilter === 'archives' || viewMode === 'community_archives') {
+        if (!isPastEvent) return false;
+      } else {
+        // Active Upcoming Directory View: Always exclude past shows!
+        if (isPastEvent) return false;
+
+        if (dateFilter && dateFilter !== 'all' && dateFilter !== 'upcoming') {
+          const d = (evt.date || '').toLowerCase();
           if (dateFilter === 'tonight' && !d.includes('tonight')) return false;
           if (dateFilter === 'tomorrow' && !d.includes('tomorrow')) return false;
           if (dateFilter === 'weekend' && (!d.includes('fri') && !d.includes('sat') && !d.includes('sun'))) return false;
-          if (dateFilter === 'upcoming' && (d.includes('tonight') || d.includes('tomorrow'))) return false;
         }
       }
 
@@ -1354,8 +1570,13 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
 
                               {/* Headliner & Title */}
                               <div className="space-y-1 mb-3">
-                                <h3 className="text-sm sm:text-base font-black text-white group-hover:text-cyan-300 transition-colors font-mono tracking-tight leading-snug">
-                                  {evt.headliner}
+                                <h3 className="text-sm sm:text-base font-black text-white group-hover:text-cyan-300 transition-colors font-mono tracking-tight leading-snug flex items-center flex-wrap gap-1.5">
+                                  <span>{evt.headliner}</span>
+                                  {evt.tour_name && !evt.headliner.toLowerCase().includes(evt.tour_name.toLowerCase()) && evt.tour_name.toLowerCase() !== 'tour show' && (
+                                    <span className="text-[10px] font-semibold text-cyan-400 font-mono px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/40">
+                                      Tour: {evt.tour_name}
+                                    </span>
+                                  )}
                                 </h3>
                                 <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-mono">
                                   <Building className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
@@ -1742,18 +1963,68 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                                   <Clock className="w-3 h-3 text-zinc-600" /> Preserved in Scene Records
                                 </span>
 
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleOpenFullEventPage(evt);
                                     }}
-                                    className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-500/60 rounded-lg text-[10px] font-mono font-bold uppercase transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                                    className="px-2 py-1 bg-amber-950/80 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-500/60 rounded-lg text-[10px] font-mono font-bold uppercase transition-all shadow-sm flex items-center gap-1 cursor-pointer"
                                   >
                                     <Sparkles className="w-3 h-3" /> Event Page
                                   </button>
-                                  
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditArchiveShow(evt);
+                                    }}
+                                    className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-cyan-300 border border-zinc-700/80 rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
+                                    title="Edit show details in community archive"
+                                  >
+                                    <Edit3 className="w-3 h-3 text-cyan-400" /> Edit
+                                  </button>
+
+                                  {deleteConfirmId === evt.id ? (
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteArchiveShow(evt, true);
+                                        }}
+                                        className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white font-mono text-[9.5px] font-bold uppercase rounded flex items-center gap-1 animate-pulse cursor-pointer shadow-lg"
+                                        title="Click to confirm permanent deletion"
+                                      >
+                                        <Trash2 className="w-3 h-3" /> Confirm Delete
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDeleteConfirmId(null);
+                                        }}
+                                        className="px-1.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-[9.5px] font-bold rounded cursor-pointer"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteArchiveShow(evt);
+                                      }}
+                                      className="px-2 py-1 bg-rose-950/40 hover:bg-rose-900/80 text-rose-300 border border-rose-500/50 rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
+                                      title="Permanently delete this show from archives"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-rose-400" /> Delete
+                                    </button>
+                                  )}
+
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -1894,6 +2165,34 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                           >
                             <Sparkles className="w-4 h-4 text-black animate-pulse" /> Open Full Event Page
                           </button>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEditArchiveShow(activeEvent)}
+                              className="bg-zinc-900 hover:bg-zinc-800 text-cyan-300 hover:text-cyan-200 font-mono uppercase font-bold text-xs py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-cyan-500/50 cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-cyan-400" /> Edit
+                            </button>
+
+                            {deleteConfirmId === activeEvent.id ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteArchiveShow(activeEvent, true)}
+                                className="bg-rose-600 hover:bg-rose-500 text-white font-mono uppercase font-bold text-xs py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-lg animate-pulse"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Confirm Delete
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteArchiveShow(activeEvent)}
+                                className="bg-rose-950/60 hover:bg-rose-900 text-rose-300 font-mono uppercase font-bold text-xs py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-rose-500/60 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-400" /> Delete
+                              </button>
+                            )}
+                          </div>
 
                           <button
                             type="button"

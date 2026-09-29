@@ -62,7 +62,7 @@ import { UploadClipModal } from './modals/UploadClipModal';
 import { UploadStoryModal } from './modals/UploadStoryModal';
 import { StoryViewerModal } from './modals/StoryViewerModal';
 import { EventCompanionModal } from './modals/EventCompanionModal';
-import { formatTimeAgo } from '../../utils/socialFeedUtils';
+import { formatTimeAgo, isPastShowDate } from '../../utils/socialFeedUtils';
 import { isValidStorageOrImageUrl } from '../../services/storageService';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -197,16 +197,18 @@ export function UniversalSocialFeed({
   const [liveEvents, setLiveEvents] = useState<any[]>(() => {
     try {
       const rawDel = localStorage.getItem('nexus_deleted_community_shows');
-      if (!rawDel) return mockLiveTonight;
-      const delList: string[] = JSON.parse(rawDel);
+      const delList: string[] = rawDel ? JSON.parse(rawDel) : [];
       const delSet = new Set(delList.map(s => String(s).toLowerCase().trim()));
       return mockLiveTonight.filter(g => {
+        if (isPastShowDate(g.date) || g.id === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee' || (String(g.headliner || '').toLowerCase().includes('vader') && String(g.date || '').includes('2026-09-24'))) {
+          return false;
+        }
         const gId = String(g.id || '').toLowerCase().trim();
         const gSig = `${String(g.headliner || '').toLowerCase().trim()}__${String(g.date || '').toLowerCase().trim()}`;
         return !delSet.has(gId) && !delSet.has(gSig);
       });
     } catch {
-      return mockLiveTonight;
+      return mockLiveTonight.filter(g => !isPastShowDate(g.date));
     }
   });
   const [liveSetlists, setLiveSetlists] = useState<Record<string, string[]>>(bandSetlists);
@@ -380,9 +382,29 @@ export function UniversalSocialFeed({
       const dateNorm = String(newShow.date || newShow.show_date || '').trim();
 
       // Clean up previous temporary or stale keys for this same show
+      const oldId = editingCommunityShow?.id || payload.id;
+      if (oldId && oldId !== showId) {
+        delete localStorageShowsMap[oldId];
+        try {
+          const rawDel = localStorage.getItem('nexus_deleted_community_shows');
+          const delList: string[] = rawDel ? JSON.parse(rawDel) : [];
+          if (!delList.includes(oldId)) delList.push(oldId);
+          localStorage.setItem('nexus_deleted_community_shows', JSON.stringify(delList));
+
+          const sb = getSupabase();
+          if (sb) {
+            (async () => {
+              try {
+                await sb.from('shows').delete().eq('id', oldId);
+              } catch (_) {}
+            })();
+          }
+        } catch (_) {}
+      }
+
       Object.keys(localStorageShowsMap).forEach(key => {
         const item = localStorageShowsMap[key];
-        if (key === payload.id || key === showId) {
+        if (key === payload.id || key === showId || key === oldId) {
           delete localStorageShowsMap[key];
         } else if (item) {
           const itemHeadliner = String(item.headliner || item.name || '').toLowerCase().trim();
@@ -1124,8 +1146,10 @@ export function UniversalSocialFeed({
                   return false;
                 }
                 const sDate = s.date || s.show_date;
-                // Exclude shows that have already passed from UPCOMING live feeds
-                if (sDate && String(sDate).split('T')[0] < todayStr) {
+                const sId = String(s.id || '').toLowerCase().trim();
+                const sH = String(s.headliner || s.band_name || s.name || s.show_name || '').toLowerCase().trim();
+                // Exclude shows that have already passed or are in community archives from UPCOMING live feeds
+                if (isPastShowDate(sDate) || sId === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee' || (sH.includes('vader') && String(sDate).includes('2026-09-24'))) {
                   return false;
                 }
                 if (s.additional_notes) {
@@ -1135,8 +1159,6 @@ export function UniversalSocialFeed({
                     if (extra.tour_id && isTourEmbargoed(extra.tour_id)) return false;
                   } catch (_) {}
                 }
-                const sId = String(s.id || '').toLowerCase().trim();
-                const sH = String(s.headliner || s.band_name || s.name || s.show_name || '').toLowerCase().trim();
                 const sD = String(s.date || s.show_date || '').toLowerCase().trim();
                 const sig = `${sH}__${sD}`;
                 if (sId && deletedShowIds.has(sId)) return false;

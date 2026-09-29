@@ -319,6 +319,8 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
         setShows={props.setShows}
         onImportShowsFromTable={props.onImportShowsFromTable}
         onOpenShowCreator={props.onOpenShowCreator}
+        onEditShow={props.onEditShow}
+        onDeleteShow={props.onDeleteShow}
         onSelectEvent={props.onSelectEvent}
         onOpenEventPage={props.onOpenEventPage}
       />

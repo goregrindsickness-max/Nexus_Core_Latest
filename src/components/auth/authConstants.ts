@@ -214,7 +214,7 @@ export async function ensureAutoFollowMiguel(supabase: any, newUserId: string) {
 
     if (!targetId || targetId === newUserId) return;
 
-    const followId = `follow-${newUserId}-${targetId}`;
+    const followId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'f0000000-0000-4000-8000-' + Math.floor(Math.random() * 1e12).toString(16).padStart(12, '0');
     const payload = {
       id: followId,
       follower_id: newUserId,

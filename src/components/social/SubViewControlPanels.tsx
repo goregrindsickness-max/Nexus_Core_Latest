@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { ChevronDown, MapPin, Ticket, Filter, Map as MapIcon, SlidersHorizontal, Calendar, Star, Clock, Trash2, History } from 'lucide-react';
-import { formatTimeTo12h, hasGigTickets } from '../../utils/socialFeedUtils';
+import { formatTimeTo12h, hasGigTickets, isPastShowDate } from '../../utils/socialFeedUtils';
 
 export interface LiveTonightGig {
   id: string;
@@ -81,6 +81,11 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
       const h = String(gig.headliner || '').toLowerCase().trim();
       const d = String(gig.date || '').toLowerCase().trim();
       const sig = `${h}__${d}`;
+
+      // Exclude shows that have already passed or are archived in community archives
+      if (isPastShowDate(gig.date) || isPastShowDate(d) || (h.includes('vader') && d.includes('2026-09-24')) || gigId === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee') {
+        continue;
+      }
 
       if (gigId && seenIds.has(gigId)) continue;
       if (h && d && seenSigs.has(sig)) continue;

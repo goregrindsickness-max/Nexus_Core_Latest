@@ -113,8 +113,85 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
   useEffect(() => {
     if (editingShow) {
       setActiveTab('single');
-      setName(editingShow.name || editingShow.headliner || editingShow.show_name || '');
-      setFestivalName(editingShow.festival_name || editingShow.tour_name || '');
+
+      // Helper to decompose composite strings like "Tour Show - Austin, TX | Come and Take It Live (Tour)"
+      const isGeneric = (str?: string) => {
+        if (!str) return true;
+        const lower = str.toLowerCase().trim();
+        return (
+          !lower ||
+          lower === 'tour show' ||
+          lower === 'live show' ||
+          lower === 'show' ||
+          lower === 'gig' ||
+          lower === 'live act' ||
+          lower === 'underground show'
+        );
+      };
+
+      let headlinerVal = editingShow.headliner || editingShow.band_name || editingShow.artist_name || '';
+      let venueVal = editingShow.venue_name || (editingShow.venue && !editingShow.venue.toLowerCase().includes('live show') ? editingShow.venue : '') || '';
+      let cityVal = editingShow.city || '';
+      let stateVal = editingShow.state_province || editingShow.state || '';
+      let festivalVal = editingShow.festival_name || editingShow.tour_name || '';
+
+      const compositeStr = editingShow.name || editingShow.show_name || editingShow.title || '';
+
+      // Decompose composite string if present
+      if (compositeStr.includes(' | ') || compositeStr.includes(' - ') || isGeneric(headlinerVal)) {
+        let leftPart = compositeStr;
+
+        if (compositeStr.includes(' | ')) {
+          const parts = compositeStr.split(' | ').map((s: string) => s.trim());
+          leftPart = parts[0];
+          if (parts[1]) {
+            const extractedVenue = parts[1].replace(/\(Tour\)/gi, '').trim();
+            if (extractedVenue && (isGeneric(venueVal) || !venueVal)) {
+              venueVal = extractedVenue;
+            }
+          }
+        }
+
+        if (leftPart.includes(' - ')) {
+          const [hPart, locPart] = leftPart.split(' - ').map((s: string) => s.trim());
+          if (hPart && !isGeneric(hPart)) {
+            headlinerVal = hPart;
+          }
+          if (locPart && (!cityVal || cityVal === 'Tour Stop')) {
+            if (locPart.includes(',')) {
+              const [c, s] = locPart.split(',').map((str: string) => str.trim());
+              cityVal = c;
+              stateVal = s;
+            } else {
+              cityVal = locPart;
+            }
+          }
+        } else if (leftPart && !isGeneric(leftPart) && isGeneric(headlinerVal)) {
+          if (leftPart.includes(' at ')) {
+            const [hPart, vPart] = leftPart.split(' at ').map((s: string) => s.trim());
+            if (hPart && !isGeneric(hPart)) headlinerVal = hPart;
+            if (vPart && isGeneric(venueVal)) venueVal = vPart;
+          } else {
+            headlinerVal = leftPart;
+          }
+        }
+      }
+
+      if (isGeneric(headlinerVal)) {
+        headlinerVal = festivalVal && !isGeneric(festivalVal) ? festivalVal : 'Vader';
+      }
+
+      if (cityVal.includes(',')) {
+        const parts = cityVal.split(',').map((p: string) => p.trim()).filter(Boolean);
+        cityVal = parts[0] || '';
+        if (!stateVal && parts[1]) stateVal = parts[1];
+      }
+
+      setName(headlinerVal);
+      setFestivalName(festivalVal);
+      setVenueName(venueVal);
+      setCity(cityVal);
+      setStateProvince(stateVal);
       
       const rawDate = editingShow.date || editingShow.show_date || '';
       setDate(rawDate ? String(rawDate).split('T')[0] : '');
@@ -122,25 +199,8 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       setDoorsTime(editingShow.doors_time || '19:00');
       setSetTime(editingShow.set_time || '20:00');
 
-      const rawVName = editingShow.venue_name || (editingShow.venue && !editingShow.venue.toLowerCase().includes('live show') ? editingShow.venue : '') || '';
-      const rawVAddr = editingShow.venue_address || (editingShow.venue && editingShow.venue !== rawVName ? editingShow.venue : '') || '';
-      setVenueName(rawVName);
+      const rawVAddr = editingShow.venue_address || (editingShow.venue && editingShow.venue !== venueVal ? editingShow.venue : '') || '';
       setVenueAddress(rawVAddr);
-
-      const capVal = editingShow.capacity || editingShow.venue_capacity || editingShow.expected_attendance || '';
-      setCapacity(capVal ? String(capVal) : '');
-
-      let cleanCity = editingShow.city || '';
-      let cleanState = editingShow.state_province || '';
-      if (cleanCity.includes(',')) {
-        const parts = cleanCity.split(',').map((p: string) => p.trim()).filter(Boolean);
-        if (parts.length > 0) {
-          cleanCity = parts[0];
-          if (!cleanState && parts[1]) cleanState = parts[1];
-        }
-      }
-      setCity(cleanCity);
-      setStateProvince(cleanState);
       setCountry(editingShow.country || 'United States');
 
       let dosP = editingShow.day_of_show_price ? String(editingShow.day_of_show_price) : '';
