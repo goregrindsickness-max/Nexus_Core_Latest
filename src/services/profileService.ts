@@ -246,20 +246,18 @@ export function normalizeLoadedProfile(data: any): any {
     }
   }
 
-  // Ensure band identity integrity: prevent community bands (e.g. Necroticgorebeast) from corrupting personal band profile
+  // Ensure band identity integrity: preserve Miguel's band Virulent Excision, and allow all valid user/community bands
   if (isMiguelNameOrProfile(normalized)) {
     normalized.band_id = 'cbddb810-259b-4230-9968-3d402dfdb872';
     normalized.band_name = 'Virulent Excision';
     normalized.bandName = 'Virulent Excision';
   } else {
-    if (normalized.band_id && isCommunityBandRecord(normalized.band_id)) {
-      normalized.band_id = undefined;
-    }
-    if (normalized.band_name && (isCommunityBandRecord(normalized.band_name) || String(normalized.band_name).toLowerCase().includes('necroticgorebeast'))) {
+    // Only strip demo band necroticgorebeast if accidentally assigned
+    if (normalized.band_name && String(normalized.band_name).toLowerCase().includes('necroticgorebeast')) {
       normalized.band_name = undefined;
       normalized.bandName = undefined;
     }
-    if (normalized.bandName && (isCommunityBandRecord(normalized.bandName) || String(normalized.bandName).toLowerCase().includes('necroticgorebeast'))) {
+    if (normalized.bandName && String(normalized.bandName).toLowerCase().includes('necroticgorebeast')) {
       normalized.bandName = undefined;
     }
   }
@@ -633,10 +631,10 @@ export function extractGlobalProfilePayload(rawPayload: any, userId?: string): R
   if (rawPayload.label_id !== undefined) payload.label_id = rawPayload.label_id;
 
   if (rawPayload.band_id !== undefined) {
-    payload.band_id = isMiguelNameOrProfile(rawPayload) ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (isCommunityBandRecord(rawPayload.band_id) ? null : rawPayload.band_id);
+    payload.band_id = isMiguelNameOrProfile(rawPayload) ? 'cbddb810-259b-4230-9968-3d402dfdb872' : rawPayload.band_id;
   }
   if (rawPayload.band_name !== undefined || rawPayload.bandName !== undefined) {
-    payload.band_name = isMiguelNameOrProfile(rawPayload) ? 'Virulent Excision' : ((rawPayload.band_name && (isCommunityBandRecord(rawPayload.band_name) || String(rawPayload.band_name).toLowerCase().includes('necroticgorebeast'))) ? null : (rawPayload.band_name || rawPayload.bandName));
+    payload.band_name = isMiguelNameOrProfile(rawPayload) ? 'Virulent Excision' : ((rawPayload.band_name && String(rawPayload.band_name).toLowerCase().includes('necroticgorebeast')) ? null : (rawPayload.band_name || rawPayload.bandName));
   }
 
   if (rawPayload.genre_tags !== undefined || rawPayload.genres !== undefined) {

@@ -42,11 +42,11 @@ export const clipsMediaStore = localforage.createInstance({
   storeName: 'clips_media_store',
 });
 
-// Fallback high-performance scene video streams if an old blob expired or failed
+// Default scene video streams for initial demo previews
 export const SCENE_PERFORMANCE_VIDEOS = [
-  'https://media.w3.org/2010/05/sintel/trailer_hd.mp4',
-  'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
-  'https://www.w3schools.com/html/mov_bbb.mp4',
+  'https://www.youtube.com/watch?v=kY6A7yL9t6Y',
+  'https://www.youtube.com/watch?v=0hY48qHjM7I',
+  'https://www.youtube.com/watch?v=1F2b_dEvFqg',
 ];
 
 /**
@@ -91,9 +91,15 @@ export async function getClipMediaBlob(clipId: string | number): Promise<Blob | 
 /**
  * Generates an active, playable URL for a clip.
  * If the URL is a dead/expired blob URL, attempts to revive it from IndexedDB.
- * If the blob was not saved, falls back to a reliable scene performance video so it is 100% playable.
  */
 export async function resolveClipVideoPlaybackUrl(clipId: string | number, currentUrl: string): Promise<string> {
+  const idStr = String(clipId || '').trim();
+
+  // If this is the Virulent Excision live clip with corrupted base64 or missing video URL
+  if (idStr === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' && (!currentUrl || currentUrl.startsWith('/9j/') || currentUrl.startsWith('data:image'))) {
+    return 'https://www.youtube.com/watch?v=kY6A7yL9t6Y';
+  }
+
   // If it's a valid remote http/https URL or server relative /uploads/ path that is not a blob, keep it
   if (currentUrl && (currentUrl.startsWith('http://') || currentUrl.startsWith('https://') || currentUrl.startsWith('/uploads/')) && !currentUrl.startsWith('blob:')) {
     return currentUrl;
@@ -111,15 +117,12 @@ export async function resolveClipVideoPlaybackUrl(clipId: string | number, curre
     console.warn(`[ClipsPersistence] Could not revive blob for clip "${clipId}":`, e);
   }
 
-  // If currentUrl was already http(s) even if blob, don't fallback unnecessarily
-  if (currentUrl && !currentUrl.startsWith('blob:') && (currentUrl.startsWith('http://') || currentUrl.startsWith('https://'))) {
+  // If currentUrl was already http(s), preserve it
+  if (currentUrl && (currentUrl.startsWith('http://') || currentUrl.startsWith('https://'))) {
     return currentUrl;
   }
 
-  // Self-heal with a real scene performance clip so player never breaks
-  const fallbackUrl = SCENE_PERFORMANCE_VIDEOS[Math.abs(String(clipId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % SCENE_PERFORMANCE_VIDEOS.length];
-  console.log(`[ClipsPersistence] Self-healing unplayable clip "${clipId}" with resilient scene stream:`, fallbackUrl);
-  return fallbackUrl;
+  return currentUrl || '';
 }
 
 /**

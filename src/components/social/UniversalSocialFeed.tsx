@@ -3880,7 +3880,24 @@ const getProfileForUser = (userParam: any) => {
     let bandMembers: any[] = [];
     if (isBand) {
       const lowerName = (user?.name || "User").toLowerCase();
-      if (isYou) {
+      const matchedCommBand = communityBandManager.findByName(user?.name || '') || communityBandManager.findMatch(user?.name || '');
+      
+      const candidateLineup = (userParam as any)?.lineup || (user as any)?.lineup;
+      if (candidateLineup && Array.isArray(candidateLineup) && candidateLineup.length > 0) {
+        bandMembers = candidateLineup.map((member: any, index: number) => ({
+          name: typeof member === 'string' ? member : member.name,
+          role: (typeof member === 'object' && member.role) ? member.role : 'Member',
+          avatar: (typeof member === 'object' && member.avatar) ? member.avatar : `https://images.unsplash.com/photo-${1500000000000 + (index * 100000)}?auto=format&fit=crop&q=80&w=100`,
+          activated: true
+        }));
+      } else if (matchedCommBand?.lineup && Array.isArray(matchedCommBand.lineup) && matchedCommBand.lineup.length > 0) {
+        bandMembers = matchedCommBand.lineup.map((member: any, index: number) => ({
+          name: typeof member === 'string' ? member : member.name,
+          role: (typeof member === 'object' && member.role) ? member.role : 'Member',
+          avatar: (typeof member === 'object' && member.avatar) ? member.avatar : `https://images.unsplash.com/photo-${1500000000000 + (index * 100000)}?auto=format&fit=crop&q=80&w=100`,
+          activated: true
+        }));
+      } else if (isYou) {
         const activeBandId = (activeBand as any)?.id || userProfile?.activeBandId || 'default';
         const savedLineupStr = localStorage.getItem(`nexus_core_band_lineup_${activeBandId}`);
         const localLineup = savedLineupStr ? JSON.parse(savedLineupStr) : [];
@@ -3960,16 +3977,49 @@ if (regWorkspaces.includes('creative') || creativeName) {
 }
 
 const isTargetMiguel = isMiguelNameOrProfile(targetProfObj) || (isYou && isMiguelNameOrProfile(userProfile));
-const rawBandNameVal = targetProfObj?.band_name || targetProfObj?.bandName;
-const bandNameVal = (isTargetMiguel || (rawBandNameVal && (rawBandNameVal.toLowerCase().includes('molested') || rawBandNameVal.toLowerCase().includes('dying fetus')))) ? 'Virulent Excision' : rawBandNameVal;
-if (regWorkspaces.includes('band') || (bandNameVal && isTargetMiguel)) {
-  const finalBandName = bandNameVal || (isTargetMiguel ? 'Virulent Excision' : null);
+const rawBandNameVal = targetProfObj?.band_name || targetProfObj?.bandName || (isYou ? userProfile?.band_name : null);
+const targetFullName = (
+  targetProfObj?.full_name ||
+  targetProfObj?.name ||
+  targetProfObj?.display_name ||
+  (isYou ? (userProfile?.full_name || userProfile?.name) : null) ||
+  ''
+).trim();
+
+// Find matched community band by direct name or member name (e.g. Andre Gonzalez -> Cordyceps, Christopher Wirstrom -> Cranial Impalement)
+let resolvedBandForTies: any = null;
+if (!isTargetMiguel) {
+  if (rawBandNameVal) {
+    resolvedBandForTies = communityBandManager.findByName(rawBandNameVal) || communityBandManager.findMatch(rawBandNameVal);
+  }
+  if (!resolvedBandForTies && targetFullName) {
+    resolvedBandForTies = communityBandManager.findByMember(targetFullName);
+  }
+  if (!resolvedBandForTies) {
+    const targetEmailLower = (targetProfObj?.email || dbProfile?.email || '').toLowerCase();
+    if (targetEmailLower.includes('exposedentrails')) {
+      resolvedBandForTies = communityBandManager.findByName('Cordyceps');
+    } else if (targetEmailLower.includes('wirstrom84')) {
+      resolvedBandForTies = communityBandManager.findByName('Cranial Impalement');
+    }
+  }
+}
+
+const bandNameVal = isTargetMiguel
+  ? 'Virulent Excision'
+  : (resolvedBandForTies?.name || resolvedBandForTies?.band_name || rawBandNameVal || null);
+
+if (regWorkspaces.includes('band') || (bandNameVal && (isTargetMiguel || resolvedBandForTies || rawBandNameVal))) {
+  const finalBandName = bandNameVal;
   if (finalBandName) {
-    const isVE = finalBandName.toLowerCase() === 'virulent excision';
+    const isVE = isTargetMiguel || finalBandName.toLowerCase() === 'virulent excision';
+    const bandAvatar = isVE
+      ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396'
+      : (resolvedBandForTies?.logo_url || resolvedBandForTies?.avatar_url || targetProfObj?.band_logo || targetProfObj?.avatar || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150');
     dynamicUserTies.push({
       name: finalBandName,
       role: 'Artist',
-      avatar: isVE ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396' : (targetProfObj?.avatar || targetProfObj?.avatar_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150')
+      avatar: bandAvatar
     });
   }
 }
@@ -4076,17 +4126,33 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
 
     const resolvedProfileId = dbProfile?.id || (userParam as any).id || (userParam as any).userId || (userParam as any).user_id || targetId || null;
 
+    const resolvedBandNameOutput = isTargetMiguel 
+      ? 'Virulent Excision' 
+      : (resolvedBandForTies?.name || dbProfile?.band_name || dbProfile?.bandName || (userParam as any)?.band_name || (userParam as any)?.bandName || null);
+    const resolvedBandIdOutput = isTargetMiguel
+      ? 'cbddb810-259b-4230-9968-3d402dfdb872'
+      : (resolvedBandForTies?.id || dbProfile?.band_id || (userParam as any)?.band_id || null);
+
     return {
+      ...(dbProfile || {}),
+      ...(typeof userParam === 'object' ? userParam : {}),
       id: resolvedProfileId,
       userId: resolvedProfileId,
       raw_id: resolvedProfileId,
-      name: user?.name || "User",
-      avatar: user?.avatar,
-      email: isYou ? userProfile?.email : (userParam.email || (realProfiles.find(p => (p?.name || "User").toLowerCase() === (user?.name || "User").toLowerCase()) as any)?.email),
+      name: user?.name || dbProfile?.name || dbProfile?.full_name || "User",
+      full_name: dbProfile?.full_name || (userParam as any)?.full_name || resolvedLegalName,
+      band_name: resolvedBandNameOutput,
+      bandName: resolvedBandNameOutput,
+      band_id: resolvedBandIdOutput,
+      registered_workspaces: dbProfile?.registered_workspaces || (userParam as any)?.registered_workspaces || [],
+      account_type: dbProfile?.account_type || (userParam as any)?.account_type || user?.role || 'industry_pro',
+      avatar: user?.avatar || dbProfile?.avatar_url || dbProfile?.avatar,
+      avatar_url: user?.avatar || dbProfile?.avatar_url || dbProfile?.avatar,
+      email: isYou ? userProfile?.email : (userParam.email || dbProfile?.email || (realProfiles.find(p => (p?.name || "User").toLowerCase() === (user?.name || "User").toLowerCase()) as any)?.email),
       banner,
       banner_url: dbProfile?.banner_url || dbProfile?.creative_banner || dbProfile?.promoter_cover_image || dbProfile?.label_banner || banner,
       cover_url: dbProfile?.cover_url || dbProfile?.promoter_cover_image || dbProfile?.creative_banner || banner,
-      role: user?.role || "Member",
+      role: user?.role || dbProfile?.role || dbProfile?.account_type || "Member",
       isYou,
       isFollowed,
       legalName: resolvedLegalName,

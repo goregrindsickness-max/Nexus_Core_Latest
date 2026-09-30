@@ -298,7 +298,7 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
       setUploadProgress(35);
       setUploadStatusText('Uploading video to clips storage bucket...');
 
-      let remoteUrl = newClipVideoUrl;
+      let remoteUrl = '';
       if (selectedClipFile) {
         try {
           remoteUrl = await uploadClipVideoFile(selectedClipFile, validUserId, 'clip');
@@ -306,16 +306,20 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
         } catch (storageErr) {
           console.warn("[UploadClipModal] uploadClipVideoFile error:", storageErr);
         }
+      } else if (newClipVideoUrl && (newClipVideoUrl.startsWith('http://') || newClipVideoUrl.startsWith('https://') || newClipVideoUrl.startsWith('/uploads/')) && !newClipVideoUrl.startsWith('blob:')) {
+        remoteUrl = newClipVideoUrl;
       }
 
-      const activeClipUrl = remoteUrl || localPreviewUrl || finalVideoUrl;
+      const isRemotePermanent = remoteUrl && (remoteUrl.startsWith('http://') || remoteUrl.startsWith('https://') || remoteUrl.startsWith('/uploads/')) && !remoteUrl.startsWith('blob:');
+      const activeClipUrl = isRemotePermanent ? remoteUrl : (localPreviewUrl || finalVideoUrl || '');
+      
       newClipObj.video_url = activeClipUrl;
       newClipObj.videoUrl = activeClipUrl;
 
       setUploadProgress(90);
       setUploadStatusText('Saving clip record to database...');
 
-      await persistClipToSupabase(activeClipUrl);
+      await persistClipToSupabase(isRemotePermanent ? remoteUrl : activeClipUrl);
 
       setUploadProgress(100);
       setUploadStatusText('Complete!');

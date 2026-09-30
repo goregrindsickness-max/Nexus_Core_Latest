@@ -34,6 +34,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     created_at: '2026-01-01T10:00:00Z',
     followers_count: 1420,
     lineup: [
+      { id: 'cord-0', name: 'Andre Gonzalez', role: 'Guitars / Vocals', status: 'active', years: '2014–present' },
       { id: 'cord-1', name: 'Rafael Gonzalez', role: 'Vocals', status: 'active', years: '2017–present' },
       { id: 'cord-2', name: 'DeLorean Nero', role: 'Lead Guitars', status: 'active', years: '2021–present' },
       { id: 'cord-3', name: 'Michael Nolan', role: 'Drums', status: 'active', years: '2020–present' },
@@ -91,6 +92,46 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         ]
       }
     ]
+  },
+  {
+    id: '0be2c858-8f1e-45a8-9fe1-6b24776b9b92',
+    name: 'Cranial Impalement',
+    band_name: 'Cranial Impalement',
+    genre: 'Brutal Death Metal',
+    subgenres: ['Brutal Death Metal', 'Slam Death Metal', 'Death Metal'],
+    micro_genres: ['Brutal Death Metal'],
+    founded_year: '2011',
+    city: 'Chattanooga',
+    state: 'TN',
+    state_province: 'TN',
+    country: 'USA',
+    record_label: 'Coyote Records',
+    label: 'Coyote Records',
+    label_name: 'Coyote Records',
+    bio: 'Community-curated archive and discography for Cranial Impalement. Formed in Chattanooga, Tennessee, delivering blistering slam grooves, relentless blast beats, and guttural vocal devastation.',
+    avatar_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790608983047_1790608983069.jpg?t=1790608983069',
+    logo_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790608983047_1790608983069.jpg?t=1790608983069',
+    avatar: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790608983047_1790608983069.jpg?t=1790608983069',
+    image: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790608983047_1790608983069.jpg?t=1790608983069',
+    cover_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1790608991971_1790608991978.jpg?t=1790608991978',
+    banner_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1790608991971_1790608991978.jpg?t=1790608991978',
+    spotify_url: 'https://open.spotify.com/artist/0UK1Rb40Aek175Sw0nR2Cc',
+    metal_archives_url: 'https://www.metal-archives.com/bands/Cranial_Impalement/3540348996',
+    custom_slug: 'cranial-impalement',
+    featured_youtube_url: 'https://youtu.be/Vrrr4B029Q8?si=Zj-5_Dwf4zthOLVY',
+    verification_status: 'community_archive',
+    curated_by: '@slam_archivist',
+    curator_name: 'Tennessee Slam Vault',
+    created_at: '2026-09-28T15:29:28.763Z',
+    followers_count: 850,
+    lineup: [
+      { id: 'cran-1', name: 'Christopher Wirstrom', role: 'Vocals', status: 'active', years: '2011–present' },
+      { id: 'cran-2', name: 'Eli Alcala', role: 'Guitar', status: 'active', years: '2011–present' },
+      { id: 'cran-3', name: 'Caesar Lazo', role: 'Guitar', status: 'active', years: '2011–present' },
+      { id: 'cran-4', name: 'Luke Richardson', role: 'Bass', status: 'active', years: '2011–present' },
+      { id: 'cran-5', name: 'Riley Davis-McDougal', role: 'Drums', status: 'active', years: '2011–present' }
+    ],
+    discography: []
   },
   {
     id: 'fd0f4960-9329-422e-98b8-0a2e44420c1f',

@@ -180,6 +180,31 @@ export function deduplicateLineup(members: LineupMember[]): LineupMember[] {
   return Array.from(seen.values());
 }
 
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        return window.localStorage.getItem(key);
+      }
+    } catch {}
+    return null;
+  },
+  setItem: (key: string, val: string): void => {
+    try {
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        window.localStorage.setItem(key, val);
+      }
+    } catch {}
+  },
+  removeItem: (key: string): void => {
+    try {
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        window.localStorage.removeItem(key);
+      }
+    } catch {}
+  }
+};
+
 export function purgeDeletedAndZombieBands(): void {
   try {
     const storageKeys = [
@@ -192,7 +217,7 @@ export function purgeDeletedAndZombieBands(): void {
     ];
 
     for (const key of storageKeys) {
-      const raw = localStorage.getItem(key);
+      const raw = safeLocalStorage.getItem(key);
       if (!raw) continue;
       try {
         const parsed = JSON.parse(raw);
@@ -206,20 +231,20 @@ export function purgeDeletedAndZombieBands(): void {
             }
             return true;
           });
-          localStorage.setItem(key, JSON.stringify(filtered));
+          safeLocalStorage.setItem(key, JSON.stringify(filtered));
         }
       } catch {}
     }
 
     // Also check active band
-    const activeBandRaw = localStorage.getItem('nexus_active_band');
+    const activeBandRaw = safeLocalStorage.getItem('nexus_active_band');
     if (activeBandRaw) {
       try {
         const activeBand = JSON.parse(activeBandRaw);
         const activeName = String(activeBand.name || activeBand.band_name || '').trim();
         const activeId = String(activeBand.id || '').trim();
         if (isDeletedOrZombieBand(activeName) || isDeletedOrZombieBand(activeId)) {
-          localStorage.removeItem('nexus_active_band');
+          safeLocalStorage.removeItem('nexus_active_band');
         }
       } catch {}
     }
@@ -233,7 +258,7 @@ const DELETED_STORAGE_KEY = 'nexus_deleted_community_bands';
 
 function getDeletedBandIds(): Set<string> {
   try {
-    const raw = localStorage.getItem(DELETED_STORAGE_KEY);
+    const raw = safeLocalStorage.getItem(DELETED_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return new Set(parsed.map(String));
@@ -253,7 +278,7 @@ function markBandDeletedInStorage(id: string, name?: string): void {
     if (name && typeof name === 'string' && name.trim()) {
       current.add(name.toLowerCase().trim());
     }
-    localStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify(Array.from(current)));
+    safeLocalStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify(Array.from(current)));
   } catch {}
 }
 
@@ -307,7 +332,7 @@ export class CommunityBandManager {
     try {
       const deletedIds = getDeletedBandIds();
 
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = safeLocalStorage.getItem(STORAGE_KEY);
       if (!stored) {
         // Only seed bands that have not been explicitly deleted by the user
         const initialFiltered = INITIAL_COMMUNITY_BANDS.filter(b => 
@@ -315,7 +340,7 @@ export class CommunityBandManager {
           !deletedIds.has(ensureUUID(b.id)) &&
           !deletedIds.has((b.name || '').toLowerCase().trim())
         );
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(initialFiltered));
+        safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(initialFiltered));
       } else {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
@@ -346,12 +371,12 @@ export class CommunityBandManager {
             } else {
               const bIdKey = initBand.id || '';
               const bUUIDKey = bIdKey ? ensureUUID(bIdKey) : '';
-              const savedLogo = (bIdKey ? localStorage.getItem(`nexus_core_band_logo_${bIdKey}`) : null) || 
-                                (bUUIDKey ? localStorage.getItem(`nexus_core_band_logo_${bUUIDKey}`) : null) ||
-                                localStorage.getItem(`nexus_core_band_logo_${updated[idx].id}`);
-              const savedCover = (bIdKey ? localStorage.getItem(`nexus_core_band_cover_${bIdKey}`) : null) || 
-                                 (bUUIDKey ? localStorage.getItem(`nexus_core_band_cover_${bUUIDKey}`) : null) ||
-                                 localStorage.getItem(`nexus_core_band_cover_${updated[idx].id}`);
+              const savedLogo = (bIdKey ? safeLocalStorage.getItem(`nexus_core_band_logo_${bIdKey}`) : null) || 
+                                (bUUIDKey ? safeLocalStorage.getItem(`nexus_core_band_logo_${bUUIDKey}`) : null) ||
+                                safeLocalStorage.getItem(`nexus_core_band_logo_${updated[idx].id}`);
+              const savedCover = (bIdKey ? safeLocalStorage.getItem(`nexus_core_band_cover_${bIdKey}`) : null) || 
+                                 (bUUIDKey ? safeLocalStorage.getItem(`nexus_core_band_cover_${bUUIDKey}`) : null) ||
+                                 safeLocalStorage.getItem(`nexus_core_band_cover_${updated[idx].id}`);
               
               const bestLogo = savedLogo || 
                 (updated[idx].logo_url && updated[idx].logo_url !== initBand.logo_url && !updated[idx].logo_url.includes('unsplash') ? updated[idx].logo_url : null) ||
@@ -393,14 +418,14 @@ export class CommunityBandManager {
               };
             }
           }
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+          safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
         } else {
           const initialFiltered = INITIAL_COMMUNITY_BANDS.filter(b => 
             !deletedIds.has(b.id) &&
             !deletedIds.has(ensureUUID(b.id)) &&
             !deletedIds.has((b.name || '').toLowerCase().trim())
           );
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(initialFiltered));
+          safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(initialFiltered));
         }
       }
     } catch (e) {
@@ -410,7 +435,7 @@ export class CommunityBandManager {
 
   public getAll(): CommunityBandRecord[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = safeLocalStorage.getItem(STORAGE_KEY);
       const deletedIds = getDeletedBandIds();
       let list: CommunityBandRecord[] = [];
       if (raw) {
@@ -475,9 +500,9 @@ export class CommunityBandManager {
         }
 
         // Resiliently restore lineup from dedicated localStorage keys if empty in the archive object
-        const cachedLineupRaw = localStorage.getItem(`nexus_core_band_lineup_${item.id}`) ||
-                                localStorage.getItem(`nexus_core_band_lineup_${itemUUID}`) ||
-                                (cleanNorm ? localStorage.getItem(`nexus_core_band_lineup_${cleanNorm}`) : null);
+        const cachedLineupRaw = safeLocalStorage.getItem(`nexus_core_band_lineup_${item.id}`) ||
+                                safeLocalStorage.getItem(`nexus_core_band_lineup_${itemUUID}`) ||
+                                (cleanNorm ? safeLocalStorage.getItem(`nexus_core_band_lineup_${cleanNorm}`) : null);
         let restoredLineupFromCache: LineupMember[] | null = null;
         if (cachedLineupRaw) {
           try {
@@ -573,7 +598,7 @@ export class CommunityBandManager {
       // Auto-prune localStorage if duplicates or deleted items were purged
       if (needsPruning && result.length > 0) {
         try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
+          safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(result));
         } catch {}
       }
 
@@ -604,6 +629,72 @@ export class CommunityBandManager {
     }) || null;
   }
 
+  public findByMember(memberName: string): CommunityBandRecord | null {
+    if (!memberName || !memberName.trim()) return null;
+    const clean = memberName.trim().toLowerCase();
+    const cleanNorm = clean.replace(/[^a-z0-9]/g, '');
+    const cleanParts = clean.split(/\s+/).filter(Boolean);
+
+    // Fast explicit aliases for verified community musicians
+    if (clean.includes('exposedentrails') || (clean.includes('andre') && (clean.includes('gonzal') || cleanParts.some(p => p.startsWith('gonz'))))) {
+      const cord = this.findByName('Cordyceps');
+      if (cord) return cord;
+    }
+    if (clean.includes('wirstrom') || (clean.includes('christopher') && clean.includes('wirstr')) || (clean.includes('chris') && clean.includes('wirstr'))) {
+      const cranial = this.findByName('Cranial Impalement');
+      if (cranial) return cranial;
+    }
+
+    const all = this.getAll();
+    return all.find((b) => {
+      if (Array.isArray(b.lineup)) {
+        return b.lineup.some((m: any) => {
+          const mName = (typeof m === 'string' ? m : m?.name || '').toLowerCase().trim();
+          if (!mName) return false;
+          if (mName === clean) return true;
+          const mNorm = mName.replace(/[^a-z0-9]/g, '');
+          if (mNorm === cleanNorm) return true;
+
+          const mParts = mName.split(/\s+/).filter(Boolean);
+          if (cleanParts.length >= 2 && mParts.length >= 2) {
+            const cleanFirst = cleanParts[0].replace(/[^a-z]/g, '');
+            const mFirst = mParts[0].replace(/[^a-z]/g, '');
+
+            const firstMatch = cleanFirst === mFirst ||
+              (cleanFirst === 'chris' && mFirst === 'christopher') ||
+              (cleanFirst === 'christopher' && mFirst === 'chris') ||
+              (cleanFirst === 'mike' && mFirst === 'michael') ||
+              (cleanFirst === 'michael' && mFirst === 'mike') ||
+              (cleanFirst === 'dan' && mFirst === 'daniel') ||
+              (cleanFirst === 'daniel' && mFirst === 'dan') ||
+              (cleanFirst === 'matt' && mFirst === 'matthew') ||
+              (cleanFirst === 'matthew' && mFirst === 'matt') ||
+              (cleanFirst === 'rob' && mFirst === 'robert') ||
+              (cleanFirst === 'robert' && mFirst === 'rob') ||
+              (cleanFirst === 'alex' && mFirst === 'alexander') ||
+              (cleanFirst === 'alexander' && mFirst === 'alex');
+
+            if (!firstMatch) return false;
+
+            const cleanLast = cleanParts[cleanParts.length - 1].replace(/[^a-z]/g, '');
+            const mLast = mParts[mParts.length - 1].replace(/[^a-z]/g, '');
+
+            const lastMatch = cleanLast === mLast ||
+              cleanLast.replace(/[sz]$/, '') === mLast.replace(/[sz]$/, '');
+
+            return Boolean(firstMatch && lastMatch);
+          }
+          return false;
+        });
+      }
+      if (typeof (b.lineup as any) === 'string') {
+        const lineStr = String(b.lineup).toLowerCase();
+        return lineStr === clean;
+      }
+      return false;
+    }) || null;
+  }
+
   public findMatch(name: string): CommunityBandRecord | null {
     return this.findByName(name);
   }
@@ -618,7 +709,7 @@ export class CommunityBandManager {
 
   private saveToStorage(list: CommunityBandRecord[]): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(list));
     } catch (e) {
       console.warn('LocalStorage quota exceeded when saving bands, pruning bulky base64 assets...', e);
       try {
@@ -628,7 +719,7 @@ export class CommunityBandManager {
           logo_url: b.logo_url?.startsWith('data:') ? undefined : b.logo_url,
           cover_url: b.cover_url?.startsWith('data:') ? undefined : b.cover_url
         }));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(pruned));
+        safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(pruned));
       } catch (err2) {
         console.error('Critical storage failure:', err2);
       }
@@ -731,19 +822,21 @@ export class CommunityBandManager {
       all[existingIndex] = updated;
       this.saveToStorage(all);
       if (lineupToSave && lineupToSave.length > 0) {
-        localStorage.setItem(`nexus_core_band_lineup_${updated.id}`, JSON.stringify(lineupToSave));
-        localStorage.setItem(`nexus_core_band_lineup_${existing.id}`, JSON.stringify(lineupToSave));
-        if (validName) localStorage.setItem(`nexus_core_band_lineup_${validName.toLowerCase().trim()}`, JSON.stringify(lineupToSave));
+        safeLocalStorage.setItem(`nexus_core_band_lineup_${updated.id}`, JSON.stringify(lineupToSave));
+        safeLocalStorage.setItem(`nexus_core_band_lineup_${existing.id}`, JSON.stringify(lineupToSave));
+        if (validName) safeLocalStorage.setItem(`nexus_core_band_lineup_${validName.toLowerCase().trim()}`, JSON.stringify(lineupToSave));
       }
       if (updated.logo_url && !updated.logo_url.startsWith('data:')) {
-        localStorage.setItem(`nexus_core_band_logo_${updated.id}`, updated.logo_url);
-        localStorage.setItem(`nexus_core_band_logo_${existing.id}`, updated.logo_url);
+        safeLocalStorage.setItem(`nexus_core_band_logo_${updated.id}`, updated.logo_url);
+        safeLocalStorage.setItem(`nexus_core_band_logo_${existing.id}`, updated.logo_url);
       }
       if (updated.cover_url && !updated.cover_url.startsWith('data:')) {
-        localStorage.setItem(`nexus_core_band_cover_${updated.id}`, updated.cover_url);
-        localStorage.setItem(`nexus_core_band_cover_${existing.id}`, updated.cover_url);
+        safeLocalStorage.setItem(`nexus_core_band_cover_${updated.id}`, updated.cover_url);
+        safeLocalStorage.setItem(`nexus_core_band_cover_${existing.id}`, updated.cover_url);
       }
-      window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: updated }));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: updated }));
+      }
       result = updated;
     } else {
       // BRAND NEW ENTRY - Guaranteed unique fresh UUID, never matching fallback strings or overwriting existing items
@@ -792,11 +885,13 @@ export class CommunityBandManager {
       all.unshift(newBand);
       this.saveToStorage(all);
       if (newBand.lineup && newBand.lineup.length > 0) {
-        localStorage.setItem(`nexus_core_band_lineup_${newBand.id}`, JSON.stringify(newBand.lineup));
-        localStorage.setItem(`nexus_core_band_lineup_${newId}`, JSON.stringify(newBand.lineup));
-        if (validName) localStorage.setItem(`nexus_core_band_lineup_${validName.toLowerCase().trim()}`, JSON.stringify(newBand.lineup));
+        safeLocalStorage.setItem(`nexus_core_band_lineup_${newBand.id}`, JSON.stringify(newBand.lineup));
+        safeLocalStorage.setItem(`nexus_core_band_lineup_${newId}`, JSON.stringify(newBand.lineup));
+        if (validName) safeLocalStorage.setItem(`nexus_core_band_lineup_${validName.toLowerCase().trim()}`, JSON.stringify(newBand.lineup));
       }
-      window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: newBand }));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: newBand }));
+      }
       result = newBand;
     }
 
@@ -824,16 +919,16 @@ export class CommunityBandManager {
 
     // Clean up cached local storage items across all keys
     try {
-      localStorage.removeItem(`nexus_core_band_lineup_${band.id}`);
-      localStorage.removeItem(`nexus_core_band_lineup_${targetUUID}`);
-      localStorage.removeItem(`nexus_core_band_lineup_${bandId}`);
-      if (bName) localStorage.removeItem(`nexus_core_band_lineup_${bName.toLowerCase().trim()}`);
-      localStorage.removeItem(`nexus_core_band_logo_${band.id}`);
-      localStorage.removeItem(`nexus_core_band_logo_${targetUUID}`);
-      localStorage.removeItem(`nexus_core_band_logo_${bandId}`);
-      localStorage.removeItem(`nexus_core_band_cover_${band.id}`);
-      localStorage.removeItem(`nexus_core_band_cover_${targetUUID}`);
-      localStorage.removeItem(`nexus_core_band_cover_${bandId}`);
+      safeLocalStorage.removeItem(`nexus_core_band_lineup_${band.id}`);
+      safeLocalStorage.removeItem(`nexus_core_band_lineup_${targetUUID}`);
+      safeLocalStorage.removeItem(`nexus_core_band_lineup_${bandId}`);
+      if (bName) safeLocalStorage.removeItem(`nexus_core_band_lineup_${bName.toLowerCase().trim()}`);
+      safeLocalStorage.removeItem(`nexus_core_band_logo_${band.id}`);
+      safeLocalStorage.removeItem(`nexus_core_band_logo_${targetUUID}`);
+      safeLocalStorage.removeItem(`nexus_core_band_logo_${bandId}`);
+      safeLocalStorage.removeItem(`nexus_core_band_cover_${band.id}`);
+      safeLocalStorage.removeItem(`nexus_core_band_cover_${targetUUID}`);
+      safeLocalStorage.removeItem(`nexus_core_band_cover_${bandId}`);
     } catch {}
 
     // Record in deleted tracking set to prevent resurrection from cached payloads
@@ -852,20 +947,20 @@ export class CommunityBandManager {
 
     // Also purge from secondary local caches
     try {
-      const commV2Raw = localStorage.getItem('nexus_community_bands_v2');
+      const commV2Raw = safeLocalStorage.getItem('nexus_community_bands_v2');
       if (commV2Raw) {
         const commV2 = JSON.parse(commV2Raw);
         if (Array.isArray(commV2)) {
           const filteredV2 = commV2.filter((b: any) => b && b.id !== band.id && ensureUUID(b.id) !== targetUUID && (b.name || b.band_name || '').toLowerCase().trim() !== bName.toLowerCase().trim());
-          localStorage.setItem('nexus_community_bands_v2', JSON.stringify(filteredV2));
+          safeLocalStorage.setItem('nexus_community_bands_v2', JSON.stringify(filteredV2));
         }
       }
-      const regRaw = localStorage.getItem('nexus_registered_bands');
+      const regRaw = safeLocalStorage.getItem('nexus_registered_bands');
       if (regRaw) {
         const reg = JSON.parse(regRaw);
         if (Array.isArray(reg)) {
           const filteredReg = reg.filter((b: any) => b && b.id !== band.id && ensureUUID(b.id) !== targetUUID && (b.name || b.band_name || '').toLowerCase().trim() !== bName.toLowerCase().trim());
-          localStorage.setItem('nexus_registered_bands', JSON.stringify(filteredReg));
+          safeLocalStorage.setItem('nexus_registered_bands', JSON.stringify(filteredReg));
         }
       }
     } catch {}
@@ -890,7 +985,9 @@ export class CommunityBandManager {
       console.warn('Notice deleting remote band record:', dbErr);
     }
 
-    window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: { id: band.id, deleted: true } }));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: { id: band.id, deleted: true } }));
+    }
     return { success: true };
   }
 
@@ -924,6 +1021,7 @@ export class CommunityBandManager {
 
       const KNOWN_SEEDED_NAMES: Record<string, string> = {
         'cordyceps': 'Cordyceps',
+        'cranial-impalement': 'Cranial Impalement',
         'mortician': 'Mortician',
         'sanguisugabogg': 'Sanguisugabogg',
         'necrophagist': 'Necrophagist',
@@ -943,7 +1041,7 @@ export class CommunityBandManager {
 
       if ((!resolvedBandName || resolvedBandName.toLowerCase() === 'nexus artist' || resolvedBandName.toLowerCase() === 'underground label') && !isExplicitNew) {
         try {
-          const archives = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+          const archives = JSON.parse(safeLocalStorage.getItem(STORAGE_KEY) || '[]');
           const bId = band.id ? String(band.id) : '';
           const bUUID = band.id ? ensureUUID(band.id) : '';
           const found = archives.find((b: any) => b && (b.id === bId || ensureUUID(b.id) === bUUID || (rawTargetSlug && (b.custom_slug === rawTargetSlug || b.slug === rawTargetSlug))));
@@ -956,7 +1054,7 @@ export class CommunityBandManager {
 
       if ((!resolvedBandName || resolvedBandName.toLowerCase() === 'nexus artist' || resolvedBandName.toLowerCase() === 'underground label') && !isExplicitNew) {
         try {
-          const activeBandRaw = localStorage.getItem('nexus_active_band');
+          const activeBandRaw = safeLocalStorage.getItem('nexus_active_band');
           if (activeBandRaw) {
             const parsed = JSON.parse(activeBandRaw);
             if (parsed?.name || parsed?.band_name) {
@@ -1037,9 +1135,9 @@ export class CommunityBandManager {
         if (Array.isArray(band.lineup) && band.lineup.length > 0) return band.lineup;
         if (idx >= 0 && Array.isArray(all[idx].lineup) && all[idx].lineup.length > 0) return all[idx].lineup;
         if (existing?.lineup && Array.isArray(existing.lineup) && existing.lineup.length > 0) return existing.lineup;
-        const stored = (band.id ? localStorage.getItem(`nexus_core_band_lineup_${band.id}`) : null) ||
-                       localStorage.getItem(`nexus_core_band_lineup_${bandUUID}`) ||
-                       (resolvedBandName ? localStorage.getItem(`nexus_core_band_lineup_${resolvedBandName.toLowerCase().trim()}`) : null);
+        const stored = (band.id ? safeLocalStorage.getItem(`nexus_core_band_lineup_${band.id}`) : null) ||
+                       safeLocalStorage.getItem(`nexus_core_band_lineup_${bandUUID}`) ||
+                       (resolvedBandName ? safeLocalStorage.getItem(`nexus_core_band_lineup_${resolvedBandName.toLowerCase().trim()}`) : null);
         if (stored) {
           try {
             const p = JSON.parse(stored);
@@ -1073,21 +1171,21 @@ export class CommunityBandManager {
       } else {
         all.push(mergedRecord);
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+      safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(all));
 
       if (resolvedLineup.length > 0) {
-        localStorage.setItem(`nexus_core_band_lineup_${bandUUID}`, JSON.stringify(resolvedLineup));
-        if (band.id) localStorage.setItem(`nexus_core_band_lineup_${band.id}`, JSON.stringify(resolvedLineup));
-        if (resolvedBandName) localStorage.setItem(`nexus_core_band_lineup_${resolvedBandName.toLowerCase().trim()}`, JSON.stringify(resolvedLineup));
+        safeLocalStorage.setItem(`nexus_core_band_lineup_${bandUUID}`, JSON.stringify(resolvedLineup));
+        if (band.id) safeLocalStorage.setItem(`nexus_core_band_lineup_${band.id}`, JSON.stringify(resolvedLineup));
+        if (resolvedBandName) safeLocalStorage.setItem(`nexus_core_band_lineup_${resolvedBandName.toLowerCase().trim()}`, JSON.stringify(resolvedLineup));
       }
 
       if (finalAvatarUrl && !finalAvatarUrl.startsWith('data:')) {
-        localStorage.setItem(`nexus_core_band_logo_${bandUUID}`, finalAvatarUrl);
-        if (band.id) localStorage.setItem(`nexus_core_band_logo_${band.id}`, finalAvatarUrl);
+        safeLocalStorage.setItem(`nexus_core_band_logo_${bandUUID}`, finalAvatarUrl);
+        if (band.id) safeLocalStorage.setItem(`nexus_core_band_logo_${band.id}`, finalAvatarUrl);
       }
       if (finalCoverUrl && !finalCoverUrl.startsWith('data:')) {
-        localStorage.setItem(`nexus_core_band_cover_${bandUUID}`, finalCoverUrl);
-        if (band.id) localStorage.setItem(`nexus_core_band_cover_${band.id}`, finalCoverUrl);
+        safeLocalStorage.setItem(`nexus_core_band_cover_${bandUUID}`, finalCoverUrl);
+        if (band.id) safeLocalStorage.setItem(`nexus_core_band_cover_${band.id}`, finalCoverUrl);
       }
 
       // 1. Sync to 'bands' table using schema resilience & sanitization with guaranteed non-null band_name
@@ -1284,6 +1382,7 @@ export class CommunityBandManager {
 
         const KNOWN_SEEDED_NAMES: Record<string, string> = {
           'cordyceps': 'Cordyceps',
+          'cranial-impalement': 'Cranial Impalement',
           'mortician': 'Mortician',
           'sanguisugabogg': 'Sanguisugabogg',
           'necrophagist': 'Necrophagist',

@@ -92,9 +92,9 @@ const DEFAULT_CLIPS: ClipItem[] = [
     id: 'c1',
     creator: 'Virulent Excision',
     role: '💀 Band',
-    avatar: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100',
+    avatar: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396',
     caption: 'Live breakdown in Texas! Technical slam riffs in full force. 🔥 #VirulentExcision #DeathMetal',
-    videoUrl: 'https://media.w3.org/2010/05/sintel/trailer_hd.mp4',
+    videoUrl: 'https://www.youtube.com/watch?v=kY6A7yL9t6Y',
     likes: 1420,
     comments: 89,
     shares: 210,
@@ -106,17 +106,17 @@ const DEFAULT_CLIPS: ClipItem[] = [
   },
   {
     id: 'c2',
-    creator: 'Goregrind_Official',
+    creator: 'Cordyceps',
     role: '💀 Band',
-    avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=100',
-    caption: 'New drum playthrough teaser! Pitch shifted vocal gargles and gravity blasts. 🥁',
-    videoUrl: 'https://media.w3.org/2010/05/sintel/trailer_hd.mp4',
+    avatar: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788041930287_1788041930303.jpg?t=1788041930303',
+    caption: 'Official performance cut! Slamming technical death metal execution. 🥁 #Cordyceps #DeathMetal',
+    videoUrl: 'https://www.youtube.com/watch?v=0hY48qHjM7I',
     likes: 980,
     comments: 42,
     shares: 112,
     reposts: 28,
     views: 4500,
-    audio: 'Goregrind - Masticated Tissue (Teaser)',
+    audio: 'Cordyceps - Betrayal',
     hasLiked: true,
     isFollowed: true,
   },
@@ -257,10 +257,11 @@ const SingleClipPlayerCard: React.FC<{
     console.warn(`[ClipPlayer] Video playback error for clip "${clip.id}" (src: ${currentSrc}). Attempting self-healing...`);
     setIsBuffering(false);
     
+    // If fallback is available and different from current, try loading it
     try {
       const fallback = await resolveClipVideoPlaybackUrl(clip.id, currentSrc);
       if (fallback && fallback !== currentSrc) {
-        console.log(`[ClipPlayer] Applying fallback video URL for clip "${clip.id}" -> ${fallback}`);
+        console.log(`[ClipPlayer] Applying revived/resolved video URL for clip "${clip.id}" -> ${fallback}`);
         setCurrentSrc(fallback);
         setHasError(false);
         if (videoRef.current) {
@@ -273,24 +274,11 @@ const SingleClipPlayerCard: React.FC<{
         return;
       }
     } catch (e) {
-      console.warn("[ClipPlayer] Fallback error:", e);
+      console.warn("[ClipPlayer] Fallback resolution error:", e);
     }
 
-    // Secondary fallback to standard rock performance clip
-    const secondary = SCENE_PERFORMANCE_VIDEOS[0];
-    if (currentSrc !== secondary) {
-      setCurrentSrc(secondary);
-      setHasError(false);
-      if (videoRef.current) {
-        videoRef.current.src = secondary;
-        videoRef.current.load();
-        if (isActive) {
-          videoRef.current.play().catch(() => {});
-        }
-      }
-    } else {
-      setHasError(true);
-    }
+    // Set error state to show poster / retry UI without replacing with arbitrary test footage
+    setHasError(true);
   };
 
   const ytId = extractYouTubeId(currentSrc);

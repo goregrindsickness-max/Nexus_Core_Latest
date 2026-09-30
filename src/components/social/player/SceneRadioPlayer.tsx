@@ -696,12 +696,16 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     }
   };
 
-  // Auto-play random track 5 seconds after social feed / scene radio mounts
+  // Auto-play random track 3 seconds after feed opens only
   useEffect(() => {
+    // Do not start on app mount; only wait until 3 seconds after the feed opens
+    if (activeTab !== 'feed') return;
+
     const autoPlayTimer = setTimeout(() => {
       if (!hasUserInteractedWithRadio.current) {
-        console.log("[RADIO PLAYER] Auto-playing random track after feed mount...");
+        console.log("[RADIO PLAYER] Auto-playing random track 3 seconds after feed opened...");
         setSceneRadioPlaying(true);
+        sceneRadioPlayingRef.current = true;
         if (ytPlayerRef.current) {
           try {
             if (typeof ytPlayerRef.current.getPlaylist === 'function') {
@@ -727,7 +731,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     return () => {
       clearTimeout(autoPlayTimer);
     };
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     let active = true;

@@ -9,6 +9,7 @@ import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert } from '../../../supabase';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
 import { isCommunityBandRecord } from '../../../lib/seedBandsData';
+import { communityBandManager } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
 import MarqueeText from '../../MarqueeText';
 import { ListenerMetric, calculateListenerMetrics } from '../../profile/SonicFootprint';
@@ -1392,11 +1393,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     workspaces.includes('band') ||
                     prof?.band_id ||
                     prof?.band_profile_id ||
-                    prof?.band_name ||
-                    prof?.is_musician ||
-                    prof?.isMusician ||
-                    (prof?.role && (prof.role.toLowerCase().includes('musician') || prof.role.toLowerCase().includes('band') || prof.role.toLowerCase().includes('guitar') || prof.role.toLowerCase().includes('drum') || prof.role.toLowerCase().includes('vocal') || prof.role.toLowerCase().includes('bass'))) ||
-                    (isTargetSelf && (userProfile?.band_id || userProfile?.band_name || userProfile?.band_profile_id)) ||
+                    (typeof prof?.band_name === 'string' && prof.band_name.trim()) ||
+                    prof?.is_musician === true ||
+                    prof?.isMusician === true ||
+                    (prof?.role && typeof prof.role === 'string' && (
+                      prof.role.toLowerCase() === 'musician' ||
+                      prof.role.toLowerCase().includes('guitar') ||
+                      prof.role.toLowerCase().includes('drum') ||
+                      prof.role.toLowerCase().includes('vocal') ||
+                      prof.role.toLowerCase().includes('bass')
+                    )) ||
+                    (isTargetSelf && (userProfile?.band_id || (typeof userProfile?.band_name === 'string' && userProfile.band_name.trim()) || userProfile?.band_profile_id)) ||
                     isMiguelProfile
                   );
 
@@ -1497,8 +1504,32 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     (targetRole && targetRole.toLowerCase() === 'band')
                   );
 
-                  const isEffTargetMiguel = isMiguelNameOrProfile(effTarget) || isMiguelNameOrProfile(baseTarget) || isMiguelNameOrProfile(selectedUserProfile) || (isTargetSelf && isMiguelNameOrProfile(userProfile)) || isMiguelNameOrProfile(userProfile);
+                  const isEffTargetMiguel = (isTargetSelf && isMiguelNameOrProfile(userProfile)) || (!isTargetSelf && (isMiguelNameOrProfile(effTarget) || isMiguelNameOrProfile(baseTarget) || isMiguelNameOrProfile(selectedUserProfile)));
                   const targetBandId = isEffTargetMiguel ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (effTarget?.band_id || (isTargetSelf ? userProfile?.band_id : null));
+
+                  const targetBandNameDirect = (
+                    effTarget?.band_name ||
+                    effTarget?.bandName ||
+                    selectedUserProfile?.band_name ||
+                    selectedUserProfile?.bandName ||
+                    baseTarget?.band_name ||
+                    baseTarget?.bandName ||
+                    (isTargetSelf ? (userProfile?.band_name || userProfile?.bandName) : null) ||
+                    ''
+                  ).trim();
+
+                  const targetFullName = (
+                    effTarget?.full_name ||
+                    effTarget?.name ||
+                    effTarget?.display_name ||
+                    selectedUserProfile?.full_name ||
+                    selectedUserProfile?.name ||
+                    baseTarget?.full_name ||
+                    baseTarget?.name ||
+                    (isTargetSelf ? (userProfile?.full_name || userProfile?.name || userProfile?.display_name) : null) ||
+                    ''
+                  ).trim();
+
                   let matchingBandProfile: any = null;
 
                   if (isEffTargetMiguel) {
@@ -1510,34 +1541,59 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       const cleanName = (p.name || p.band_name || '').toLowerCase().trim();
                       return pId === 'cbddb810-259b-4230-9968-3d402dfdb872' || pId === 'real-b-cbddb810-259b-4230-9968-3d402dfdb872' || rawId === 'cbddb810-259b-4230-9968-3d402dfdb872' || cleanName === 'virulent excision';
                     }) : null;
+                  } else if (targetBandNameDirect) {
+                    const commBand = communityBandManager.findByName(targetBandNameDirect) || communityBandManager.findMatch(targetBandNameDirect);
+                    if (commBand) {
+                      matchingBandProfile = commBand;
+                    } else if (Array.isArray(allProfiles)) {
+                      matchingBandProfile = allProfiles.find((p: any) => {
+                        const isBandType = p.type === 'band' || p.isBandProfile || p.category === 'bands' || (p.role && p.role.toLowerCase() === 'band') || (p.portalRole && p.portalRole.toLowerCase() === 'band');
+                        if (!isBandType) return false;
+                        return (p.name?.toLowerCase() === targetBandNameDirect.toLowerCase() || p.band_name?.toLowerCase() === targetBandNameDirect.toLowerCase());
+                      });
+                    }
                   } else if (targetBandId) {
-                    matchingBandProfile = allProfiles.find((p: any) => {
-                      if (isCommunityBandRecord(p.id) || isCommunityBandRecord(p.name) || isCommunityBandRecord(p.band_name) || (p.name && p.name.toLowerCase().includes('necroticgorebeast'))) return false;
-                      const isBandType = p.type === 'band' || p.isBandProfile || p.category === 'bands' || (p.role && p.role.toLowerCase() === 'band') || (p.portalRole && p.portalRole.toLowerCase() === 'band');
-                      if (!isBandType) return false;
-                      return p.id === targetBandId || p.band_id === targetBandId || p.id === `real-b-${targetBandId}`;
-                    });
-                  } else if (typeof bandWsRef === 'object' && bandWsRef?.workspace_id) {
-                     matchingBandProfile = allProfiles.find((p: any) => (p.type === 'band' || p.isBandProfile || p.category === 'bands' || p.role === 'Band') && (p.id === bandWsRef.workspace_id || p.id === `real-b-${bandWsRef.workspace_id}`));
+                    const commBand = communityBandManager.getById(targetBandId);
+                    if (commBand) {
+                      matchingBandProfile = commBand;
+                    } else if (Array.isArray(allProfiles)) {
+                      matchingBandProfile = allProfiles.find((p: any) => {
+                        const isBandType = p.type === 'band' || p.isBandProfile || p.category === 'bands' || (p.role && p.role.toLowerCase() === 'band') || (p.portalRole && p.portalRole.toLowerCase() === 'band');
+                        if (!isBandType) return false;
+                        return p.id === targetBandId || p.band_id === targetBandId || p.id === `real-b-${targetBandId}`;
+                      });
+                    }
                   } else if (typeof bandWsRef === 'object' && bandWsRef?.name) {
-                     matchingBandProfile = allProfiles.find((p: any) => (p.type === 'band' || p.isBandProfile || p.category === 'bands' || p.role === 'Band') && p.name?.toLowerCase() === bandWsRef.name.toLowerCase());
-                  } else if (effTarget?.band_name || (isTargetSelf && userProfile?.band_name)) {
-                     const bName = effTarget?.band_name || (isTargetSelf ? userProfile?.band_name : '');
-                     if (bName && !isCommunityBandRecord(bName)) {
-                       matchingBandProfile = allProfiles.find((p: any) => {
-                         const isBandType = p.type === 'band' || p.isBandProfile || p.category === 'bands' || (p.role && p.role.toLowerCase() === 'band') || (p.portalRole && p.portalRole.toLowerCase() === 'band');
-                         if (!isBandType) return false;
-                         if (isCommunityBandRecord(p.id) || isCommunityBandRecord(p.name) || isCommunityBandRecord(p.band_name)) return false;
-                         return (p.name?.toLowerCase() === bName.toLowerCase() || p.band_name?.toLowerCase() === bName.toLowerCase());
-                       });
-                     }
+                    const commBand = communityBandManager.findByName(bandWsRef.name) || communityBandManager.findMatch(bandWsRef.name);
+                    if (commBand) {
+                      matchingBandProfile = commBand;
+                    } else if (Array.isArray(allProfiles)) {
+                      matchingBandProfile = allProfiles.find((p: any) => (p.type === 'band' || p.isBandProfile || p.category === 'bands' || p.role === 'Band') && p.name?.toLowerCase() === bandWsRef.name.toLowerCase());
+                    }
+                  }
+
+                  // If still no band found, look up by member name in community band lineups (e.g. Christopher Wirstrom -> Cranial Impalement, Andre Gonzalez -> Cordyceps)
+                  if (!matchingBandProfile && !isEffTargetMiguel) {
+                    if (targetFullName) {
+                      matchingBandProfile = communityBandManager.findByMember(targetFullName);
+                    }
+                    if (!matchingBandProfile) {
+                      const targetEmailLower = (effTarget?.email || baseTarget?.email || selectedUserProfile?.email || (isTargetSelf ? userProfile?.email : '') || '').toLowerCase();
+                      if (targetEmailLower.includes('exposedentrails') || targetFullName.toLowerCase().includes('andre')) {
+                        matchingBandProfile = communityBandManager.findByName('Cordyceps');
+                      } else if (targetEmailLower.includes('wirstrom84') || targetFullName.toLowerCase().includes('wirstrom')) {
+                        matchingBandProfile = communityBandManager.findByName('Cranial Impalement');
+                      }
+                    }
                   }
 
                   let localSavedBand: any = null;
-                  try {
-                    const localStr = localStorage.getItem('nexus_my_band_profile');
-                    if (localStr) localSavedBand = JSON.parse(localStr);
-                  } catch (e) {}
+                  if (isTargetSelf) {
+                    try {
+                      const localStr = localStorage.getItem('nexus_my_band_profile');
+                      if (localStr) localSavedBand = JSON.parse(localStr);
+                    } catch (e) {}
+                  }
 
                   const lbd = matchingBandProfile || (
                     isTargetSelf && (userProfile?.band_name || userProfile?.band_id) ? (
@@ -1549,24 +1605,27 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                   let rawBandName = isEffTargetMiguel
                     ? 'Virulent Excision'
-                    : (lbd?.band_name || lbd?.name || effTarget.band_name || effTarget.bandName || localSavedBand?.name || localSavedBand?.band_name || (typeof bandWsRef === 'object' && bandWsRef?.name ? bandWsRef.name : null) || (isTargetSelf ? (userProfile?.band_name || userProfile?.bandName) : null) || (hasWorkspaceType('band') ? 'Artist Workspace' : null));
-                  
-                  if (isEffTargetMiguel) {
-                    rawBandName = 'Virulent Excision';
-                  }
+                    : (
+                      matchingBandProfile?.name ||
+                      matchingBandProfile?.band_name ||
+                      targetBandNameDirect ||
+                      lbd?.band_name ||
+                      lbd?.name ||
+                      (isTargetSelf ? (localSavedBand?.name || userProfile?.band_name || userProfile?.bandName) : null) ||
+                      (typeof bandWsRef === 'object' && bandWsRef?.name ? bandWsRef.name : null) ||
+                      null
+                    );
 
                   const hasBandWorkspace = (
                     isEffTargetMiguel ||
-                    hasWorkspaceType('band') ||
                     Boolean(matchingBandProfile) ||
+                    Boolean(targetBandNameDirect) ||
+                    hasWorkspaceType('band') ||
                     Boolean(targetBandId) ||
-                    Boolean(effTarget.band_name) ||
-                    Boolean(effTarget.bandName) ||
-                    Boolean(localSavedBand?.name) ||
                     (isTargetSelf && Boolean(userProfile?.band_name || userProfile?.band_id))
-                  ) && Boolean(rawBandName) && String(rawBandName).trim() !== '' && !isCommunityBandRecord(rawBandName);
+                  ) && Boolean(rawBandName) && String(rawBandName).trim() !== '';
 
-                   const hasBand = !isCurrentProfileBand && hasBandWorkspace;
+                  const hasBand = !isCurrentProfileBand && hasBandWorkspace;
 
                    const promoterRefLogo = effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null);
 
@@ -1624,6 +1683,9 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     ) : null;
 
                     const candidateBandLogo = (
+                      (!isVirulentExcision && matchingBandProfile?.logo_url && isValidBandLogo(matchingBandProfile.logo_url) ? matchingBandProfile.logo_url : null) ||
+                      (!isVirulentExcision && matchingBandProfile?.avatar_url && isValidBandLogo(matchingBandProfile.avatar_url) ? matchingBandProfile.avatar_url : null) ||
+                      (!isVirulentExcision && matchingBandProfile?.avatar && isValidBandLogo(matchingBandProfile.avatar) ? matchingBandProfile.avatar : null) ||
                       (savedCoreBandLogo && isValidBandLogo(savedCoreBandLogo) ? savedCoreBandLogo : null) ||
                       (isTargetSelf && userProfile?.band_logo && isValidBandLogo(userProfile.band_logo) ? userProfile.band_logo : null) ||
                       (isTargetSelf && userProfile?.band_metadata?.logo_url && isValidBandLogo(userProfile.band_metadata.logo_url) ? userProfile.band_metadata.logo_url : null) ||
@@ -1651,11 +1713,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       logo,
                       subtitle,
                       onClick: () => {
-                        const isRealBandProfile = matchingBandProfile && (matchingBandProfile.type === 'band' || matchingBandProfile.isBandProfile || (matchingBandProfile.role && matchingBandProfile.role.toLowerCase() === 'band'));
-                        const targetBandProfile = isRealBandProfile ? matchingBandProfile : null;
+                        const targetBandProfile = matchingBandProfile || lbd;
 
                         const bandProfileObj = {
-                          ...(isVirulentExcision ? {} : (targetBandProfile || lbd || {})),
+                          ...(isVirulentExcision ? {} : (targetBandProfile || {})),
                           id: isVirulentExcision ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (targetBandProfile?.id || lbd?.id || targetBandId || `band_${effTarget?.id || Date.now()}`),
                           name,
                           band_name: name,
@@ -1668,12 +1729,12 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           isPersonal: false,
                           avatar: logo,
                           avatar_url: logo,
-                          banner: isVirulentExcision ? veBanner : (lbd?.cover_url || lbd?.banner_url || targetBandProfile?.banner_url || effTarget.banner_url),
-                          banner_url: isVirulentExcision ? veBanner : (lbd?.cover_url || lbd?.banner_url || targetBandProfile?.banner_url || effTarget.banner_url),
-                          cover_url: isVirulentExcision ? veBanner : (lbd?.cover_url || targetBandProfile?.cover_url),
+                          banner: isVirulentExcision ? veBanner : (matchingBandProfile?.cover_url || matchingBandProfile?.banner_url || lbd?.cover_url || lbd?.banner_url || targetBandProfile?.banner_url || effTarget.banner_url),
+                          banner_url: isVirulentExcision ? veBanner : (matchingBandProfile?.cover_url || matchingBandProfile?.banner_url || lbd?.cover_url || lbd?.banner_url || targetBandProfile?.banner_url || effTarget.banner_url),
+                          cover_url: isVirulentExcision ? veBanner : (matchingBandProfile?.cover_url || lbd?.cover_url || targetBandProfile?.cover_url),
                           logo_url: logo,
                           genre: isVirulentExcision ? 'Brutal Death Metal' : subtitle,
-                          micro_genres: isVirulentExcision ? ['Brutal Death Metal', 'Death Metal', 'Slamming BDM'] : (lbd?.micro_genres || targetBandProfile?.micro_genres || []),
+                          micro_genres: isVirulentExcision ? ['Brutal Death Metal', 'Death Metal', 'Slamming BDM'] : (matchingBandProfile?.micro_genres || lbd?.micro_genres || targetBandProfile?.micro_genres || []),
                           subgenres: isVirulentExcision ? ['Brutal Death Metal', 'Death Metal', 'Slamming BDM'] : undefined,
                           genre_tags: isVirulentExcision ? ['Brutal Death Metal', 'Death Metal', 'Slamming BDM'] : undefined,
                           homebase: isVirulentExcision ? 'Denison, TX, USA' : (lbd?.homebase || targetBandProfile?.homebase || effTarget.homebase || 'Global Scene'),
@@ -1686,7 +1747,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           record_label: isVirulentExcision ? 'Comatose Music' : undefined,
                           label: isVirulentExcision ? 'Comatose Music' : undefined,
                           metal_archives_url: isVirulentExcision ? 'https://www.metal-archives.com/bands/Virulent_Excision/3540459437' : undefined,
-                          bio: isVirulentExcision ? 'V.E. is brutal death metal, fusing old-school NYDM weight with modern technical slam. Driven by themes of biological reconfiguration and systemic depopulation, the project stands as an uncompromising, heavy-hitting soundtrack to humanity’s extinction..' : (lbd?.bio || lbd?.description || targetBandProfile?.bio || `Official Nexus Artist Profile for ${name}.`)
+                          bio: isVirulentExcision ? 'V.E. is brutal death metal, fusing old-school NYDM weight with modern technical slam. Driven by themes of biological reconfiguration and systemic depopulation, the project stands as an uncompromising, heavy-hitting soundtrack to humanity’s extinction..' : (matchingBandProfile?.bio || lbd?.bio || lbd?.description || targetBandProfile?.bio || `Official Nexus Artist Profile for ${name}.`)
                         };
                         setSelectedUserProfile(bandProfileObj);
                         triggerNotification?.(`🎸 Opening Public Band Profile for ${name}...`);

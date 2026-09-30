@@ -186,7 +186,11 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
               ? (creatorProfile.role_badge || creatorProfile.account_type || 'Operator') 
               : (clip.band_name ? '💀 Band' : 'Operator');
 
-            const videoUrl = clip.video_url || clip.videoUrl || clip.url || '';
+            const rawVideoUrl = clip.video_url || clip.videoUrl || clip.url || '';
+            const isCorrupted = !rawVideoUrl || rawVideoUrl.startsWith('/9j/') || rawVideoUrl.startsWith('data:image');
+            const videoUrl = (String(clip.id) === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' && isCorrupted)
+              ? 'https://www.youtube.com/watch?v=kY6A7yL9t6Y'
+              : rawVideoUrl;
             const caption = clip.caption || clip.description || clip.title || '';
             const songTitle = clip.song_title || clip.songTitle || clip.audio || 'Original Audio';
             const bandName = clip.band_name || clip.bandName || creatorName;

@@ -4161,7 +4161,7 @@ list.push({
       )}
 
       <div className="flex-1 w-full flex flex-col relative">
-        {showSplash && (
+        {showSplash ? (
           <div className="fixed inset-0 z-[9999] bg-[#07080a] overflow-y-auto custom-scrollbar">
             <SplashView 
               isLoggedOut={isLoggedOut}
@@ -4182,9 +4182,7 @@ list.push({
               }}
             />
           </div>
-        )}
-
-        {isLoggedOut ? (
+        ) : isLoggedOut ? (
           <LoginView 
             initialTab={loginInitialTab} 
             triggerNotification={triggerNotification}
@@ -4332,7 +4330,7 @@ list.push({
               addLog(customProfile ? `New crew profile signed up: ${customProfile.name} (${customProfile.role}) for ${customBand?.name || 'Artist'}` : 'Session restored by authorized administrator.');
             }} 
           />
-        ) : (!showSplash && !isLoggedOut && (activeTab as string) === 'social') ? (
+        ) : ((activeTab as string) === 'social') ? (
           <UniversalSocialFeed 
             userProfile={userProfile}
             setUserProfile={setUserProfile}
@@ -4384,7 +4382,7 @@ list.push({
               }
             }}
           />
-        ) : (!showSplash && !isLoggedOut && (userProfile?.account_type === 'creative' || userProfile?.active_workspace === 'creative' || (activeTab as string) === 'creative')) ? (
+        ) : (userProfile?.account_type === 'creative' || userProfile?.active_workspace === 'creative' || (activeTab as string) === 'creative') ? (
           <div className="flex-grow overflow-y-auto">
               <CreativeDashboardViewV2
                 onUpgradeToPro={() => setShowWorkspaceRegistration(true)}
@@ -4416,7 +4414,7 @@ list.push({
                 addLog={addLog}
               />
           </div>
-        ) : (!showSplash && !isLoggedOut && (userProfile?.account_type === 'label' || userProfile?.active_workspace === 'label' || (activeTab as string) === 'label')) ? (
+        ) : (userProfile?.account_type === 'label' || userProfile?.active_workspace === 'label' || (activeTab as string) === 'label') ? (
             <LabelDashboardViewV2
               userProfile={userProfile}
               setUserProfile={setUserProfile}
@@ -4429,7 +4427,7 @@ list.push({
                 triggerNotification('Session closed. Goodbye.');
               }}
             />
-        ) : (!showSplash && !isLoggedOut && FLAGS.ENABLE_PROMOTER_PORTAL && (userProfile?.account_type === 'promoter' || userProfile?.active_workspace === 'promoter' || (activeTab as string) === 'promoter')) ? (
+        ) : (FLAGS.ENABLE_PROMOTER_PORTAL && (userProfile?.account_type === 'promoter' || userProfile?.active_workspace === 'promoter' || (activeTab as string) === 'promoter')) ? (
             <div className="flex-grow overflow-y-auto">
               <PromoterDashboardViewV2
                 onUpgradeToPro={() => setShowWorkspaceRegistration(true)}
