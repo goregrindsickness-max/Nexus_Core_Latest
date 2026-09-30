@@ -69,33 +69,100 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
   const isFan = activeWorkspace === 'fan_only' || activeWorkspace === 'fan' || portalRole === 'fan_only' || portalRole === 'fan';
   const isIndustryPro = activeWorkspace === 'industry_pro' || activeWorkspace === 'pro' || portalRole === 'industry_pro' || portalRole === 'pro' || (!isBand && !isPromoter && !isFan);
 
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const isHoveredRef = React.useRef(false);
+
+  // Filter shows so each multi-city tour or headliner features ONLY 1 geographically closest show to avoid feed clutter
   const uniqueLiveEvents = useMemo(() => {
     if (!liveEvents || !Array.isArray(liveEvents)) return [];
-    const seenIds = new Set<string>();
-    const seenSigs = new Set<string>();
-    const result: LiveTonightGig[] = [];
+
+    const tourGroups = new Map<string, LiveTonightGig[]>();
 
     for (const gig of liveEvents) {
       if (!gig) continue;
       const gigId = String(gig.id || '').trim();
-      const h = String(gig.headliner || '').toLowerCase().trim();
+      const h = String(gig.headliner || (gig as any).name || '').toLowerCase().trim();
       const d = String(gig.date || '').toLowerCase().trim();
-      const sig = `${h}__${d}`;
 
-      // Exclude shows that have already passed or are archived in community archives
-      if (isPastShowDate(gig.date) || isPastShowDate(d) || (h.includes('vader') && d.includes('2026-09-24')) || gigId === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee') {
+      // Exclude shows that have already passed or are archived (Exempt Nile)
+      if (!h.includes('nile') && (isPastShowDate(gig.date) || isPastShowDate(d) || (h.includes('vader') && d.includes('2026-09-24')) || gigId === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee')) {
         continue;
       }
 
-      if (gigId && seenIds.has(gigId)) continue;
-      if (h && d && seenSigs.has(sig)) continue;
-
-      if (gigId) seenIds.add(gigId);
-      if (h && d) seenSigs.add(sig);
-      result.push(gig);
+      // Group key: tour_id or tour_name or headliner name
+      const tourKey = (gig as any).tour_id || (gig as any).tour_name || (h ? h : `gig-${gigId}`);
+      const group = tourGroups.get(tourKey) || [];
+      group.push(gig);
+      tourGroups.set(tourKey, group);
     }
-    return result;
-  }, [liveEvents]);
+
+    const parseMiles = (gig: LiveTonightGig): number => {
+      if ((gig as any).distanceMiles !== undefined) return Number((gig as any).distanceMiles);
+      if (gig.distance && typeof gig.distance === 'string') {
+        const cleaned = gig.distance.replace(/,/g, '').match(/\d+(\.\d+)?/);
+        if (cleaned) return parseFloat(cleaned[0]);
+      }
+      const cityLower = String(gig.city || '').toLowerCase();
+      const userCity = String(userProfile?.city || userProfile?.location || '').toLowerCase();
+      if (userCity && cityLower.includes(userCity)) return 5;
+      if (cityLower.includes('kansas city') || cityLower.includes('denver') || cityLower.includes('st. louis')) return 20;
+      return 99999;
+    };
+
+    const featuredGigs: LiveTonightGig[] = [];
+
+    for (const [, gigs] of tourGroups) {
+      if (gigs.length === 0) continue;
+      if (gigs.length === 1) {
+        featuredGigs.push(gigs[0]);
+        continue;
+      }
+
+      // Sort gigs in the tour by closest geographical distance
+      gigs.sort((a, b) => {
+        const distA = parseMiles(a);
+        const distB = parseMiles(b);
+        if (distA !== distB) return distA - distB;
+        return String(a.date || '').localeCompare(String(b.date || ''));
+      });
+
+      // Feature the 1 closest show for this tour
+      featuredGigs.push(gigs[0]);
+    }
+
+    // Sort final featured list so followed bands and closest shows appear first
+    featuredGigs.sort((a, b) => {
+      if (a.isFollowed && !b.isFollowed) return -1;
+      if (!a.isFollowed && b.isFollowed) return 1;
+      return parseMiles(a) - parseMiles(b);
+    });
+
+    return featuredGigs;
+  }, [liveEvents, userProfile]);
+
+  // Auto-scroll loop at a medium readable speed (~3.5 seconds per step), pausing on user interaction
+  React.useEffect(() => {
+    if (!isLiveTonightOpen || uniqueLiveEvents.length <= 1) return;
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const intervalId = setInterval(() => {
+      if (!scrollRef.current || isHoveredRef.current) return;
+      const target = scrollRef.current;
+      const maxScroll = target.scrollWidth - target.clientWidth;
+      if (maxScroll <= 0) return;
+
+      if (target.scrollLeft >= maxScroll - 15) {
+        target.scrollTo({ left: 0, behavior: 'smooth' });
+      } else {
+        target.scrollBy({ left: 240, behavior: 'smooth' });
+      }
+    }, 3500);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isLiveTonightOpen, uniqueLiveEvents.length]);
 
   return (
     <div className="w-full bg-black/60 border-b border-zinc-900">
@@ -136,7 +203,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
             </span>
             {uniqueLiveEvents && uniqueLiveEvents.length > 0 && (
               <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 hidden sm:inline">
-                {uniqueLiveEvents.length} {uniqueLiveEvents.length === 1 ? 'Date' : 'Dates'}
+                {uniqueLiveEvents.length} {uniqueLiveEvents.length === 1 ? 'Show' : 'Shows'} Featured
               </span>
             )}
           </div>
@@ -175,7 +242,14 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
         </div>
 
         {isLiveTonightOpen && (
-          <div className="overflow-x-auto no-scrollbar px-4 flex gap-3 pb-1 animate-in slide-in-from-top-2 fade-in duration-200">
+          <div
+            ref={scrollRef}
+            onMouseEnter={() => { isHoveredRef.current = true; }}
+            onMouseLeave={() => { isHoveredRef.current = false; }}
+            onTouchStart={() => { isHoveredRef.current = true; }}
+            onTouchEnd={() => { isHoveredRef.current = false; }}
+            className="overflow-x-auto no-scrollbar px-4 flex gap-3 pb-1 animate-in slide-in-from-top-2 fade-in duration-200 scroll-smooth"
+          >
             {uniqueLiveEvents.map((gig, idx) => {
               const isTonight = gig.date?.toLowerCase() === 'tonight' || (!gig.date && gig.time.toLowerCase().includes('tonight'));
               const isTomorrow = gig.date?.toLowerCase() === 'tomorrow';

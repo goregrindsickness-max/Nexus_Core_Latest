@@ -460,9 +460,12 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-mono font-bold text-zinc-400 uppercase block mb-1">
-                    GENRE TAGS (COMMA SEPARATED)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-mono font-bold text-zinc-400 uppercase">
+                      GENRE TAGS (COMMA SEPARATED)
+                    </label>
+                    <span className="text-[10px] text-zinc-500 font-mono">Tap pills below to toggle</span>
+                  </div>
                   <input
                     type="text"
                     placeholder="SLAM, TECHNICAL DEATH, LIVE"
@@ -470,6 +473,35 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
                     onChange={(e) => setNewClipTags(e.target.value)}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
                   />
+                  {/* Preset Tag Quick Selection Chips */}
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {['SLAM', 'GOREGRIND', 'DEATHCORE', 'BRUTAL DEATH', 'HARDCORE', 'BEATDOWN', 'TECH DEATH', 'BLACK METAL', 'BREAKDOWN', 'LIVE'].map((tag) => {
+                      const activeTags = newClipTags.split(',').map((t: string) => t.trim().toUpperCase());
+                      const isSelected = activeTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              const filtered = activeTags.filter((t: string) => t !== tag && t.length > 0);
+                              setNewClipTags(filtered.join(', '));
+                            } else {
+                              const existing = activeTags.filter((t: string) => t.length > 0);
+                              setNewClipTags([...existing, tag].join(', '));
+                            }
+                          }}
+                          className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer border ${
+                            isSelected
+                              ? 'bg-rose-600 border-rose-500 text-white shadow-[0_0_8px_rgba(244,63,94,0.4)]'
+                              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+                          }`}
+                        >
+                          #{tag}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 

@@ -380,9 +380,9 @@ async function startServer() {
     }
   });
 
-  // We need JSON parsing for our API routes (with larger size limit to allow base64 uploads)
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  // We need JSON parsing for our API routes (with larger size limit to allow video & audio uploads up to 500MB)
+  app.use(express.json({ limit: '500mb' }));
+  app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
   // Ensure and serve local uploads directory for robust file persistence
   const uploadsDir = path.join(process.cwd(), 'uploads');

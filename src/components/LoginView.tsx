@@ -1365,7 +1365,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
       return;
     }
     if (!nexusConsentChecked) {
-      setError("YOU MUST RECONCILE AND AGREE TO THE NEXUS CORE PLATFORM TERMS AND FEES AGREEMENT BEFORE COMMITTING REGISTRATION.");
+      setError("PLEASE REVIEW AND AGREE TO THE TERMS OF SERVICE AND PRIVACY POLICY.");
+      setViewingTerms(true);
       return;
     }
     if (activeUserRoles.length === 0) {
@@ -2997,6 +2998,23 @@ export const LoginView: React.FC<LoginViewProps> = ({
             <TermsOfServiceView
               onBack={() => setViewingTerms(false)}
               triggerNotification={triggerNotification}
+              isRegistrationModal={(activeTab as string) === 'signup'}
+              onAgreeAndAccept={() => {
+                setNexusConsentChecked(true);
+                setViewingTerms(false);
+                setError('');
+                if (triggerNotification) triggerNotification("✅ Accepted Terms of Service & Privacy Policy");
+              }}
+              onDeclineAndExit={() => {
+                setNexusConsentChecked(false);
+                setViewingTerms(false);
+                if (onBackToSplash) {
+                  onBackToSplash();
+                } else {
+                  setActiveTab('unlock');
+                }
+                if (triggerNotification) triggerNotification("Registration declined");
+              }}
             />
           </motion.div>
         )}

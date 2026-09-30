@@ -410,60 +410,54 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
             targetId === 'my_band_id'
           );
 
-          // If the profile has a specific band assigned, fetch that band (unless it's a community archive in user workspace)
-          if (targetBandId && extractUUID(targetBandId) && (!isOwnerMiguel || !isCommunityBandRecord(targetBandId))) {
+          // Fetch band from Supabase 'bands' table as primary source of truth
+          if (targetBandId && extractUUID(targetBandId)) {
             try {
               const { data } = await supabase.from('bands').select('*').eq('id', extractUUID(targetBandId)).maybeSingle();
-              if (data && (!isOwnerMiguel || (!isCommunityBandRecord(data.id) && !isCommunityBandRecord(data.name || data.band_name)))) {
-                record = data;
-              }
+              if (data) record = data;
+            } catch (_) {}
+          } else if (validUUID) {
+            try {
+              const { data } = await supabase.from('bands').select('*').eq('id', validUUID).maybeSingle();
+              if (data) record = data;
             } catch (_) {}
           }
 
           if (!record && validUUID) {
             try {
               const { data } = await supabase.from('bands').select('*').eq('creator_id', validUUID).order('created_at', { ascending: false });
-              if (Array.isArray(data)) {
-                const userBand = data.find((b: any) => {
-                  const bId = String(b.id || '').trim();
-                  const bName = String(b.name || b.band_name || '').trim();
-                  if (bId === 'cbddb810-259b-4230-9968-3d402dfdb872' || bName.toLowerCase() === 'virulent excision') return true;
-                  return !isCommunityBandRecord(bId) && !isCommunityBandRecord(bName);
-                });
-                if (userBand) record = userBand;
+              if (Array.isArray(data) && data.length > 0) {
+                record = data[0];
               }
             } catch (_) {}
           }
 
           if (!record && (targetBandName || targetName)) {
-            const queryName = targetBandName || targetName;
-            if (!isCommunityBandRecord(queryName)) {
-              try {
-                const { data } = await supabase.from('bands').select('*').ilike('band_name', `%${queryName.trim()}%`).maybeSingle();
-                if (data && (!isOwnerMiguel || (!isCommunityBandRecord(data.id) && !isCommunityBandRecord(data.name || data.band_name)))) {
-                  record = data;
-                }
-              } catch (_) {}
-            }
+            const queryName = (targetBandName || targetName).trim();
+            try {
+              const { data } = await supabase.from('bands').select('*').ilike('band_name', `%${queryName}%`).maybeSingle();
+              if (data) {
+                record = data;
+              } else {
+                const slugCandidate = queryName.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+                const { data: slugData } = await supabase.from('bands').select('*').ilike('custom_slug', `%${slugCandidate}%`).maybeSingle();
+                if (slugData) record = slugData;
+              }
+            } catch (_) {}
           }
 
           if (!record && isViewingSelf) {
             try {
               const localBandStr = localStorage.getItem('nexus_my_band_profile');
               if (localBandStr) {
-                const parsed = JSON.parse(localBandStr);
-                if (parsed && (isCommunityBandRecord(parsed.id) || isCommunityBandRecord(parsed.name || parsed.band_name))) {
-                  localStorage.removeItem('nexus_my_band_profile');
-                } else {
-                  record = parsed;
-                }
+                record = JSON.parse(localBandStr);
               }
             } catch (_) {}
           }
 
-          // Virulent Excision is the founder's (Miguel's) band — force Virulent Excision ONLY when viewing Miguel's own profile
+          // Virulent Excision is the founder's (Miguel's) band — force Virulent Excision ONLY when viewing Miguel's own personal profile
           const recName = record ? String(record.name || record.band_name || '').toLowerCase() : '';
-          if ((!record || isCommunityBandRecord(record.id) || isCommunityBandRecord(record.name || record.band_name) || recName.includes('molested') || recName.includes('dying fetus')) && isViewingSelf && isOwnerMiguel && !isPersonal) {
+          if (!record && isViewingSelf && isOwnerMiguel && !isPersonal) {
             try {
               const { data } = await supabase.from('bands').select('*').eq('id', 'cbddb810-259b-4230-9968-3d402dfdb872').maybeSingle();
               if (data) record = data;
@@ -486,10 +480,19 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           }
 
           if (isMounted && record) {
-            setFetchedBandData(record);
-            if ((record.bio || record.description) && setProfileBlurb) {
+            const normalizedRecord = {
+              ...record,
+              avatar_url: record.avatar_url || record.logo_url || record.avatar || record.image || '',
+              logo_url: record.logo_url || record.avatar_url || record.avatar || record.image || '',
+              cover_url: record.cover_url || record.banner_url || record.banner || record.cover || '',
+              banner_url: record.banner_url || record.cover_url || record.banner || record.cover || '',
+              name: record.band_name || record.name || '',
+              band_name: record.band_name || record.name || ''
+            };
+            setFetchedBandData(normalizedRecord);
+            if ((normalizedRecord.bio || normalizedRecord.description) && setProfileBlurb) {
               if (base?.isYou || selectedUserProfile?.isYou) {
-                setProfileBlurb(record.bio || record.description);
+                setProfileBlurb(normalizedRecord.bio || normalizedRecord.description);
               }
             }
           }
@@ -522,6 +525,53 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           // Fallback silently
         }
       }
+
+  // Realtime subscription on Supabase 'bands' table so profiles always update live when changed in DB
+  React.useEffect(() => {
+    let isMounted = true;
+    const targetUuid = fetchedBandData?.id || extractUUID(base?.band_id) || extractUUID(selectedUserProfile?.band_id) || extractUUID(targetId);
+    const targetNameQuery = base?.band_name || base?.bandName || selectedUserProfile?.band_name || selectedUserProfile?.bandName || targetName || selectedUserProfile?.name;
+    if (!targetUuid && !targetNameQuery) return;
+
+    const channelName = `public:bands_card_${(targetUuid || targetNameQuery).toString().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'bands' },
+        (payload: any) => {
+          if (!isMounted) return;
+          const newBand = payload.new;
+          if (!newBand) return;
+
+          const matchesId = targetUuid && extractUUID(newBand.id) === extractUUID(targetUuid);
+          const matchesName = targetNameQuery && (
+            (newBand.band_name && newBand.band_name.toLowerCase() === targetNameQuery.toLowerCase()) ||
+            (newBand.name && newBand.name.toLowerCase() === targetNameQuery.toLowerCase())
+          );
+
+          if (matchesId || matchesName) {
+            const normalized = {
+              ...newBand,
+              avatar_url: newBand.avatar_url || newBand.logo_url || newBand.avatar || newBand.image || '',
+              logo_url: newBand.logo_url || newBand.avatar_url || newBand.avatar || newBand.image || '',
+              cover_url: newBand.cover_url || newBand.banner_url || newBand.banner || newBand.cover || '',
+              banner_url: newBand.banner_url || newBand.cover_url || newBand.banner || newBand.cover || '',
+              name: newBand.band_name || newBand.name || '',
+              band_name: newBand.band_name || newBand.name || ''
+            };
+            setFetchedBandData(normalized);
+            communityBandManager.upsertCommunityBand(normalized, { isNew: false });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [fetchedBandData?.id, base?.band_id, base?.band_name, base?.bandName, targetId, targetName, selectedUserProfile?.name, selectedUserProfile?.band_name, selectedUserProfile?.bandName, supabase]);
 
       // C) Fetch Profile from 'profiles' table for full name, console handle, location, bio
       if (supabase) {

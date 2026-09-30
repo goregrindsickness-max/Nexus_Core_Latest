@@ -691,10 +691,12 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
 
   if (!isOpen) return null;
 
-  const filteredBands = bandsList.filter((b) =>
-    b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    b.genre.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredBands = bandsList
+    .filter((b) =>
+      b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      b.genre.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true }));
 
   return (
     <div className="fixed inset-0 z-[1000005] bg-black/90 backdrop-blur-md flex items-center justify-center p-2 sm:p-6 overflow-y-auto animate-in fade-in duration-200">

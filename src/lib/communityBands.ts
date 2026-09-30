@@ -259,9 +259,11 @@ function markBandDeletedInStorage(id: string, name?: string): void {
 
 export class CommunityBandManager {
   private static instance: CommunityBandManager;
+  private isListeningToRealtime = false;
 
   private constructor() {
     this.initStorage();
+    this.setupRealtimeListener();
   }
 
   public static getInstance(): CommunityBandManager {
@@ -269,6 +271,36 @@ export class CommunityBandManager {
       CommunityBandManager.instance = new CommunityBandManager();
     }
     return CommunityBandManager.instance;
+  }
+
+  public setupRealtimeListener(): void {
+    if (this.isListeningToRealtime) return;
+    try {
+      const client = getSupabase();
+      if (!client) return;
+
+      this.isListeningToRealtime = true;
+
+      // Subscribe to live postgres_changes on the 'bands' table so all band profiles update live
+      client
+        .channel('public:bands_community_sync')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'bands' },
+          async () => {
+            await this.fetchFromSupabase();
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('nexus_community_bands_updated'));
+            }
+          }
+        )
+        .subscribe();
+
+      // Immediately run initial sync from Supabase
+      this.fetchFromSupabase().catch(() => {});
+    } catch (e) {
+      console.warn('[communityBands] Error setting up Realtime listener:', e);
+    }
   }
 
   private initStorage(): void {
@@ -545,9 +577,19 @@ export class CommunityBandManager {
         } catch {}
       }
 
-      return result.length > 0 ? result : INITIAL_COMMUNITY_BANDS;
+      const finalResult = (result.length > 0 ? result : INITIAL_COMMUNITY_BANDS).slice().sort((a, b) => {
+        const nameA = (a.name || (a as any).band_name || '').trim();
+        const nameB = (b.name || (b as any).band_name || '').trim();
+        return nameA.localeCompare(nameB, undefined, { sensitivity: 'base', numeric: true });
+      });
+
+      return finalResult;
     } catch {
-      return INITIAL_COMMUNITY_BANDS;
+      return INITIAL_COMMUNITY_BANDS.slice().sort((a, b) => {
+        const nameA = (a.name || (a as any).band_name || '').trim();
+        const nameB = (b.name || (b as any).band_name || '').trim();
+        return nameA.localeCompare(nameB, undefined, { sensitivity: 'base', numeric: true });
+      });
     }
   }
 
@@ -1353,19 +1395,21 @@ export class CommunityBandManager {
                            (bUUIDKey ? localStorage.getItem(`nexus_core_band_cover_${bUUIDKey}`) : null) ||
                            (existingItem?.id ? localStorage.getItem(`nexus_core_band_cover_${existingItem.id}`) : null);
 
-        const resolvedAvatar = savedLogo || 
-          (existingItem?.logo_url && existingItem.logo_url !== seedMatch?.logo_url && !existingItem.logo_url.includes('unsplash') ? existingItem.logo_url : null) ||
-          (existingItem?.avatar_url && existingItem.avatar_url !== seedMatch?.avatar_url && !existingItem.avatar_url.includes('unsplash') ? existingItem.avatar_url : null) ||
-          (b.logo_url && b.logo_url !== seedMatch?.logo_url && !b.logo_url.includes('unsplash') ? b.logo_url : null) ||
-          (b.avatar_url && b.avatar_url !== seedMatch?.avatar_url && !b.avatar_url.includes('unsplash') ? b.avatar_url : null) ||
-          seedMatch?.logo_url || seedMatch?.avatar_url || existingItem?.logo_url || existingItem?.avatar_url || b.logo_url || b.avatar_url || '';
+        const resolvedAvatar = 
+          (b.logo_url && !b.logo_url.includes('unsplash')) ? b.logo_url :
+          (b.avatar_url && !b.avatar_url.includes('unsplash')) ? b.avatar_url :
+          (savedLogo && !savedLogo.includes('unsplash')) ? savedLogo :
+          (existingItem?.logo_url && !existingItem.logo_url.includes('unsplash') ? existingItem.logo_url : null) ||
+          (existingItem?.avatar_url && !existingItem.avatar_url.includes('unsplash') ? existingItem.avatar_url : null) ||
+          seedMatch?.logo_url || seedMatch?.avatar_url || b.logo_url || b.avatar_url || '';
 
-        const resolvedCover = savedCover ||
-          (existingItem?.cover_url && existingItem.cover_url !== seedMatch?.cover_url && !existingItem.cover_url.includes('unsplash') ? existingItem.cover_url : null) ||
-          (existingItem?.banner_url && existingItem.banner_url !== seedMatch?.banner_url && !existingItem.banner_url.includes('unsplash') ? existingItem.banner_url : null) ||
-          (b.cover_url && b.cover_url !== seedMatch?.cover_url && !b.cover_url.includes('unsplash') ? b.cover_url : null) ||
-          (b.banner_url && b.banner_url !== seedMatch?.banner_url && !b.banner_url.includes('unsplash') ? b.banner_url : null) ||
-          seedMatch?.cover_url || seedMatch?.banner_url || existingItem?.cover_url || existingItem?.banner_url || b.cover_url || b.banner_url || '';
+        const resolvedCover = 
+          (b.cover_url && !b.cover_url.includes('unsplash')) ? b.cover_url :
+          (b.banner_url && !b.banner_url.includes('unsplash')) ? b.banner_url :
+          (savedCover && !savedCover.includes('unsplash')) ? savedCover :
+          (existingItem?.cover_url && !existingItem.cover_url.includes('unsplash') ? existingItem.cover_url : null) ||
+          (existingItem?.banner_url && !existingItem.banner_url.includes('unsplash') ? existingItem.banner_url : null) ||
+          seedMatch?.cover_url || seedMatch?.banner_url || b.cover_url || b.banner_url || '';
 
         // Intelligently merge discography: prioritize Supabase remoteDiscography, then local edits, strictly deduplicated
         const mergedDiscography: DiscographyRelease[] = (() => {
@@ -1404,21 +1448,21 @@ export class CommunityBandManager {
           ? 'verified_official'
           : 'community_archive';
 
-        // Prioritize Supabase cloud data for bio, then local edits, then seed match
+        // Prioritize Supabase cloud data for profile fields
         const record: CommunityBandRecord = {
-          id: existingItem?.id || b.id,
-          name: existingItem?.name || bandName,
-          band_name: existingItem?.name || bandName,
-          genre: existingItem?.genre || microGenres[0] || b.genre || seedMatch?.genre || 'Extreme Metal',
-          subgenres: (existingItem?.subgenres && existingItem.subgenres.length > 0) ? existingItem.subgenres : (microGenres.length > 0 ? microGenres : (seedMatch?.subgenres || [])),
-          founded_year: existingItem?.founded_year || b.founded_year || seedMatch?.founded_year || '',
-          city: existingItem?.city || b.city || seedMatch?.city || '',
-          state: existingItem?.state || b.state_province || b.state || seedMatch?.state || '',
-          state_province: existingItem?.state_province || existingItem?.state || b.state_province || b.state || seedMatch?.state_province || seedMatch?.state || '',
-          country: existingItem?.country || b.country || seedMatch?.country || 'USA',
-          record_label: existingItem?.record_label || existingItem?.label || b.record_label || b.label_name || b.label || seedMatch?.record_label || seedMatch?.label || '',
-          label: existingItem?.label || existingItem?.record_label || b.label || b.record_label || b.label_name || seedMatch?.label || seedMatch?.record_label || '',
-          creator_id: existingItem?.creator_id || b.creator_id,
+          id: b.id || existingItem?.id,
+          name: b.band_name || b.name || existingItem?.name || bandName,
+          band_name: b.band_name || b.name || existingItem?.name || bandName,
+          genre: b.genre || microGenres[0] || existingItem?.genre || seedMatch?.genre || 'Extreme Metal',
+          subgenres: (microGenres.length > 0 ? microGenres : (existingItem?.subgenres && existingItem.subgenres.length > 0 ? existingItem.subgenres : (seedMatch?.subgenres || []))),
+          founded_year: b.founded_year || existingItem?.founded_year || seedMatch?.founded_year || '',
+          city: b.city || existingItem?.city || seedMatch?.city || '',
+          state: b.state_province || b.state || existingItem?.state || seedMatch?.state || '',
+          state_province: b.state_province || b.state || existingItem?.state_province || existingItem?.state || seedMatch?.state_province || seedMatch?.state || '',
+          country: b.country || existingItem?.country || seedMatch?.country || 'USA',
+          record_label: b.record_label || b.label_name || b.label || existingItem?.record_label || existingItem?.label || seedMatch?.record_label || seedMatch?.label || '',
+          label: b.label || b.record_label || b.label_name || existingItem?.label || existingItem?.record_label || seedMatch?.label || seedMatch?.record_label || '',
+          creator_id: b.creator_id || existingItem?.creator_id,
           bio: (() => {
             if (b.bio && b.bio.trim() !== '') return b.bio.trim();
             if (existingItem?.bio && existingItem.bio.trim() !== '') return existingItem.bio.trim();
@@ -1431,16 +1475,16 @@ export class CommunityBandManager {
           image: resolvedAvatar,
           cover_url: resolvedCover,
           banner_url: resolvedCover,
-          spotify_url: existingItem?.spotify_url || b.spotify || b.spotify_url || seedMatch?.spotify_url || '',
-          bandcamp_url: existingItem?.bandcamp_url || b.bandcamp || b.bandcamp_url || seedMatch?.bandcamp_url || '',
-          metal_archives_url: existingItem?.metal_archives_url || b.metal_archives_url || seedMatch?.metal_archives_url || '',
-          youtube_url: existingItem?.youtube_url || b.featured_youtube_url || b.youtube_url || seedMatch?.youtube_url || '',
-          featured_youtube_url: existingItem?.featured_youtube_url || existingItem?.youtube_url || b.featured_youtube_url || b.youtube_url || seedMatch?.featured_youtube_url || '',
+          spotify_url: b.spotify || b.spotify_url || existingItem?.spotify_url || seedMatch?.spotify_url || '',
+          bandcamp_url: b.bandcamp || b.bandcamp_url || existingItem?.bandcamp_url || seedMatch?.bandcamp_url || '',
+          metal_archives_url: b.metal_archives_url || existingItem?.metal_archives_url || seedMatch?.metal_archives_url || '',
+          youtube_url: b.featured_youtube_url || b.youtube_url || existingItem?.youtube_url || seedMatch?.youtube_url || '',
+          featured_youtube_url: b.featured_youtube_url || b.youtube_url || existingItem?.featured_youtube_url || seedMatch?.featured_youtube_url || '',
           lineup: mergedLineup,
           discography: mergedDiscography,
           curated_by: existingItem?.curated_by || seedMatch?.curated_by || '@fan_archivist',
           curator_name: existingItem?.curator_name || seedMatch?.curator_name || 'Community Archivist',
-          created_at: existingItem?.created_at || b.created_at || seedMatch?.created_at || new Date().toISOString(),
+          created_at: b.created_at || existingItem?.created_at || seedMatch?.created_at || new Date().toISOString(),
           verification_status: resolvedVerification,
           followers_count: existingItem?.followers_count || seedMatch?.followers_count || 120
         };
@@ -1508,8 +1552,14 @@ export class CommunityBandManager {
         }
       }
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(dedupedList));
-      return dedupedList;
+      const sortedDedupedList = dedupedList.slice().sort((a, b) => {
+        const nameA = (a.name || (a as any).band_name || '').trim();
+        const nameB = (b.name || (b as any).band_name || '').trim();
+        return nameA.localeCompare(nameB, undefined, { sensitivity: 'base', numeric: true });
+      });
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sortedDedupedList));
+      return sortedDedupedList;
     } catch (err) {
       console.warn('[communityBands] fetchFromSupabase exception:', err);
       return this.getAll();

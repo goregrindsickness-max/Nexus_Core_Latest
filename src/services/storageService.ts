@@ -962,12 +962,37 @@ export async function uploadClipVideoFile(
       contentType = 'video/mp4';
     }
 
-    // Fast-path Primary Strategy: Post to server /api/upload endpoint (bypasses client RLS, instant, reliable)
+    // Primary Strategy: Direct binary upload to Supabase 'clips' storage bucket (instant, no Base64 conversion overhead)
+    const flatPath = `${cleanToken}_${cleanAuthId}_${timestamp}_${safeFileName}`;
+    try {
+      const { data: uploadData, error: uploadError } = await client.storage
+        .from('clips')
+        .upload(flatPath, uploadPayload, {
+          upsert: true,
+          cacheControl: '3600',
+          contentType,
+        });
+
+      if (!uploadError && uploadData) {
+        const finalPath = uploadData.path || flatPath;
+        const { data: publicUrlData } = client.storage.from('clips').getPublicUrl(finalPath);
+        if (publicUrlData?.publicUrl) {
+          console.log(`[STORAGE UPLOAD DIRECT SUCCESS] Stored clip in bucket "clips":`, publicUrlData.publicUrl);
+          return publicUrlData.publicUrl;
+        }
+      } else if (uploadError) {
+        console.warn(`[STORAGE UPLOAD DIRECT WARNING] Direct upload to clips bucket failed, trying secondary fallback:`, uploadError.message);
+      }
+    } catch (directErr: any) {
+      console.warn(`[STORAGE UPLOAD DIRECT EXCEPTION] Direct clips bucket exception:`, directErr?.message || directErr);
+    }
+
+    // Secondary Strategy: For small files (< 8MB) or data URLs, try /api/upload endpoint
     try {
       let base64String = '';
       if (typeof file === 'string' && file.startsWith('data:')) {
         base64String = file;
-      } else if (uploadPayload) {
+      } else if (uploadPayload && uploadPayload.size < 8 * 1024 * 1024) {
         base64String = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
@@ -1000,41 +1025,13 @@ export async function uploadClipVideoFile(
       console.warn('[STORAGE UPLOAD FAST-PATH WARNING] Fast-path /api/upload exception, falling back:', apiErr);
     }
 
-    const bucketCandidates = ['clips', 'photo-pit', 'media', 'public-assets'];
-
-    for (const targetBucket of bucketCandidates) {
-      const flatPath = `${cleanToken}_${cleanAuthId}_${timestamp}_${safeFileName}`;
-      const folderPath = `${cleanAuthId}/${cleanToken}_${timestamp}_${safeFileName}`;
-      const simplePath = `${timestamp}_${safeFileName}`;
-
-      for (const currentPath of [flatPath, folderPath, simplePath]) {
-        try {
-          const { data: uploadData, error: uploadError } = await client.storage
-            .from(targetBucket)
-            .upload(currentPath, uploadPayload, {
-              upsert: true,
-              cacheControl: '3600',
-              contentType,
-            });
-
-          if (!uploadError && uploadData) {
-            const finalPath = uploadData.path || currentPath;
-            const { data: publicUrlData } = client.storage.from(targetBucket).getPublicUrl(finalPath);
-            if (publicUrlData?.publicUrl) {
-              const finalPublicUrl = publicUrlData.publicUrl;
-              console.log(`[STORAGE UPLOAD SUCCESS] Stored clip in bucket "${targetBucket}" (${finalPath}):`, finalPublicUrl);
-              return finalPublicUrl;
-            }
-          } else if (uploadError) {
-            console.warn(`[STORAGE UPLOAD ATTEMPT] Bucket "${targetBucket}" path "${currentPath}" error:`, uploadError.message);
-          }
-        } catch (attemptErr: any) {
-          console.warn(`[STORAGE UPLOAD ATTEMPT ERROR] ${targetBucket}/${currentPath}:`, attemptErr?.message || attemptErr);
-        }
-      }
+    // Local object URL fallback if online upload couldn't complete
+    if (typeof file === 'object' && file !== null) {
+      const localBlobUrl = URL.createObjectURL(file as Blob);
+      console.log(`[STORAGE UPLOAD FALLBACK] Using local blob playback URL:`, localBlobUrl);
+      return localBlobUrl;
     }
 
-    console.warn('[STORAGE UPLOAD NOTICE] Could not upload clip video to storage buckets.');
     return '';
   } catch (err: any) {
     console.error('[STORAGE HELPER ERROR] Failed uploading clip file:', err);

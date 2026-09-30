@@ -1148,8 +1148,8 @@ export function UniversalSocialFeed({
                 const sDate = s.date || s.show_date;
                 const sId = String(s.id || '').toLowerCase().trim();
                 const sH = String(s.headliner || s.band_name || s.name || s.show_name || '').toLowerCase().trim();
-                // Exclude shows that have already passed or are in community archives from UPCOMING live feeds
-                if (isPastShowDate(sDate) || sId === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee' || (sH.includes('vader') && String(sDate).includes('2026-09-24'))) {
+                // Exclude shows that have already passed or are in community archives from UPCOMING live feeds (Exempt Nile)
+                if (!sH.includes('nile') && (isPastShowDate(sDate) || sId === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee' || (sH.includes('vader') && String(sDate).includes('2026-09-24')))) {
                   return false;
                 }
                 if (s.additional_notes) {

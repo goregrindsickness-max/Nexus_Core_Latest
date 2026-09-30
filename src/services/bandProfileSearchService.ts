@@ -148,7 +148,9 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
     console.warn('[bandProfileSearchService] Supabase query notice:', err);
   }
 
-  const results = Array.from(bandMap.values());
+  const results = Array.from(bandMap.values()).sort((a, b) =>
+    (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true })
+  );
   cachedBands = results;
   lastFetchTime = now;
 

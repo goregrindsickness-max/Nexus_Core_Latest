@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Download, 
   Smartphone, 
@@ -38,6 +38,48 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
   const [apkDownloadUrl, setApkDownloadUrl] = useState(
     'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/downloads/Nexus-Core-v1.0.apk'
   );
+
+  // Burnout transition effect state (Real fire video overlay)
+  const [isBurningOut, setIsBurningOut] = useState(false);
+  const [burnProgress, setBurnProgress] = useState(0); // 0 to 150% expanding burn radius
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const handleTriggerBurnout = (targetAction: () => void) => {
+    if (isBurningOut) return;
+    setIsBurningOut(true);
+
+    if (videoRef.current) {
+      try {
+        videoRef.current.currentTime = 0;
+        videoRef.current.play().catch(() => {});
+      } catch (_) {}
+    }
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([20, 40, 20, 60, 30, 100]);
+      }
+    } catch (_) {}
+
+    const startTime = performance.now();
+    const duration = 3500; // 3.5s cinematic fire burn transition
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      // Smooth ease out exponent for expanding fire circle
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setBurnProgress(eased * 150);
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        targetAction();
+      }
+    };
+
+    requestAnimationFrame(animate);
+  };
 
   // Dynamic APK fetch from Supabase Storage 'downloads' bucket
   useEffect(() => {
@@ -120,7 +162,28 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
   };
 
   return (
-    <div className="bg-[#07080a] flex-1 w-full flex flex-col items-center justify-between p-6 text-white font-sans select-none pb-10 relative isolate overflow-x-hidden overflow-y-auto min-h-screen">
+    <>
+      {/* Real Fire Video Effect Overlay (.mp4 from Supabase storage) - Always preloaded */}
+      <video
+        ref={videoRef}
+        src="https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/good%20fire%20effect.mp4"
+        preload="auto"
+        muted
+        playsInline
+        className={`fixed inset-0 w-full h-full object-cover z-[999999] pointer-events-none mix-blend-screen filter contrast-150 brightness-125 transition-opacity duration-300 ${
+          isBurningOut ? 'opacity-100' : 'opacity-0'
+        }`}
+        style={{
+          clipPath: isBurningOut ? `circle(${burnProgress}% at 50% 28%)` : 'circle(0% at 50% 28%)',
+          WebkitClipPath: isBurningOut ? `circle(${burnProgress}% at 50% 28%)` : 'circle(0% at 50% 28%)',
+        }}
+      />
+
+      <div 
+        className={`bg-[#07080a] flex-1 w-full flex flex-col items-center justify-start gap-6 sm:gap-8 p-4 sm:p-8 text-white font-sans select-none relative isolate overflow-x-hidden overflow-y-auto min-h-screen ${
+          isBurningOut ? 'pointer-events-none opacity-85 transition-opacity duration-700' : ''
+        }`}
+      >
       {/* Background concert image overlayed with grayscale filter */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-25 filter grayscale contrast-125 brightness-50 pointer-events-none z-0"
@@ -183,19 +246,25 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
         
         {/* Layered Emblem with Signature Green Glow */}
         <motion.div 
-          className="relative flex items-center justify-center w-full my-2"
+          className="relative flex items-center justify-center w-full my-2 transition-all duration-300"
+          style={{
+            filter: isBurningOut
+              ? 'brightness(3) contrast(1.8) drop-shadow(0 0 60px #ff4500) drop-shadow(0 0 100px #00ffcc)'
+              : undefined,
+            transform: isBurningOut ? 'scale(1.1)' : undefined,
+          }}
           initial={{ opacity: 0, scale: 0.94 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.7, ease: "easeOut" }}
         >
           {/* Pulsing Signature Green Backlight */}
           <motion.div
-            className="absolute inset-0 bg-[#00ffcc]/20 blur-[80px] rounded-full w-[260px] h-[260px] mx-auto pointer-events-none"
+            className="absolute inset-0 bg-[#00ffcc]/20 blur-[60px] rounded-full w-[180px] h-[180px] mx-auto pointer-events-none"
             animate={{ scale: [1, 1.15, 1], opacity: [0.25, 0.45, 0.25] }}
             transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
           />
 
-          <div className="relative z-10 flex items-center justify-center w-[250px] h-[250px] sm:w-[280px] sm:h-[280px]">
+          <div className="relative z-10 flex items-center justify-center w-[170px] h-[170px] sm:w-[210px] sm:h-[210px]">
             
             {/* 1. BRACKETS LAYER */}
             <motion.img 
@@ -323,18 +392,20 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
         <div className="grid grid-cols-2 gap-2.5 pt-1">
           <button 
             type="button"
-            onClick={onCreateAccount}
-            className="py-3 px-3 text-white hover:text-black text-xs font-bold bg-zinc-900/90 hover:bg-[#00ffcc] border border-zinc-800 hover:border-[#00ffcc] transition-all rounded-xl tracking-wider uppercase active:scale-[0.98] cursor-pointer text-center shadow-lg shadow-black/40 hover:shadow-[0_0_20px_rgba(0,255,204,0.3)]"
+            disabled={isBurningOut}
+            onClick={() => handleTriggerBurnout(onCreateAccount)}
+            className="py-3 px-3 text-white hover:text-black text-xs font-bold bg-zinc-900/90 hover:bg-[#00ffcc] border border-zinc-800 hover:border-[#00ffcc] transition-all rounded-xl tracking-wider uppercase active:scale-[0.98] cursor-pointer text-center shadow-lg shadow-black/40 hover:shadow-[0_0_20px_rgba(0,255,204,0.3)] disabled:opacity-50"
           >
             Create Account
           </button>
 
           <button 
             type="button"
-            onClick={onGoToDashboard}
-            className="py-3 px-3 text-zinc-300 hover:text-white text-xs font-bold bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-800/80 hover:border-zinc-700 transition-all rounded-xl tracking-wider uppercase active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
+            disabled={isBurningOut}
+            onClick={() => handleTriggerBurnout(onGoToDashboard)}
+            className="py-3 px-3 text-zinc-300 hover:text-white text-xs font-bold bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-800/80 hover:border-zinc-700 transition-all rounded-xl tracking-wider uppercase active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
           >
-            <span>Sign In</span>
+            <span>{isBurningOut ? 'Igniting...' : 'Sign In'}</span>
             <ArrowRight className="w-3 h-3 text-zinc-400 group-hover:text-[#00ffcc]" />
           </button>
         </div>
@@ -351,5 +422,6 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
         </div>
       </motion.div>
     </div>
+    </>
   );
 }

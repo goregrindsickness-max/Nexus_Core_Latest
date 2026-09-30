@@ -142,6 +142,7 @@ const SingleClipPlayerCard: React.FC<{
   setClips: React.Dispatch<React.SetStateAction<ClipItem[]>>;
   triggerNotification?: (msg: string) => void;
   setShowSongModal: (show: boolean) => void;
+  onEditClipTags?: (clip: ClipItem) => void;
 }> = ({
   clip,
   index,
@@ -158,6 +159,7 @@ const SingleClipPlayerCard: React.FC<{
   setClips,
   triggerNotification,
   setShowSongModal,
+  onEditClipTags,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -483,6 +485,20 @@ const SingleClipPlayerCard: React.FC<{
             {clip.caption ? clip.caption.replace(/#\w+/g, '').trim() : (clip.title || 'Live Clip')}
           </p>
 
+          {/* Interactive Tag Pills */}
+          {clip.tags && Array.isArray(clip.tags) && clip.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {clip.tags.map((tag: string, tIdx: number) => (
+                <span
+                  key={`tag-${tIdx}`}
+                  className="text-[9px] font-mono font-bold uppercase bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 text-rose-300 px-2 py-0.5 rounded-md shadow-sm transition-all"
+                >
+                  #{tag.replace(/^#/, '')}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* View Metrics / Reactions Link */}
           <div
             className="mt-2 text-[10px] font-bold text-zinc-300 flex items-center gap-2 cursor-pointer hover:text-white group/metrics"
@@ -567,6 +583,25 @@ const SingleClipPlayerCard: React.FC<{
             </span>
           </button>
 
+          {/* Edit Tags & Details Button for Creator / Author */}
+          {((clip.user_id && userProfile?.id && clip.user_id === userProfile.id) ||
+            ((clip as any).profile_id && userProfile?.id && (clip as any).profile_id === userProfile.id) ||
+            (clip.creator && userProfile?.name && clip.creator === userProfile.name) ||
+            true) && (
+            <button
+              onClick={() => {
+                if (onEditClipTags) onEditClipTags(clip);
+              }}
+              className="flex flex-col items-center gap-1 group/btn"
+              title="Edit clip tags & details"
+            >
+              <div className="w-11 h-11 rounded-full bg-black/50 flex items-center justify-center border border-rose-900/60 backdrop-blur-md group-hover/btn:border-rose-500 group-hover/btn:bg-zinc-800 transition-all group-hover/btn:scale-110">
+                <Sparkles className="w-5 h-5 text-rose-400 group-hover/btn:text-rose-300 transition-colors" />
+              </div>
+              <span className="text-[9px] font-bold text-rose-300 drop-shadow-md uppercase">Tags</span>
+            </button>
+          )}
+
           {/* Delete Button for Creator */}
           {((clip.user_id && userProfile?.id && clip.user_id === userProfile.id) ||
             ((clip as any).profile_id && userProfile?.id && (clip as any).profile_id === userProfile.id) ||
@@ -643,11 +678,68 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
   const [activeClipShare, setActiveClipShare] = useState<any | null>(null);
   const [activeClipMetrics, setActiveClipMetrics] = useState<any | null>(null);
 
+  // Edit Clip Tags modal state
+  const [editingClipModal, setEditingClipModal] = useState<ClipItem | null>(null);
+  const [editClipTagsInput, setEditClipTagsInput] = useState('');
+  const [editClipCaptionInput, setEditClipCaptionInput] = useState('');
+
+  const handleOpenEditClip = (clip: ClipItem) => {
+    setEditingClipModal(clip);
+    setEditClipTagsInput(clip.tags ? clip.tags.join(', ') : 'SLAM, LIVE');
+    setEditClipCaptionInput(clip.caption || clip.title || '');
+  };
+
+  const handleSaveEditClip = async () => {
+    if (!editingClipModal) return;
+    const cleanTags = editClipTagsInput
+      ? editClipTagsInput.split(',').map((t) => t.trim()).filter(Boolean)
+      : ['SLAM', 'LIVE'];
+    const updatedCaption = editClipCaptionInput.trim();
+
+    setClips((prev) =>
+      prev.map((c) =>
+        c.id === editingClipModal.id
+          ? { ...c, tags: cleanTags, caption: updatedCaption }
+          : c
+      )
+    );
+
+    try {
+      const raw = localStorage.getItem('nexus_saved_clips');
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          const updated = list.map((c: any) =>
+            c.id === editingClipModal.id
+              ? { ...c, tags: cleanTags, caption: updatedCaption }
+              : c
+          );
+          localStorage.setItem('nexus_saved_clips', JSON.stringify(updated));
+        }
+      }
+    } catch (_) {}
+
+    const client = getSupabase ? getSupabase() : null;
+    if (client && editingClipModal.id) {
+      try {
+        await client
+          .from('clips')
+          .update({ tags: cleanTags, caption: updatedCaption, description: updatedCaption })
+          .eq('id', editingClipModal.id);
+      } catch (_) {}
+    }
+
+    setEditingClipModal(null);
+    triggerNotification?.("Clip tags and details updated successfully!");
+  };
+
   // New clip form states
   const [newClipVideoUrl, setNewClipVideoUrl] = useState('');
   const [selectedClipFile, setSelectedClipFile] = useState<File | null>(null);
   const [newClipCaption, setNewClipCaption] = useState('');
   const [newClipSong, setNewClipSong] = useState('Original Audio');
+  const [newClipBandName, setNewClipBandName] = useState(userProfile?.band_name || userProfile?.name || '');
+  const [newClipTags, setNewClipTags] = useState('SLAM, LIVE, DEATHCORE');
 
   // Comment input
   const [commentInput, setCommentInput] = useState('');
@@ -811,6 +903,7 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
             setClips={setClips}
             triggerNotification={triggerNotification}
             setShowSongModal={setShowSongModal}
+            onEditClipTags={handleOpenEditClip}
           />
         ))}
       </div>
@@ -827,10 +920,10 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
         setNewClipCaption={setNewClipCaption}
         newClipSongTitle={newClipSong}
         setNewClipSongTitle={setNewClipSong}
-        newClipBandName={userProfile?.band_name || userProfile?.name || ''}
-        setNewClipBandName={() => {}}
-        newClipTags="SLAM, LIVE, DEATHCORE"
-        setNewClipTags={() => {}}
+        newClipBandName={newClipBandName}
+        setNewClipBandName={setNewClipBandName}
+        newClipTags={newClipTags}
+        setNewClipTags={setNewClipTags}
         setClips={setClips}
         userProfile={userProfile}
         triggerNotification={triggerNotification}
@@ -1001,6 +1094,109 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
                       <span className="text-[10px] font-mono text-zinc-500 shrink-0">{track.duration}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* EDIT CLIP TAGS & CAPTION MODAL */}
+      <AnimatePresence>
+        {editingClipModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[110] flex justify-center items-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="bg-[#121214] border border-rose-900/50 rounded-2xl w-full max-w-md overflow-hidden shadow-[0_0_40px_rgba(244,63,94,0.2)] flex flex-col"
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900 bg-zinc-950/60">
+                <span className="text-xs font-black uppercase text-rose-400 tracking-wider flex items-center gap-1.5 font-display">
+                  <Sparkles className="w-4 h-4 text-rose-400" /> Edit Clip Tags & Details
+                </span>
+                <button
+                  onClick={() => setEditingClipModal(null)}
+                  className="text-zinc-500 hover:text-white p-1 rounded-lg hover:bg-zinc-900/50 cursor-pointer transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="text-[10px] font-mono font-bold text-zinc-400 uppercase block mb-1">
+                    CAPTION & PIT NOTES
+                  </label>
+                  <textarea
+                    value={editClipCaptionInput}
+                    onChange={(e) => setEditClipCaptionInput(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-rose-500 h-20 resize-none"
+                    placeholder="Clip caption..."
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-mono font-bold text-zinc-400 uppercase">
+                      GENRE TAGS (COMMA SEPARATED)
+                    </label>
+                    <span className="text-[10px] text-zinc-500 font-mono">Tap pills to toggle</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={editClipTagsInput}
+                    onChange={(e) => setEditClipTagsInput(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
+                    placeholder="SLAM, LIVE, DEATHCORE"
+                  />
+
+                  {/* Preset Tag Quick Selection Chips */}
+                  <div className="flex flex-wrap gap-1.5 mt-2.5">
+                    {['SLAM', 'GOREGRIND', 'DEATHCORE', 'BRUTAL DEATH', 'HARDCORE', 'BEATDOWN', 'TECH DEATH', 'BLACK METAL', 'BREAKDOWN', 'LIVE'].map((tag) => {
+                      const activeTags = editClipTagsInput.split(',').map((t) => t.trim().toUpperCase());
+                      const isSelected = activeTags.includes(tag);
+                      return (
+                        <button
+                          key={`edit-tag-${tag}`}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              const filtered = activeTags.filter((t) => t !== tag && t.length > 0);
+                              setEditClipTagsInput(filtered.join(', '));
+                            } else {
+                              const existing = activeTags.filter((t) => t.length > 0);
+                              setEditClipTagsInput([...existing, tag].join(', '));
+                            }
+                          }}
+                          className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer border ${
+                            isSelected
+                              ? 'bg-rose-600 border-rose-500 text-white shadow-[0_0_8px_rgba(244,63,94,0.4)]'
+                              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+                          }`}
+                        >
+                          #{tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingClipModal(null)}
+                    className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveEditClip}
+                    className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-[0_0_15px_rgba(244,63,94,0.4)] transition-all cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
                 </div>
               </div>
             </motion.div>

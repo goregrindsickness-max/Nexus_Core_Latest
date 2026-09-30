@@ -4161,26 +4161,30 @@ list.push({
       )}
 
       <div className="flex-1 w-full flex flex-col relative">
-        {showSplash ? (
-          <SplashView 
-            isLoggedOut={isLoggedOut}
-            onGoToDashboard={() => {
-              const saved = localStorage.getItem('nexus_core_user_profile');
-              const profileSaved = saved !== null && saved !== 'null';
-              if (profileSaved) {
-                setIsLoggedOut(false);
-              } else {
+        {showSplash && (
+          <div className="fixed inset-0 z-[9999] bg-[#07080a] overflow-y-auto custom-scrollbar">
+            <SplashView 
+              isLoggedOut={isLoggedOut}
+              onGoToDashboard={() => {
+                const saved = localStorage.getItem('nexus_core_user_profile');
+                const profileSaved = saved !== null && saved !== 'null';
+                if (profileSaved) {
+                  setIsLoggedOut(false);
+                } else {
+                  setIsLoggedOut(true);
+                }
+                setShowSplash(false);
+              }} 
+              onCreateAccount={() => {
+                setLoginInitialTab('signup');
                 setIsLoggedOut(true);
-              }
-              setShowSplash(false);
-            }} 
-            onCreateAccount={() => {
-              setLoginInitialTab('signup');
-              setIsLoggedOut(true);
-              setShowSplash(false);
-            }}
-          />
-        ) : isLoggedOut ? (
+                setShowSplash(false);
+              }}
+            />
+          </div>
+        )}
+
+        {isLoggedOut ? (
           <LoginView 
             initialTab={loginInitialTab} 
             triggerNotification={triggerNotification}

@@ -722,7 +722,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
           }
         }
       }
-    }, 5000);
+    }, 3000);
 
     return () => {
       clearTimeout(autoPlayTimer);
