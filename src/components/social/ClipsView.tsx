@@ -94,7 +94,7 @@ const DEFAULT_CLIPS: ClipItem[] = [
     role: '💀 Band',
     avatar: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100',
     caption: 'Live breakdown in Texas! Technical slam riffs in full force. 🔥 #VirulentExcision #DeathMetal',
-    videoUrl: 'https://vjs.zencdn.net/v/oceans.mp4',
+    videoUrl: 'https://media.w3.org/2010/05/sintel/trailer_hd.mp4',
     likes: 1420,
     comments: 89,
     shares: 210,

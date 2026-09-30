@@ -44,7 +44,6 @@ export const clipsMediaStore = localforage.createInstance({
 
 // Fallback high-performance scene video streams if an old blob expired or failed
 export const SCENE_PERFORMANCE_VIDEOS = [
-  'https://vjs.zencdn.net/v/oceans.mp4',
   'https://media.w3.org/2010/05/sintel/trailer_hd.mp4',
   'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
   'https://www.w3schools.com/html/mov_bbb.mp4',
@@ -95,8 +94,8 @@ export async function getClipMediaBlob(clipId: string | number): Promise<Blob | 
  * If the blob was not saved, falls back to a reliable scene performance video so it is 100% playable.
  */
 export async function resolveClipVideoPlaybackUrl(clipId: string | number, currentUrl: string): Promise<string> {
-  // If it's a valid remote http/https URL that is not a blob, keep it
-  if (currentUrl && (currentUrl.startsWith('http://') || currentUrl.startsWith('https://')) && !currentUrl.startsWith('blob:')) {
+  // If it's a valid remote http/https URL or server relative /uploads/ path that is not a blob, keep it
+  if (currentUrl && (currentUrl.startsWith('http://') || currentUrl.startsWith('https://') || currentUrl.startsWith('/uploads/')) && !currentUrl.startsWith('blob:')) {
     return currentUrl;
   }
 

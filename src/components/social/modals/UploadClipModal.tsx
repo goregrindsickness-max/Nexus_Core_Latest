@@ -91,9 +91,6 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
     if (!finalVideoUrl && localPreviewUrl) {
       finalVideoUrl = localPreviewUrl;
     }
-    if (!finalVideoUrl) {
-      finalVideoUrl = 'https://vjs.zencdn.net/v/oceans.mp4';
-    }
 
     const cleanTags = newClipTags
       ? newClipTags.split(',').map((t: string) => t.trim()).filter(Boolean)
@@ -311,15 +308,14 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
         }
       }
 
-      if (remoteUrl) {
-        newClipObj.video_url = remoteUrl;
-        newClipObj.videoUrl = remoteUrl;
-      }
+      const activeClipUrl = remoteUrl || localPreviewUrl || finalVideoUrl;
+      newClipObj.video_url = activeClipUrl;
+      newClipObj.videoUrl = activeClipUrl;
 
       setUploadProgress(90);
       setUploadStatusText('Saving clip record to database...');
 
-      await persistClipToSupabase(remoteUrl || finalVideoUrl);
+      await persistClipToSupabase(activeClipUrl);
 
       setUploadProgress(100);
       setUploadStatusText('Complete!');

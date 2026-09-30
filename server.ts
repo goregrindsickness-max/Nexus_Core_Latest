@@ -3540,9 +3540,6 @@ Return a valid JSON object matching the requested schema. If any field is not fo
                   promoter_contact: stop.venueContactName || '',
                   parking_arrangements: stop.parkingNotes || '',
                   status: isEmbargoed ? 'Embargoed' : 'Active',
-                  is_published: isPublished,
-                  publication_status: tour.publicationStatus || 'embargoed_private',
-                  embargo_until_date: tour.embargoUntilDate || '',
                   is_managed_client_booking: true,
                   additional_notes: JSON.stringify({
                     tour_id: tour.id,
@@ -3554,7 +3551,10 @@ Return a valid JSON object matching the requested schema. If any field is not fo
                     hospitality: stop.hospitalityNotes,
                     venue_email: stop.venueContactEmail,
                     venue_phone: stop.venueContactPhone,
-                    stop_status: stop.status
+                    stop_status: stop.status,
+                    publication_status: tour.publicationStatus || 'embargoed_private',
+                    is_published: isPublished,
+                    embargo_until_date: tour.embargoUntilDate || ''
                   }),
                   support_lineup: Array.isArray(tour.bands) ? tour.bands.map((b: any) => b.name).join(', ') : ''
                 };

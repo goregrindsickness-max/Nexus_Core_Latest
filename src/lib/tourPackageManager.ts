@@ -933,9 +933,14 @@ class TourPackageManagerService {
             newStops.push(es);
             existingStopIds.add(es.id);
           } else {
-            // Update in-place
+            // Update in-place while preserving locally scouted/assigned venue names if DB show contains placeholder '?' or 'Venue'
             const idx = newStops.findIndex(st => st.id === es.id);
-            if (idx >= 0) newStops[idx] = { ...newStops[idx], ...es };
+            if (idx >= 0) {
+              const existing = newStops[idx];
+              const isDbPlaceholder = !es.venueName || es.venueName === '?' || es.venueName === 'Venue' || es.venueName === 'TBD';
+              const finalVenueName = isDbPlaceholder && existing.venueName && existing.venueName !== '?' ? existing.venueName : es.venueName;
+              newStops[idx] = { ...existing, ...es, venueName: finalVenueName };
+            }
           }
         }
         // Sort stops by date
@@ -1003,9 +1008,6 @@ class TourPackageManagerService {
             promoter_contact: stop.venueContactName || '',
             parking_arrangements: stop.parkingNotes || '',
             status: isEmbargoed ? 'Embargoed' : 'Active',
-            is_published: isPublished,
-            publication_status: tour.publicationStatus,
-            embargo_until_date: tour.embargoUntilDate,
             is_managed_client_booking: true,
             additional_notes: JSON.stringify({
               tour_id: tour.id,
@@ -1017,7 +1019,10 @@ class TourPackageManagerService {
               hospitality: stop.hospitalityNotes,
               venue_email: stop.venueContactEmail,
               venue_phone: stop.venueContactPhone,
-              stop_status: stop.status
+              stop_status: stop.status,
+              publication_status: tour.publicationStatus,
+              is_published: isPublished,
+              embargo_until_date: tour.embargoUntilDate
             }),
             support_lineup: Array.isArray(tour.bands) ? tour.bands.map(b => b.name).join(', ') : ''
           };

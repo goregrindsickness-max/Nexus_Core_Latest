@@ -962,6 +962,44 @@ export async function uploadClipVideoFile(
       contentType = 'video/mp4';
     }
 
+    // Fast-path Primary Strategy: Post to server /api/upload endpoint (bypasses client RLS, instant, reliable)
+    try {
+      let base64String = '';
+      if (typeof file === 'string' && file.startsWith('data:')) {
+        base64String = file;
+      } else if (uploadPayload) {
+        base64String = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(uploadPayload);
+        });
+      }
+
+      if (base64String) {
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            base64Data: base64String,
+            bucket: 'clips',
+            userId: cleanAuthId,
+            fileNameToken: cleanToken
+          })
+        });
+
+        if (response.ok) {
+          const resJson = await response.json();
+          if (resJson.publicUrl) {
+            console.log(`[STORAGE UPLOAD FAST-PATH SUCCESS] Saved clip via /api/upload:`, resJson.publicUrl);
+            return resJson.publicUrl;
+          }
+        }
+      }
+    } catch (apiErr) {
+      console.warn('[STORAGE UPLOAD FAST-PATH WARNING] Fast-path /api/upload exception, falling back:', apiErr);
+    }
+
     const bucketCandidates = ['clips', 'photo-pit', 'media', 'public-assets'];
 
     for (const targetBucket of bucketCandidates) {

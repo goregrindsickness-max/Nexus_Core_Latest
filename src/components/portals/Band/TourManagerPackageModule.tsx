@@ -840,7 +840,26 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
   };
 
   const handleUpdateStop = (updatedStop: TourPackageStop) => {
-    setStops(prev => prev.map(s => s.id === updatedStop.id ? updatedStop : s));
+    setStops(prev => {
+      const nextStops = prev.map(s => s.id === updatedStop.id ? updatedStop : s);
+      if (currentTour) {
+        const updatedRecord: TourPackageRecord = {
+          ...currentTour,
+          id: activeTourId,
+          title: tourTitle,
+          headlinerClientName: clientBandName,
+          publicationStatus: publicationStatus,
+          embargoUntilDate: embargoUntilDate,
+          bands: bands,
+          stops: nextStops,
+          vehicles: vehicles,
+          backlineConfig: backlineConfig,
+          updatedAt: new Date().toISOString()
+        };
+        tourPackageManager.saveTour(updatedRecord, true);
+      }
+      return nextStops;
+    });
     triggerNotification?.(`Updated stop details for ${updatedStop.venueName}.`);
     addLog?.(`TM Mode: Updated stop ${updatedStop.venueName}.`);
   };
