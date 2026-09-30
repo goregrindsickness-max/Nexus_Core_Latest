@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { ChevronDown, MapPin, Ticket, Filter, Map as MapIcon, SlidersHorizontal, Calendar, Star, Clock, Trash2, History } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { ChevronDown, MapPin, Ticket, Filter, Map as MapIcon, SlidersHorizontal, Calendar, Star, Clock, Trash2, History, UserPlus, Check, Sparkles, Building2, Palette, Music, Disc } from 'lucide-react';
 import { formatTimeTo12h, hasGigTickets, isPastShowDate } from '../../utils/socialFeedUtils';
 
 export interface LiveTonightGig {
@@ -41,7 +41,79 @@ export interface SubViewControlPanelsProps {
   onDeleteGig?: (gig: LiveTonightGig) => void;
   portalRole?: string;
   userProfile?: any;
+  discoverProfiles?: any[];
+  allProfiles?: any[];
+  onToggleFollow?: (profile: any) => void;
+  onSelectProfile?: (profile: any) => void;
+  triggerNotification?: (msg: string) => void;
 }
+
+const DEFAULT_CURATED_DISCOVERY = [
+  {
+    id: 'scene-band-cordyceps',
+    name: 'Cordyceps',
+    role: 'Band',
+    handle: '@cordyceps_bdm',
+    genre: 'Brutal Death Metal',
+    avatar: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'scene-label-unique-leader',
+    name: 'Unique Leader Records',
+    role: 'Record Label',
+    handle: '@uniqueleaderrec',
+    genre: 'Extreme Metal Distro',
+    avatar: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=150&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'scene-creative-bloodshed',
+    name: 'Bloodshed Visuals',
+    role: 'Creative',
+    handle: '@bloodshed_art',
+    genre: 'Album Art & Stage FX',
+    avatar: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=150&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'scene-promoter-heavy-mtn',
+    name: 'Heavy Mountain Bookings',
+    role: 'Promoter',
+    handle: '@heavymtn_tours',
+    genre: 'Northwest Metal Tours',
+    avatar: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=150&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'scene-band-nile',
+    name: 'Nile',
+    role: 'Band',
+    handle: '@nile_official',
+    genre: 'Technical Death Metal',
+    avatar: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=150&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'scene-label-relapse',
+    name: 'Relapse Records',
+    role: 'Record Label',
+    handle: '@relapserecords',
+    genre: 'Underground Metal',
+    avatar: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=150&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'scene-creative-rotten-graphics',
+    name: 'Rotten Graphics',
+    role: 'Creative',
+    handle: '@rottengraphics',
+    genre: 'Merch & Poster Design',
+    avatar: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=150&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'scene-promoter-denver-collective',
+    name: 'Denver Metal Collective',
+    role: 'Promoter',
+    handle: '@denvermetal',
+    genre: 'Rocky Mountain Gigs',
+    avatar: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=150&auto=format&fit=crop&q=80',
+  }
+];
 
 export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
   isLiveTonightOpen,
@@ -62,6 +134,11 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
   onDeleteGig,
   portalRole = 'band',
   userProfile,
+  discoverProfiles = [],
+  allProfiles = [],
+  onToggleFollow,
+  onSelectProfile,
+  triggerNotification,
 }) => {
   const activeWorkspace = (userProfile?.active_workspace || portalRole || '').toLowerCase();
   const isBand = activeWorkspace === 'band' || portalRole === 'band';
@@ -71,6 +148,72 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const isHoveredRef = React.useRef(false);
+
+  // Local follow state tracking for instant UI responsiveness
+  const [followedState, setFollowedState] = useState<Record<string, boolean>>({});
+
+  // Combine discoverProfiles & curated scene profiles for the ticker
+  const tickerProfiles = useMemo(() => {
+    const list: any[] = [];
+    const seenNames = new Set<string>();
+
+    // 1. Add active discoverProfiles
+    if (discoverProfiles && Array.isArray(discoverProfiles)) {
+      discoverProfiles.forEach((p) => {
+        const name = (p.name || '').trim();
+        if (name && !seenNames.has(name.toLowerCase())) {
+          seenNames.add(name.toLowerCase());
+          list.push({
+            id: p.id || `disc-${name}`,
+            name: p.name,
+            role: p.role || 'Creator',
+            handle: p.handle || `@${name.toLowerCase().replace(/\\s+/g, '')}`,
+            genre: p.genre || p.bio || 'Scene Creator',
+            avatar: p.avatar || p.logo_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80',
+            followed: Boolean(p.followed),
+            rawProfile: p,
+          });
+        }
+      });
+    }
+
+    // 2. Add curated scene entities to ensure diverse mix of Band, Label, Creative, Promoter
+    DEFAULT_CURATED_DISCOVERY.forEach((curated) => {
+      if (!seenNames.has(curated.name.toLowerCase())) {
+        seenNames.add(curated.name.toLowerCase());
+        list.push({
+          ...curated,
+          followed: Boolean(followedState[curated.id] || followedState[curated.name.toLowerCase()]),
+          rawProfile: curated,
+        });
+      }
+    });
+
+    return list;
+  }, [discoverProfiles, followedState]);
+
+  const handleEntityFollowClick = (e: React.MouseEvent, entity: any) => {
+    e.stopPropagation();
+    const entityKey = entity.id || entity.name.toLowerCase();
+    const currentFollow = Boolean(followedState[entityKey] !== undefined ? followedState[entityKey] : entity.followed);
+    const nextFollow = !currentFollow;
+
+    setFollowedState((prev) => ({
+      ...prev,
+      [entityKey]: nextFollow,
+      [entity.name.toLowerCase()]: nextFollow,
+    }));
+
+    if (onToggleFollow) {
+      onToggleFollow(entity.rawProfile || entity);
+    }
+
+    triggerNotification?.(
+      nextFollow
+        ? `⚡ Now following ${entity.name}`
+        : `Unfollowed ${entity.name}`
+    );
+  };
 
   // Filter shows so each multi-city tour or headliner features ONLY 1 geographically closest show to avoid feed clutter
   const uniqueLiveEvents = useMemo(() => {
@@ -349,64 +492,79 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
         )}
       </div>
 
-      {/* Feed Filters Control Panel */}
-      {(setFilterHideTicketPresales ||
-        setFilterShowFollowedOnly ||
-        setFilterShowMerchDropsOnlyFromFollowed) && (
-        <div className="px-4 py-1.5 bg-zinc-950/80 border-t border-zinc-900/80 flex items-center justify-between text-[9px] font-mono text-zinc-400 overflow-x-auto no-scrollbar gap-2">
-          <div className="flex items-center gap-1.5 shrink-0 text-zinc-500 font-bold uppercase tracking-wider">
-            <SlidersHorizontal className="w-3 h-3 text-rose-500" /> Filters:
-          </div>
+      {/* Interactive Discover & Follow Scene Ticker Module */}
+      <div className="px-3 py-1.5 bg-zinc-950/90 border-t border-zinc-900/80 flex items-center gap-2.5 overflow-hidden text-[9px] font-mono select-none">
+        {/* Module Label Badge */}
+        <div className="flex items-center gap-1.5 shrink-0 text-[8.5px] font-mono font-black text-rose-400 uppercase tracking-wider bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-500/30 shadow-[0_0_10px_rgba(244,63,94,0.15)]">
+          <Sparkles className="w-2.5 h-2.5 text-rose-400 animate-pulse" />
+          <span>SCENE FEED</span>
+        </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {setFilterHideTicketPresales && (
-              <button
-                type="button"
-                onClick={() => setFilterHideTicketPresales(!filterHideTicketPresales)}
-                className={`px-2 py-0.5 rounded-full border transition-all cursor-pointer font-bold uppercase tracking-wider ${
-                  filterHideTicketPresales
-                    ? 'bg-rose-950/60 border-rose-500/60 text-rose-300'
-                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                {filterHideTicketPresales ? '✓ Hide Tickets' : 'Hide Presales'}
-              </button>
-            )}
+        {/* Continuous Scrolling Ticker */}
+        <div className="flex-1 overflow-hidden relative flex items-center">
+          <div className="animate-scene-follow-ticker flex items-center gap-2.5 shrink-0">
+            {tickerProfiles.concat(tickerProfiles).map((item, idx) => {
+              const itemKey = item.id || item.name.toLowerCase();
+              const isFollowed = Boolean(followedState[itemKey] !== undefined ? followedState[itemKey] : item.followed);
+              const roleColor =
+                item.role?.toLowerCase().includes('label')
+                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                  : item.role?.toLowerCase().includes('promoter')
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                  : item.role?.toLowerCase().includes('creative')
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
 
-            {setFilterShowFollowedOnly && (
-              <button
-                type="button"
-                onClick={() => setFilterShowFollowedOnly(!filterShowFollowedOnly)}
-                className={`px-2 py-0.5 rounded-full border transition-all cursor-pointer font-bold uppercase tracking-wider ${
-                  filterShowFollowedOnly
-                    ? 'bg-rose-950/60 border-rose-500/60 text-rose-300'
-                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                {filterShowFollowedOnly ? '✓ Followed Only' : 'Followed Artists'}
-              </button>
-            )}
+              return (
+                <div
+                  key={`${item.id}-${idx}`}
+                  onClick={() => onSelectProfile && onSelectProfile(item.rawProfile || item)}
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-900/90 hover:bg-zinc-800/90 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer shrink-0 shadow-sm group/item"
+                >
+                  <span className={`text-[7px] font-mono font-black px-1.5 py-0.2 rounded uppercase tracking-wider border ${roleColor}`}>
+                    {item.role?.toUpperCase().replace('RECORD ', '') || 'ARTIST'}
+                  </span>
 
-            {setFilterShowMerchDropsOnlyFromFollowed && (
-              <button
-                type="button"
-                onClick={() =>
-                  setFilterShowMerchDropsOnlyFromFollowed(!filterShowMerchDropsOnlyFromFollowed)
-                }
-                className={`px-2 py-0.5 rounded-full border transition-all cursor-pointer font-bold uppercase tracking-wider ${
-                  filterShowMerchDropsOnlyFromFollowed
-                    ? 'bg-rose-950/60 border-rose-500/60 text-rose-300'
-                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                {filterShowMerchDropsOnlyFromFollowed
-                  ? '✓ Followed Merch'
-                  : 'Followed Merch Drops'}
-              </button>
-            )}
+                  <img
+                    src={item.avatar}
+                    alt={item.name}
+                    className="w-3.5 h-3.5 rounded-full object-cover border border-zinc-700 shrink-0"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+
+                  <span className="text-[9.5px] font-bold text-zinc-200 group-hover/item:text-white truncate max-w-[110px]">
+                    {item.name}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleEntityFollowClick(e, item)}
+                    className={`flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[8px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      isFollowed
+                        ? 'bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                        : 'bg-zinc-800 hover:bg-rose-900/60 border border-zinc-700 hover:border-rose-500/60 text-zinc-300 hover:text-white'
+                    }`}
+                  >
+                    {isFollowed ? (
+                      <>
+                        <Check className="w-2.5 h-2.5 text-emerald-400" />
+                        <span>Following</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-2.5 h-2.5 text-rose-400" />
+                        <span>Follow</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

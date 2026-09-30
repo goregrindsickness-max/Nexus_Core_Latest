@@ -147,6 +147,22 @@
   animation: continuous-marquee 8s linear infinite;
 }
 
+@keyframes scene-follow-ticker {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-scene-follow-ticker {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: scene-follow-ticker 149s linear infinite;
+}
+
+.animate-scene-follow-ticker:hover,
+.animate-scene-follow-ticker:active {
+  animation-play-state: paused;
+}
+
 @keyframes marquee {
   0% { transform: translate3d(0, 0, 0); }
   50% { transform: translate3d(-35%, 0, 0); }

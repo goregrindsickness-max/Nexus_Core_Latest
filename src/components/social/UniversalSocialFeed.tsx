@@ -5208,6 +5208,22 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
             onDeleteGig={handleDeleteUpcomingShowPermanently}
             portalRole={portalRole}
             userProfile={userProfile}
+            discoverProfiles={discoverProfiles}
+            allProfiles={allProfiles}
+            onToggleFollow={(p) => {
+              if (p) {
+                handleGlobalSearchFollowToggle(p.id, p.name);
+              }
+            }}
+            onSelectProfile={(p) => {
+              if (p) {
+                const prof = getProfileForUser(p);
+                if (prof) {
+                  handleSelectUserProfile(prof);
+                }
+              }
+            }}
+            triggerNotification={triggerNotification}
           />
         )}
       </div>

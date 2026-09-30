@@ -526,53 +526,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         }
       }
 
-  // Realtime subscription on Supabase 'bands' table so profiles always update live when changed in DB
-  React.useEffect(() => {
-    let isMounted = true;
-    const targetUuid = fetchedBandData?.id || extractUUID(base?.band_id) || extractUUID(selectedUserProfile?.band_id) || extractUUID(targetId);
-    const targetNameQuery = base?.band_name || base?.bandName || selectedUserProfile?.band_name || selectedUserProfile?.bandName || targetName || selectedUserProfile?.name;
-    if (!targetUuid && !targetNameQuery) return;
-
-    const channelName = `public:bands_card_${(targetUuid || targetNameQuery).toString().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'bands' },
-        (payload: any) => {
-          if (!isMounted) return;
-          const newBand = payload.new;
-          if (!newBand) return;
-
-          const matchesId = targetUuid && extractUUID(newBand.id) === extractUUID(targetUuid);
-          const matchesName = targetNameQuery && (
-            (newBand.band_name && newBand.band_name.toLowerCase() === targetNameQuery.toLowerCase()) ||
-            (newBand.name && newBand.name.toLowerCase() === targetNameQuery.toLowerCase())
-          );
-
-          if (matchesId || matchesName) {
-            const normalized = {
-              ...newBand,
-              avatar_url: newBand.avatar_url || newBand.logo_url || newBand.avatar || newBand.image || '',
-              logo_url: newBand.logo_url || newBand.avatar_url || newBand.avatar || newBand.image || '',
-              cover_url: newBand.cover_url || newBand.banner_url || newBand.banner || newBand.cover || '',
-              banner_url: newBand.banner_url || newBand.cover_url || newBand.banner || newBand.cover || '',
-              name: newBand.band_name || newBand.name || '',
-              band_name: newBand.band_name || newBand.name || ''
-            };
-            setFetchedBandData(normalized);
-            communityBandManager.upsertCommunityBand(normalized, { isNew: false });
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      isMounted = false;
-      supabase.removeChannel(channel);
-    };
-  }, [fetchedBandData?.id, base?.band_id, base?.band_name, base?.bandName, targetId, targetName, selectedUserProfile?.name, selectedUserProfile?.band_name, selectedUserProfile?.bandName, supabase]);
-
       // C) Fetch Profile from 'profiles' table for full name, console handle, location, bio
       if (supabase) {
         try {
@@ -625,6 +578,54 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     loadProfileBandDataAndShows();
     return () => { isMounted = false; };
   }, [selectedUserProfile?.id, selectedUserProfile?.email, selectedUserProfile?.console_handle, selectedUserProfile?.name, targetProfile?.id, targetProfile?.name, supabase]);
+
+  // Realtime subscription on Supabase 'bands' table so profiles always update live when changed in DB
+  React.useEffect(() => {
+    let isMounted = true;
+    const base = selectedUserProfile || targetProfile;
+    const targetUuid = fetchedBandData?.id || extractUUID(base?.band_id) || extractUUID(selectedUserProfile?.band_id) || extractUUID(base?.id);
+    const targetNameQuery = base?.band_name || base?.bandName || selectedUserProfile?.band_name || selectedUserProfile?.bandName || base?.name || selectedUserProfile?.name;
+    if (!targetUuid && !targetNameQuery) return;
+
+    const channelName = `public:bands_card_${(targetUuid || targetNameQuery).toString().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'bands' },
+        (payload: any) => {
+          if (!isMounted) return;
+          const newBand = payload.new;
+          if (!newBand) return;
+
+          const matchesId = targetUuid && extractUUID(newBand.id) === extractUUID(targetUuid);
+          const matchesName = targetNameQuery && (
+            (newBand.band_name && newBand.band_name.toLowerCase() === targetNameQuery.toLowerCase()) ||
+            (newBand.name && newBand.name.toLowerCase() === targetNameQuery.toLowerCase())
+          );
+
+          if (matchesId || matchesName) {
+            const normalized = {
+              ...newBand,
+              avatar_url: newBand.avatar_url || newBand.logo_url || newBand.avatar || newBand.image || '',
+              logo_url: newBand.logo_url || newBand.avatar_url || newBand.avatar || newBand.image || '',
+              cover_url: newBand.cover_url || newBand.banner_url || newBand.banner || newBand.cover || '',
+              banner_url: newBand.banner_url || newBand.cover_url || newBand.banner || newBand.cover || '',
+              name: newBand.band_name || newBand.name || '',
+              band_name: newBand.band_name || newBand.name || ''
+            };
+            setFetchedBandData(normalized);
+            communityBandManager.upsertCommunityBand(normalized, { isNew: false });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [fetchedBandData?.id, selectedUserProfile, targetProfile, supabase]);
 
   React.useEffect(() => {
     const handleBandUpdate = (evt: any) => {
@@ -4271,24 +4272,26 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                 
                                 return (
                                   <div key={release.id ? `rel-${release.id}-${rIdx}` : `rel-${rIdx}`} className="bg-[#0c0e12] border border-zinc-800/80 rounded-2xl overflow-hidden shadow-2xl relative flex flex-col">
-                                    <div className="flex items-center justify-between p-3 border-b border-zinc-800/80 bg-black/40">
+                                    <div className="flex items-center justify-between p-3 border-b border-zinc-800/80 bg-black/40 gap-3">
                                       <div 
-                                        className="flex items-center gap-2 cursor-pointer group/title"
+                                        className="flex flex-col items-start gap-1 cursor-pointer group/title min-w-0 flex-1"
                                         onClick={() => setSelectedRelease(fullRel)}
                                         title="View Release Details & Full Tracklist"
                                       >
-                                        <span className="px-1.5 py-0.5 rounded bg-[#FF9900]/10 text-[#FF9900] border border-[#FF9900]/20 text-[8px] font-mono font-black uppercase tracking-widest">{release.format || release.type || fullRel.type || 'Release'}</span>
-                                        <h4 className="text-xs font-bold text-white uppercase tracking-wider group-hover/title:text-[#FF9900] transition-colors">{release.title || fullRel.title}</h4>
-                                      </div>
-                                      <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                          <span className="px-1.5 py-0.5 rounded bg-[#FF9900]/10 text-[#FF9900] border border-[#FF9900]/20 text-[8px] font-mono font-black uppercase tracking-widest shrink-0">{release.format || release.type || fullRel.type || 'Release'}</span>
+                                          <h4 className="text-xs font-bold text-white uppercase tracking-wider group-hover/title:text-[#FF9900] transition-colors truncate">{release.title || fullRel.title}</h4>
+                                        </div>
                                         {!hasAnyAudio && (
-                                          <span className="text-[9px] font-mono text-amber-500/90 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1">
-                                            <span>*</span> audio files not loaded yet
+                                          <span className="text-[9px] font-mono text-amber-500/90 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded inline-flex items-center gap-1 shrink-0">
+                                            <span className="text-amber-400 font-bold">*</span> audio files not loaded yet
                                           </span>
                                         )}
-                                        <button className="flex items-center gap-1.5 px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-wider transition-colors shadow-lg">
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        <button className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-900/90 hover:bg-purple-800 text-white rounded-md text-[10px] font-black uppercase tracking-wider transition-colors shadow-lg border border-purple-600/40">
                                           <ShoppingCart className="w-3 h-3" />
-                                          <span>Buy • $9.99</span>
+                                          <span>BUY • $9.99</span>
                                         </button>
                                       </div>
                                     </div>

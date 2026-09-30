@@ -39,9 +39,8 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
     'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/downloads/Nexus-Core-v1.0.apk'
   );
 
-  // Burnout transition effect state (Real fire video overlay)
+  // Burnout transition effect state (Real fire screen video overlay)
   const [isBurningOut, setIsBurningOut] = useState(false);
-  const [burnProgress, setBurnProgress] = useState(0); // 0 to 150% expanding burn radius
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const handleTriggerBurnout = (targetAction: () => void) => {
@@ -51,7 +50,10 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
     if (videoRef.current) {
       try {
         videoRef.current.currentTime = 0;
-        videoRef.current.play().catch(() => {});
+        videoRef.current.playbackRate = 2.2; // Play 7.9s video across 3.5s transition
+        videoRef.current.play().catch((err) => {
+          console.warn('Fire transition video play error:', err);
+        });
       } catch (_) {}
     }
 
@@ -61,24 +63,9 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
       }
     } catch (_) {}
 
-    const startTime = performance.now();
-    const duration = 3500; // 3.5s cinematic fire burn transition
-
-    const animate = (now: number) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(1, elapsed / duration);
-      // Smooth ease out exponent for expanding fire circle
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setBurnProgress(eased * 150);
-
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
-        targetAction();
-      }
-    };
-
-    requestAnimationFrame(animate);
+    setTimeout(() => {
+      targetAction();
+    }, 3500);
   };
 
   // Dynamic APK fetch from Supabase Storage 'downloads' bucket
@@ -163,25 +150,26 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
 
   return (
     <>
-      {/* Real Fire Video Effect Overlay (.mp4 from Supabase storage) - Always preloaded */}
+      {/* Real Fire Screen Video Effect Overlay (Flames only, black keyed out via mix-blend-screen) */}
       <video
         ref={videoRef}
-        src="https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/good%20fire%20effect.mp4"
+        src="https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/fire%20screen.mp4"
+        crossOrigin="anonymous"
         preload="auto"
         muted
         playsInline
-        className={`fixed inset-0 w-full h-full object-cover z-[999999] pointer-events-none mix-blend-screen filter contrast-150 brightness-125 transition-opacity duration-300 ${
+        className={`fixed inset-0 w-full h-full object-cover z-[999999] pointer-events-none transition-opacity duration-300 ${
           isBurningOut ? 'opacity-100' : 'opacity-0'
         }`}
         style={{
-          clipPath: isBurningOut ? `circle(${burnProgress}% at 50% 28%)` : 'circle(0% at 50% 28%)',
-          WebkitClipPath: isBurningOut ? `circle(${burnProgress}% at 50% 28%)` : 'circle(0% at 50% 28%)',
+          mixBlendMode: 'screen',
+          filter: 'contrast(1.25) brightness(1.15)',
         }}
       />
 
       <div 
         className={`bg-[#07080a] flex-1 w-full flex flex-col items-center justify-start gap-6 sm:gap-8 p-4 sm:p-8 text-white font-sans select-none relative isolate overflow-x-hidden overflow-y-auto min-h-screen ${
-          isBurningOut ? 'pointer-events-none opacity-85 transition-opacity duration-700' : ''
+          isBurningOut ? 'pointer-events-none' : ''
         }`}
       >
       {/* Background concert image overlayed with grayscale filter */}
