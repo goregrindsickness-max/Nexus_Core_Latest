@@ -145,6 +145,16 @@ export function useSocialFeedState({
   const [eventCost, setEventCost] = useState('Free / Donation');
   const [eventTicketUrl, setEventTicketUrl] = useState('');
 
+  // Classifieds & Gear Swap Notice states
+  const [classifiedType, setClassifiedType] = useState<'gear' | 'classifieds'>('gear');
+  const [classifiedTitle, setClassifiedTitle] = useState('');
+  const [classifiedPrice, setClassifiedPrice] = useState('150');
+  const [classifiedCondition, setClassifiedCondition] = useState('Good');
+  const [classifiedBrand, setClassifiedBrand] = useState('');
+  const [classifiedYear, setClassifiedYear] = useState('');
+  const [classifiedLocation, setClassifiedLocation] = useState('');
+  const [classifiedDescription, setClassifiedDescription] = useState('');
+
   // Shop & Category Filter states
   const [shopCategory, setShopCategory] = useState<string>('all');
   const [shopBrandFilter, setShopBrandFilter] = useState<string | null>(null);
@@ -924,6 +934,45 @@ export function useSocialFeedState({
       const ytUrl = youtubeUrl || (ytId ? `https://www.youtube.com/watch?v=${ytId}` : undefined);
       const mediaUrlToUse = mediaUrl || ytUrl || tapeDataValue?.audioUrl || tapeAudioUrl || finalImage || undefined;
 
+      const classifiedDataValue = classifiedTitle.trim()
+        ? {
+            listingType: classifiedType,
+            title: classifiedTitle.trim(),
+            price: classifiedType === 'gear' ? (parseFloat(classifiedPrice) || 0) : 0,
+            condition: classifiedCondition || 'Good',
+            brand: classifiedBrand.trim() || undefined,
+            year: classifiedYear.trim() || undefined,
+            location: classifiedLocation.trim() || taggedVenue || 'Local Community',
+            description: classifiedDescription.trim() || newPostText.trim(),
+            image: finalImage || undefined,
+            seller: authorName
+          }
+        : undefined;
+
+      if (classifiedDataValue) {
+        try {
+          const sb = getSupabase();
+          if (sb) {
+            await sb.from('nexus_shop_items').insert([{
+              id: `comm_${Date.now()}`,
+              profile_id: userProfile?.id,
+              name: classifiedDataValue.title,
+              price: classifiedDataValue.price,
+              category: classifiedDataValue.listingType,
+              condition: classifiedDataValue.condition,
+              brand_name: classifiedDataValue.brand,
+              description: classifiedDataValue.description,
+              fallback_thumbnail: classifiedDataValue.image || 'https://images.unsplash.com/photo-1598514982205-f36b96d1e8d4?w=600',
+              seller: authorName,
+              is_user_listed: true,
+              created_at: new Date().toISOString()
+            }]);
+          }
+        } catch (shopErr) {
+          console.warn('Could not insert classified shop item:', shopErr);
+        }
+      }
+
       let resolvedBandcampData: any = undefined;
       if (isBandcampMedia && mediaUrlToUse) {
         try {
@@ -956,7 +1005,8 @@ export function useSocialFeedState({
 
       const newPost: any = {
         id: postUuid,
-        type: merchDataValue ? 'merch_drop' : tapeDataValue ? 'tape_share' : pollDataValue ? 'poll' : eventDataValue ? 'event' : 'post',
+        type: classifiedDataValue ? classifiedType : merchDataValue ? 'merch_drop' : tapeDataValue ? 'tape_share' : pollDataValue ? 'poll' : eventDataValue ? 'event' : 'post',
+        category: classifiedDataValue ? classifiedType : undefined,
         workspace_type: activeWorkspace,
         workspaceType: activeWorkspace,
         persona_id: resolvedPersona.id,
@@ -981,7 +1031,7 @@ export function useSocialFeedState({
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
         content: newPostText,
-        tag: newPostTag,
+        tag: classifiedDataValue ? (classifiedType === 'gear' ? 'GEAR SWAP' : 'CLASSIFIED') : newPostTag,
         image: finalImage,
         mediaUrl: mediaUrlToUse,
         media_url: mediaUrlToUse,
@@ -1012,6 +1062,8 @@ export function useSocialFeedState({
         merchData: merchDataValue,
         tapeData: tapeDataValue,
         eventData: eventDataValue,
+        classifiedData: classifiedDataValue,
+        classified_data: classifiedDataValue,
       };
 
       await syncPostToSupabase(newPost, activeAuthorId);
@@ -1059,6 +1111,13 @@ export function useSocialFeedState({
       setEventDescription('');
       setEventCost('Free / Donation');
       setEventTicketUrl('');
+      setClassifiedTitle('');
+      setClassifiedPrice('150');
+      setClassifiedCondition('Good');
+      setClassifiedBrand('');
+      setClassifiedYear('');
+      setClassifiedLocation('');
+      setClassifiedDescription('');
       setShowTapeInput(false);
       setShowMediaInput(false);
       setShowYoutubeInput(false);
@@ -1214,6 +1273,24 @@ export function useSocialFeedState({
     setEventCost,
     eventTicketUrl,
     setEventTicketUrl,
+
+    // Classifieds & Gear Swap
+    classifiedType,
+    setClassifiedType,
+    classifiedTitle,
+    setClassifiedTitle,
+    classifiedPrice,
+    setClassifiedPrice,
+    classifiedCondition,
+    setClassifiedCondition,
+    classifiedBrand,
+    setClassifiedBrand,
+    classifiedYear,
+    setClassifiedYear,
+    classifiedLocation,
+    setClassifiedLocation,
+    classifiedDescription,
+    setClassifiedDescription,
 
     // Filters
     shopCategory,

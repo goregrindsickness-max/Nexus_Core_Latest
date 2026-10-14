@@ -90,35 +90,51 @@ interface ClipsViewProps {
 const DEFAULT_CLIPS: ClipItem[] = [
   {
     id: 'c1',
-    creator: 'Virulent Excision',
+    creator: 'Cranial Impalement',
     role: '💀 Band',
-    avatar: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396',
-    caption: 'Live breakdown in Texas! Technical slam riffs in full force. 🔥 #VirulentExcision #DeathMetal',
-    videoUrl: 'https://www.youtube.com/watch?v=kY6A7yL9t6Y',
+    avatar: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788041930287_1788041930303.jpg?t=1788041930303',
+    caption: 'Cranial Impalement ASOC / Age of Terror live execution in full force! 🥁 #CranialImpalement #DeathMetal',
+    videoUrl: 'https://www.youtube.com/watch?v=Vrrr4B029Q8',
     likes: 1420,
     comments: 89,
     shares: 210,
     reposts: 45,
     views: 8900,
-    audio: 'Virulent Excision - Grotesque Impalement (Live)',
+    audio: 'Cranial Impalement - Age of Terror (Live)',
     hasLiked: false,
     isFollowed: false,
   },
   {
     id: 'c2',
-    creator: 'Cordyceps',
+    creator: 'Devourment',
     role: '💀 Band',
-    avatar: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788041930287_1788041930303.jpg?t=1788041930303',
-    caption: 'Official performance cut! Slamming technical death metal execution. 🥁 #Cordyceps #DeathMetal',
-    videoUrl: 'https://www.youtube.com/watch?v=0hY48qHjM7I',
+    avatar: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396',
+    caption: 'Official performance cut! Slamming technical death metal execution. 🔥 #Devourment #Slam',
+    videoUrl: 'https://www.youtube.com/watch?v=jQ26iMGJbW4',
+    likes: 1850,
+    comments: 94,
+    shares: 280,
+    reposts: 64,
+    views: 12400,
+    audio: 'Devourment - Pious Impiety',
+    hasLiked: true,
+    isFollowed: true,
+  },
+  {
+    id: 'c3',
+    creator: 'Pathology',
+    role: '💀 Band',
+    avatar: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=120&h=120&q=80',
+    caption: 'Tyrannical Decay live! Brutal blasting surgical precision. 💀 #Pathology #DeathMetal',
+    videoUrl: 'https://www.youtube.com/watch?v=sUNAHriFXj0',
     likes: 980,
     comments: 42,
     shares: 112,
     reposts: 28,
     views: 4500,
-    audio: 'Cordyceps - Betrayal',
-    hasLiked: true,
-    isFollowed: true,
+    audio: 'Pathology - Tyrannical Decay (Live)',
+    hasLiked: false,
+    isFollowed: false,
   },
 ];
 
@@ -649,8 +665,21 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
   getSupabase,
   onSelectProfile,
 }) => {
-  const [internalClips, setInternalClips] = useState<ClipItem[]>(DEFAULT_CLIPS);
-  const clips = propClips && propClips.length > 0 ? propClips : internalClips;
+  const [internalClips, setInternalClips] = useState<ClipItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_saved_clips');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (_) {}
+    return DEFAULT_CLIPS;
+  });
+  const clips = (propClips && propClips.length > 0) 
+    ? propClips 
+    : (internalClips && internalClips.length > 0 ? internalClips : DEFAULT_CLIPS);
   const setClips = propSetClips || setInternalClips;
 
   // Active clip index in viewport and global mute state

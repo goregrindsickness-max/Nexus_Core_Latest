@@ -72,6 +72,21 @@ export interface TourEmbedData {
   }[];
 }
 
+export interface ClassifiedPostData {
+  listingId?: string;
+  listingType?: 'gear' | 'classifieds' | string;
+  title?: string;
+  price?: number;
+  condition?: string;
+  brand?: string;
+  year?: string;
+  location?: string;
+  description?: string;
+  image?: string;
+  seller?: string;
+  contactHint?: string;
+}
+
 export interface FeedPost {
   id: string;
   type?: string;
@@ -138,6 +153,8 @@ export interface FeedPost {
     condition?: string;
     category?: string;
   };
+  classifiedData?: ClassifiedPostData;
+  classified_data?: ClassifiedPostData;
   eventData?: any;
   isVipExclusive?: boolean;
   requiredTier?: string;

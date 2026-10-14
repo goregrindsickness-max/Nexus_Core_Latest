@@ -1,6 +1,7 @@
 import localforage from 'localforage';
 import { getSupabase, executeWithSchemaResilience, ensureValidSupabaseAuthSession } from '../../../supabase';
 import { ensureProfileRowExists, getPersistentUserUuid } from './postSyncUtils';
+import { isMiguelNameOrProfile } from './profileUtils';
 
 export interface PersistedClip {
   id: any;
@@ -44,9 +45,10 @@ export const clipsMediaStore = localforage.createInstance({
 
 // Default scene video streams for initial demo previews
 export const SCENE_PERFORMANCE_VIDEOS = [
-  'https://www.youtube.com/watch?v=kY6A7yL9t6Y',
-  'https://www.youtube.com/watch?v=0hY48qHjM7I',
-  'https://www.youtube.com/watch?v=1F2b_dEvFqg',
+  'https://www.youtube.com/watch?v=jQ26iMGJbW4',
+  'https://www.youtube.com/watch?v=Vrrr4B029Q8',
+  'https://www.youtube.com/watch?v=sUNAHriFXj0',
+  'https://www.youtube.com/watch?v=qs6xYfN2YLY',
 ];
 
 /**
@@ -97,7 +99,7 @@ export async function resolveClipVideoPlaybackUrl(clipId: string | number, curre
 
   // If this is the Virulent Excision live clip with corrupted base64 or missing video URL
   if (idStr === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' && (!currentUrl || currentUrl.startsWith('/9j/') || currentUrl.startsWith('data:image'))) {
-    return 'https://www.youtube.com/watch?v=kY6A7yL9t6Y';
+    return 'https://www.youtube.com/watch?v=jQ26iMGJbW4';
   }
 
   // If it's a valid remote http/https URL or server relative /uploads/ path that is not a blob, keep it
@@ -316,6 +318,7 @@ export function generateClipUUID(): string {
  * Verifies that the returned UUID corresponds to a legitimate registered user in auth/profiles.
  */
 export async function resolveValidClipUserId(supabaseClient: any, userProfile: any): Promise<string> {
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
   const verifiedDefaultUserId = '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
 
   if (supabaseClient) {
@@ -367,6 +370,17 @@ export async function resolveValidClipUserId(supabaseClient: any, userProfile: a
     }
   } catch (_) {}
 
-  // 5. Fallback to active verified user UUID
-  return verifiedDefaultUserId;
+  // 5. If user is genuinely Miguel, use verified Miguel UUID
+  if (isOwnerMiguel) {
+    return verifiedDefaultUserId;
+  }
+
+  // 6. Otherwise resolve or generate a unique persistent UUID for this user and ensure their profile row exists
+  const uniqueUserUuid = getPersistentUserUuid(userProfile?.id, userProfile);
+  if (supabaseClient) {
+    try {
+      await ensureProfileRowExists(supabaseClient, uniqueUserUuid, userProfile);
+    } catch (_) {}
+  }
+  return uniqueUserUuid;
 }

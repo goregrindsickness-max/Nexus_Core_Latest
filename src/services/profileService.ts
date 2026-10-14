@@ -138,31 +138,54 @@ export function normalizeLoadedProfile(data: any): any {
     }
   }
 
-  // Ensure promoter_metadata is synthesized and fully populated for promoter profiles
-  if (!normalized.promoter_metadata || typeof normalized.promoter_metadata !== 'object') {
-    normalized.promoter_metadata = {};
-  }
-  const pm = normalized.promoter_metadata;
-  pm.brand_name = pm.brand_name || pm.agency_name || pm.entity_name || normalized.promoter_agency || normalized.promoter_brand || normalized.promoter_name || normalized.entity_name || normalized.corporate_name || 'Nexus Live Productions';
-  pm.agency_name = pm.agency_name || pm.brand_name;
-  pm.business_name = pm.business_name || pm.brand_name || pm.agency_name;
-  pm.city = pm.city || normalized.promoter_city || normalized.city;
-  pm.state = pm.state || normalized.promoter_state || normalized.state_province || normalized.state;
-  pm.logo_url = pm.logo_url || pm.avatar_url || normalized.promoter_logo || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
-  pm.banner_url = pm.banner_url || pm.cover_url || normalized.promoter_cover_image || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
-  pm.bio = pm.bio || normalized.promoter_bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
+  // Ensure promoter_metadata is synthesized and fully populated ONLY for actual promoter profiles or Miguel
+  const isOwnerMiguel = isMiguelNameOrProfile(normalized);
+  const isPromoterUser = Boolean(
+    isOwnerMiguel ||
+    normalized.account_type === 'promoter' ||
+    normalized.active_workspace === 'promoter' ||
+    (normalized.promoter_id && normalized.promoter_id !== normalized.id) ||
+    (Array.isArray(normalized.registered_workspaces) && normalized.registered_workspaces.some((w: any) => {
+      const type = typeof w === 'string' ? w : (w?.type || w?.key || '');
+      return String(type).toLowerCase() === 'promoter';
+    })) ||
+    (normalized.promoter_metadata && (normalized.promoter_metadata.is_registered === true || normalized.promoter_metadata.brand_name))
+  );
 
-  // Backfill namespaced promoter properties so promoter components never fall back to empty or stale local storage
-  normalized.promoter_id = normalized.promoter_id || pm.id || (normalized.id && normalized.id !== 'guest' ? normalized.id : undefined);
-  normalized.promoter_name = pm.brand_name;
-  normalized.promoter_agency = pm.agency_name;
-  normalized.promoter_brand = pm.brand_name;
-  normalized.promoter_logo = pm.logo_url;
-  normalized.promoter_cover_image = pm.banner_url;
-  normalized.promoter_bio = pm.bio;
-  normalized.promoter_city = pm.city || normalized.promoter_city || normalized.city;
-  normalized.promoter_state = pm.state || normalized.promoter_state;
-  normalized.promoter_booking_email = pm.booking_email || normalized.promoter_booking_email || normalized.email;
+  if (isPromoterUser) {
+    if (!normalized.promoter_metadata || typeof normalized.promoter_metadata !== 'object') {
+      normalized.promoter_metadata = {};
+    }
+    const pm = normalized.promoter_metadata;
+    pm.brand_name = pm.brand_name || pm.agency_name || pm.entity_name || normalized.promoter_agency || normalized.promoter_brand || normalized.promoter_name || normalized.entity_name || normalized.corporate_name || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations');
+    pm.agency_name = pm.agency_name || pm.brand_name;
+    pm.business_name = pm.business_name || pm.brand_name || pm.agency_name;
+    pm.city = pm.city || normalized.promoter_city || normalized.city;
+    pm.state = pm.state || normalized.promoter_state || normalized.state_province || normalized.state;
+    pm.logo_url = pm.logo_url || pm.avatar_url || normalized.promoter_logo || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : '');
+    pm.banner_url = pm.banner_url || pm.cover_url || normalized.promoter_cover_image || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : '');
+    pm.bio = pm.bio || normalized.promoter_bio || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent concert promoter and live events coordinator.');
+
+    // Backfill namespaced promoter properties so promoter components never fall back to empty or stale local storage
+    normalized.promoter_id = normalized.promoter_id || pm.id || (normalized.id && normalized.id !== 'guest' ? normalized.id : undefined);
+    normalized.promoter_name = pm.brand_name;
+    normalized.promoter_agency = pm.agency_name;
+    normalized.promoter_brand = pm.brand_name;
+    normalized.promoter_logo = pm.logo_url;
+    normalized.promoter_cover_image = pm.banner_url;
+    normalized.promoter_bio = pm.bio;
+    normalized.promoter_city = pm.city || normalized.promoter_city || normalized.city;
+    normalized.promoter_state = pm.state || normalized.promoter_state;
+    normalized.promoter_booking_email = pm.booking_email || normalized.promoter_booking_email || normalized.email;
+  } else {
+    // Non-promoter: do not synthesize promoter identity or badges
+    delete normalized.promoter_agency;
+    delete normalized.promoter_brand;
+    delete normalized.promoter_name;
+    if (!normalized.promoter_id || normalized.promoter_id === normalized.id) {
+      delete normalized.promoter_id;
+    }
+  }
 
   // Extract only dedicated namespaced custom fields from metadata without touching top-level personal banner/avatar/bio
   const namespacedCustomFields = [

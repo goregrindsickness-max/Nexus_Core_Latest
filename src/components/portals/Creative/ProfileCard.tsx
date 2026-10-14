@@ -343,7 +343,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     (selectedUserProfile?.email && userProfile?.email && selectedUserProfile.email.toLowerCase() === userProfile.email.toLowerCase())
   );
 
-  const isOwnerMiguel = isMiguelNameOrProfile(selectedUserProfile) || isMiguelNameOrProfile(targetProfile) || (isTargetExplicitSelf && isMiguelNameOrProfile(userProfile)) || isMiguelNameOrProfile(userProfile);
+  const isOwnerMiguel = isMiguelNameOrProfile(selectedUserProfile) || isMiguelNameOrProfile(targetProfile) || (isTargetExplicitSelf && isMiguelNameOrProfile(userProfile));
 
   React.useEffect(() => {
     let isMounted = true;
@@ -528,20 +528,22 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           } catch (_) {}
 
           if (!linkedBandRecord) {
-            const isOwnerMiguel = isMiguelNameOrProfile(selectedUserProfile) || isMiguelNameOrProfile(targetProfile) || (isTargetExplicitSelf && isMiguelNameOrProfile(userProfile)) || isMiguelNameOrProfile(userProfile);
+            const isOwnerMiguel = isMiguelNameOrProfile(selectedUserProfile) || isMiguelNameOrProfile(targetProfile) || (isTargetExplicitSelf && isMiguelNameOrProfile(userProfile));
             const veLogo = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396';
             const candidateBandLogo = (
               userProfile.band_logo || 
               userProfile.band_metadata?.logo_url || 
               (isOwnerMiguel ? veLogo : (userProfile.avatar_url || userProfile.avatar))
             );
-            linkedBandRecord = {
-              id: isOwnerMiguel ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (userProfile.band_id || 'my_band_id'),
-              band_name: isOwnerMiguel ? 'Virulent Excision' : (userProfile.band_name || userProfile.bandName || 'Virulent Excision'),
-              name: isOwnerMiguel ? 'Virulent Excision' : (userProfile.band_name || userProfile.bandName || 'Virulent Excision'),
-              logo_url: candidateBandLogo,
-              genre: isOwnerMiguel ? 'Brutal Death Metal' : (userProfile.genre || 'Metal')
-            };
+            if (isOwnerMiguel || userProfile.band_id || userProfile.band_name || userProfile.bandName) {
+              linkedBandRecord = {
+                id: isOwnerMiguel ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (userProfile.band_id || 'my_band_id'),
+                band_name: isOwnerMiguel ? 'Virulent Excision' : (userProfile.band_name || userProfile.bandName || 'Band / Artist'),
+                name: isOwnerMiguel ? 'Virulent Excision' : (userProfile.band_name || userProfile.bandName || 'Band / Artist'),
+                logo_url: candidateBandLogo,
+                genre: isOwnerMiguel ? 'Brutal Death Metal' : (userProfile.genre || 'Metal')
+              };
+            }
           }
         }
 
@@ -715,9 +717,11 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const creativeBizName = baseTarget?.business_name || baseTarget?.businessName || baseTarget?.creative_business_name || baseTarget?.creative_name || fetchedCreativeData?.business_name || fetchedCreativeData?.creative_name || fetchedCreativeData?.name || fetchedProfileData?.creative_business_name || fetchedProfileData?.creative_name || fetchedProfileData?.creative_metadata?.business_name || (baseTarget?.isYou ? (userProfile?.creative_business_name || userProfile?.creative_name) : null);
   const creativeHandleVal = baseTarget?.creative_handle || fetchedCreativeData?.handle || fetchedCreativeData?.creative_handle || fetchedProfileData?.creative_handle || (baseTarget?.isYou ? userProfile?.creative_handle : null);
 
-  const personalName = baseTarget?.full_name || baseTarget?.name || fetchedProfileData?.full_name || fetchedProfileData?.name || (baseTarget?.isYou ? (userProfile?.full_name || userProfile?.name) : null) || 'Miguel Goregrinder Medina';
+  const isTargetMiguel = isMiguelNameOrProfile(baseTarget) || (baseTarget?.isYou && isMiguelNameOrProfile(userProfile)) || isMiguelNameOrProfile(selectedUserProfile);
+  const personalName = baseTarget?.full_name || baseTarget?.name || fetchedProfileData?.full_name || fetchedProfileData?.name || (baseTarget?.isYou ? (userProfile?.full_name || userProfile?.name) : null) || (isTargetMiguel ? 'Miguel Goregrinder Medina' : 'Member Profile');
   const rawPersonalHandle = baseTarget?.console_handle || baseTarget?.handle || fetchedProfileData?.console_handle || fetchedProfileData?.handle || (baseTarget?.isYou ? (userProfile?.console_handle || userProfile?.handle) : null);
-  const personalHandle = (!rawPersonalHandle || rawPersonalHandle.toLowerCase().includes('virulent') || rawPersonalHandle.toLowerCase() === '@virulentexcision') ? '@bdmCEO' : (rawPersonalHandle.startsWith('@') ? rawPersonalHandle : `@${rawPersonalHandle}`);
+  const fallbackCreativeHandle = isTargetMiguel ? '@bdmCEO' : (personalName && !personalName.toLowerCase().includes('miguel') ? `@${personalName.replace(/\s+/g, '_').toLowerCase()}` : (userProfile?.email ? `@${userProfile.email.split('@')[0]}` : '@member'));
+  const personalHandle = (!rawPersonalHandle || (isTargetMiguel && rawPersonalHandle.toLowerCase().includes('virulent')) || (!isTargetMiguel && (rawPersonalHandle.toLowerCase().includes('bdmceo') || rawPersonalHandle.toLowerCase().includes('goregrinder')))) ? fallbackCreativeHandle : (rawPersonalHandle.startsWith('@') ? rawPersonalHandle : `@${rawPersonalHandle}`);
 
   const effTarget = {
     ...baseTarget,
@@ -815,8 +819,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       console_handle: isCreativeTarget 
         ? (creativeHandleVal || 'vortexgraphics') 
         : ((baseTarget?.isYou || selectedUserProfile?.isYou)
-            ? '@bdmCEO'
-            : (isArtistOrBand && bData.custom_slug ? `@${bData.custom_slug.replace('@', '')}` : (baseTarget.console_handle || baseTarget.handle || '@bdmCEO'))),
+            ? (isTargetMiguel ? '@bdmCEO' : fallbackCreativeHandle)
+            : (isArtistOrBand && bData.custom_slug ? `@${bData.custom_slug.replace('@', '')}` : (baseTarget.console_handle || baseTarget.handle || (isTargetMiguel ? '@bdmCEO' : fallbackCreativeHandle)))),
       genre: bData.genre || baseTarget.genre,
       genre_tags: bData.genre_tags || (bData.genre ? [bData.genre] : baseTarget.genre_tags),
       lineup: bData.lineup || baseTarget.lineup,
@@ -1368,11 +1372,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   });
 
                   // Keep Founder/Overlord badge for Miguel if applicable
-                  const isMiguelProfile = !selectedUserProfile.isBandProfile && selectedUserProfile.type !== 'band' && !!(
-                    selectedUserProfile.name?.toLowerCase().includes('miguel') ||
-                    selectedUserProfile.name?.toLowerCase().includes('goregrinder') ||
-                    selectedUserProfile.email?.toLowerCase().includes('goregrindsickness')
-                  );
+                  const isMiguelProfile = !selectedUserProfile.isBandProfile && selectedUserProfile.type !== 'band' && isMiguelNameOrProfile(selectedUserProfile);
 
                   const isTargetSelf = Boolean(
                     effTarget?.isYou ||
@@ -1404,7 +1404,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       prof.role.toLowerCase().includes('bass')
                     )) ||
                     (isTargetSelf && (userProfile?.band_id || (typeof userProfile?.band_name === 'string' && userProfile.band_name.trim()) || userProfile?.band_profile_id)) ||
-                    isMiguelProfile
+                    (isTargetSelf && isMiguelProfile)
                   );
 
                   if (isTiedToBand && !seenLabels.has('🎸 Musician')) {

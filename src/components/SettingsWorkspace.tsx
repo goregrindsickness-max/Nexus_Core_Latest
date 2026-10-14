@@ -91,30 +91,35 @@ export default function SettingsWorkspace(props: any) {
     try {
       const rawBandId = String(props.activeBand.id).trim();
       const bandUUID = ensureUUID(rawBandId);
+      let dataList: any[] = [];
       const { data, error } = await supabase
         .from('releases')
         .select('*')
         .or(`band_id.eq.${rawBandId},band_id.eq.${bandUUID}`);
-      if (data && !error) {
-        setReleasesList(data.map((row: any) => ({
-          id: row.id,
-          catalogId: row.catalog_id || row.catalogId || '',
-          title: row.title || '',
-          coverColor: row.cover_color || '',
-          type: row.type || 'Album',
-          year: row.release_date ? new Date(row.release_date).getFullYear().toString() : (row.release_year || '2026'),
-          releaseDate: row.release_date || '',
-          label: row.label || '',
-          genre: row.genre || '',
-          coverImage: row.cover_image || row.cover_url || '',
-          coverUrl: row.cover_url || row.cover_image || '',
-          image_url: row.cover_url || row.cover_image || '',
-          tracks: Array.isArray(row.tracks) ? row.tracks : (typeof row.tracks === 'string' ? JSON.parse(row.tracks) : []),
-          formats: typeof row.formats === 'object' && row.formats ? row.formats : (typeof row.formats === 'string' ? JSON.parse(row.formats) : {}),
-          digital: Array.isArray(row.digital) ? row.digital : (typeof row.digital === 'string' ? JSON.parse(row.digital) : []),
-          status: row.status || 'active'
-        })));
+      if (data && !error && data.length > 0) {
+        dataList = data;
+      } else {
+        const fallback = await fetchReleasesFromDatabase();
+        dataList = fallback.filter((row: any) => !row.band_id || row.band_id === rawBandId || row.band_id === bandUUID);
       }
+      setReleasesList(dataList.map((row: any) => ({
+        id: row.id,
+        catalogId: row.catalog_id || row.catalogId || '',
+        title: row.title || '',
+        coverColor: row.cover_color || '',
+        type: row.type || 'Album',
+        year: row.release_date || row.releaseDate ? new Date(row.release_date || row.releaseDate).getFullYear().toString() : (row.release_year || '2026'),
+        releaseDate: row.release_date || row.releaseDate || '',
+        label: row.label || '',
+        genre: row.genre || '',
+        coverImage: row.cover_image || row.cover_url || row.coverImage || row.coverUrl || '',
+        coverUrl: row.cover_url || row.cover_image || row.coverUrl || row.coverImage || '',
+        image_url: row.cover_url || row.cover_image || row.coverUrl || row.coverImage || '',
+        tracks: Array.isArray(row.tracks) ? row.tracks : (typeof row.tracks === 'string' ? JSON.parse(row.tracks) : []),
+        formats: typeof row.formats === 'object' && row.formats ? row.formats : (typeof row.formats === 'string' ? JSON.parse(row.formats) : {}),
+        digital: Array.isArray(row.digital) ? row.digital : (typeof row.digital === 'string' ? JSON.parse(row.digital) : []),
+        status: row.status || 'active'
+      })));
     } catch (e) {
       console.warn('[loadReleasesData error]:', e);
     } finally {

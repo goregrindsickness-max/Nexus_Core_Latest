@@ -5,6 +5,10 @@ import {
   resolveBandCover,
   resolveBandHandle,
   resolveBandName,
+  resolveCreativeName,
+  resolveCreativeHandle,
+  resolvePromoterName,
+  resolvePromoterHandle,
   resolveEffectiveAvatar,
   resolveEffectiveCover,
   formatCleanLocation
@@ -82,8 +86,21 @@ export const ProfileHubCard: React.FC<ProfileHubCardProps> = ({
 
   const effectiveAvatar = liveAvatar || baseAvatar;
   const effectiveCover = liveCover || baseCover;
-  const effectiveName = portalRole === 'band' ? resolveBandName(activeBand, userProfile) : (profileFullLegalName || 'User');
-  const effectiveHandle = portalRole === 'band' ? resolveBandHandle(activeBand, userProfile) : (profileHandle || 'user');
+  const effectiveName = portalRole === 'band' 
+    ? resolveBandName(activeBand, userProfile) 
+    : portalRole === 'creative'
+    ? resolveCreativeName(userProfile)
+    : portalRole === 'promoter'
+    ? resolvePromoterName(userProfile)
+    : (profileFullLegalName || 'User');
+
+  const effectiveHandle = portalRole === 'band' 
+    ? resolveBandHandle(activeBand, userProfile) 
+    : portalRole === 'creative'
+    ? resolveCreativeHandle(userProfile)
+    : portalRole === 'promoter'
+    ? resolvePromoterHandle(userProfile)
+    : (profileHandle || 'user');
 
   React.useEffect(() => {
     setAvatarError(false);

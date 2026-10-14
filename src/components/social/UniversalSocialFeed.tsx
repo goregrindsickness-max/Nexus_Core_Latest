@@ -26,6 +26,12 @@ import {
   resolveBandName,
   resolveBandBio,
   resolveBandLocation,
+  resolveCreativeName,
+  resolveCreativeHandle,
+  resolveCreativeLogo,
+  resolveCreativeCover,
+  resolveCreativeBio,
+  resolveCreativeLocation,
   resolveEffectiveAvatar,
   resolveEffectiveCover,
   resolvePromoterName,
@@ -41,7 +47,7 @@ import {
   loadProfileLocalStorageCache,
   loadProfileIndexedDBCache
 } from './utils/feedCacheUtils';
-import { resolveActiveUserId, syncPostToSupabase } from './utils/postSyncUtils';
+import { resolveActiveUserId, syncPostToSupabase, generateUUID } from './utils/postSyncUtils';
 import { mergePostWithReactions } from './utils/reactionStore';
 import { useSocialProfileState } from './hooks/useSocialProfileState';
 import { FeedTopHeader } from './navigation/FeedTopHeader';
@@ -78,6 +84,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { getSupabase, subscribeToTable, executeWithSchemaResilience, uploadBase64ToStorage, normalizeLoadedProfile, createShopMerchItem, fetchShopMerchItems, sanitizeMicroGenres, formatBandLocation, sanitizeShowForDb, ensureUUID } from '../../supabase';
 import { uploadFeedMedia } from '../../lib/storage';
 import { communityBandManager } from '../../lib/communityBands';
+import { hasRegisteredWorkspace } from '../../types';
 import { tourPackageManager } from '../../lib/tourPackageManager';
 import Barcode from 'react-barcode';
 import { MASTER_GENRES } from '../../constants/genres';
@@ -1843,6 +1850,24 @@ export function UniversalSocialFeed({
     eventTicketUrl,
     setEventTicketUrl,
 
+    // Classifieds & Gear Swap
+    classifiedType,
+    setClassifiedType,
+    classifiedTitle,
+    setClassifiedTitle,
+    classifiedPrice,
+    setClassifiedPrice,
+    classifiedCondition,
+    setClassifiedCondition,
+    classifiedBrand,
+    setClassifiedBrand,
+    classifiedYear,
+    setClassifiedYear,
+    classifiedLocation,
+    setClassifiedLocation,
+    classifiedDescription,
+    setClassifiedDescription,
+
     // Handlers
     handleDetectLocation,
     handleMediaUpload,
@@ -2161,26 +2186,26 @@ export function UniversalSocialFeed({
       } else {
         // Professional portals
         defaultName = portalRole === 'band' ? resolveBandName(resolvedActiveBand || activeBand, userProfile)
-          : portalRole === 'creative' ? (userProfile?.creative_metadata?.business_name || 'Pro Creative')
+          : portalRole === 'creative' ? resolveCreativeName(userProfile)
           : portalRole === 'promoter' ? resolvePromoterName(userProfile)
           : portalRole === 'label' ? (userProfile?.label_company_name || 'Pro Label')
           : (userProfile?.full_name || userProfile?.legal_name || userProfile?.name || 'Pro Account');
 
         defaultHandle = portalRole === 'band' ? resolveBandHandle(resolvedActiveBand || activeBand, userProfile)
-          : portalRole === 'creative' ? (userProfile?.creative_metadata?.business_name?.replace(/\s+/g, '') || 'creative_pro')
+          : portalRole === 'creative' ? resolveCreativeHandle(userProfile)
           : portalRole === 'promoter' ? resolvePromoterHandle(userProfile)
           : portalRole === 'label' ? (userProfile?.label_url_slug || 'label_pro')
           : (userProfile?.console_handle || userProfile?.handle || 'pro_account');
 
         defaultAvatar = portalRole === 'band' ? resolveBandLogo(resolvedActiveBand || activeBand, userProfile)
           : portalRole === 'label' ? (userProfile?.label_avatar || null)
-          : portalRole === 'creative' ? (userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || userProfile?.avatar_url || null)
+          : portalRole === 'creative' ? resolveCreativeLogo(userProfile)
           : portalRole === 'promoter' ? resolvePromoterLogo(userProfile)
           : (userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null) || null);
 
         defaultCover = portalRole === 'band' ? resolveBandCover(resolvedActiveBand || activeBand, userProfile)
           : portalRole === 'label' ? (userProfile?.label_banner || null)
-          : portalRole === 'creative' ? (userProfile?.creative_banner || null)
+          : portalRole === 'creative' ? resolveCreativeCover(userProfile)
           : portalRole === 'promoter' ? resolvePromoterCover(userProfile)
           : (userProfile?.banner_url || null);
 
@@ -2213,6 +2238,8 @@ let loadedFromLocalStorage = false;
 try {
   const parsed = loadProfileLocalStorageCache(portalRole, userProfile?.id);
   if (parsed) {
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+
     if (portalRole === 'band') {
       setProfileFullLegalName(resolveBandName(resolvedActiveBand || activeBand, userProfile));
       setProfileHandle(resolveBandHandle(resolvedActiveBand || activeBand, userProfile));
@@ -2227,7 +2254,11 @@ try {
         : portalRole === 'label' ? userProfile?.label_company_name 
         : userProfile?.name || userProfile?.full_name;
       
-      setProfileFullLegalName(parentName || parsed.profileFullLegalName || 'Pro Account');
+      const safeParsedLegal = parsed.profileFullLegalName && (isOwnerMiguel || (!parsed.profileFullLegalName.toLowerCase().includes('miguel') && !parsed.profileFullLegalName.toLowerCase().includes('goregrinder')))
+        ? parsed.profileFullLegalName
+        : null;
+
+      setProfileFullLegalName(parentName || safeParsedLegal || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Pro Account'));
 
       const parentHandle = portalRole === 'creative' ? (userProfile?.creative_metadata?.business_name || userProfile?.business_name)?.toLowerCase().replace(/\s+/g, '')
         : portalRole === 'promoter' ? userProfile?.promoter_metadata?.brand_name?.toLowerCase().replace(/\s+/g, '')
@@ -2236,7 +2267,7 @@ try {
 
       if (parentHandle) {
         setProfileHandle(parentHandle);
-      } else if (parsed.profileHandle) {
+      } else if (parsed.profileHandle && (isOwnerMiguel || (!parsed.profileHandle.toLowerCase().includes('bdmceo') && !parsed.profileHandle.toLowerCase().includes('goregrinder')))) {
         setProfileHandle(parsed.profileHandle);
       }
 
@@ -2246,7 +2277,7 @@ try {
         : (userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null));
       
       if (parentAvatar) setProfileAvatarUrl(parentAvatar);
-      else if (parsed.profileAvatarUrl) setProfileAvatarUrl(parsed.profileAvatarUrl);
+      else if (parsed.profileAvatarUrl && (isOwnerMiguel || !parsed.profileAvatarUrl.includes('5403162d-1947-43aa-b5f6-38a1bd2a1b80'))) setProfileAvatarUrl(parsed.profileAvatarUrl);
 
       const parentCover = portalRole === 'label' ? userProfile?.label_banner 
         : portalRole === 'creative' ? userProfile?.creative_banner || userProfile?.banner_url
@@ -2254,37 +2285,42 @@ try {
         : userProfile?.banner_url;
       
       if (parentCover) setProfileCoverUrl(parentCover);
-      else if (parsed.profileCoverUrl) setProfileCoverUrl(parsed.profileCoverUrl);
+      else if (parsed.profileCoverUrl && (isOwnerMiguel || !parsed.profileCoverUrl.includes('5403162d-1947-43aa-b5f6-38a1bd2a1b80'))) setProfileCoverUrl(parsed.profileCoverUrl);
 
     } else {
       const uName = userProfile?.full_name || userProfile?.legal_name || userProfile?.name || userProfile?.screen_name;
-      if (uName && uName !== 'New User' && uName !== '') {
+      if (uName && uName !== 'New User' && uName !== '' && (isOwnerMiguel || (!uName.toLowerCase().includes('miguel') && !uName.toLowerCase().includes('goregrinder')))) {
         setProfileFullLegalName(uName);
-      } else if (parsed.profileFullLegalName) {
+      } else if (parsed.profileFullLegalName && (isOwnerMiguel || (!parsed.profileFullLegalName.toLowerCase().includes('miguel') && !parsed.profileFullLegalName.toLowerCase().includes('goregrinder')))) {
         setProfileFullLegalName(parsed.profileFullLegalName);
+      } else {
+        setProfileFullLegalName(isOwnerMiguel ? 'Miguel Goregrinder Medina' : (userProfile?.email ? userProfile.email.split('@')[0] : 'Scene Member'));
       }
 
       const uAvatar = userProfile?.avatar_url;
       const defaultAvatar = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Nexus%20Icon%20Circuits.png';
-      if (uAvatar && uAvatar !== defaultAvatar) {
+      if (uAvatar && uAvatar !== defaultAvatar && (isOwnerMiguel || !uAvatar.includes('5403162d-1947-43aa-b5f6-38a1bd2a1b80'))) {
         setProfileAvatarUrl(uAvatar);
-      } else if (parsed.profileAvatarUrl) {
+      } else if (parsed.profileAvatarUrl && (isOwnerMiguel || !parsed.profileAvatarUrl.includes('5403162d-1947-43aa-b5f6-38a1bd2a1b80'))) {
         setProfileAvatarUrl(parsed.profileAvatarUrl);
       }
 
       const uCover = userProfile?.banner_url;
-      if (uCover) {
+      if (uCover && (isOwnerMiguel || !uCover.includes('5403162d-1947-43aa-b5f6-38a1bd2a1b80'))) {
         setProfileCoverUrl(uCover);
-      } else if (parsed.profileCoverUrl) {
+      } else if (parsed.profileCoverUrl && (isOwnerMiguel || !parsed.profileCoverUrl.includes('5403162d-1947-43aa-b5f6-38a1bd2a1b80'))) {
         setProfileCoverUrl(parsed.profileCoverUrl);
       }
     }
 
     const uHandle = userProfile?.handle || userProfile?.console_handle || userProfile?.screen_name?.replace(/\s+/g, '');
-    if (uHandle && uHandle !== '') {
-      setProfileHandle(uHandle);
-    } else if (parsed.profileHandle) {
-      setProfileHandle(parsed.profileHandle);
+    if (uHandle && uHandle !== '' && (isOwnerMiguel || (!uHandle.toLowerCase().includes('bdmceo') && !uHandle.toLowerCase().includes('goregrinder')))) {
+      setProfileHandle(uHandle.startsWith('@') ? uHandle : `@${uHandle}`);
+    } else if (parsed.profileHandle && (isOwnerMiguel || (!parsed.profileHandle.toLowerCase().includes('bdmceo') && !parsed.profileHandle.toLowerCase().includes('goregrinder')))) {
+      setProfileHandle(parsed.profileHandle.startsWith('@') ? parsed.profileHandle : `@${parsed.profileHandle}`);
+    } else {
+      const fallbackH = isOwnerMiguel ? '@bdmCEO' : (userProfile?.name && !userProfile.name.toLowerCase().includes('miguel') ? `@${userProfile.name.replace(/\s+/g, '_').toLowerCase()}` : (userProfile?.email ? `@${userProfile.email.split('@')[0]}` : '@user'));
+      setProfileHandle(fallbackH);
     }
 
     const uEmail = userProfile?.email;
@@ -2379,8 +2415,15 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
         
         setProfileHandle(parentHandle || data.profileHandle || 'pro_account');
       } else {
-        setProfileFullLegalName(data.profileFullLegalName || userProfile?.full_name || userProfile?.legal_name || userProfile?.name || userProfile?.screen_name || 'Fan Listener');
-        if (data.profileHandle) setProfileHandle(data.profileHandle);
+        const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+        const authenticName = userProfile?.full_name || userProfile?.legal_name || userProfile?.name || userProfile?.screen_name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : (data.profileFullLegalName || (userProfile?.email ? userProfile.email.split('@')[0] : 'Scene Member')));
+        setProfileFullLegalName(authenticName);
+        if (data.profileHandle && (isOwnerMiguel || (!data.profileHandle.toLowerCase().includes('bdmceo') && !data.profileHandle.toLowerCase().includes('goregrinder')))) {
+          setProfileHandle(data.profileHandle.startsWith('@') ? data.profileHandle : `@${data.profileHandle}`);
+        } else {
+          const fallbackH = isOwnerMiguel ? '@bdmCEO' : (userProfile?.name && !userProfile.name.toLowerCase().includes('miguel') ? `@${userProfile.name.replace(/\s+/g, '_').toLowerCase()}` : (userProfile?.email ? `@${userProfile.email.split('@')[0]}` : '@user'));
+          setProfileHandle(fallbackH);
+        }
       }
 
       if (data.profileEmail) setProfileEmail(data.profileEmail);
@@ -3559,8 +3602,10 @@ const getProfileForUser = (userParam: any) => {
     }
 
     if (activeRole === 'creative' || userProfile?.account_type === 'creative') {
-      const cBizName = userProfile?.creative_business_name || userProfile?.creative_name || profileFullLegalName || userProfile?.name || 'Pro Creative';
-      const cHandle = profileHandle || userProfile?.creative_handle || 'creative_pro';
+      const cBizName = resolveCreativeName(userProfile);
+      const cHandle = resolveCreativeHandle(userProfile);
+      const cAvatar = resolveCreativeLogo(userProfile, profileAvatarUrl);
+      const cCover = resolveCreativeCover(userProfile, profileCoverUrl);
       return {
         id: userProfile?.id || null,
         name: cBizName,
@@ -3569,21 +3614,22 @@ const getProfileForUser = (userParam: any) => {
         creative_name: cBizName,
         creative_handle: cHandle,
         legalName: profileFullLegalName || userProfile?.full_name || userProfile?.name,
-        avatar: profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_avatar') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.creative_avatar || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150',
-        avatar_url: profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_avatar') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.creative_avatar || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150',
-        banner: profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_user_banner')) : null) || userProfile?.creative_banner || userProfile?.banner_url || null,
-        banner_url: profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_user_banner')) : null) || userProfile?.creative_banner || userProfile?.banner_url || null,
-        cover_url: profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_user_banner')) : null) || userProfile?.creative_banner || userProfile?.banner_url || null,
-        location: userProfile?.location || 'USA / Global',
+        avatar: cAvatar,
+        avatar_url: cAvatar,
+        banner: cCover,
+        banner_url: cCover,
+        cover_url: cCover,
+        location: resolveCreativeLocation(userProfile) || userProfile?.location || 'Detroit, MI',
         role: 'Creative',
         account_type: 'creative',
         type: 'creative',
-        isPersonal: true,
+        isPersonal: false,
         isBandProfile: false,
+        isCreativeProfile: true,
         isYou: true,
         badges: ['🛠️ Creative Pro', '🎨 Designer'],
         customBadges: ['🛠️ Creative Pro', '🎨 Designer'],
-        bio: userProfile?.bio || profileBlurb || 'Professional creative specialist on the Nexus network.',
+        bio: resolveCreativeBio(userProfile),
         handle: cHandle,
         console_handle: cHandle,
         followersCount: currentUserStats?.followers ?? 0,
@@ -3624,13 +3670,15 @@ const getProfileForUser = (userParam: any) => {
       };
     }
 
-    if (activeRole === 'promoter' || userProfile?.account_type === 'promoter' || userProfile?.active_workspace === 'promoter') {
-      const promoterName = userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_agency || profileFullLegalName || userProfile?.name || 'Nexus Live Productions';
-      const promoterHandle = resolvePromoterHandle(userProfile) || profileHandle || 'NexusLive';
-      const promoterLogo = profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || userProfile?.avatar_url || userProfile?.avatar || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
-      const promoterCover = profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_cover') || localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner')) : null) || userProfile?.promoter_cover_image || userProfile?.promoter_metadata?.banner_url || userProfile?.promoter_metadata?.cover_url || userProfile?.banner_url || userProfile?.banner || userProfile?.cover_url || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
+    const hasRegisteredPromoterAccess = hasRegisteredWorkspace(userProfile, 'promoter') || isMiguelNameOrProfile(userProfile);
+    if (hasRegisteredPromoterAccess && (activeRole === 'promoter' || userProfile?.account_type === 'promoter' || userProfile?.active_workspace === 'promoter')) {
+      const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+      const promoterName = userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_agency || profileFullLegalName || userProfile?.name || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations');
+      const promoterHandle = resolvePromoterHandle(userProfile) || profileHandle || (isOwnerMiguel ? 'NexusLive' : 'promoter_ops');
+      const promoterLogo = profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || userProfile?.avatar_url || userProfile?.avatar || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : null);
+      const promoterCover = profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_cover') || localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner')) : null) || userProfile?.promoter_cover_image || userProfile?.promoter_metadata?.banner_url || userProfile?.promoter_metadata?.cover_url || userProfile?.banner_url || userProfile?.banner || userProfile?.cover_url || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : null);
       const promoterLocation = resolvePromoterLocation(userProfile);
-      const promoterBioText = userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
+      const promoterBioText = userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent live event promoter and concert coordinator.');
 
       return {
         id: userProfile?.id || null,
@@ -3661,16 +3709,20 @@ const getProfileForUser = (userParam: any) => {
     }
 
     if (activeRole === 'industry_pro' || userProfile?.account_type === 'industry_pro') {
-      const pName = profileFullLegalName || userProfile?.full_name || userProfile?.name || 'Industry Pro';
+      const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+      const pName = profileFullLegalName || userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Industry Pro');
       const rawHandle = profileHandle || userProfile?.console_handle || userProfile?.handle;
-      const pHandle = (!rawHandle || rawHandle.toLowerCase().includes('virulent') || rawHandle === 'pro_user' || rawHandle === 'user') ? '@bdmCEO' : (rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`);
+      const userDefaultHandle = isOwnerMiguel ? '@bdmCEO' : (userProfile?.name && !userProfile.name.toLowerCase().includes('miguel') ? `@${userProfile.name.replace(/\s+/g, '_').toLowerCase()}` : (userProfile?.email ? `@${userProfile.email.split('@')[0]}` : '@pro_user'));
+      const pHandle = (!rawHandle || (isOwnerMiguel && rawHandle.toLowerCase().includes('virulent')) || rawHandle === 'pro_user' || rawHandle === 'user' || (!isOwnerMiguel && (rawHandle.toLowerCase().includes('bdmceo') || rawHandle.toLowerCase().includes('goregrinder')))) 
+        ? userDefaultHandle 
+        : (rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`);
       const savedUserBio = typeof window !== 'undefined' ? localStorage.getItem('nexus_user_bio') : null;
       const promoterBio = userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio;
       const personalBio = (savedUserBio && savedUserBio !== promoterBio)
         ? savedUserBio
         : ((userProfile?.bio && userProfile.bio !== promoterBio)
           ? userProfile.bio
-          : 'Extreme metal musician, archivist, and underground pit warrior.');
+          : (isOwnerMiguel ? 'Extreme metal musician, archivist, and underground pit warrior.' : 'Underground music supporter and scene regular.'));
       const effectiveBanner = profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner')) : null) || userProfile?.banner_url || userProfile?.banner || null;
       const cleanUserBanner = effectiveBanner;
       const effectiveUserAvatar = profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || userProfile?.avatar_url || userProfile?.avatar;
@@ -3704,16 +3756,20 @@ const getProfileForUser = (userParam: any) => {
       };
     }
 
-    const fName = profileFullLegalName || userProfile?.full_name || userProfile?.name || 'Fan Listener';
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+    const fName = profileFullLegalName || userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Fan Listener');
     const rawFHandle = profileHandle || userProfile?.fan_handle || userProfile?.console_handle || userProfile?.handle;
-    const fHandle = (!rawFHandle || rawFHandle.toLowerCase().includes('virulent') || rawFHandle === 'listener' || rawFHandle === 'user') ? '@bdmCEO' : (rawFHandle.startsWith('@') ? rawFHandle : `@${rawFHandle}`);
+    const userDefaultFHandle = isOwnerMiguel ? '@bdmCEO' : (userProfile?.name && !userProfile.name.toLowerCase().includes('miguel') ? `@${userProfile.name.replace(/\s+/g, '_').toLowerCase()}` : (userProfile?.email ? `@${userProfile.email.split('@')[0]}` : '@listener'));
+    const fHandle = (!rawFHandle || (isOwnerMiguel && rawFHandle.toLowerCase().includes('virulent')) || rawFHandle === 'listener' || rawFHandle === 'user' || (!isOwnerMiguel && (rawFHandle.toLowerCase().includes('bdmceo') || rawFHandle.toLowerCase().includes('goregrinder')))) 
+      ? userDefaultFHandle 
+      : (rawFHandle.startsWith('@') ? rawFHandle : `@${rawFHandle}`);
     const savedUserBio = typeof window !== 'undefined' ? localStorage.getItem('nexus_user_bio') : null;
     const promoterBio = userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio;
     const personalBio = (savedUserBio && savedUserBio !== promoterBio)
       ? savedUserBio
       : ((userProfile?.bio && userProfile.bio !== promoterBio)
         ? userProfile.bio
-        : 'Extreme metal musician, archivist, and underground pit warrior.');
+        : (isOwnerMiguel ? 'Extreme metal musician, archivist, and underground pit warrior.' : 'Underground music supporter and scene regular.'));
     const userBannerCandF = profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner')) : null) || userProfile?.banner_url || userProfile?.banner || null;
     const cleanUserBannerF = userBannerCandF;
     const effectiveFanAvatar = profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || userProfile?.avatar_url || userProfile?.avatar;
@@ -3853,7 +3909,7 @@ const getProfileForUser = (userParam: any) => {
       top_song_url: isYou ? (profileTopSongUrl || userProfile?.top_song_url || '') : (dbProfile?.top_song_url || userParam?.top_song_url || ''),
       customBadges: isYou ? (
         portalRole === 'label' ? ['💿 Record Label'] :
-        portalRole === 'promoter' ? ['🎫 Promoter'] :
+        (portalRole === 'promoter' && (hasRegisteredWorkspace(userProfile, 'promoter') || isMiguelNameOrProfile(userProfile))) ? ['🎫 Promoter'] :
         portalRole === 'creative' ? ['🎨 Creative'] :
         portalRole === 'band' ? ['🎸 Artist'] :
         portalRole === 'industry_pro' ? ['💼 Industry Pro'] :
@@ -3987,12 +4043,17 @@ const targetFullName = (
 ).trim();
 
 // Find matched community band by direct name or member name (e.g. Andre Gonzalez -> Cordyceps, Christopher Wirstrom -> Cranial Impalement)
+const isEmmanuelTargetProfile = Boolean(
+  (targetFullName.toLowerCase().includes('emmanuel') && targetFullName.toLowerCase().includes('flores')) ||
+  (targetProfObj?.username && String(targetProfObj.username).toLowerCase().includes('emmanuel') && String(targetProfObj.username).toLowerCase().includes('flores'))
+);
+
 let resolvedBandForTies: any = null;
 if (!isTargetMiguel) {
-  if (rawBandNameVal) {
+  if (rawBandNameVal && (!isEmmanuelTargetProfile || rawBandNameVal.toLowerCase() !== 'origin')) {
     resolvedBandForTies = communityBandManager.findByName(rawBandNameVal) || communityBandManager.findMatch(rawBandNameVal);
   }
-  if (!resolvedBandForTies && targetFullName) {
+  if (!resolvedBandForTies && targetFullName && !isEmmanuelTargetProfile) {
     resolvedBandForTies = communityBandManager.findByMember(targetFullName);
   }
   if (!resolvedBandForTies) {
@@ -4003,6 +4064,10 @@ if (!isTargetMiguel) {
       resolvedBandForTies = communityBandManager.findByName('Cranial Impalement');
     }
   }
+}
+
+if (isEmmanuelTargetProfile && (resolvedBandForTies?.name?.toLowerCase() === 'origin' || (resolvedBandForTies as any)?.band_name?.toLowerCase() === 'origin')) {
+  resolvedBandForTies = null;
 }
 
 const bandNameVal = isTargetMiguel
@@ -4036,7 +4101,12 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
   });
 }
 
-    const associatedProfiles = isBand ? bandMembers :
+    const isEmmanuelTarget = Boolean(
+      (targetFullName.toLowerCase().includes('emmanuel') && targetFullName.toLowerCase().includes('flores')) ||
+      (targetProfObj?.username && String(targetProfObj.username).toLowerCase().includes('emmanuel') && String(targetProfObj.username).toLowerCase().includes('flores'))
+    );
+
+    const rawAssociatedProfiles = isBand ? bandMembers :
       dynamicUserTies.length > 0 ? dynamicUserTies :
       userRoleLower.includes('label') ? [
         { name: 'Devourment', role: 'Artist', avatar: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?auto=format&fit=crop&q=80&w=100' },
@@ -4045,6 +4115,10 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         { name: 'Incinerate', role: 'Artist', avatar: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=200' },
         { name: 'Stabbing', role: 'Artist', avatar: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&q=80&w=200' }
       ] : [];
+
+    const associatedProfiles = isEmmanuelTarget
+      ? rawAssociatedProfiles.filter(p => p.name?.toLowerCase() !== 'origin')
+      : rawAssociatedProfiles;
     const dbBanner = dbProfile?.banner_url || dbProfile?.creative_banner || dbProfile?.promoter_cover_image || dbProfile?.label_banner;
     const banner = (user as any).banner || dbBanner || (discoverProf as any)?.banner || registryData.banner || (isYou ? profileCoverUrl : undefined);
 
@@ -4099,7 +4173,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
     const resolvedLegalName = isYou 
       ? (portalRole === 'band' ? (activeBand?.name || userProfile?.bandName || profileFullLegalName)
          : portalRole === 'fan_only' ? (profileFullLegalName || userProfile?.full_name || userProfile?.name)
-         : portalRole === 'creative' ? (userProfile?.creative_metadata?.business_name || profileFullLegalName || 'Pro Creative')
+         : portalRole === 'creative' ? resolveCreativeName(userProfile)
          : portalRole === 'promoter' ? (resolvePromoterName(userProfile) || profileFullLegalName || 'Pro Promoter')
          : portalRole === 'label' ? (userProfile?.label_company_name || profileFullLegalName || 'Pro Label')
          : (profileFullLegalName || userProfile?.legal_name || userProfile?.full_name || userProfile?.name))
@@ -4113,7 +4187,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
     const resolvedHandle = isYou 
       ? (portalRole === 'band' ? (profileHandle || (activeBand?.name || '').replace(/\s+/g, ''))
          : portalRole === 'fan_only' ? (profileHandle || userProfile?.fan_handle || 'listener')
-         : portalRole === 'creative' ? (profileHandle || 'creative_pro')
+         : portalRole === 'creative' ? (profileHandle || resolveCreativeHandle(userProfile))
          : portalRole === 'promoter' ? (profileHandle || resolvePromoterHandle(userProfile) || 'promoter_pro')
          : portalRole === 'label' ? (profileHandle || userProfile?.label_url_slug || 'label_pro')
          : (profileHandle || userProfile?.console_handle || userProfile?.handle))
@@ -4451,8 +4525,58 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
     }
 
     setShopItemsList(prev => [newListingItem as any, ...prev]);
+
+    // Also turn this classified/gear item into an active feed post on the timeline
+    const isGearListing = newListingType === 'gear';
+    const feedPostUuid = generateUUID();
+    const sellerDisplayName = defaultUserHandle || userProfile?.name || 'Verified Member';
+
+    const classifiedFeedPost: any = {
+      id: feedPostUuid,
+      type: newListingType,
+      category: newListingType,
+      timestamp: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      timeAgo: 'Just now',
+      authorId: userProfile?.id || 'current_user',
+      authorName: sellerDisplayName,
+      authorAvatar: userProfile?.avatar || userProfile?.avatar_url || '',
+      authorRole: portalRole === 'band' ? 'Band / Artist' : portalRole === 'label' ? 'Record Label' : portalRole === 'promoter' ? 'Promoter' : 'Community Member',
+      location: newListingItem.location,
+      message: newListingDescription.trim() || `${newListingTitle.trim()} - Pinned to the Community Bulletin Board`,
+      content: newListingDescription.trim() || `${newListingTitle.trim()} - Pinned to the Community Bulletin Board`,
+      image: imageUrl,
+      image_url: imageUrl,
+      images: imageUrl ? [imageUrl] : [],
+      tag: isGearListing ? 'GEAR SWAP' : 'CLASSIFIED',
+      classifiedData: {
+        listingId: newListingItem.id,
+        listingType: newListingType,
+        title: newListingTitle.trim(),
+        price: newListingItem.price,
+        condition: newListingCondition,
+        brand: newListingBrand.trim() || 'Generic',
+        year: newListingYear.trim() || 'N/A',
+        location: newListingItem.location,
+        description: newListingDescription.trim(),
+        image: imageUrl,
+        seller: sellerDisplayName
+      },
+      reactions: { flame: 0, horns: 0 },
+      comments: []
+    };
+
+    try {
+      await syncPostToSupabase(classifiedFeedPost, userProfile?.id);
+    } catch (e) {
+      console.warn('Could not sync classified post:', e);
+    }
+
+    setFeed(prev => [classifiedFeedPost, ...prev]);
+    setLabelPosts(prev => [classifiedFeedPost, ...prev]);
+
     setIsPostListingOpen(false);
-    triggerNotification?.(`🚀 Successfully posted "${newListingTitle.trim()}" to the Community Marketplace!`);
+    triggerNotification?.(`🚀 Successfully posted "${newListingTitle.trim()}" to the Community Marketplace & Feed!`);
 
     // Reset fields
     setNewListingTitle('');
@@ -5418,6 +5542,22 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
   setEventCost={setEventCost}
   eventTicketUrl={eventTicketUrl}
   setEventTicketUrl={setEventTicketUrl}
+  classifiedType={classifiedType}
+  setClassifiedType={setClassifiedType}
+  classifiedTitle={classifiedTitle}
+  setClassifiedTitle={setClassifiedTitle}
+  classifiedPrice={classifiedPrice}
+  setClassifiedPrice={setClassifiedPrice}
+  classifiedCondition={classifiedCondition}
+  setClassifiedCondition={setClassifiedCondition}
+  classifiedBrand={classifiedBrand}
+  setClassifiedBrand={setClassifiedBrand}
+  classifiedYear={classifiedYear}
+  setClassifiedYear={setClassifiedYear}
+  classifiedLocation={classifiedLocation}
+  setClassifiedLocation={setClassifiedLocation}
+  classifiedDescription={classifiedDescription}
+  setClassifiedDescription={setClassifiedDescription}
   stories={stories}
   setShowUploadStoryModal={setShowUploadStoryModal}
   setActiveStory={setActiveStory}

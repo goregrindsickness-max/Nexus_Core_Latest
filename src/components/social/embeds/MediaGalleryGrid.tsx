@@ -1,6 +1,7 @@
 import React from 'react';
 import { Maximize2, MapPin, Ticket, Calendar } from 'lucide-react';
 import { isAudioUrl } from '../../../utils/socialFeedUtils';
+import { handleImageFallbackError } from '../../../utils/bandProfileUtils';
 
 interface MediaGalleryGridProps {
   images?: string[];
@@ -66,10 +67,7 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
         src={src} 
         alt="Post media" 
         referrerPolicy="no-referrer"
-        onError={(e) => {
-          e.currentTarget.onerror = null;
-          e.currentTarget.style.display = 'none';
-        }}
+        onError={(e) => handleImageFallbackError(e, isTourFlyer ? 'banner' : 'generic')}
         className="w-full max-h-[520px] object-contain relative z-10 group-hover:scale-[1.01] transition-transform duration-500" 
       />
 
@@ -150,10 +148,7 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
                   src={img} 
                   alt={`Media ${i}`} 
                   referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    e.currentTarget.onerror = null;
-                    e.currentTarget.style.display = 'none';
-                  }}
+                  onError={(e) => handleImageFallbackError(e, 'banner')}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                 />
                 <div className="absolute top-2 left-2 bg-black/75 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px] font-mono text-zinc-300 border border-white/10">
@@ -184,10 +179,7 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
                 src={validImages[0]} 
                 alt="Media 0" 
                 referrerPolicy="no-referrer"
-                onError={(e) => {
-                  e.currentTarget.onerror = null;
-                  e.currentTarget.style.display = 'none';
-                }}
+                onError={(e) => handleImageFallbackError(e, 'banner')}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
               />
               <div className="absolute top-2 left-2 bg-black/75 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px] font-mono text-zinc-300 border border-white/10">
@@ -201,10 +193,7 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
                     src={img} 
                     alt={`Media ${i + 1}`} 
                     referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.style.display = 'none';
-                    }}
+                    onError={(e) => handleImageFallbackError(e, 'banner')}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                   />
                   <div className="absolute top-2 left-2 bg-black/75 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px] font-mono text-zinc-300 border border-white/10">
@@ -235,10 +224,7 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
                 src={img} 
                 alt={`Media ${i}`} 
                 referrerPolicy="no-referrer"
-                onError={(e) => {
-                  e.currentTarget.onerror = null;
-                  e.currentTarget.style.display = 'none';
-                }}
+                onError={(e) => handleImageFallbackError(e, 'banner')}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
               />
               <div className="absolute top-2 left-2 bg-black/75 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px] font-mono text-zinc-300 border border-white/10">

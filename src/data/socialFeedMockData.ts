@@ -132,7 +132,10 @@ export interface FeedItem {
   boost_duration?: '24h' | '72h';
   effective_boost?: boolean;
   id: string;
-  type?: 'post' | 'merch_drop' | 'ticket_sale' | 'poll' | 'tape_share' | 'event';
+  type?: 'post' | 'merch_drop' | 'ticket_sale' | 'poll' | 'tape_share' | 'event' | 'gear' | 'classifieds' | string;
+  category?: string;
+  classifiedData?: any;
+  classified_data?: any;
   workspace_type?: string;
   workspaceType?: string;
   eventData?: DIYEventData;
@@ -485,6 +488,63 @@ export const mockFeed: FeedItem[] = [
       { id: 'c3_r1', parent_comment_id: 'c3', author: 'SlamGoblin', text: 'Emasculator is giving Putridity a run for their money though, that new promo is filthy.', timeAgo: '8m ago' },
       { id: 'c3_2', author: 'DevourmentFanatic', text: 'Voted Stabbing! Bridget\'s vocals live are absolutely terrifying.', timeAgo: '5m ago' },
       { id: 'c3_2_r1', parent_comment_id: 'c3_2', author: 'Blastfiend999', text: 'Stabbing is taking a huge surge in the poll right now! 120 votes so far.', timeAgo: '2m ago' }
+    ]
+  },
+  {
+    id: 'mock_gear_1',
+    type: 'gear',
+    category: 'gear',
+    author: { name: 'RiffLord99 (Marcus Stone)', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150', role: 'FAN' },
+    timeAgo: '1h ago',
+    timestamp: new Date(Date.now() - 65 * 60000).toISOString(),
+    content: "Legendary high gain 120W tube head in original condition. Fresh matched JJ 6L6 power tubes and bias checked. Crushing death metal tone, zero issues.",
+    tag: 'GEAR SWAP',
+    classifiedData: {
+      listingId: 'gear1',
+      listingType: 'gear',
+      title: 'Peavey 5150 Block Letter Head (1992)',
+      price: 1200,
+      condition: 'Good',
+      brand: 'Peavey',
+      year: '1992',
+      location: 'Austin, TX (Will Ship ConUS)',
+      description: 'Legendary high gain 120W tube head in original condition. Fresh matched JJ 6L6 power tubes and bias checked. Crushing death metal tone, zero issues.',
+      image: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Peavy%205150.jpg',
+      seller: 'RiffLord99'
+    },
+    reactions: [{ type: 'flame', count: 29, active: true }, { type: 'horns', count: 14, active: false }],
+    comments: [
+      { id: 'cg1', author: 'SlamLord_666', text: 'Does this have the original footswitch included?', timeAgo: '45m ago' },
+      { id: 'cg1_r1', parent_comment_id: 'cg1', author: 'RiffLord99', text: 'Yes, original 2-button Peavey footswitch and heavy duty power cable included!', timeAgo: '30m ago' },
+      { id: 'cg2', author: 'ToneChaser', text: 'Block letter era has the crunchiest mid-range bark of all 5150 variations.', timeAgo: '20m ago' }
+    ]
+  },
+  {
+    id: 'mock_class_1',
+    type: 'classifieds',
+    category: 'classifieds',
+    author: { name: 'GraveMiasma (Dave Rotten)', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', role: 'ARTIST' },
+    timeAgo: '2h ago',
+    timestamp: new Date(Date.now() - 120 * 60000).toISOString(),
+    content: "Established underground death metal band seeking dedicated double-bass powerhouse drummer for upcoming full-length recording and fall west coast run. Rehearsal space in DTLA.",
+    tag: 'CLASSIFIED',
+    classifiedData: {
+      listingId: 'class1',
+      listingType: 'classifieds',
+      title: 'DRUMMER WANTED: Death Metal Project (Incantation / Immolation style)',
+      price: 0,
+      condition: 'Experienced / Pro Gear',
+      brand: 'Nexus Scene',
+      year: '2026',
+      location: 'Los Angeles, CA (DTLA Rehearsals)',
+      description: 'Established underground death metal band seeking dedicated double-bass powerhouse drummer for upcoming full-length recording and fall west coast run. Influences: Incantation, Immolation, Cryptopsy, Dead Congregation.',
+      image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=600',
+      seller: 'GraveMiasma'
+    },
+    reactions: [{ type: 'flame', count: 35, active: false }, { type: 'horns', count: 22, active: true }],
+    comments: [
+      { id: 'cc1', author: 'BlastKing_LA', text: 'DM sent with my drum play-through links from my last tour!', timeAgo: '1h ago' },
+      { id: 'cc1_r1', parent_comment_id: 'cc1', author: 'GraveMiasma', text: 'Checking the videos right now, solid blast beats man! Let\'s jam this weekend.', timeAgo: '40m ago' }
     ]
   },
   {

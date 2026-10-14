@@ -4,6 +4,7 @@ import { loadFeedCache, saveFeedCache, getDeletedPostIdsLocal, resolveWorkspaceE
 import { getSupabase, subscribeToTable } from '../../../supabase';
 import { extractYouTubeId } from '../utils/postSyncUtils';
 import { mergePostWithReactions } from '../utils/reactionStore';
+import { isMiguelNameOrProfile } from '../utils/profileUtils';
 
 interface UseFeedLocalCacheOptions {
   portalRole: string;
@@ -101,6 +102,7 @@ export function useFeedLocalCache({
                     const authorNameVal = (postObj.authorName || postObj.author?.name || item.profiles?.full_name || item.profiles?.name || '').toLowerCase();
                     const authorHandleVal = (postObj.authorHandle || postObj.author?.console_handle || item.profiles?.console_handle || '').toLowerCase();
 
+                    const isViewerMiguel = isMiguelNameOrProfile(userProfile);
                     const isSelf = Boolean(
                       (userProfile?.id && (userProfile.id === item.profiles?.id || userProfile.id === item.profile_id || userProfile.id === postObj.author?.id || userProfile.id === postObj.authorId)) ||
                       (userProfile?.email && (userProfile.email.toLowerCase() === (item.profiles?.email || '').toLowerCase() || userProfile.email.toLowerCase() === (postObj.author?.email || '').toLowerCase())) ||
@@ -111,9 +113,11 @@ export function useFeedLocalCache({
                       )) ||
                       (userProfile?.name && authorNameVal === userProfile.name.toLowerCase()) ||
                       (userProfile?.full_name && authorNameVal === userProfile.full_name.toLowerCase()) ||
-                      authorNameVal.includes('goregrinder') ||
-                      authorNameVal.includes('bdmceo') ||
-                      authorNameVal === 'miguel medina'
+                      (isViewerMiguel && (
+                        authorNameVal.includes('goregrinder') ||
+                        authorNameVal.includes('bdmceo') ||
+                        authorNameVal === 'miguel medina'
+                      ))
                     );
 
                     const localStoredAvatar = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null;
@@ -459,6 +463,7 @@ export function useFeedLocalCache({
           const authorNameVal = (parsedPost.authorName || parsedPost.author?.name || profile?.full_name || profile?.name || '').toLowerCase();
           const authorHandleVal = (parsedPost.authorHandle || parsedPost.author?.console_handle || profile?.console_handle || '').toLowerCase();
 
+          const isViewerMiguel = isMiguelNameOrProfile(userProfile);
           const isSelf = Boolean(
             (userProfile?.id && (userProfile.id === profile?.id || userProfile.id === newItem.profile_id || userProfile.id === parsedPost.author?.id || userProfile.id === parsedPost.authorId)) ||
             (userProfile?.email && (userProfile.email.toLowerCase() === (profile?.email || '').toLowerCase() || userProfile.email.toLowerCase() === (parsedPost.author?.email || '').toLowerCase())) ||
@@ -469,9 +474,11 @@ export function useFeedLocalCache({
             )) ||
             (userProfile?.name && authorNameVal === userProfile.name.toLowerCase()) ||
             (userProfile?.full_name && authorNameVal === userProfile.full_name.toLowerCase()) ||
-            authorNameVal.includes('goregrinder') ||
-            authorNameVal.includes('bdmceo') ||
-            authorNameVal === 'miguel medina'
+            (isViewerMiguel && (
+              authorNameVal.includes('goregrinder') ||
+              authorNameVal.includes('bdmceo') ||
+              authorNameVal === 'miguel medina'
+            ))
           );
 
           const localStoredAvatar = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null;

@@ -35,8 +35,11 @@ import {
   deleteArchiveShowFromDatabase,
   resetArchiveShowInDatabase,
   CANONICAL_DOMINATION_FEST_ARCHIVES,
-  ArchiveShowItem
+  ArchiveShowItem,
+  parseVenueAndAddress,
+  classifyEventType
 } from '../../../services/archiveShowsService';
+import { isMiguelNameOrProfile } from '../utils/profileUtils';
 
 export interface PromoterArchivesModalProps {
   isOpen: boolean;
@@ -107,7 +110,8 @@ export const PromoterArchivesModal: React.FC<PromoterArchivesModalProps> = ({
   const addFileInputRef = useRef<HTMLInputElement | null>(null);
   const editFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const promoterUserId = promoterProfile?.user_id || promoterProfile?.id || userProfile?.id || '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+  const isOwnerMiguel = isMiguelNameOrProfile(promoterProfile) || isMiguelNameOrProfile(userProfile);
+  const promoterUserId = promoterProfile?.user_id || promoterProfile?.id || userProfile?.id || (isOwnerMiguel ? '5403162d-1947-43aa-b5f6-38a1bd2a1b80' : 'promoter');
 
   // Load from Supabase 'archive_shows' table on mount/open
   const loadArchiveData = async () => {
@@ -233,15 +237,19 @@ export const PromoterArchivesModal: React.FC<PromoterArchivesModalProps> = ({
     const support = Array.isArray(s.support_lineup)
       ? s.support_lineup.map((x: any) => typeof x === 'string' ? x : (x.name || x.band)).filter(Boolean)
       : [];
+    const { venueName, venueAddress } = parseVenueAndAddress(s);
+    const evType = classifyEventType(s);
+
     return {
       id: s.id,
       year: isNaN(y) ? 2026 : y,
       title: s.show_name 
         ? `${s.headliner || s.name || 'Artist'} - ${s.show_name}`
-        : (s.festival_name || s.name || `${s.headliner || 'Live'} at ${s.venue || 'Venue'}`),
-      type: (s.festival_name ? 'festival' : 'club_gig') as any,
+        : (s.festival_name || s.name || `${s.headliner || 'Live'} at ${venueName || 'Venue'}`),
+      type: evType as any,
       date: s.date || 'Past Event',
-      venue: s.venue_address || s.venue || s.venue_name || 'Underground Venue',
+      venue: venueName,
+      venueAddress: venueAddress,
       city: s.city ? (s.state_province ? `${s.city}, ${s.state_province}` : s.city) : 'Haltom City, TX',
       lineup: [s.headliner || s.name, ...support].filter(Boolean),
       attendance: s.expected_attendance ? `${s.expected_attendance} Capacity` : 'Full House',

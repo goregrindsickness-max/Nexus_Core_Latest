@@ -992,7 +992,7 @@ export async function uploadClipVideoFile(
       let base64String = '';
       if (typeof file === 'string' && file.startsWith('data:')) {
         base64String = file;
-      } else if (uploadPayload && uploadPayload.size < 8 * 1024 * 1024) {
+      } else if (uploadPayload && uploadPayload.size < 250 * 1024 * 1024) {
         base64String = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);

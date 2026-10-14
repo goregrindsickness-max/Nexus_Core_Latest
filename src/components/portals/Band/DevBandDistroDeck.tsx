@@ -2507,7 +2507,7 @@ Keep it heavy, keep it loud!
                           <input 
                             type="text" 
                             id="yt-video-url"
-                            placeholder="https://www.youtube.com/watch?v=f02mOEt11g4"
+                            placeholder="https://www.youtube.com/watch?v=jQ26iMGJbW4"
                             className="bg-black/50 border border-zinc-800 px-3 py-2 text-xs font-mono text-white rounded-lg focus:outline-none focus:border-[#39ff14] flex-grow"
                           />
                           <button
@@ -2567,9 +2567,9 @@ Keep it heavy, keep it loud!
                         </span>
                         <div className="flex flex-wrap gap-1.5">
                           {[
-                            { name: "⚡ INDUSTRIAL SLATE", code: "f02mOEt11g4", title: "Industrial Noise & Decay Loop" },
+                            { name: "⚡ CRANIAL LIVE", code: "Vrrr4B029Q8", title: "Cranial Impalement - Age of Terror Live" },
                             { name: "📻 LOFI CODES", code: "jfKfPfyJRdk", title: "Atmospheric Lofi Ambient Jam" },
-                            { name: "⚙️ TECHNO BEATS", code: "3h8kFSTg4w0", title: "Sovereign Modular Feedback Session" }
+                            { name: "💀 DEVOURMENT SLAM", code: "jQ26iMGJbW4", title: "Devourment - Pious Impiety Live Session" }
                           ].map((preset, idx) => (
                             <button
                               key={`${preset.code}-${idx}`}

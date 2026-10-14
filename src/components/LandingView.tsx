@@ -265,7 +265,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onEnterApp }) => {
             />
           </div>
           <p className="text-zinc-300 font-mono text-[10px] sm:text-[11px] tracking-[0.14em] uppercase text-center max-w-xs sm:max-w-sm leading-relaxed font-semibold">
-            From creator to community the complete architecture for independent artists and creators
+            HARDWIRED FOR THE UNDERGROUND: COMMAND, CREATE, AND DISTRIBUTE WITHOUT COMPROMISE.
           </p>
         </motion.div>
 

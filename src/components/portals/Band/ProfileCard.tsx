@@ -1136,6 +1136,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       if (pEmail.includes('wirstrom') && (mName.includes('christopher') || mName.includes('wirstrom'))) {
         return true;
       }
+      // Safeguard: Emmanuel Flores is NOT in Origin (Mike Flores is in Origin)
+      if (mName.includes('flores') && (mName.includes('mike') || mName.includes('michael'))) {
+        if (pName.includes('emmanuel') || pUser.includes('emmanuel') || pEmail.includes('emmanuel')) {
+          return false;
+        }
+      }
+      if (pName.includes('flores') && pName.includes('emmanuel')) {
+        if (mName.includes('mike') || mName.includes('michael')) {
+          return false;
+        }
+      }
       if (mName && pName && (
         pName === mName ||
         pName.includes(mName) ||
@@ -1802,11 +1813,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     }
                   }
 
-                  const isMiguelProfile = !selectedUserProfile.isBandProfile && selectedUserProfile.type !== 'band' && !!(
-                    selectedUserProfile.name?.toLowerCase().includes('miguel') ||
-                    selectedUserProfile.name?.toLowerCase().includes('goregrinder') ||
-                    selectedUserProfile.email?.toLowerCase().includes('goregrindsickness')
-                  );
+                  const isMiguelProfile = !selectedUserProfile.isBandProfile && selectedUserProfile.type !== 'band' && isMiguelNameOrProfile(selectedUserProfile);
 
                   if (isMiguelProfile) {
                     badgesToRender.push({
@@ -1835,7 +1842,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       prof.role.toLowerCase().includes('bass')
                     )) ||
                     (isTargetSelf && (userProfile?.band_id || (typeof userProfile?.band_name === 'string' && userProfile.band_name.trim()) || userProfile?.band_profile_id)) ||
-                    isMiguelProfile
+                    (isTargetSelf && isMiguelProfile)
                   );
 
                   if (isTiedToBand) {
@@ -1845,18 +1852,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     });
                   }
 
+                  const isProfMiguel = isMiguelNameOrProfile(prof);
                   const hasPromoterBadge = Boolean(
-                    workspaces.includes('promoter') ||
-                    prof?.promoter_id ||
-                    (typeof prof?.promoter_name === 'string' && prof.promoter_name.trim()) ||
-                    (typeof prof?.promoter_agency === 'string' && prof.promoter_agency.trim()) ||
-                    (typeof prof?.promoter_brand === 'string' && prof.promoter_brand.trim()) ||
-                    (typeof prof?.agency_name === 'string' && prof.agency_name.trim()) ||
+                    prof?.account_type === 'promoter' ||
+                    prof?.active_workspace === 'promoter' ||
                     (prof?.promoter_metadata && typeof prof.promoter_metadata === 'object' && (
-                      (typeof prof.promoter_metadata.brand_name === 'string' && prof.promoter_metadata.brand_name.trim()) ||
-                      (typeof prof.promoter_metadata.agency_name === 'string' && prof.promoter_metadata.agency_name.trim()) ||
-                      prof.promoter_metadata.is_registered === true
-                    ))
+                      prof.promoter_metadata.is_registered === true ||
+                      (isProfMiguel && (prof.promoter_metadata.brand_name || prof.promoter_agency)) ||
+                      (!isProfMiguel && prof.promoter_metadata.brand_name && prof.promoter_metadata.brand_name !== 'Nexus Live Productions')
+                    )) ||
+                    (isProfMiguel && (prof?.promoter_id || prof?.promoter_name)) ||
+                    (workspaces.includes('promoter') && (isProfMiguel || (prof?.promoter_metadata && prof.promoter_metadata.is_registered)))
                   );
 
                   if (hasPromoterBadge) {

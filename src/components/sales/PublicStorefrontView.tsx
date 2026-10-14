@@ -23,6 +23,7 @@ import {
 import { mockShopItems } from '../../data/shopMockData';
 import { getShopCategoryFallback } from '../social/StorefrontView';
 import { isItemBelongingToBandOrSplit } from '../../services/discographySyncService';
+import { communityBandManager } from '../../lib/communityBands';
 
 export interface PublicStorefrontViewProps {
   catalogReleases?: any;
@@ -165,84 +166,42 @@ export const PublicStorefrontView: React.FC<PublicStorefrontViewProps> = ({
     const matching = combined.filter(item => isItemBelongingToBandOrSplit(item, resolvedBandId, resolvedBandName));
     if (matching.length > 0) return matching;
 
-    // Default authentic artist merchandise fallback if no explicit items exist
-    return [
-      {
-        id: `store_${resolvedBandId || 'band'}_lp`,
-        name: `${resolvedBandName} - Debut Album (180g Splatter Vinyl LP)`,
-        price: 28,
-        category: 'media',
-        subcategory: 'vinyl',
-        description: `Deluxe 180-gram heavyweight splatter vinyl pressing with gatefold sleeve and lyric insert. Direct from ${resolvedBandName}.`,
-        thumbnail: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Heinous%20Interstellar%20Malformations%20Split.png',
-        fallbackThumbnail: 'https://images.unsplash.com/photo-1539185441755-769473a23570?auto=format&fit=crop&q=80&w=600',
-        sizes: ['Vinyl LP', 'Limited Colored Wax', 'CD Digipak'],
-        isLimited: true,
-        stock: 12,
-        brand: resolvedBandName,
-        artist: resolvedBandName
-      },
-      {
-        id: `store_${resolvedBandId || 'band'}_tee`,
-        name: `${resolvedBandName} Tour Crest Heavyweight Tee`,
-        price: 30,
-        category: 'apparel',
-        subcategory: 't-shirts',
-        description: `Official heavyweight 100% combed cotton tour tee with discharge print front and back tour dates.`,
-        thumbnail: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/TDF%201%20Drawstring%20Bag.png',
-        fallbackThumbnail: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&q=80&w=600',
-        sizes: ['S', 'M', 'L', 'XL', '2XL', '3XL'],
-        isLimited: false,
-        stock: 45,
-        brand: resolvedBandName,
-        artist: resolvedBandName
-      },
-      {
-        id: `store_${resolvedBandId || 'band'}_hoodie`,
-        name: `${resolvedBandName} Embroidered Pullover Hoodie`,
-        price: 55,
-        category: 'apparel',
-        subcategory: 'hoodies',
-        description: `Premium 450gsm heavyweight fleece pullover hoodie with chest embroidery and sleeve artwork.`,
-        thumbnail: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&q=80&w=600',
-        fallbackThumbnail: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&q=80&w=600',
-        sizes: ['S', 'M', 'L', 'XL', '2XL'],
-        isLimited: true,
-        stock: 8,
-        brand: resolvedBandName,
-        artist: resolvedBandName
-      },
-      {
-        id: `store_${resolvedBandId || 'band'}_cd`,
-        name: `${resolvedBandName} - Digipak CD Edition`,
-        price: 15,
-        category: 'media',
-        subcategory: 'cds',
-        description: `6-panel matte digipak with 12-page booklet and high-resolution master audio.`,
-        thumbnail: 'https://images.unsplash.com/photo-1539185441755-769473a23570?auto=format&fit=crop&q=80&w=600',
-        fallbackThumbnail: 'https://images.unsplash.com/photo-1539185441755-769473a23570?auto=format&fit=crop&q=80&w=600',
-        sizes: ['CD Digipak'],
-        isLimited: false,
-        stock: 65,
-        brand: resolvedBandName,
-        artist: resolvedBandName
-      },
-      {
-        id: `store_${resolvedBandId || 'band'}_patch`,
-        name: `${resolvedBandName} Woven Logo Patch`,
-        price: 8,
-        category: 'apparel',
-        subcategory: 'label',
-        description: `High-density woven logo patch with merrowed border. Perfect for battle jackets and vests.`,
-        thumbnail: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&q=80&w=600',
-        fallbackThumbnail: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&q=80&w=600',
-        sizes: ['Standard'],
-        isLimited: false,
-        stock: 90,
-        brand: resolvedBandName,
-        artist: resolvedBandName
+    // 5. Check if the artist has authentic catalog releases or discography stored in communityBandManager
+    const commBand = (resolvedBandId ? communityBandManager.getById(resolvedBandId) : null) ||
+      (resolvedBandName ? (communityBandManager.findByName(resolvedBandName) || communityBandManager.findMatch(resolvedBandName)) : null);
+
+    if (commBand && Array.isArray(commBand.discography) && commBand.discography.length > 0) {
+      const authenticMediaItems = commBand.discography.map((rel: any, idx: number) => {
+        const cover = rel.image_url || rel.cover_url || rel.cover_image || rel.coverUrl || rel.coverImage || '';
+        const formatName = (rel.type || 'album').toLowerCase() === 'ep' ? 'EP' :
+                           (rel.type || 'album').toLowerCase() === 'single' ? 'Single' : 'Vinyl LP / CD';
+        return {
+          id: rel.id || `comm_rel_${idx}_${Date.now()}`,
+          name: `${resolvedBandName} - ${rel.title} (${formatName})`,
+          price: (rel.type || '').toLowerCase() === 'single' ? 10 : 25,
+          category: 'media',
+          subcategory: (rel.type || '').toLowerCase().includes('vinyl') ? 'vinyl' : 'cds',
+          description: `Authentic catalog release by ${resolvedBandName}. Released ${rel.year || ''} via ${rel.label || 'Direct'}.`,
+          thumbnail: cover,
+          fallbackThumbnail: cover,
+          sizes: ['Vinyl LP', 'CD Digipak', 'Digital Master'],
+          isLimited: true,
+          stock: 25,
+          brand: resolvedBandName,
+          artist: resolvedBandName,
+          band_id: commBand.id || resolvedBandId
+        };
+      }).filter(item => Boolean(item.thumbnail)); // Only include items with authentic matching artwork
+
+      if (authenticMediaItems.length > 0) {
+        return authenticMediaItems;
       }
-    ];
+    }
+
+    // Do NOT display mismatched generic stock photos.
+    // If the artist has not uploaded their authentic merch catalog yet, return an empty array
+    // so the storefront cleanly indicates: "This artist has not uploaded any items yet".
+    return [];
   }, [catalogReleases, catalogApparel, resolvedBandId, resolvedBandName]);
 
   // Filter items visible on the storefront
@@ -545,17 +504,36 @@ export const PublicStorefrontView: React.FC<PublicStorefrontViewProps> = ({
 
         {/* Empty State */}
         {filteredMerchItems.length === 0 && (
-          <div className="text-center py-16 bg-zinc-950/40 border border-zinc-900 rounded-2xl space-y-3 mb-8">
-            <ShoppingBag className="w-12 h-12 text-zinc-700 mx-auto" />
-            <p className="text-sm font-black text-zinc-400 uppercase font-mono tracking-wider">No matching merch items found</p>
-            <p className="text-xs text-zinc-600 max-w-sm mx-auto">Try selecting another category or clear your search query to explore the catalog.</p>
-            <button
-              type="button"
-              onClick={() => { setShopCategory('all'); setShopSearchQuery(''); }}
-              className="mt-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-white rounded-xl text-xs font-bold uppercase font-mono tracking-wider transition-colors"
-            >
-              Reset Filters
-            </button>
+          <div className="text-center py-16 px-4 bg-zinc-950/60 border border-zinc-900 rounded-2xl space-y-3 mb-8 shadow-inner">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-center text-zinc-500 shadow-sm">
+              <ShoppingBag className="w-7 h-7 text-zinc-500" />
+            </div>
+            {allShopItems.length === 0 ? (
+              <>
+                <p className="text-sm sm:text-base font-black text-zinc-200 uppercase font-mono tracking-wider">
+                  This artist has not uploaded any items yet
+                </p>
+                <p className="text-xs text-zinc-500 max-w-md mx-auto leading-relaxed">
+                  {resolvedBandName} hasn&apos;t published official merchandise or physical catalog releases to their storefront yet. Check back soon or visit their profile for tour dates and updates.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-black text-zinc-300 uppercase font-mono tracking-wider">
+                  No matching merch items found
+                </p>
+                <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                  Try selecting another category or clear your search query to explore the rest of the catalog.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setShopCategory('all'); setShopSearchQuery(''); }}
+                  className="mt-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-white rounded-xl text-xs font-bold uppercase font-mono tracking-wider transition-colors cursor-pointer"
+                >
+                  Reset Filters
+                </button>
+              </>
+            )}
           </div>
         )}
 

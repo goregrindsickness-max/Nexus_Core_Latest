@@ -30,8 +30,8 @@ export function useBandManagement({
     management_role: 'tour_manager' as 'tour_manager' | 'booking_agent' | 'executive_producer' | 'owner',
     management_commission_pct: 15,
     management_day_rate: 250,
-    executive_contact_name: userProfile?.name || 'Miguel (@bdmCEO)',
-    executive_contact_email: userProfile?.email || 'goregrindsickness@gmail.com',
+    executive_contact_name: userProfile?.name || userProfile?.full_name || '',
+    executive_contact_email: userProfile?.email || '',
     executive_contact_phone: '',
     client_roster_notes: ''
   });

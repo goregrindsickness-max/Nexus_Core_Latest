@@ -9,6 +9,14 @@ import CreativeAlliancesView from './CreativeAlliancesView';
 import CreativeWorkspaceProtocols from './CreativeWorkspaceProtocols';
 import EscrowReleaseReceipt from './EscrowReleaseReceipt';
 import { ProfileCard } from './ProfileCard';
+import { 
+  resolveCreativeName, 
+  resolveCreativeHandle, 
+  resolveCreativeLogo, 
+  resolveCreativeCover, 
+  resolveCreativeBio, 
+  resolveCreativeLocation 
+} from '../../../utils/bandProfileUtils';
 import { MASTER_GENRES } from '../../../constants/genres';
 import { COUNTRIES, US_STATES } from '../../../constants/location';
 
@@ -287,17 +295,17 @@ export default function CreativeDashboardViewV2({
   const upAny = userProfile as any;
 
   // Profile fields state
-  const [displayName, setDisplayName] = useState(upAny?.creative_name || upAny?.creativeName || userProfile.name || '');
-  const [avatarUrl, setAvatarUrl] = useState(upAny?.creative_avatar || userProfile.creative_avatar || '');
-  const [businessName, setBusinessName] = useState(upAny?.creative_business_name || upAny?.creative_name || upAny?.creativeName || upAny?.creative_metadata?.business_name || upAny?.business_name || 'Vortex Graphics');
-  const [creativeHandle, setCreativeHandle] = useState(upAny?.creative_handle || upAny?.creative_slug || upAny?.custom_slug || userProfile?.console_handle || userProfile?.screen_name || 'vortexgraphics');
+  const [displayName, setDisplayName] = useState(resolveCreativeName(userProfile));
+  const [avatarUrl, setAvatarUrl] = useState(resolveCreativeLogo(userProfile));
+  const [businessName, setBusinessName] = useState(resolveCreativeName(userProfile));
+  const [creativeHandle, setCreativeHandle] = useState(resolveCreativeHandle(userProfile));
   const [bookingEmail, setBookingEmail] = useState(userProfile.email || upAny?.creative_metadata?.booking_email || '');
   const [city, setCity] = useState(userProfile.city || upAny?.creative_metadata?.city || '');
   const [stateProvince, setStateProvince] = useState(userProfile.state_province || upAny?.creative_metadata?.state_province || '');
   const [country, setCountry] = useState(userProfile.country || upAny?.creative_metadata?.country || 'USA');
-  const [baseLocation, setBaseLocation] = useState(userProfile.city ? `${userProfile.city}, ${userProfile.state_province || userProfile.country || ''}` : (upAny?.creative_metadata?.base_location || 'Remote Market Hub'));
+  const [baseLocation, setBaseLocation] = useState(resolveCreativeLocation(userProfile));
   const [portfolioLink, setPortfolioLink] = useState(upAny?.creative_metadata?.portfolio_link || upAny?.website || '');
-  const [bio, setBio] = useState(userProfile.bio || upAny?.creative_metadata?.bio || upAny?.creative_metadata?.biography || '');
+  const [bio, setBio] = useState(resolveCreativeBio(userProfile));
   const [dayRate, setDayRate] = useState<string>(String(upAny?.creative_metadata?.day_rate || upAny?.creative_metadata?.base_rate_value || '350'));
   const [rateType, setRateType] = useState<'day' | 'project'>(upAny?.creative_metadata?.rate_type || 'day');
   const [pricingNotes, setPricingNotes] = useState(upAny?.creative_metadata?.pricing_notes || 'Flexible depending on label sizes.');
@@ -316,15 +324,20 @@ export default function CreativeDashboardViewV2({
 
   useEffect(() => {
     if (userProfile) {
-      setDisplayName(upAny?.creative_name || upAny?.creativeName || userProfile.name || '');
-      setAvatarUrl(upAny?.creative_avatar || userProfile.creative_avatar || '');
-      setBusinessName(upAny?.creative_business_name || upAny?.creative_name || upAny?.creativeName || upAny?.creative_metadata?.business_name || '');
+      const cName = resolveCreativeName(userProfile);
+      const cLogo = resolveCreativeLogo(userProfile);
+      const cHandle = resolveCreativeHandle(userProfile);
+      const cLoc = resolveCreativeLocation(userProfile);
+      const cBio = resolveCreativeBio(userProfile);
+
+      setDisplayName(cName);
+      setAvatarUrl(cLogo);
+      setBusinessName(cName);
+      setCreativeHandle(cHandle);
       setBookingEmail(userProfile.email || upAny?.creative_metadata?.booking_email || '');
-      if (userProfile.city || upAny?.creative_metadata?.base_location) {
-        setBaseLocation(userProfile.city ? `${userProfile.city}, ${userProfile.state_province || userProfile.country || ''}` : (upAny?.creative_metadata?.base_location || 'Remote Market Hub'));
-      }
+      setBaseLocation(cLoc);
+      setBio(cBio);
       setPortfolioLink(upAny?.creative_metadata?.portfolio_link || upAny?.website || '');
-      setBio(userProfile.bio || upAny?.creative_metadata?.bio || upAny?.creative_metadata?.biography || '');
       if (upAny?.creative_metadata?.day_rate || upAny?.creative_metadata?.base_rate_value) {
         setDayRate(String(upAny?.creative_metadata?.day_rate || upAny?.creative_metadata?.base_rate_value));
       }

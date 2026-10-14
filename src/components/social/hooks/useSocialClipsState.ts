@@ -95,9 +95,12 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
         console.error("Failed to delete clip from database:", err);
       }
     }
+    try {
+      await fetch(`/api/clips/${encodeURIComponent(idStr)}`, { method: 'DELETE' });
+    } catch (_) {}
   };
 
-  // Load and revive clips from Supabase and IndexedDB on mount
+  // Load and revive clips from Supabase, server API, and IndexedDB on mount
   useEffect(() => {
     let isMounted = true;
 
@@ -119,35 +122,57 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
     initLocalClips();
 
     const fetchClips = async () => {
+      let apiClips: any[] = [];
+      try {
+        const aRes = await fetch('/api/clips');
+        if (aRes.ok) {
+          const aData = await aRes.json();
+          if (Array.isArray(aData)) {
+            apiClips = aData;
+          }
+        }
+      } catch (_) {}
+
       const supabaseClient = getSupabase();
-      if (!supabaseClient) return;
 
       try {
         let dbClips: any[] = [];
         
-        // 1. Fetch from 'clips' table
-        try {
-          const { data: cData, error: cErr } = await supabaseClient
-            .from('clips')
-            .select('*')
-            .order('created_at', { ascending: false });
-          if (!cErr && cData && cData.length > 0) {
-            dbClips = cData;
-          }
-        } catch (_) {}
+        // 1. Fetch from 'clips' table if supabase client is active
+        if (supabaseClient) {
+          try {
+            const { data: cData, error: cErr } = await supabaseClient
+              .from('clips')
+              .select('*')
+              .order('created_at', { ascending: false });
+            if (!cErr && cData && cData.length > 0) {
+              dbClips = cData;
+            }
+          } catch (_) {}
 
-        // 2. Fallback or merge with 'nexus_clips' table
-        try {
-          const { data: ncData, error: ncErr } = await supabaseClient
-            .from('nexus_clips')
-            .select('*')
-            .order('created_at', { ascending: false });
-          if (!ncErr && ncData && ncData.length > 0) {
-            const existingIds = new Set(dbClips.map((c: any) => c.id));
-            const uniqueNc = ncData.filter((c: any) => !existingIds.has(c.id));
-            dbClips = [...dbClips, ...uniqueNc];
+          // 2. Fallback or merge with 'nexus_clips' table
+          try {
+            const { data: ncData, error: ncErr } = await supabaseClient
+              .from('nexus_clips')
+              .select('*')
+              .order('created_at', { ascending: false });
+            if (!ncErr && ncData && ncData.length > 0) {
+              const existingIds = new Set(dbClips.map((c: any) => c.id));
+              const uniqueNc = ncData.filter((c: any) => !existingIds.has(c.id));
+              dbClips = [...dbClips, ...uniqueNc];
+            }
+          } catch (_) {}
+        }
+
+        // 3. Merge server API clips
+        if (apiClips && apiClips.length > 0) {
+          const existingIds = new Set(dbClips.map((c: any) => String(c.id).toLowerCase()));
+          for (const ac of apiClips) {
+            if (ac && ac.id && !existingIds.has(String(ac.id).toLowerCase())) {
+              dbClips.push(ac);
+            }
           }
-        } catch (_) {}
+        }
 
         if (dbClips && dbClips.length > 0) {
           const userIds = Array.from(new Set(dbClips.map((c: any) => c.user_id || c.profile_id).filter(Boolean)));
@@ -189,7 +214,7 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
             const rawVideoUrl = clip.video_url || clip.videoUrl || clip.url || '';
             const isCorrupted = !rawVideoUrl || rawVideoUrl.startsWith('/9j/') || rawVideoUrl.startsWith('data:image');
             const videoUrl = (String(clip.id) === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' && isCorrupted)
-              ? 'https://www.youtube.com/watch?v=kY6A7yL9t6Y'
+              ? 'https://www.youtube.com/watch?v=jQ26iMGJbW4'
               : rawVideoUrl;
             const caption = clip.caption || clip.description || clip.title || '';
             const songTitle = clip.song_title || clip.songTitle || clip.audio || 'Original Audio';

@@ -558,7 +558,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
         const showPayload: any = {
           ...(existingShow || {}),
           id: showId,
-          creator_id: existingShow?.creator_id || '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
+          creator_id: existingShow?.creator_id || 'community_curator',
           name: finalName,
           show_name: finalName,
           headliner: headlinerVal,

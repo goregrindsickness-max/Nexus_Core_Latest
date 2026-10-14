@@ -45,8 +45,12 @@ import {
   EventEmbedCard,
   MerchEmbedCard,
   BandcampEmbedCard,
+  BulletinBoardPostCard,
 } from '../embeds';
 import { GigProximityPill } from './GigProximityPill';
+import { isMiguelNameOrProfile } from '../utils/profileUtils';
+import { resolveCreativeLogo, resolveBandLogo, resolvePromoterLogo } from '../../../utils/bandProfileUtils';
+import { getResilientFallback } from '../../../utils/imageFallbacks';
 
 // Global cache of failed avatar URLs across all PostCard instances to prevent remount flashing loops
 const GLOBAL_FAILED_AVATAR_URLS = new Set<string>();
@@ -391,6 +395,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   const nameMatch = postAuthorName ? postAuthorName.match(/^(.*?)\s*\((.*?)\)$/) : null;
   const handleDisplay = nameMatch ? nameMatch[1].trim() : (postAuthorName || 'User');
 
+  const isCurrentUserMiguel = isMiguelNameOrProfile(userProfile);
   const isAuthorNameMatchingUser = Boolean(
     (userProfile?.name && authorNameLower === userProfile.name.toLowerCase()) ||
     (userProfile?.full_name && authorNameLower === userProfile.full_name.toLowerCase()) ||
@@ -402,7 +407,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       authorNameLower === userProfile.console_handle.toLowerCase() ||
       authorNameLower === userProfile.console_handle.replace(/^@/, '').toLowerCase()
     )) ||
-    (authorNameLower.includes('goregrinder') || authorNameLower.includes('bdmceo') || authorNameLower === 'miguel medina')
+    (isCurrentUserMiguel && (authorNameLower.includes('goregrinder') || authorNameLower.includes('bdmceo') || authorNameLower === 'miguel medina'))
   );
 
   const isPostExplicitlyOther = Boolean(
@@ -411,10 +416,7 @@ export const PostCard: React.FC<PostCardProps> = ({
     ((post as any).author?.isYou === false && !isAuthorNameMatchingUser)
   );
 
-  const isCurrentUser = !isPostExplicitlyOther && Boolean(
-    (post as any).isYou === true ||
-    (post as any).author?.isYou === true ||
-    isAuthorNameMatchingUser ||
+  const isAuthorIdMatching = Boolean(
     (currentUserId && currentUserId !== 'author' && currentUserId !== 'user' && (
       (post.authorId && post.authorId === currentUserId) || 
       ((post as any).author?.id && (post as any).author?.id === currentUserId)
@@ -422,7 +424,12 @@ export const PostCard: React.FC<PostCardProps> = ({
     (userProfile?.id && userProfile.id !== 'author' && userProfile.id !== 'user' && (
       (post.authorId && post.authorId === userProfile.id) || 
       ((post as any).author?.id && (post as any).author?.id === userProfile.id)
-    )) ||
+    ))
+  );
+
+  const isCurrentUser = !isPostExplicitlyOther && Boolean(
+    isAuthorIdMatching ||
+    isAuthorNameMatchingUser ||
     (userProfile?.console_handle && 
      userProfile.console_handle !== '@user' && 
      userProfile.console_handle !== 'user' && 
@@ -623,19 +630,29 @@ export const PostCard: React.FC<PostCardProps> = ({
   const isAuthorSelf = Boolean(isCurrentUser || isAuthorNameMatchingUser);
   const isRawAvatarKnownFailed = Boolean(validRawPostAvatar && GLOBAL_FAILED_AVATAR_URLS.has(validRawPostAvatar));
 
-  // If author is current logged in user, validLiveSelfAvatar is authoritative over any stale or broken post snapshot
-  const displayAvatar = isAuthorSelf
-    ? (validLiveSelfAvatar || (isRawAvatarKnownFailed ? null : validRawPostAvatar))
-    : (isRawAvatarKnownFailed ? null : (validRawPostAvatar || null));
+  // Determine appropriate live workspace avatar fallback
+  const liveAuthorAvatar = isCreative
+    ? resolveCreativeLogo(userProfile)
+    : isArtistOrBand
+    ? resolveBandLogo(post, userProfile)
+    : isPromoter
+    ? resolvePromoterLogo(userProfile)
+    : validLiveSelfAvatar;
+
+  // Priority: If the post itself has a valid raw post avatar (band logo, creative logo, etc.), ALWAYS use it.
+  // If author is self and raw avatar is missing/failed, fall back to the appropriate live workspace avatar.
+  const displayAvatar = (!isRawAvatarKnownFailed && validRawPostAvatar)
+    ? validRawPostAvatar
+    : (isAuthorSelf ? (liveAuthorAvatar || validLiveSelfAvatar || null) : (isRawAvatarKnownFailed ? null : (validRawPostAvatar || null)));
 
   const [avatarImgSrc, setAvatarImgSrc] = useState<string | null>(() => {
     if (displayAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar)) return displayAvatar;
-    if (isAuthorSelf && validLiveSelfAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(validLiveSelfAvatar)) return validLiveSelfAvatar;
+    if (isAuthorSelf && liveAuthorAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(liveAuthorAvatar)) return liveAuthorAvatar;
     return null;
   });
   const [hasAvatarImgError, setHasAvatarImgError] = useState<boolean>(() => {
     if (displayAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar)) return false;
-    if (isAuthorSelf && validLiveSelfAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(validLiveSelfAvatar)) return false;
+    if (isAuthorSelf && liveAuthorAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(liveAuthorAvatar)) return false;
     return Boolean(displayAvatar && GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar));
   });
 
@@ -643,14 +660,14 @@ export const PostCard: React.FC<PostCardProps> = ({
     if (displayAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar)) {
       setAvatarImgSrc(displayAvatar);
       setHasAvatarImgError(false);
-    } else if (isAuthorSelf && validLiveSelfAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(validLiveSelfAvatar)) {
-      setAvatarImgSrc(validLiveSelfAvatar);
+    } else if (isAuthorSelf && liveAuthorAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(liveAuthorAvatar)) {
+      setAvatarImgSrc(liveAuthorAvatar);
       setHasAvatarImgError(false);
     } else {
       setAvatarImgSrc(null);
       setHasAvatarImgError(true);
     }
-  }, [displayAvatar, validLiveSelfAvatar, isAuthorSelf]);
+  }, [displayAvatar, liveAuthorAvatar, isAuthorSelf]);
 
   const getInitials = (str?: string) => {
     if (!str) return 'NX';
@@ -794,6 +811,52 @@ export const PostCard: React.FC<PostCardProps> = ({
     setShowDeleteConfirm(true);
   };
 
+  const isClassifiedOrGear = Boolean(
+    post.classifiedData ||
+    post.classified_data ||
+    post.category === 'gear' ||
+    post.category === 'classifieds' ||
+    post.type === 'gear' ||
+    post.type === 'classifieds' ||
+    post.tag === 'GEAR SWAP' ||
+    post.tag === 'CLASSIFIED'
+  );
+
+  if (isClassifiedOrGear) {
+    return (
+      <BulletinBoardPostCard
+        post={post}
+        currentUserId={currentUserId}
+        currentUserName={currentUserName}
+        userProfile={userProfile}
+        portalRole={portalRole}
+        boostData={boostData}
+        isCommentsOpen={isCommentsOpen}
+        commentDraft={commentDraft}
+        replyingTo={replyingTo}
+        isPostMenuOpen={isPostMenuOpen}
+        isReactionMenuOpen={isReactionMenuOpen}
+        isHypeAnimated={isHypeAnimated}
+        shareToastActive={shareToastActive}
+        onOpenProfile={onOpenProfile}
+        onTogglePostMenu={onTogglePostMenu}
+        onClosePostMenu={onClosePostMenu}
+        onTogglePin={onTogglePin}
+        onDeletePost={onDeletePost}
+        onShareClick={onShareClick}
+        onOpenBoostModal={onOpenBoostModal}
+        onToggleComments={onToggleComments}
+        onReactionClick={onTriggerEmojiReact}
+        onToggleReactionMenu={onOpenReactionMenu}
+        onCloseReactionMenu={onCloseReactionMenu}
+        onCommentDraftChange={onCommentDraftChange}
+        onCommentSubmit={onCommentSubmit}
+        onSetReplyingTo={onSetReplyingTo}
+        openLightbox={(url: string) => onOpenLightbox?.([url], 0)}
+      />
+    );
+  }
+
   return (
     <div
       className={`bg-[#0d0e11] border rounded-2xl p-4 sm:p-5 shadow-2xl transition-all relative overflow-hidden space-y-3.5 ${
@@ -905,11 +968,13 @@ export const PostCard: React.FC<PostCardProps> = ({
                     alt={post.authorName} 
                     referrerPolicy="no-referrer"
                     onError={() => {
-                      if (avatarImgSrc) {
-                        GLOBAL_FAILED_AVATAR_URLS.add(avatarImgSrc);
-                      }
-                      if (isAuthorSelf && validLiveSelfAvatar && avatarImgSrc !== validLiveSelfAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(validLiveSelfAvatar)) {
-                        setAvatarImgSrc(validLiveSelfAvatar);
+                      const fallback = getResilientFallback(avatarImgSrc, 'avatar');
+                      if (fallback && fallback !== avatarImgSrc) {
+                        setAvatarImgSrc(fallback);
+                        setHasAvatarImgError(false);
+                      } else if (isAuthorSelf && liveAuthorAvatar && liveAuthorAvatar !== avatarImgSrc) {
+                        setAvatarImgSrc(liveAuthorAvatar);
+                        setHasAvatarImgError(false);
                       } else {
                         setAvatarImgSrc(null);
                         setHasAvatarImgError(true);

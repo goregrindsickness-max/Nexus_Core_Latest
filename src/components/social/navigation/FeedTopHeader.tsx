@@ -27,12 +27,20 @@ import {
   resolveBandName,
   resolveBandBio,
   resolveBandLocation,
+  resolveCreativeName,
+  resolveCreativeHandle,
+  resolveCreativeLogo,
+  resolveCreativeCover,
+  resolveCreativeBio,
+  resolveCreativeLocation,
   resolveEffectiveAvatar,
   resolveEffectiveCover,
-  resolvePromoterName
+  resolvePromoterName,
+  resolvePromoterHandle
 } from '../../../utils/bandProfileUtils';
 import { BandWorkspaceNavBanner } from './BandWorkspaceNavBanner';
 import { PromoterWorkspaceNavBanner } from './PromoterWorkspaceNavBanner';
+import { isMiguelNameOrProfile } from '../utils/profileUtils';
 
 const HeaderAvatarImage: React.FC<{
   src?: string | null;
@@ -234,7 +242,7 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                   : portalRole === 'band'
                   ? resolveBandName(activeBand, userProfile)?.toUpperCase() || 'ARTIST WORKSPACE'
                   : portalRole === 'creative'
-                  ? 'CREATIVE PRO'
+                  ? resolveCreativeName(userProfile)?.toUpperCase() || 'CREATIVE PRO'
                   : portalRole === 'promoter'
                   ? (resolvePromoterName(userProfile)?.toUpperCase() || 'PROMOTER PRO')
                   : portalRole === 'label'
@@ -242,7 +250,15 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                   : 'INDUSTRY PRO'}
               </p>
               <p className="text-sm font-black text-white leading-none">
-                Hi {portalRole === 'band' ? (resolveBandName(activeBand, userProfile).split(' ')[0]) : portalRole === 'promoter' ? (resolvePromoterName(userProfile).split(' ')[0]) : (profileFullLegalName || userProfile?.display_name || userProfile?.username || userProfile?.name || 'User').split(' ')[0]},
+                Hi {
+                  portalRole === 'band' 
+                    ? (resolveBandName(activeBand, userProfile).split(' ')[0]) 
+                    : portalRole === 'creative'
+                    ? (resolveCreativeName(userProfile).split(' ')[0])
+                    : portalRole === 'promoter' 
+                    ? (resolvePromoterName(userProfile).split(' ')[0]) 
+                    : (profileFullLegalName || userProfile?.display_name || userProfile?.username || userProfile?.name || 'User').split(' ')[0]
+                },
               </p>
             </div>
           )}
@@ -269,7 +285,13 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                 {(() => {
                   const activeKey = portalRole || userProfile?.active_workspace || 'industry_pro';
                   const activeAvatar = resolveEffectiveAvatar(activeKey, activeBand, userProfile, profileAvatarUrl);
-                  const displayName = portalRole === 'band' ? resolveBandName(activeBand, userProfile) : (profileFullLegalName || userProfile?.name || 'User');
+                  const displayName = activeKey === 'band' 
+                    ? resolveBandName(activeBand, userProfile) 
+                    : activeKey === 'creative'
+                    ? resolveCreativeName(userProfile)
+                    : activeKey === 'promoter'
+                    ? resolvePromoterName(userProfile)
+                    : (profileFullLegalName || userProfile?.name || 'User');
                   const initials = (displayName || 'U').slice(0, 2).toUpperCase();
                   return <HeaderAvatarImage src={activeAvatar} initials={initials} />;
                 })()}
@@ -292,13 +314,27 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                       const activeKey = portalRole || userProfile?.active_workspace || 'industry_pro';
                       const activeAvatar = resolveEffectiveAvatar(activeKey, activeBand, userProfile, profileAvatarUrl);
                       const isBand = activeKey === 'band';
+                      const isCreative = activeKey === 'creative';
+                      const isPromoter = activeKey === 'promoter';
+                      const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
                       const rawHandle = isBand 
                         ? resolveBandHandle(activeBand, userProfile)
-                        : (userProfile?.console_handle || userProfile?.username || userProfile?.handle || userProfile?.display_name?.replace(/\s+/g, '_') || profileFullLegalName?.replace(/\s+/g, '_') || 'user');
-                      const userHandle = isBand
+                        : isCreative
+                        ? resolveCreativeHandle(userProfile)
+                        : isPromoter
+                        ? resolvePromoterHandle(userProfile)
+                        : (userProfile?.console_handle || userProfile?.username || userProfile?.handle || userProfile?.display_name?.replace(/\s+/g, '_') || profileFullLegalName?.replace(/\s+/g, '_') || (userProfile?.email ? userProfile.email.split('@')[0] : (isOwnerMiguel ? 'bdmCEO' : 'member')));
+                      const fallbackH = isOwnerMiguel ? '@bdmCEO' : (userProfile?.name && !userProfile.name.toLowerCase().includes('miguel') ? `@${userProfile.name.replace(/\s+/g, '_').toLowerCase()}` : (userProfile?.email ? `@${userProfile.email.split('@')[0]}` : '@member'));
+                      const userHandle = (isBand || isCreative || isPromoter)
                         ? (rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`)
-                        : ((!rawHandle || rawHandle.toLowerCase().includes('virulent') || rawHandle === 'user' || rawHandle === '@user') ? '@bdmCEO' : (rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`));
-                      const displayName = isBand ? resolveBandName(activeBand, userProfile) : (profileFullLegalName || userProfile?.name || 'User Name');
+                        : ((!rawHandle || (isOwnerMiguel && rawHandle.toLowerCase().includes('virulent')) || rawHandle === 'user' || rawHandle === '@user' || (!isOwnerMiguel && (rawHandle.toLowerCase().includes('bdmceo') || rawHandle.toLowerCase().includes('goregrinder')))) ? fallbackH : (rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`));
+                      const displayName = isBand 
+                        ? resolveBandName(activeBand, userProfile) 
+                        : isCreative
+                        ? resolveCreativeName(userProfile)
+                        : isPromoter
+                        ? resolvePromoterName(userProfile)
+                        : (profileFullLegalName || userProfile?.name || 'User Name');
                       const initials = (displayName || 'U').slice(0, 2).toUpperCase();
                       return (
                         <div className="flex items-center justify-between mb-2 pb-2 border-b border-zinc-900/80">
@@ -367,21 +403,22 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                         }
 
                         if (portalRole === 'promoter') {
+                          const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
                           const pm = (userProfile as any)?.promoter_metadata || {};
-                          const promoterAgencyName = pm.brand_name || pm.agency_name || (userProfile as any)?.promoter_agency || 'Nexus Live Productions';
-                          const promoterLogo = pm.logo_url || (userProfile as any)?.promoter_logo || (userProfile as any)?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
-                          const promoterCover = pm.banner_url || pm.cover_url || (userProfile as any)?.promoter_cover_image || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
-                          const promoterBio = pm.bio || (userProfile as any)?.promoter_bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
-                          const rawHandle = (userProfile as any)?.promoter_handle || (promoterAgencyName ? `@${promoterAgencyName.replace(/\s+/g, '')}` : '@NexusLive');
+                          const promoterAgencyName = pm.brand_name || pm.agency_name || (userProfile as any)?.promoter_agency || (isOwnerMiguel ? 'Nexus Live Productions' : (userProfile?.name ? `${userProfile.name} Productions` : 'Promoter Operations'));
+                          const promoterLogo = pm.logo_url || (userProfile as any)?.promoter_logo || (userProfile as any)?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : (userProfile?.avatar_url || ''));
+                          const promoterCover = pm.banner_url || pm.cover_url || (userProfile as any)?.promoter_cover_image || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : (userProfile?.banner_url || ''));
+                          const promoterBio = pm.bio || (userProfile as any)?.promoter_bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent live event promoter.');
+                          const rawHandle = (userProfile as any)?.promoter_handle || (promoterAgencyName ? `@${promoterAgencyName.replace(/\s+/g, '')}` : (isOwnerMiguel ? '@NexusLive' : '@promoter'));
                           const resolvedHandle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
 
                           const detailPayload = {
-                            id: userProfile?.id || (userProfile as any)?.promoter_id || '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
-                            user_id: userProfile?.id || '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
-                            email: userProfile?.email || 'goregrindsickness@gmail.com',
+                            id: userProfile?.id || (userProfile as any)?.promoter_id || (isOwnerMiguel ? '5403162d-1947-43aa-b5f6-38a1bd2a1b80' : 'promoter_profile'),
+                            user_id: userProfile?.id || (isOwnerMiguel ? '5403162d-1947-43aa-b5f6-38a1bd2a1b80' : 'promoter_profile'),
+                            email: userProfile?.email || (isOwnerMiguel ? 'goregrindsickness@gmail.com' : ''),
                             name: promoterAgencyName,
-                            legalName: userProfile?.full_name || userProfile?.name || 'Miguel Goregrinder Medina',
-                            full_name: userProfile?.full_name || userProfile?.name || 'Miguel Goregrinder Medina',
+                            legalName: userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Promoter User'),
+                            full_name: userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Promoter User'),
                             handle: resolvedHandle,
                             console_handle: resolvedHandle,
                             username: resolvedHandle,
@@ -414,11 +451,12 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                         }
 
                         if (portalRole === 'creative') {
-                          const creativeName = (userProfile as any)?.creative_metadata?.business_name || (userProfile as any)?.creative_name || userProfile?.name || 'Vortex Graphics';
-                          const creativeAvatar = (userProfile as any)?.creative_avatar || (userProfile as any)?.creative_metadata?.avatar_url || userProfile?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
-                          const creativeBanner = (userProfile as any)?.creative_banner || (userProfile as any)?.creative_metadata?.banner_url || userProfile?.banner_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200';
-                          const creativeBio = (userProfile as any)?.creative_metadata?.bio || userProfile?.bio || 'Professional creative specialist on the Nexus network.';
-                          const creativeHandle = (userProfile as any)?.creative_handle || userProfile?.console_handle || 'vortexgraphics';
+                          const creativeName = resolveCreativeName(userProfile);
+                          const creativeAvatar = resolveCreativeLogo(userProfile, profileAvatarUrl);
+                          const creativeBanner = resolveCreativeCover(userProfile, profileCoverUrl);
+                          const creativeBio = resolveCreativeBio(userProfile);
+                          const creativeHandle = resolveCreativeHandle(userProfile);
+                          const creativeLoc = resolveCreativeLocation(userProfile);
 
                           const detailPayload = {
                             id: (userProfile as any)?.creative_id || userProfile?.id || 'creative:vortex',
@@ -433,7 +471,7 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                             banner: creativeBanner,
                             banner_url: creativeBanner,
                             cover_url: creativeBanner,
-                            location: userProfile?.location || 'USA / Global',
+                            location: creativeLoc || userProfile?.location || 'Detroit, MI',
                             role: 'Creative',
                             account_type: 'creative',
                             type: 'creative',
@@ -488,17 +526,21 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                           return;
                         }
 
-                        const personalHandle = userProfile?.console_handle && !userProfile.console_handle.toLowerCase().includes('virulent') && userProfile.console_handle !== '@user' && userProfile.console_handle !== 'user'
-                          ? (userProfile.console_handle.startsWith('@') ? userProfile.console_handle : `@${userProfile.console_handle}`)
-                          : '@bdmCEO';
+                        const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+                        const rawPersonalHandle = userProfile?.console_handle || userProfile?.handle || userProfile?.username || userProfile?.screen_name || (userProfile?.name && !userProfile.name.toLowerCase().includes('miguel') ? userProfile.name.replace(/\s+/g, '_').toLowerCase() : (userProfile?.email ? userProfile.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') : (isOwnerMiguel ? 'bdmCEO' : 'member')));
+                        const personalHandle = rawPersonalHandle && (!rawPersonalHandle.toLowerCase().includes('virulent') || isOwnerMiguel) && (!rawPersonalHandle.toLowerCase().includes('bdmceo') || isOwnerMiguel) && rawPersonalHandle !== '@user' && rawPersonalHandle !== 'user'
+                          ? (rawPersonalHandle.startsWith('@') ? rawPersonalHandle : `@${rawPersonalHandle}`)
+                          : (isOwnerMiguel ? '@bdmCEO' : (userProfile?.name ? `@${userProfile.name.replace(/\s+/g, '_').toLowerCase()}` : (userProfile?.email ? `@${userProfile.email.split('@')[0]}` : '@member')));
 
                         const rawPersonalBanner = userProfile?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_banner') : null) || null;
                         const cleanPersonalBanner = (typeof rawPersonalBanner === 'string' && rawPersonalBanner.includes('promoter-banner')) ? null : rawPersonalBanner;
 
+                        const authenticName = profileFullLegalName || userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : (userProfile?.email ? userProfile.email.split('@')[0] : 'Member'));
+
                         const detailPayload = {
                           id: userProfile?.id || null,
-                          name: profileFullLegalName || userProfile?.name || userProfile?.full_name || 'Miguel Goregrinder Medina',
-                          legalName: profileFullLegalName || userProfile?.full_name || userProfile?.name || 'Miguel Goregrinder Medina',
+                          name: authenticName,
+                          legalName: authenticName,
                           handle: personalHandle,
                           console_handle: personalHandle,
                           username: personalHandle,
@@ -1021,6 +1063,7 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                   {[
                     { id: 'all', label: 'All Stream', emoji: '🔥' },
                     { id: 'followed', label: 'Followed', emoji: '⭐' },
+                    { id: 'bulletin', label: 'Bulletin & Gear', emoji: '📌' },
                     { id: 'tour', label: 'Tour Dates', emoji: '🎟️' },
                     { id: 'merch', label: 'Merch Drops', emoji: '👕' },
                     { id: 'audio', label: 'Demos & Tapes', emoji: '🎙️' },

@@ -56,7 +56,7 @@ export default function AddItemView({ onBack, onSave, onDelete, triggerNotificat
 
   React.useEffect(() => {
     try {
-      const savedBandId = localStorage.getItem('nexus_core_active_band_id') || '';
+      const savedBandId = localStorage.getItem('nexus_core_active_band_id') || localStorage.getItem('nexus_active_band_id') || '';
       const savedProfileStr = localStorage.getItem('nexus_core_user_profile');
       let savedProfileId = 'profile_admin';
       if (savedProfileStr) {
@@ -138,7 +138,7 @@ export default function AddItemView({ onBack, onSave, onDelete, triggerNotificat
     triggerNotification(`Routing upload to '${INVENTORY_STORAGE_BUCKET}' storage bucket...`);
 
     try {
-      const activeBandId = initialItem?.band_id || localStorage.getItem('nexus_core_active_band_id') || '';
+      const activeBandId = initialItem?.band_id || localStorage.getItem('nexus_core_active_band_id') || localStorage.getItem('nexus_active_band_id') || '';
       const result = await uploadInventoryItemImage(file, initialItem?.id || generateUUID(), activeBandId);
 
       if (result && result.publicUrl) {

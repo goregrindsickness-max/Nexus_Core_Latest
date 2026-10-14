@@ -6,11 +6,13 @@ export interface ArchiveShowItem {
   id: string;
   user_id?: string;
   promoter_id?: string;
+  band_id?: string;
   year: number;
   title: string;
   type: 'festival' | 'tour' | 'club_gig' | 'anniversary';
   date: string;
   venue: string;
+  venueAddress?: string;
   city: string;
   lineup: string[];
   attendance?: string;
@@ -265,6 +267,81 @@ const LOCAL_STORAGE_OVERRIDES_KEY = 'nexus_promoter_archive_overrides';
 const LOCAL_STORAGE_DELETED_KEY = 'nexus_promoter_deleted_archives';
 const LOCAL_STORAGE_ALL_KEY = 'nexus_promoter_archive_shows_db_cache';
 
+export function parseVenueAndAddress(s: any): { venueName: string; venueAddress: string } {
+  const candidateName = (s.venue_name || s.venue || s.venueName || '').trim();
+  const candidateAddress = (s.venue_address || s.address || s.location || '').trim();
+
+  const isStreetAddress = (str: string) => /^\d+\s+[A-Za-z0-9]/.test(str);
+
+  let venueName = candidateName;
+  let venueAddress = candidateAddress;
+
+  if (candidateName && isStreetAddress(candidateName)) {
+    if (s.venue_name && !isStreetAddress(s.venue_name)) {
+      venueName = s.venue_name.trim();
+      venueAddress = candidateName;
+    } else if (candidateAddress && !isStreetAddress(candidateAddress)) {
+      venueName = candidateAddress;
+      venueAddress = candidateName;
+    } else {
+      venueName = candidateName;
+      venueAddress = candidateName;
+    }
+  } else if (!candidateName && candidateAddress) {
+    venueName = candidateAddress;
+    venueAddress = candidateAddress;
+  }
+
+  if (!venueName) {
+    venueName = 'Underground Venue';
+  }
+
+  if (venueAddress === venueName) {
+    venueAddress = '';
+  }
+
+  return { venueName, venueAddress };
+}
+
+export function classifyEventType(item: any): 'festival' | 'tour' | 'club_gig' {
+  const typeStr = String(item.type || item.show_type || '').toLowerCase();
+  const titleStr = String(item.title || item.name || item.show_name || '').toLowerCase();
+  const festName = String(item.festival_name || item.festivalName || '').toLowerCase();
+  const tourName = String(item.tour_name || item.tourName || '').toLowerCase();
+  const notesStr = String(item.description || item.additional_notes || item.historicalNotes || item.notes || '').toLowerCase();
+
+  if (
+    typeStr === 'festival' || 
+    typeStr === 'anniversary' || 
+    festName || 
+    titleStr.includes('fest') || 
+    titleStr.includes('festival') ||
+    notesStr.includes('festival') ||
+    item.is_festival === true
+  ) {
+    return 'festival';
+  }
+
+  if (
+    typeStr === 'tour' || 
+    typeStr === 'tour date' || 
+    tourName || 
+    titleStr.includes('tour') || 
+    notesStr.includes('tour') || 
+    notesStr.includes('vader') ||
+    item.tour_id ||
+    item.is_tour === true
+  ) {
+    return 'tour';
+  }
+
+  if (typeStr === 'club_gig' || typeStr === 'gig' || typeStr === 'club') {
+    return 'club_gig';
+  }
+
+  return 'tour';
+}
+
 /**
  * Normalizes a database row to a frontend ArchiveShowItem.
  */
@@ -282,15 +359,19 @@ export function mapDbToArchiveShow(row: any): ArchiveShowItem {
     }
   }
 
+  const { venueName, venueAddress } = parseVenueAndAddress(row);
+  const evType = classifyEventType(row);
+
   return {
     id: String(row.id || `arch_${Date.now()}`),
     user_id: row.user_id,
     promoter_id: row.promoter_id,
     year: typeof row.year === 'number' ? row.year : parseInt(row.year, 10) || 2024,
     title: row.title || row.name || 'Historic Show',
-    type: (row.type || row.show_type || 'festival') as any,
+    type: evType as any,
     date: row.date || row.show_date || 'Past Event',
-    venue: row.venue || row.venue_name || row.venue_address || 'Underground Venue',
+    venue: venueName,
+    venueAddress: venueAddress,
     city: row.city || 'Chicago, IL',
     lineup: parsedLineup,
     attendance: row.attendance || row.expected_attendance,
@@ -403,21 +484,11 @@ export async function fetchArchiveShowsFromDatabase(userId = '5403162d-1947-43aa
       if (pastShowsData && Array.isArray(pastShowsData)) {
         const pastFromShowsTable: ArchiveShowItem[] = pastShowsData
           .filter(s => {
-            // Strictly exclude community-submitted shows and shows not booked personally by this promoter
-            if (s.is_community_submitted === true || s.is_community === true || s.source === 'community') {
-              return false;
-            }
-            const isPersonallyBooked = (userId && (s.creator_id === userId || s.promoter_id === userId)) ||
-              s.is_promoter_show === true ||
-              Boolean(s.festival_name && s.festival_name.toLowerCase().includes('domination'));
-            if (!isPersonallyBooked) {
-              return false;
-            }
-
             const sDate = s.date || s.show_date;
             const isPast = sDate && String(sDate).split('T')[0] < todayStr;
             const isArchived = s.additional_notes && String(s.additional_notes).includes('"archived":true');
-            return isPast || isArchived;
+            const isStatusConcluded = s.status === 'Concluded' || s.status === 'Archived' || s.status === 'Completed';
+            return isPast || isArchived || isStatusConcluded;
           })
           .map(s => {
             const rawDate = s.date || s.show_date || '';
@@ -436,21 +507,34 @@ export async function fetchArchiveShowsFromDatabase(userId = '5403162d-1947-43aa
 
             const support = Array.isArray(s.support_lineup)
               ? s.support_lineup.map((x: any) => typeof x === 'string' ? x : (x.name || x.band)).filter(Boolean)
-              : [];
+              : (typeof s.support_lineup === 'string' ? s.support_lineup.split(',').map((x: string) => x.trim()).filter(Boolean) : []);
+
+            const extraLineup = Array.isArray(s.lineup)
+              ? s.lineup.map((x: any) => typeof x === 'string' ? x : (x.name || x.band)).filter(Boolean)
+              : (typeof s.lineup === 'string' ? s.lineup.split(',').map((x: string) => x.trim()).filter(Boolean) : []);
+
+            const combinedLineup = Array.from(new Set([s.headliner || s.name, ...support, ...extraLineup])).filter(Boolean);
+
+            const { venueName, venueAddress } = parseVenueAndAddress(s);
+            const evType = classifyEventType(s);
 
             return {
               id: s.id,
               user_id: s.creator_id || userId,
-              promoter_id: s.creator_id || userId,
+              promoter_id: s.promoter_id || s.creator_id || userId,
+              band_id: s.band_id,
               year: isNaN(y) ? 2026 : y,
-              title: s.show_name 
-                ? `${s.headliner || s.name || 'Artist'} - ${s.show_name}`
-                : (s.festival_name || `${s.headliner || 'Live'} at ${s.venue || 'Venue'}`),
-              type: (s.festival_name ? 'festival' : 'club_gig') as any,
+              title: s.tour_name
+                ? `${s.tour_name} - ${venueName || s.city || 'Live'}`
+                : (s.show_name 
+                    ? `${s.headliner || s.name || 'Artist'} - ${s.show_name}`
+                    : (s.festival_name || `${s.headliner || 'Live'} at ${venueName || 'Venue'}`)),
+              type: evType as any,
               date: formattedDate,
-              venue: s.venue_address || s.venue || s.venue_name || 'Underground Venue',
+              venue: venueName,
+              venueAddress: venueAddress,
               city: s.city ? (s.state_province ? `${s.city}, ${s.state_province}` : s.city) : 'Haltom City, TX',
-              lineup: [s.headliner || s.name, ...support].filter(Boolean),
+              lineup: combinedLineup,
               attendance: s.expected_attendance ? `${s.expected_attendance} Capacity` : 'Full House',
               milestone: '⚡ Completed Live Performance',
               historicalNotes: typeof s.additional_notes === 'string' ? s.additional_notes : (s.additional_notes ? JSON.stringify(s.additional_notes) : `Official headline show at ${s.venue || 'venue'}.`),

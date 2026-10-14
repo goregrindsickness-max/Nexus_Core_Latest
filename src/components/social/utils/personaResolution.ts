@@ -1,5 +1,6 @@
 import { hasRegisteredWorkspace } from '../../../types';
-import { resolveBandName, resolveBandLogo } from '../../../utils/bandProfileUtils';
+import { resolveBandName, resolveBandLogo, resolveCreativeName, resolveCreativeLogo } from '../../../utils/bandProfileUtils';
+import { isMiguelNameOrProfile } from './profileUtils';
 
 export interface PostingPersona {
   id: string;
@@ -183,13 +184,8 @@ export function getAvailablePersonas({
       realName: legalName,
     }, true);
   } else if (normalizedRole === 'creative') {
-    const creativeName = userProfile?.creative_metadata?.business_name || 
-      userProfile?.creative_business_name || 
-      userProfile?.creative_name || 
-      userProfile?.creative_profile?.business_name || 
-      userProfile?.creative_profile?.name || 
-      (profileHandle || userProfile?.console_handle || userProfile?.username || legalName || 'Creative Pro');
-    const creativeAvatar = userProfile?.creative_metadata?.avatar_url || userProfile?.creative_avatar || userProfile?.creative_profile?.avatar || liveUserAvatar;
+    const creativeName = resolveCreativeName(userProfile);
+    const creativeAvatar = resolveCreativeLogo(userProfile, profileAvatarUrl);
     addPersona({
       id: 'workspace:creative',
       type: 'creative',
@@ -200,11 +196,15 @@ export function getAvailablePersonas({
       realName: legalName,
     }, true);
   } else if (normalizedRole === 'fan_only' || normalizedRole === 'fan') {
-    const fanHandle = profileHandle || userProfile?.console_handle || userProfile?.screen_name || 'Fan Listener';
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+    const rawFan = profileHandle || userProfile?.console_handle || userProfile?.fan_handle || userProfile?.screen_name;
+    const cleanFan = (!rawFan || (!isOwnerMiguel && (rawFan.toLowerCase().includes('bdmceo') || rawFan.toLowerCase().includes('goregrinder'))))
+      ? (userProfile?.screen_name || userProfile?.username || (userProfile?.name && !userProfile.name.toLowerCase().includes('miguel') ? userProfile.name.replace(/\s+/g, '_') : (userProfile?.email ? userProfile.email.split('@')[0] : 'Fan Listener')))
+      : rawFan;
     addPersona({
       id: 'personal:fan',
       type: 'fan',
-      name: fanHandle,
+      name: cleanFan,
       avatarUrl: liveUserAvatar,
       roleBadge: 'Fan',
       subtitle: 'Fan Identity',
@@ -212,11 +212,15 @@ export function getAvailablePersonas({
     }, true);
   } else {
     // Default Industry Pro
-    const proHandle = profileHandle || userProfile?.console_handle || userProfile?.username || legalName || 'Industry Pro';
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+    const rawPro = profileHandle || userProfile?.console_handle || userProfile?.username;
+    const cleanPro = (!rawPro || (!isOwnerMiguel && (rawPro.toLowerCase().includes('bdmceo') || rawPro.toLowerCase().includes('goregrinder'))))
+      ? (userProfile?.screen_name || userProfile?.username || (userProfile?.name && !userProfile.name.toLowerCase().includes('miguel') ? userProfile.name.replace(/\s+/g, '_') : (userProfile?.email ? userProfile.email.split('@')[0] : (legalName && !legalName.toLowerCase().includes('miguel') ? legalName : 'Industry Pro'))))
+      : rawPro;
     addPersona({
       id: 'personal:industry_pro',
       type: 'industry_pro',
-      name: proHandle,
+      name: cleanPro,
       avatarUrl: liveUserAvatar,
       roleBadge: 'Industry Pro',
       subtitle: 'Personal Pro Console',
@@ -282,15 +286,11 @@ export function getAvailablePersonas({
   const hasCreativeAccess = hasRegisteredWorkspace(userProfile, 'creative') ||
     userProfile?.account_type === 'creative' ||
     userProfile?.active_workspace === 'creative' ||
-    Boolean(userProfile?.creative_metadata?.business_name || userProfile?.creative_business_name || userProfile?.creative_name || userProfile?.creative_profile);
+    Boolean(userProfile?.creative_metadata?.business_name || userProfile?.creative_business_name || userProfile?.creative_name || userProfile?.creative_profile) ||
+    isMiguelNameOrProfile(userProfile);
   if (hasCreativeAccess && !registeredIds.has('workspace:creative')) {
-    const creativeName = userProfile?.creative_metadata?.business_name || 
-      userProfile?.creative_business_name || 
-      userProfile?.creative_name || 
-      userProfile?.creative_profile?.business_name || 
-      userProfile?.creative_profile?.name || 
-      (profileHandle || userProfile?.console_handle || userProfile?.username || legalName || 'Creative Pro');
-    const creativeAvatar = userProfile?.creative_metadata?.avatar_url || userProfile?.creative_avatar || userProfile?.creative_profile?.avatar || liveUserAvatar;
+    const creativeName = resolveCreativeName(userProfile);
+    const creativeAvatar = resolveCreativeLogo(userProfile, profileAvatarUrl);
     addPersona({
       id: 'workspace:creative',
       type: 'creative',
@@ -304,11 +304,15 @@ export function getAvailablePersonas({
 
   // 6. Always ensure Personal Industry Pro is available as an option
   if (!registeredIds.has('personal:industry_pro') && normalizedRole !== 'fan_only' && normalizedRole !== 'fan') {
-    const proHandle = profileHandle || userProfile?.console_handle || userProfile?.username || legalName || 'Industry Pro';
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+    const rawPro = profileHandle || userProfile?.console_handle || userProfile?.username;
+    const cleanPro = (!rawPro || (!isOwnerMiguel && (rawPro.toLowerCase().includes('bdmceo') || rawPro.toLowerCase().includes('goregrinder'))))
+      ? (userProfile?.screen_name || userProfile?.username || (userProfile?.name && !userProfile.name.toLowerCase().includes('miguel') ? userProfile.name.replace(/\s+/g, '_') : (userProfile?.email ? userProfile.email.split('@')[0] : (legalName && !legalName.toLowerCase().includes('miguel') ? legalName : 'Industry Pro'))))
+      : rawPro;
     addPersona({
       id: 'personal:industry_pro',
       type: 'industry_pro',
-      name: proHandle,
+      name: cleanPro,
       avatarUrl: liveUserAvatar,
       roleBadge: 'Industry Pro',
       subtitle: 'Personal Pro Console',

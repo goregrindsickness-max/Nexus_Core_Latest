@@ -1,5 +1,6 @@
 import { getSupabase, ensureValidSupabaseAuthSession } from './clientService';
 import { executeWithSchemaResilience } from './schemaResilienceService';
+import { isMiguelNameOrProfile } from '../components/social/utils/profileUtils';
 
 export interface PromoterRecord {
   id?: string;
@@ -23,21 +24,22 @@ export interface PromoterRecord {
 }
 
 /**
- * Builds the canonical Nexus Live Productions promoter payload from a user profile object.
+ * Builds the canonical promoter payload from a user profile object.
  */
 export function buildNexusLivePromoterPayload(userProfile: any): PromoterRecord {
-  const userId = userProfile?.id || '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+  const userId = userProfile?.id || (isOwnerMiguel ? '5403162d-1947-43aa-b5f6-38a1bd2a1b80' : 'user');
   const meta = userProfile?.promoter_metadata || {};
   
   return {
-    id: userProfile?.promoter_id || userId,
+    id: userProfile?.promoter_id || meta.id || userId,
     user_id: userId,
-    name: userProfile?.full_name || userProfile?.name || 'Miguel Goregrinder Medina',
-    entity_name: meta.brand_name || meta.agency_name || userProfile?.promoter_agency || 'Nexus Live Productions',
-    email: meta.booking_email || meta.admin_email || userProfile?.email || 'goregrindsickness@gmail.com',
-    phone: meta.phone || userProfile?.phone || '(580)952-2047',
-    location: meta.city ? `${meta.city}, ${meta.state || 'TX'}` : (userProfile?.city || 'Denison, TX'),
-    active_venues: [
+    name: userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Promoter User'),
+    entity_name: meta.brand_name || meta.agency_name || userProfile?.promoter_agency || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations'),
+    email: meta.booking_email || meta.admin_email || userProfile?.email || (isOwnerMiguel ? 'goregrindsickness@gmail.com' : ''),
+    phone: meta.phone || userProfile?.phone || (isOwnerMiguel ? '(580)952-2047' : ''),
+    location: meta.city ? `${meta.city}, ${meta.state || 'TX'}` : (userProfile?.city || (isOwnerMiguel ? 'Denison, TX' : 'USA / Global')),
+    active_venues: meta.active_venues || (isOwnerMiguel ? [
       'Reggies Rock Club',
       'Subterranean',
       'Cobra Lounge',
@@ -45,18 +47,18 @@ export function buildNexusLivePromoterPayload(userProfile: any): PromoterRecord 
       'Live Wire Lounge',
       'Empty Bottle',
       'Beat Kitchen'
-    ],
-    social_links: {
+    ] : ['Local DIY & Club Venues']),
+    social_links: meta.social_links || (isOwnerMiguel ? {
       instagram: meta.instagram || 'https://instagram.com/nexusliveproductions',
       facebook: 'https://facebook.com/nexuslive'
-    },
-    notes: 'Primary underground death metal, slam, and grindcore tour operations (Chicago/Texas Domination Fest iterations).',
-    bio: meta.bio || userProfile?.promoter_bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.',
+    } : {}),
+    notes: meta.notes || (isOwnerMiguel ? 'Primary underground death metal, slam, and grindcore tour operations (Chicago/Texas Domination Fest iterations).' : 'Concert & show booking gateway.'),
+    bio: meta.bio || userProfile?.promoter_bio || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent live event promoter and concert coordinator.'),
     genres: Array.isArray(meta.genres) && meta.genres.length > 0 
       ? meta.genres 
-      : (Array.isArray(meta.genre_tags) && meta.genre_tags.length > 0 ? meta.genre_tags : (Array.isArray(userProfile?.genres) && userProfile.genres.length > 0 ? userProfile.genres : (Array.isArray(userProfile?.genre_tags) && userProfile.genre_tags.length > 0 ? userProfile.genre_tags : ['Brutal Death Metal', 'Slam Death Metal', 'Grindcore', 'Deathcore', 'Death Metal', 'Extreme Metal']))),
-    promoter_logo: meta.logo_url || userProfile?.promoter_logo || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601',
-    promoter_cover_image: meta.banner_url || meta.cover_url || userProfile?.promoter_cover_image || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635',
+      : (Array.isArray(meta.genre_tags) && meta.genre_tags.length > 0 ? meta.genre_tags : (Array.isArray(userProfile?.genres) && userProfile.genres.length > 0 ? userProfile.genres : (Array.isArray(userProfile?.genre_tags) && userProfile.genre_tags.length > 0 ? userProfile.genre_tags : ['Extreme Metal', 'Death Metal', 'Grindcore']))),
+    promoter_logo: meta.logo_url || userProfile?.promoter_logo || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : (userProfile?.avatar_url || '')),
+    promoter_cover_image: meta.banner_url || meta.cover_url || userProfile?.promoter_cover_image || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : (userProfile?.banner_url || '')),
     top_song_url: userProfile?.top_song_url || userProfile?.promoter_metadata?.top_song_url || '',
     featured_youtube_url: userProfile?.featured_youtube_url || userProfile?.top_song_url || userProfile?.promoter_metadata?.featured_video_url || userProfile?.promoter_metadata?.top_song_url || '',
     top_song_artist: userProfile?.top_song_artist || userProfile?.promoter_metadata?.top_song_artist || '',
@@ -150,18 +152,37 @@ export async function autoSyncPromoterProfile(userProfile: any): Promise<any> {
       // Ignore permission denied or missing table
     }
 
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile) || isMiguelNameOrProfile(profData);
+    const hasPromoterRegistration = Boolean(
+      isOwnerMiguel ||
+      promoterRecord ||
+      profData?.promoter_id ||
+      userProfile?.promoter_id ||
+      userProfile?.promoter_agency ||
+      userProfile?.promoter_brand ||
+      (userProfile?.promoter_metadata && (userProfile.promoter_metadata.is_registered || userProfile.promoter_metadata.brand_name)) ||
+      (Array.isArray(userProfile?.registered_workspaces) && userProfile.registered_workspaces.some((w: any) => {
+        const type = typeof w === 'string' ? w : (w?.type || w?.key || '');
+        return String(type).toLowerCase() === 'promoter';
+      }))
+    );
+
+    if (!hasPromoterRegistration) {
+      return null;
+    }
+
     const pm = profData?.promoter_metadata || userProfile?.promoter_metadata || {};
-    const effectiveBio = promoterRecord?.bio || pm.bio || profData?.promoter_bio || userProfile?.promoter_bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
-    const effectiveBrandName = promoterRecord?.entity_name || pm.brand_name || pm.agency_name || pm.business_name || profData?.promoter_agency || profData?.promoter_brand || 'Nexus Live Productions';
-    const effectiveLogo = promoterRecord?.promoter_logo || pm.logo_url || profData?.promoter_logo || profData?.avatar_url || userProfile?.promoter_logo || userProfile?.avatar_url || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
-    const effectiveBanner = promoterRecord?.promoter_cover_image || pm.banner_url || pm.cover_url || profData?.promoter_cover_image || profData?.banner_url || userProfile?.promoter_cover_image || userProfile?.banner_url || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
+    const effectiveBio = promoterRecord?.bio || pm.bio || profData?.promoter_bio || userProfile?.promoter_bio || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent live event promoter and concert coordinator.');
+    const effectiveBrandName = promoterRecord?.entity_name || pm.brand_name || pm.agency_name || pm.business_name || profData?.promoter_agency || profData?.promoter_brand || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations');
+    const effectiveLogo = promoterRecord?.promoter_logo || pm.logo_url || profData?.promoter_logo || profData?.avatar_url || userProfile?.promoter_logo || userProfile?.avatar_url || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : '');
+    const effectiveBanner = promoterRecord?.promoter_cover_image || pm.banner_url || pm.cover_url || profData?.promoter_cover_image || profData?.banner_url || userProfile?.promoter_cover_image || userProfile?.banner_url || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : '');
 
     const merged = {
       ...pm,
       ...(promoterRecord || {}),
       id: promoterRecord?.id || profData?.promoter_id || pm.id || userId,
       user_id: userId,
-      name: profData?.full_name || userProfile?.full_name || 'Miguel Goregrinder Medina',
+      name: profData?.full_name || userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Promoter User'),
       brand_name: effectiveBrandName,
       agency_name: effectiveBrandName,
       entity_name: effectiveBrandName,
@@ -171,10 +192,10 @@ export async function autoSyncPromoterProfile(userProfile: any): Promise<any> {
       promoter_brand: effectiveBrandName,
       bio: effectiveBio,
       promoter_bio: effectiveBio,
-      city: promoterRecord?.location?.split(',')[0]?.trim() || pm.city || profData?.city || 'Denison',
-      state: promoterRecord?.location?.split(',')[1]?.trim() || pm.state || profData?.state_province || 'TX',
-      booking_email: promoterRecord?.email || pm.booking_email || profData?.email || userEmail || 'goregrindsickness@gmail.com',
-      phone: promoterRecord?.phone || pm.phone || profData?.phone || '(580)952-2047',
+      city: promoterRecord?.location?.split(',')[0]?.trim() || pm.city || profData?.city || (isOwnerMiguel ? 'Denison' : 'USA'),
+      state: promoterRecord?.location?.split(',')[1]?.trim() || pm.state || profData?.state_province || (isOwnerMiguel ? 'TX' : 'Global'),
+      booking_email: promoterRecord?.email || pm.booking_email || profData?.email || userEmail || (isOwnerMiguel ? 'goregrindsickness@gmail.com' : ''),
+      phone: promoterRecord?.phone || pm.phone || profData?.phone || (isOwnerMiguel ? '(580)952-2047' : ''),
       logo_url: effectiveLogo,
       promoter_logo: effectiveLogo,
       banner_url: effectiveBanner,

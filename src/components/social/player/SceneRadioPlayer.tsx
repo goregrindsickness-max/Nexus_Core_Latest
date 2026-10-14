@@ -20,7 +20,9 @@ import {
   Disc,
   Sparkles,
   Volume2,
-  VolumeX
+  VolumeX,
+  Minimize2,
+  Maximize2
 } from 'lucide-react';
 import { RADIO_PLAYLISTS, FRONTEND_FALLBACK_PLAYLISTS } from '../../../data/socialFeedMockData';
 import {
@@ -114,6 +116,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
   const [duration, setDuration] = useState(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [radioVolume, setRadioVolume] = useState<number>(100);
+  const [isTucked, setIsTucked] = useState<boolean>(false);
 
   const handleRadioVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value, 10);
@@ -801,6 +804,28 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
         )}
       </AnimatePresence>
 
+      {/* TUCKED MINI-PILL (Visible when user tucks radio to free 100% of bottom screen) */}
+      <AnimatePresence>
+        {showSceneRadio && isTucked && activeTab !== 'reels' && !(activeTab === 'messages' && selectedChatId) && (
+          <motion.button
+            key="scene-radio-tucked-pill"
+            initial={{ y: 30, opacity: 0, scale: 0.9 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 30, opacity: 0, scale: 0.9 }}
+            onClick={() => setIsTucked(false)}
+            className="fixed bottom-3 right-3 sm:right-6 z-[9995] px-3.5 py-1.5 rounded-full bg-zinc-950/95 border border-rose-500/60 shadow-[0_4px_25px_rgba(225,29,72,0.4)] flex items-center gap-2 backdrop-blur-xl hover:border-rose-400 transition-all cursor-pointer group active:scale-95"
+            title="Restore Scene Radio Player"
+          >
+            <span className={`w-2 h-2 rounded-full ${sceneRadioPlaying ? 'bg-rose-500 animate-ping' : 'bg-zinc-500'}`} />
+            <Radio className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+            <span className="text-[11px] font-mono font-bold text-zinc-200 uppercase tracking-wide truncate max-w-[130px] sm:max-w-[200px]">
+              {playlistVideos[currentVideoIndex]?.title ? playlistVideos[currentVideoIndex].title : 'Scene Radio'}
+            </span>
+            <ChevronUp className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white transition-colors" />
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {showSceneRadio && activeTab !== 'reels' && !(activeTab === 'messages' && selectedChatId) && (
         <motion.div
@@ -811,7 +836,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
           className={`fixed bottom-0 left-0 right-0 ${
             isRadioExpanded ? 'z-[9999]' : 'z-[9990]'
           } w-full bg-[#09090b]/95 backdrop-blur-xl border-t border-zinc-800/80 shadow-[0_-4px_30px_rgba(0,0,0,0.85)] flex flex-col group transition-all duration-300 ${
-            traysHiddenOnMobile ? 'pointer-events-none opacity-0 translate-y-12' : 'opacity-100 translate-y-0'
+            traysHiddenOnMobile || isTucked ? 'pointer-events-none opacity-0 translate-y-16' : 'opacity-100 translate-y-0'
           }`}
         >
           {/* PERSISTENT YOUTUBE PLAYER EMBED (Kept continuously mounted so audio never stops when minimizing) */}
@@ -1464,6 +1489,19 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
               >
                 <Video className="w-3.5 h-3.5 text-rose-400" />
                 <span className="hidden md:inline">{showVideo ? 'Hide Clip' : 'Clip'}</span>
+              </button>
+
+              {/* Tuck / Minimize Radio Bar Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsTucked(true);
+                  if (isRadioExpanded) setIsRadioExpanded(false);
+                }}
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 flex items-center justify-center transition-colors cursor-pointer"
+                title="Tuck Radio to Mini-Pill (Free up bottom screen)"
+              >
+                <Minimize2 className="w-3.5 h-3.5" />
               </button>
 
               {/* Queue Expand/Collapse Toggle */}

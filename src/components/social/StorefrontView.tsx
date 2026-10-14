@@ -6,6 +6,7 @@ import {
   Zap, CreditCard
 } from 'lucide-react';
 import { mockShopItems } from '../../data/shopMockData';
+import { syncPostToSupabase } from './utils/postSyncUtils';
 
 type ChatType = any;
 
@@ -231,7 +232,63 @@ export const StorefrontView: React.FC<StorefrontViewProps> = (props) => {
       setShopItems(prev => [newItem, ...prev]);
     }
 
-    triggerNotification?.("🚀 Listing published to Live Accounts!");
+    // Turn into an active timeline Feed Post with unique bulletin board frame
+    const isGearListing = newListingType === 'gear';
+    const feedPostUuid = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `cf_${Date.now()}`;
+    const sellerDisplayName = userProfile?.name || userProfile?.full_name || userProfile?.console_handle || 'Verified Account';
+
+    const classifiedFeedPost: any = {
+      id: feedPostUuid,
+      type: newListingType,
+      category: newListingType,
+      timestamp: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      timeAgo: 'Just now',
+      authorId: userProfile?.id || 'current_user',
+      authorName: sellerDisplayName,
+      authorAvatar: userProfile?.avatar || userProfile?.avatar_url || '',
+      authorRole: portalRole === 'band' ? 'Band / Artist' : portalRole === 'label' ? 'Record Label' : portalRole === 'promoter' ? 'Promoter' : 'Community Member',
+      location: newItem.location || 'Local Community',
+      message: newItem.description || `${newItem.name} - Available on Community Bulletin Board`,
+      content: newItem.description || `${newItem.name} - Available on Community Bulletin Board`,
+      image: newItem.thumbnail,
+      image_url: newItem.thumbnail,
+      images: newItem.thumbnail ? [newItem.thumbnail] : [],
+      tag: isGearListing ? 'GEAR SWAP' : 'CLASSIFIED',
+      classifiedData: {
+        listingId: newItem.id,
+        listingType: newListingType,
+        title: newItem.name,
+        price: newItem.price,
+        condition: newItem.condition,
+        brand: newItem.brand,
+        year: newItem.year,
+        location: newItem.location,
+        description: newItem.description,
+        image: newItem.thumbnail,
+        seller: sellerDisplayName
+      },
+      reactions: { flame: 0, horns: 0 },
+      comments: []
+    };
+
+    try {
+      await syncPostToSupabase(classifiedFeedPost, userProfile?.id);
+    } catch (syncErr) {
+      console.warn("Could not sync classified post to timeline feed:", syncErr);
+    }
+
+    if (props.onAddFeedPost) {
+      props.onAddFeedPost(classifiedFeedPost);
+    }
+    if (props.setFeed) {
+      props.setFeed((prev: any[]) => [classifiedFeedPost, ...prev]);
+    }
+    if (props.setLabelPosts) {
+      props.setLabelPosts((prev: any[]) => [classifiedFeedPost, ...prev]);
+    }
+
+    triggerNotification?.("🚀 Listing published to Marketplace & Community Bulletin Feed!");
     setIsPostListingOpen(false);
     setIsDemoMode(false); // Automatically switch to live view to showcase the published item
 

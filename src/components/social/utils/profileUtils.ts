@@ -4,30 +4,38 @@ export const isMiguelNameOrProfile = (p?: any): boolean => {
   if (!p) return false;
   if (typeof p === 'string') {
     const s = p.toLowerCase().trim();
-    return (
-      s === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-      s.includes('miguel') ||
-      s.includes('goregrinder') ||
-      s.includes('goregrindsickness') ||
-      s.includes('bdmceo') ||
-      s === 'admin@nexus.com' ||
-      s === 'goregrindsickness@gmail.com'
-    );
+    if (s === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' || s === 'goregrindsickness@gmail.com' || s === 'admin@nexus.com') {
+      return true;
+    }
+    return s === 'miguel goregrinder medina' || s === 'miguel medina';
   }
+
+  // If a profile has an email, and it is NOT Miguel's email, they are NEVER Miguel
+  const email = String(p?.email || p?.booking_email || '').toLowerCase().trim();
+  if (email && email !== 'goregrindsickness@gmail.com' && email !== 'admin@nexus.com') {
+    return false;
+  }
+
+  // If a profile has a user ID, and it is a valid UUID other than Miguel's auth ID, they are NOT Miguel
   const pid = String(p?.id || p?.userId || p?.user_id || p?.creator_id || p?.owner_id || p?.author_id || p?.profile_id || '').toLowerCase().trim();
-  if (pid === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') return true;
-  const name = (p?.name || p?.full_name || p?.displayName || p?.display_name || p?.console_handle || p?.handle || p?.username || p?.profileHandle || p?.email || p?.legalName || '').toLowerCase().trim();
-  const email = (p?.email || '').toLowerCase().trim();
-  return (
-    name.includes('miguel') ||
-    name.includes('goregrinder') ||
-    name.includes('goregrindsickness') ||
-    name.includes('bdmceo') ||
-    email === 'admin@nexus.com' ||
-    email === 'goregrindsickness@gmail.com' ||
-    email.includes('goregrind') ||
-    email.includes('bdmceo')
-  );
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (pid && pid !== '5403162d-1947-43aa-b5f6-38a1bd2a1b80' && uuidRegex.test(pid)) {
+    return false;
+  }
+
+  if (email === 'goregrindsickness@gmail.com' || email === 'admin@nexus.com') {
+    return true;
+  }
+  if (pid === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') {
+    return true;
+  }
+
+  const rawName = String(p?.full_name || p?.legal_name || p?.legalName || p?.name || '').toLowerCase().trim();
+  if (rawName === 'miguel goregrinder medina' || rawName === 'miguel medina') {
+    return true;
+  }
+
+  return false;
 };
 
 export const PROFILE_REGISTRY: Record<string, any> = {

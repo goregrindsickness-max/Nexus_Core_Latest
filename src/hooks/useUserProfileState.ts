@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { profileStore } from '../utils/indexedDB';
+import { isMiguelNameOrProfile } from '../components/social/utils/profileUtils';
 import { getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, sanitizeCreativePayload, formatCreativePayload, extractGlobalProfilePayload, sanitizeBandPayload, ensureValidSupabaseAuthSession } from '../supabase';
 import { 
   resolveBandLogo, 
@@ -8,6 +9,12 @@ import {
   resolveBandName, 
   resolveBandBio, 
   resolveBandLocation, 
+  resolveCreativeName,
+  resolveCreativeHandle,
+  resolveCreativeLogo,
+  resolveCreativeCover,
+  resolveCreativeBio,
+  resolveCreativeLocation,
   resolvePromoterName, 
   resolvePromoterHandle, 
   resolvePromoterLogo, 
@@ -45,7 +52,7 @@ export function useUserProfileState({
       return resolveBandName(activeBand, userProfile);
     }
     if (portalRole === 'creative') {
-      return userProfile?.creative_metadata?.business_name || userProfile?.creative_name || 'Pro Creative';
+      return resolveCreativeName(userProfile);
     }
     if (portalRole === 'promoter') {
       return resolvePromoterName(userProfile);
@@ -54,8 +61,14 @@ export function useUserProfileState({
       return userProfile?.label_company_name || 'Pro Label';
     }
 
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
     const savedLegalName = typeof window !== 'undefined' ? (localStorage.getItem('nexus_full_legal_name') || localStorage.getItem('nexus_user_full_name')) : null;
-    if (savedLegalName && savedLegalName.trim() !== '') return savedLegalName;
+    if (savedLegalName && savedLegalName.trim() !== '') {
+      const isSavedMiguel = savedLegalName.toLowerCase().includes('miguel') || savedLegalName.toLowerCase().includes('goregrinder');
+      if (isOwnerMiguel || !isSavedMiguel) {
+        return savedLegalName;
+      }
+    }
 
     if (portalRole === 'fan_only') {
       return userProfile?.full_name || userProfile?.legal_name || userProfile?.screen_name || userProfile?.name || 'Fan Listener';
@@ -65,21 +78,26 @@ export function useUserProfileState({
     }
 
     if (userProfile?.full_name || userProfile?.legal_name) {
-      return userProfile.full_name || userProfile.legal_name || '';
+      const cand = userProfile.full_name || userProfile.legal_name || '';
+      if (isOwnerMiguel || (!cand.toLowerCase().includes('miguel') && !cand.toLowerCase().includes('goregrinder'))) {
+        return cand;
+      }
     }
     if (userProfile?.name && userProfile.name !== 'New User' && userProfile.name !== '') {
-      return userProfile.name;
+      if (isOwnerMiguel || (!userProfile.name.toLowerCase().includes('miguel') && !userProfile.name.toLowerCase().includes('goregrinder'))) {
+        return userProfile.name;
+      }
     }
-    return 'Fan Listener';
+    return userProfile?.email ? userProfile.email.split('@')[0] : 'Scene Member';
   });
 
   const [profileHandle, setProfileHandle] = useState(() => {
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
     if (portalRole === 'band') {
       return resolveBandHandle(activeBand, userProfile);
     }
     if (portalRole === 'creative') {
-      const rawC = userProfile?.creative_handle || userProfile?.creative_metadata?.business_name || 'creative_pro';
-      return rawC.replace(/^@+/, '').replace(/\s+/g, '_');
+      return resolveCreativeHandle(userProfile);
     }
     if (portalRole === 'promoter') {
       return resolvePromoterHandle(userProfile);
@@ -90,18 +108,32 @@ export function useUserProfileState({
     }
 
     if (userProfile?.console_handle && userProfile.console_handle !== '') {
-      return userProfile.console_handle.replace(/^@+/, '');
+      const cleanH = userProfile.console_handle.replace(/^@+/, '');
+      if (isOwnerMiguel || (!cleanH.toLowerCase().includes('bdmceo') && !cleanH.toLowerCase().includes('goregrinder'))) {
+        return cleanH;
+      }
     }
     if (portalRole === 'fan_only') {
-      return userProfile?.screen_name?.replace(/^@+/, '').replace(/\s+/g, '') || 'fan_core';
+      const fHandle = userProfile?.screen_name?.replace(/^@+/, '').replace(/\s+/g, '');
+      if (fHandle && (isOwnerMiguel || (!fHandle.toLowerCase().includes('bdmceo') && !fHandle.toLowerCase().includes('goregrinder')))) {
+        return fHandle;
+      }
     }
     if (userProfile?.screen_name && userProfile.screen_name !== '') {
-      return userProfile.screen_name.replace(/^@+/, '').replace(/\s+/g, '');
+      const sHandle = userProfile.screen_name.replace(/^@+/, '').replace(/\s+/g, '');
+      if (isOwnerMiguel || (!sHandle.toLowerCase().includes('bdmceo') && !sHandle.toLowerCase().includes('goregrinder'))) {
+        return sHandle;
+      }
     }
     if (userProfile?.name && userProfile.name !== 'New User' && userProfile.name !== '') {
-      return userProfile.name.replace(/^@+/, '').replace(/\s+/g, '');
+      if (isOwnerMiguel || !userProfile.name.toLowerCase().includes('miguel')) {
+        return userProfile.name.replace(/^@+/, '').replace(/\s+/g, '_').toLowerCase();
+      }
     }
-    return 'pro_user';
+    if (userProfile?.email) {
+      return userProfile.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '');
+    }
+    return isOwnerMiguel ? 'bdmCEO' : 'scene_member';
   });
 
   const [profileEmail, setProfileEmail] = useState(userProfile?.email || '');
@@ -114,8 +146,8 @@ export function useUserProfileState({
     if (portalRole === 'label' && (userProfile?.label_headquarters || userProfile?.city)) {
       return formatCleanLocation(userProfile.label_headquarters || userProfile.city, userProfile.state_province || userProfile.state);
     }
-    if (portalRole === 'creative' && (userProfile?.creative_metadata?.city || userProfile?.creative_metadata?.base_location)) {
-      return formatCleanLocation(userProfile.creative_metadata.city || userProfile.creative_metadata.base_location, userProfile.creative_metadata.state || userProfile.state_province);
+    if (portalRole === 'creative') {
+      return resolveCreativeLocation(userProfile);
     }
     if (portalRole === 'promoter') {
       return resolvePromoterLocation(userProfile);
@@ -182,8 +214,20 @@ export function useUserProfileState({
   };
 
   const initialSongParts = parseSongParts(userProfile?.top_song_title || userProfile?.favoriteSong || '');
-  const [profileTopSongArtist, setProfileTopSongArtist] = useState<string>(initialSongParts.artist);
-  const [profileTopSongTitle, setProfileTopSongTitle] = useState<string>(initialSongParts.title);
+  const [profileTopSongArtist, setProfileTopSongArtist] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('nexus_user_top_song_artist');
+      if (saved) return saved;
+    }
+    return initialSongParts.artist;
+  });
+  const [profileTopSongTitle, setProfileTopSongTitle] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('nexus_user_top_song_title');
+      if (saved) return saved;
+    }
+    return initialSongParts.title;
+  });
 
   const [profileFavoriteSong, setProfileFavoriteSong] = useState<string>(() => {
     return userProfile?.top_song_title || userProfile?.favoriteSong || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_favorite_song') || localStorage.getItem('nexus_favorite_song')) : '') || '';
@@ -305,11 +349,12 @@ export function useUserProfileState({
   ]);
 
   useEffect(() => {
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
     let name = '';
     if (portalRole === 'band') {
       name = resolveBandName(activeBand, userProfile);
     } else if (portalRole === 'creative') {
-      name = userProfile?.creative_metadata?.business_name || userProfile?.creative_name || 'Pro Creative';
+      name = resolveCreativeName(userProfile);
     } else if (portalRole === 'promoter') {
       name = resolvePromoterName(userProfile);
     } else if (portalRole === 'label') {
@@ -326,6 +371,10 @@ export function useUserProfileState({
       name = userProfile?.name || '';
     }
 
+    if (!isOwnerMiguel && (name.toLowerCase().includes('miguel') || name.toLowerCase().includes('goregrinder'))) {
+      name = userProfile?.screen_name || userProfile?.username || (userProfile?.email ? userProfile.email.split('@')[0] : 'Scene Member');
+    }
+
     if (name) {
       setProfileFullLegalName(prev => (prev === name ? prev : name));
     }
@@ -334,23 +383,28 @@ export function useUserProfileState({
     if (portalRole === 'band') {
       handle = resolveBandHandle(activeBand, userProfile);
     } else if (portalRole === 'creative') {
-      const rawC = userProfile?.creative_handle || userProfile?.creative_metadata?.business_name || 'creative_pro';
-      handle = rawC.replace(/^@+/, '').replace(/\s+/g, '_');
+      handle = resolveCreativeHandle(userProfile);
     } else if (portalRole === 'promoter') {
       handle = resolvePromoterHandle(userProfile);
     } else if (portalRole === 'label') {
       const rawL = userProfile?.label_url_slug || userProfile?.label_company_name || 'label_pro';
       handle = rawL.replace(/^@+/, '').replace(/\s+/g, '_');
     } else if (portalRole === 'fan_only') {
-      handle = (userProfile?.screen_name || userProfile?.console_handle || userProfile?.name || 'fan_core').replace(/^@+/, '').replace(/\s+/g, '');
+      handle = (userProfile?.screen_name || userProfile?.console_handle || userProfile?.name || (userProfile?.email ? userProfile.email.split('@')[0] : 'fan_core')).replace(/^@+/, '').replace(/\s+/g, '');
     } else if (userProfile?.console_handle && userProfile.console_handle !== '') {
       handle = userProfile.console_handle.replace(/^@+/, '');
     } else if (userProfile?.screen_name && userProfile.screen_name !== '') {
       handle = userProfile.screen_name.replace(/^@+/, '').replace(/\s+/g, '');
     } else if (userProfile?.name && userProfile.name !== 'New User' && userProfile.name !== '') {
-      handle = userProfile.name.replace(/^@+/, '').replace(/\s+/g, '');
+      handle = userProfile.name.replace(/^@+/, '').replace(/\s+/g, '_').toLowerCase();
+    } else if (userProfile?.email) {
+      handle = userProfile.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '');
     } else {
-      handle = 'fan_core';
+      handle = isOwnerMiguel ? 'bdmCEO' : 'scene_member';
+    }
+
+    if (!isOwnerMiguel && (handle.toLowerCase().includes('bdmceo') || handle.toLowerCase().includes('goregrinder'))) {
+      handle = userProfile?.screen_name || userProfile?.username || (userProfile?.email ? userProfile.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') : 'scene_member');
     }
 
     if (handle) {
@@ -699,19 +753,20 @@ export function useUserProfileState({
             });
           }
         } else if (portalRole === 'promoter') {
+          const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
           const promoterId = userProfile?.promoter_id || userProfile?.registered_promoter_id || userProfile?.id;
           if (promoterId && userProfile?.id) {
             const promoterPayload = {
               id: promoterId,
               user_id: userProfile.id,
-              name: profileFullLegalName || userProfile?.full_name || userProfile?.name || 'Miguel Goregrinder Medina',
-              entity_name: profileFullLegalName || userProfile?.corporate_name || userProfile?.name || 'Nexus Live Productions',
-              corporate_name: profileFullLegalName || userProfile?.corporate_name || userProfile?.name || 'Nexus Live Productions',
-              brand_name: profileFullLegalName || userProfile?.corporate_name || userProfile?.name || 'Nexus Live Productions',
-              email: userProfile?.email || 'goregrindsickness@gmail.com',
-              phone: userProfile?.phone || '(580)952-2047',
-              location: profileLocation || userProfile?.city || 'Denison, TX',
-              active_venues: [
+              name: profileFullLegalName || userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Promoter User'),
+              entity_name: profileFullLegalName || userProfile?.corporate_name || userProfile?.promoter_name || userProfile?.name || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations'),
+              corporate_name: profileFullLegalName || userProfile?.corporate_name || userProfile?.promoter_name || userProfile?.name || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations'),
+              brand_name: profileFullLegalName || userProfile?.corporate_name || userProfile?.promoter_name || userProfile?.name || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations'),
+              email: userProfile?.email || (isOwnerMiguel ? 'goregrindsickness@gmail.com' : ''),
+              phone: userProfile?.phone || (isOwnerMiguel ? '(580)952-2047' : ''),
+              location: profileLocation || userProfile?.city || (isOwnerMiguel ? 'Denison, TX' : 'USA / Global'),
+              active_venues: isOwnerMiguel ? [
                 'Reggies Rock Club',
                 'Subterranean',
                 'Cobra Lounge',
@@ -719,15 +774,15 @@ export function useUserProfileState({
                 'Live Wire Lounge',
                 'Empty Bottle',
                 'Beat Kitchen'
-              ],
-              social_links: {
+              ] : ['Local DIY & Club Venues'],
+              social_links: isOwnerMiguel ? {
                 instagram: 'https://instagram.com/nexusliveproductions',
                 facebook: 'https://facebook.com/nexuslive'
-              },
-              notes: 'Primary underground death metal, slam, and grindcore tour operations (Chicago/Texas Domination Fest iterations).',
+              } : {},
+              notes: isOwnerMiguel ? 'Primary underground death metal, slam, and grindcore tour operations (Chicago/Texas Domination Fest iterations).' : 'Concert & show booking gateway.',
               promoter_logo: profileAvatarUrl,
               promoter_cover_image: profileCoverUrl,
-              bio: profileBlurb,
+              bio: profileBlurb || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but...' : 'Independent concert promoter and live events coordinator.'),
               genres: combinedGenres,
               city: profileLocation,
               top_song_url: finalTopSongUrl,

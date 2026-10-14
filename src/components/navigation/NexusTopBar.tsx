@@ -6,6 +6,15 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { hasRegisteredWorkspace, normalizeRegisteredWorkspaces, Band, UserProfile } from '../../types';
+import { 
+  resolveEffectiveAvatar, 
+  resolveCreativeName, 
+  resolveCreativeHandle, 
+  resolvePromoterName, 
+  resolvePromoterHandle,
+  resolveBandName,
+  resolveBandHandle 
+} from '../../utils/bandProfileUtils';
 import MarqueeText from '../MarqueeText';
 
 export interface NexusTopBarProps {
@@ -274,44 +283,36 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                       <div className="w-10 h-10 rounded-full bg-rose-950/40 border border-rose-500/40 flex items-center justify-center font-black text-rose-400 shrink-0 overflow-hidden">
                         {(() => {
                           const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
-                          if (r === 'band') return activeBand?.logo_url || null;
-                          if (r === 'creative') return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
-                          if (r === 'label') return userProfile?.label_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_avatar') : null) || null;
-                          if (r === 'promoter') return (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.avatar_url || null;
-                          return userProfile?.avatar_url || (userProfile as any)?.avatar || (userProfile as any)?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null) || null;
-                        })() ? (
-                          <img 
-                            src={(() => {
-                              const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
-                              if (r === 'band') return activeBand?.logo_url;
-                              if (r === 'creative') return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
-                              if (r === 'label') return userProfile?.label_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_avatar') : null);
-                              if (r === 'promoter') return (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.avatar_url;
-                              return userProfile?.avatar_url || (userProfile as any)?.avatar || (userProfile as any)?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null);
-                            })() || ""} 
-                            className="w-full h-full object-cover" 
-                            alt="" 
-                            referrerPolicy="no-referrer" 
-                            onError={(e) => {
-                              e.currentTarget.onerror = null;
-                              const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
-                              e.currentTarget.src = r === 'creative' 
-                                ? 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150' 
-                                : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
-                            }}
-                          />
-                        ) : (
-                          <div className="font-mono text-sm">
-                            {(() => {
-                              const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
-                              if (r === 'band') return activeBand?.name;
-                              if (r === 'creative') return userProfile?.creative_metadata?.business_name;
-                              if (r === 'label') return userProfile?.label_company_name;
-                              if (r === 'promoter') return userProfile?.promoter_metadata?.brand_name;
-                              return userProfile?.name;
-                            })()?.charAt(0).toUpperCase() || 'U'}
-                          </div>
-                        )}
+                          const avatar = resolveEffectiveAvatar(r, activeBand, userProfile);
+                          if (avatar) {
+                            return (
+                              <img 
+                                src={avatar} 
+                                className="w-full h-full object-cover" 
+                                alt="" 
+                                referrerPolicy="no-referrer" 
+                                onError={(e) => {
+                                  e.currentTarget.onerror = null;
+                                  e.currentTarget.src = r === 'creative' 
+                                    ? 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150' 
+                                    : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+                                }}
+                              />
+                            );
+                          }
+                          const name = r === 'band' 
+                            ? resolveBandName(activeBand, userProfile) 
+                            : r === 'creative' 
+                            ? resolveCreativeName(userProfile) 
+                            : r === 'promoter' 
+                            ? resolvePromoterName(userProfile) 
+                            : (userProfile?.name || 'U');
+                          return (
+                            <div className="font-mono text-sm">
+                              {name?.charAt(0).toUpperCase() || 'U'}
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div className="overflow-hidden flex-1">
                         <h4 className="text-sm font-black text-white truncate flex items-center gap-1.5">
@@ -319,13 +320,13 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                             const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
                             if (r === 'industry_pro') return 'Industry Pro';
                             if (r === 'fan_only') return 'Fan Only';
-                            if (r === 'promoter') return userProfile?.promoter_metadata?.brand_name || 'Promoter Gateway';
-                            if (r === 'creative') return userProfile?.creative_metadata?.business_name || 'Creative Hub';
+                            if (r === 'promoter') return resolvePromoterName(userProfile);
+                            if (r === 'creative') return resolveCreativeName(userProfile);
                             if (r === 'label') return userProfile?.label_company_name || 'Pro Label';
                             if (userProfile?.band_role_mode === 'tour_manager' || userProfile?.role?.toLowerCase() === 'tour manager') {
                               return userProfile?.full_name || userProfile?.legal_name || userProfile?.name || 'Miguel Goregrinder Medina';
                             }
-                            return activeBand?.name || userProfile?.bandName || 'Artist';
+                            return resolveBandName(activeBand, userProfile);
                           })()}
                           <span className="text-[7px] font-black tracking-widest uppercase bg-emerald-500/25 border border-emerald-500/45 text-emerald-400 px-1 py-0.5 rounded">
                             {activeClearanceLevel === 5 ? 'OWNER' : `LVL ${activeClearanceLevel}`}

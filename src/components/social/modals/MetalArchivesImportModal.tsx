@@ -42,7 +42,15 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
   onImportSuccess
 }) => {
   const [activeTab, setActiveTab] = useState<'search' | 'paste'>('search');
+  const [selectedSource, setSelectedSource] = useState<'all' | 'google' | 'itunes' | 'metal-archives'>('all');
   const [queryUrl, setQueryUrl] = useState(bandName && bandName !== 'Nexus Artist' ? bandName : '');
+
+  // Keep queryUrl synced when bandName changes
+  React.useEffect(() => {
+    if (bandName && bandName !== 'Nexus Artist') {
+      setQueryUrl(bandName);
+    }
+  }, [bandName]);
   const [pastedText, setPastedText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [scrapeResult, setScrapeResult] = useState<MetalArchivesScrapeResult | null>(null);
@@ -64,20 +72,21 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
 
   if (!isOpen) return null;
 
-  const handleFetchScrape = async (e?: React.FormEvent) => {
+  const handleFetchScrape = async (e?: React.FormEvent, overrideSource?: 'all' | 'google' | 'itunes' | 'metal-archives') => {
     if (e) e.preventDefault();
     if (!queryUrl.trim()) {
-      setErrorMsg('Please enter a band name or Metal-Archives URL.');
+      setErrorMsg('Please enter a band name or search query.');
       return;
     }
 
+    const src = overrideSource || selectedSource;
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const result = await scrapeMetalArchivesBand(queryUrl.trim());
+      const result = await scrapeMetalArchivesBand(queryUrl.trim(), undefined, src);
       
       if (!result.releases || result.releases.length === 0) {
-        setErrorMsg(`No archived releases found for "${queryUrl.trim()}". You can switch to the "Direct Table Paste" tab to paste the discography directly from Encyclopaedia Metallum.`);
+        setErrorMsg(`No releases found for "${queryUrl.trim()}" on ${src === 'google' ? 'Google & Web' : src === 'itunes' ? 'Apple Music' : src === 'metal-archives' ? 'Metal-Archives / MusicBrainz' : 'all sources'}. You can try switching sources or use the "Direct Table Paste" tab.`);
       } else {
         setScrapeResult(result);
         // Select all matching active filters
@@ -260,6 +269,15 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
 
         if (typeof window !== 'undefined') {
           window.dispatchEvent(
+            new CustomEvent('nexus_discography_imported', {
+              detail: {
+                bandId,
+                bandName,
+                releases: releasesToImport
+              }
+            })
+          );
+          window.dispatchEvent(
             new CustomEvent('nexus_core_toast', {
               detail: {
                 message: `Successfully imported ${releasesToImport.length} real releases into your catalog!`,
@@ -283,7 +301,7 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
   };
 
   return (
-    <div id="metal_archives_modal_backdrop" className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+    <div id="metal_archives_modal_backdrop" className="fixed inset-0 z-[2000050] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
       <motion.div
         id="metal_archives_modal_dialog"
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -291,35 +309,36 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
         className="relative w-full max-w-4xl max-h-[92vh] flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden text-zinc-100"
       >
-        {/* Header */}
-        <div id="metal_archives_modal_header" className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/50">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-red-600/10 border border-red-500/20 rounded-xl text-red-500">
-              <Disc className="w-5 h-5 animate-spin-slow" />
+        {/* Header - Compact & Responsive */}
+        <div id="metal_archives_modal_header" className="flex items-center justify-between px-3.5 py-2.5 sm:px-6 sm:py-4 border-b border-zinc-800 bg-zinc-950/50 gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="p-1.5 sm:p-2.5 bg-red-600/10 border border-red-500/20 rounded-lg sm:rounded-xl text-red-500 shrink-0">
+              <Disc className="w-4 h-4 sm:w-5 sm:h-5 animate-spin-slow" />
             </div>
-            <div>
-              <h2 className="text-lg font-bold tracking-tight text-zinc-100 flex items-center gap-2">
-                <span>Metal-Archives & Music Catalog Importer</span>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full">
-                  Authentic Live Sync
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-lg font-bold tracking-tight text-zinc-100 flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <span className="truncate">Discography & Metadata Importer</span>
+                <span className="hidden xs:inline-block text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full shrink-0">
+                  Live Sync
                 </span>
               </h2>
-              <p className="text-xs text-zinc-400">
-                Auto-extracts song titles, track durations, record labels, catalog numbers, and official artwork
+              <p className="text-[11px] sm:text-xs text-zinc-400 truncate hidden sm:block">
+                Extract authentic releases, HD artwork, and tracklists from Google & Web, Apple Music, and Open Archives
               </p>
             </div>
           </div>
           <button
             id="close_metal_archives_modal_btn"
             onClick={onClose}
-            className="p-2 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-xl transition-colors cursor-pointer"
+            className="p-1.5 sm:p-2 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-lg sm:rounded-xl transition-colors cursor-pointer shrink-0"
+            title="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* Tab Controls */}
-        <div id="metal_archives_tabs" className="flex border-b border-zinc-800 bg-zinc-950/40 px-6 pt-3">
+        <div id="metal_archives_tabs" className="flex border-b border-zinc-800 bg-zinc-950/40 px-3 sm:px-6 pt-2 sm:pt-3">
           <button
             id="tab_search_url_btn"
             onClick={() => setActiveTab('search')}
@@ -330,7 +349,7 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
             }`}
           >
             <Search className="w-3.5 h-3.5" />
-            <span>Search & Archive URL</span>
+            <span>Search Live Metadata</span>
           </button>
           <button
             id="tab_direct_paste_btn"
@@ -342,7 +361,7 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
             }`}
           >
             <Clipboard className="w-3.5 h-3.5" />
-            <span>Direct Metal-Archives Table Paste</span>
+            <span>Direct Table / Text Paste</span>
           </button>
         </div>
 
@@ -350,9 +369,73 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
         <div id="metal_archives_modal_body" className="flex-1 overflow-y-auto p-6 space-y-6">
           {activeTab === 'search' ? (
             /* Search/URL Form */
-            <form id="metal_archives_search_form" onSubmit={handleFetchScrape} className="space-y-4">
+            <form id="metal_archives_search_form" onSubmit={(e) => handleFetchScrape(e)} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold tracking-wider text-zinc-400 uppercase mb-2">
+                  Select Search Engine / Metadata Source
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSource('all');
+                      if (scrapeResult && queryUrl) handleFetchScrape(undefined, 'all');
+                    }}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium border flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      selectedSource === 'all'
+                        ? 'bg-red-600/20 border-red-500 text-red-300 font-bold shadow-sm'
+                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                    }`}
+                  >
+                    <span>🌐 All Sources</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSource('google');
+                      if (scrapeResult && queryUrl) handleFetchScrape(undefined, 'google');
+                    }}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium border flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      selectedSource === 'google'
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-300 font-bold shadow-sm'
+                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                    }`}
+                  >
+                    <span>🔍 Google & Web</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSource('itunes');
+                      if (scrapeResult && queryUrl) handleFetchScrape(undefined, 'itunes');
+                    }}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium border flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      selectedSource === 'itunes'
+                        ? 'bg-purple-600/20 border-purple-500 text-purple-300 font-bold shadow-sm'
+                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                    }`}
+                  >
+                    <span>🍎 Apple Music</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSource('metal-archives');
+                      if (scrapeResult && queryUrl) handleFetchScrape(undefined, 'metal-archives');
+                    }}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium border flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      selectedSource === 'metal-archives'
+                        ? 'bg-amber-600/20 border-amber-500 text-amber-300 font-bold shadow-sm'
+                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                    }`}
+                  >
+                    <span>⚡ Metal Archives</span>
+                  </button>
+                </div>
+              </div>
+
               <label className="block text-xs font-semibold tracking-wider text-zinc-400 uppercase">
-                Band Name or Encyclopaedia Metallum URL
+                Band Name, Artist, or Catalog Link
               </label>
               <div className="space-y-3">
                 <div className="relative w-full">
@@ -362,7 +445,7 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
                     type="text"
                     value={queryUrl}
                     onChange={(e) => setQueryUrl(e.target.value)}
-                    placeholder="e.g., Sanguisugabogg, https://www.metal-archives.com/bands/Sanguisugabogg/3540450514, or Necrophagist"
+                    placeholder="e.g., Sanguisugabogg, Dying Fetus, PeelingFlesh, 200 Stab Wounds, Frozen Soul..."
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-3.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-red-500 transition-colors shadow-inner"
                   />
                 </div>
@@ -375,12 +458,12 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
                   {isLoading ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Resolving Authentic Discography, Tracks & Labels...</span>
+                      <span>Searching Live Metadata across {selectedSource === 'all' ? 'All Engines' : selectedSource}...</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      <span>Fetch Live Discography & Tracklists</span>
+                      <span>Search & Extract Live Discography</span>
                     </>
                   )}
                 </button>
@@ -525,23 +608,24 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
                         {/* Main Release Header Row */}
                         <div
                           onClick={() => toggleSelectRelease(rel.id)}
-                          className="flex items-center justify-between px-4 py-3 hover:bg-zinc-900/60 transition-colors cursor-pointer"
+                          className="flex items-center justify-between px-3 sm:px-4 py-3 sm:py-3.5 hover:bg-zinc-900/60 transition-colors cursor-pointer gap-2 sm:gap-4"
                         >
-                          <div className="flex items-center gap-3 min-w-0 pr-4">
+                          <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                            {/* Checkbox */}
                             <button
                               type="button"
                               onClick={(e) => toggleSelectRelease(rel.id, e)}
-                              className="text-zinc-400 shrink-0 cursor-pointer"
+                              className="text-zinc-400 shrink-0 cursor-pointer p-0.5"
                             >
                               {isSelected ? (
-                                <CheckSquare className="w-4 h-4 text-red-500" />
+                                <CheckSquare className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />
                               ) : (
-                                <Square className="w-4 h-4 text-zinc-600" />
+                                <Square className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-600" />
                               )}
                             </button>
                             
-                            {/* Artwork or Icon */}
-                            <div className="w-10 h-10 rounded-lg bg-zinc-850 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                            {/* Artwork - Enlarged and Crisp (w-14 h-14 / 56px) */}
+                            <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-zinc-850 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden shadow-md">
                               {(rel.cover_url || rel.cover_image || rel.coverUrl || rel.coverImage || rel.image_url) ? (
                                 <img
                                   src={rel.cover_url || rel.cover_image || rel.coverUrl || rel.coverImage || rel.image_url}
@@ -553,37 +637,54 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
                                   }}
                                 />
                               ) : (
-                                <Music2 className="w-4 h-4 text-zinc-500" />
+                                <Music2 className="w-6 h-6 text-zinc-600" />
                               )}
                             </div>
 
-                            <div className="truncate">
+                            {/* Release Metadata */}
+                            <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <p className="text-sm font-semibold text-zinc-100 truncate">{rel.title}</p>
+                                <p className="text-sm sm:text-base font-semibold text-zinc-100 truncate">{rel.title}</p>
                               </div>
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400 mt-0.5">
+                              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs text-zinc-400 mt-1">
+                                {/* Source Badge - Cleanly positioned inline with metadata */}
+                                {rel.source && (
+                                  <span className={`inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md text-[10px] font-bold tracking-tight shrink-0 ${
+                                    rel.source === 'Google & Web'
+                                      ? 'bg-blue-500/10 text-blue-400 border border-blue-500/25'
+                                      : rel.source === 'Apple Music'
+                                      ? 'bg-purple-500/10 text-purple-400 border border-purple-500/25'
+                                      : rel.source === 'Metal-Archives' || rel.source === 'MusicBrainz'
+                                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/25'
+                                      : 'bg-zinc-800 text-zinc-400 border border-zinc-700/40'
+                                  }`}>
+                                    {rel.source}
+                                  </span>
+                                )}
+
                                 {/* Record Label Badge */}
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-300 text-[11px] font-medium">
-                                  <Building className="w-2.5 h-2.5 text-zinc-400" />
-                                  {rel.label || 'Underground Label'}
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-300 text-[11px] font-medium truncate max-w-[150px] sm:max-w-[220px]">
+                                  <Building className="w-2.5 h-2.5 text-zinc-400 shrink-0" />
+                                  <span className="truncate">{rel.label || 'Underground Label'}</span>
                                 </span>
                                 
                                 {/* Catalog ID Badge */}
                                 {rel.catalogId && rel.catalogId !== 'N/A' && (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/60 text-zinc-400 text-[11px] font-mono">
+                                  <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/60 text-zinc-400 text-[11px] font-mono">
                                     <Tag className="w-2.5 h-2.5 text-zinc-500" />
                                     {rel.catalogId}
                                   </span>
                                 )}
 
-                                <span>&middot;</span>
-                                <span className="text-zinc-500">{trackCount} {trackCount === 1 ? 'track' : 'tracks'} ({totalRuntime})</span>
+                                <span className="text-zinc-600">&middot;</span>
+                                <span className="text-zinc-400 text-[11px] whitespace-nowrap">{trackCount} {trackCount === 1 ? 'track' : 'tracks'} ({totalRuntime})</span>
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${
+                          {/* Right Side: Type, Year, Chevron */}
+                          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 pl-1">
+                            <span className={`px-2 py-0.5 rounded-md text-[11px] sm:text-xs font-semibold ${
                               rel.type === 'Full-length'
                                 ? 'bg-red-500/10 text-red-400 border border-red-500/20'
                                 : rel.type === 'EP'
@@ -596,13 +697,13 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
                             }`}>
                               {rel.type}
                             </span>
-                            <span className="text-xs font-mono text-zinc-400 w-10 text-right">
+                            <span className="text-xs font-mono font-medium text-zinc-300 w-11 text-right">
                               {rel.release_date || rel.releaseDate}
                             </span>
                             <button
                               type="button"
                               onClick={(e) => toggleExpandRelease(rel.id, e)}
-                              className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-md transition-colors cursor-pointer"
+                              className="p-1 sm:p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
                               title={isExpanded ? 'Hide Tracklist' : 'View Tracklist'}
                             >
                               {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -617,7 +718,7 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: 'auto' }}
                               exit={{ opacity: 0, height: 0 }}
-                              className="px-12 py-3 bg-zinc-950/80 border-t border-zinc-800/60"
+                              className="px-6 sm:px-14 py-3 bg-zinc-950/80 border-t border-zinc-800/60"
                             >
                               <div className="flex items-center justify-between mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                                 <span>Tracklist ({trackCount} Songs)</span>

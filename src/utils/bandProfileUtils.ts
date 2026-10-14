@@ -1,10 +1,23 @@
+import { isMiguelNameOrProfile } from '../components/social/utils/profileUtils';
+import { 
+  VIRULENT_EXCISION_SVG_LOGO, 
+  VIRULENT_EXCISION_SVG_COVER, 
+  PROMOTER_SVG_AVATAR, 
+  PROMOTER_SVG_COVER,
+  VORTEX_GRAPHICS_SVG_AVATAR,
+  VORTEX_GRAPHICS_SVG_COVER,
+  getResilientFallback,
+  handleImageFallbackError
+} from './imageFallbacks';
+
 /**
  * Central utility for resolving band and role assets (logo, cover, handle, name, bio, location).
- * Ensures that band workspaces NEVER inadvertently display personal user avatars/banners.
+ * Ensures that band and creative workspaces NEVER inadvertently display personal user avatars/banners.
  */
 
-export const VIRULENT_EXCISION_DEFAULT_LOGO = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396';
-export const VIRULENT_EXCISION_DEFAULT_COVER = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-cover_1787467851123.jpg?t=1787467851123';
+export const VIRULENT_EXCISION_DEFAULT_LOGO = VIRULENT_EXCISION_SVG_LOGO;
+export const VIRULENT_EXCISION_DEFAULT_COVER = VIRULENT_EXCISION_SVG_COVER;
+export { getResilientFallback, handleImageFallbackError };
 
 export const isVirulentExcisionProfile = (activeBand: any, userProfile: any): boolean => {
   const bName = (
@@ -15,8 +28,7 @@ export const isVirulentExcisionProfile = (activeBand: any, userProfile: any): bo
     ''
   ).toLowerCase();
   
-  if (bName.includes('dying fetus')) return false;
-  return true;
+  return bName.includes('virulent');
 };
 
 export const resolveBandLogo = (activeBand: any, userProfile: any, profileAvatarUrl?: string | null): string => {
@@ -42,7 +54,7 @@ export const resolveBandLogo = (activeBand: any, userProfile: any, profileAvatar
   if (isVirulentExcisionProfile(activeBand, userProfile)) {
     return VIRULENT_EXCISION_DEFAULT_LOGO;
   }
-  return VIRULENT_EXCISION_DEFAULT_LOGO;
+  return '';
 };
 
 export const resolveBandCover = (activeBand: any, userProfile: any, profileCoverUrl?: string | null): string => {
@@ -64,7 +76,7 @@ export const resolveBandCover = (activeBand: any, userProfile: any, profileCover
   if (isVirulentExcisionProfile(activeBand, userProfile)) {
     return VIRULENT_EXCISION_DEFAULT_COVER;
   }
-  return VIRULENT_EXCISION_DEFAULT_COVER;
+  return '';
 };
 
 export const resolveBandHandle = (activeBand: any, userProfile: any): string => {
@@ -75,11 +87,26 @@ export const resolveBandHandle = (activeBand: any, userProfile: any): string => 
   if (isVirulentExcisionProfile(activeBand, userProfile)) {
     return 'Virulent_Excision';
   }
-  return 'Virulent_Excision';
+  return 'Band_Artist';
 };
 
 export const resolveBandName = (activeBand: any, userProfile: any): string => {
-  return 'Virulent Excision';
+  if (activeBand?.name && typeof activeBand.name === 'string' && activeBand.name.trim()) {
+    return activeBand.name.trim();
+  }
+  if (activeBand?.band_name && typeof activeBand.band_name === 'string' && activeBand.band_name.trim()) {
+    return activeBand.band_name.trim();
+  }
+  if (userProfile?.band_name && typeof userProfile.band_name === 'string' && userProfile.band_name.trim()) {
+    return userProfile.band_name.trim();
+  }
+  if (userProfile?.bandName && typeof userProfile.bandName === 'string' && userProfile.bandName.trim()) {
+    return userProfile.bandName.trim();
+  }
+  if (isVirulentExcisionProfile(activeBand, userProfile)) {
+    return 'Virulent Excision';
+  }
+  return 'Band / Artist';
 };
 
 export const resolveBandBio = (activeBand: any, userProfile: any): string => {
@@ -262,8 +289,13 @@ export const resolvePromoterHandle = (userProfile: any): string => {
   return raw.replace(/^@+/, '').replace(/\s+/g, '_');
 };
 
-export const PROMOTER_DEFAULT_AVATAR = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
-export const PROMOTER_DEFAULT_COVER = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
+export const PROMOTER_DEFAULT_AVATAR = PROMOTER_SVG_AVATAR;
+export const PROMOTER_DEFAULT_COVER = PROMOTER_SVG_COVER;
+
+export const VORTEX_GRAPHICS_DEFAULT_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'><rect width='400' height='400' fill='%23050505'/><circle cx='200' cy='200' r='180' fill='none' stroke='%2310b981' stroke-width='6' stroke-dasharray='12 6'/><circle cx='200' cy='200' r='140' fill='none' stroke='%23d946ef' stroke-width='4' opacity='0.7'/><g transform='translate(200,200)'><path d='M0,-110 C60,-110 110,-60 110,0 C110,60 60,110 0,110 C-60,110 -110,60 -110,0' fill='none' stroke='%2310b981' stroke-width='8' stroke-linecap='round'/><path d='M0,-75 C40,-75 75,-40 75,0 C75,40 40,75 0,75 C-40,75 -75,40 -75,0' fill='none' stroke='%23d946ef' stroke-width='6' stroke-linecap='round'/><path d='M0,-40 C20,-40 40,-20 40,0 C40,20 20,40 0,40 C-20,40 -40,20 -40,0' fill='none' stroke='%2322c55e' stroke-width='5'/><circle cx='0' cy='0' r='14' fill='%2310b981'/></g><text x='200' y='360' font-family='monospace' font-size='22' font-weight='900' fill='%2310b981' text-anchor='middle' letter-spacing='4'>VORTEX GRAPHICS</text></svg>";
+export const VORTEX_GRAPHICS_DEFAULT_COVER = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80';
+export const CREATIVE_GENERIC_DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=300';
+export const CREATIVE_GENERIC_DEFAULT_COVER = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80';
 
 export const DEFAULT_PERSONAL_AVATAR = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
 export const DEFAULT_PERSONAL_COVER = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=1200&q=80';
@@ -278,6 +310,166 @@ export const isPromoterCoverUrl = (url?: string | null, _userProfile?: any): boo
   if (!url || typeof url !== 'string' || !url.trim()) return false;
   const clean = url.trim();
   return clean.includes('promoter-banner_') || clean.includes('promoter-cover_');
+};
+
+export const isCreativeAvatarUrl = (url?: string | null, _userProfile?: any): boolean => {
+  if (!url || typeof url !== 'string' || !url.trim()) return false;
+  const clean = url.trim();
+  return clean.includes('creative-avatar') || clean.includes('creative-logo') || clean.includes('VORTEX GRAPHICS');
+};
+
+export const isCreativeCoverUrl = (url?: string | null, _userProfile?: any): boolean => {
+  if (!url || typeof url !== 'string' || !url.trim()) return false;
+  const clean = url.trim();
+  return clean.includes('creative-banner') || clean.includes('creative-cover');
+};
+
+export const resolveCreativeName = (userProfile: any): string => {
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+  const cm = userProfile?.creative_metadata;
+  const cand =
+    cm?.business_name ||
+    cm?.name ||
+    cm?.creative_name ||
+    userProfile?.creative_business_name ||
+    userProfile?.creative_name ||
+    userProfile?.creativeName ||
+    userProfile?.creative_profile?.business_name ||
+    userProfile?.creative_profile?.name ||
+    (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_business_name') || localStorage.getItem('nexus_creative_name')) : null);
+
+  if (cand && typeof cand === 'string' && cand.trim() && !['pro creative', 'creative pro', 'creative hub', 'creative studio'].includes(cand.toLowerCase().trim())) {
+    return cand.trim();
+  }
+
+  if (isOwnerMiguel) {
+    return 'Vortex Graphics';
+  }
+
+  if (cand && typeof cand === 'string' && cand.trim()) {
+    return cand.trim();
+  }
+
+  return userProfile?.name && !['user', 'new user', 'industry pro'].includes(userProfile.name.toLowerCase().trim())
+    ? `${userProfile.name} Studios`
+    : 'Vortex Graphics';
+};
+
+export const resolveCreativeHandle = (userProfile: any): string => {
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+  const cm = userProfile?.creative_metadata;
+  const raw =
+    userProfile?.creative_handle ||
+    userProfile?.creative_slug ||
+    cm?.creative_handle ||
+    cm?.handle ||
+    (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_handle') : null);
+
+  if (raw && typeof raw === 'string' && raw.trim() && !['creative_pro', 'creativepro'].includes(raw.toLowerCase().trim())) {
+    return raw.replace(/^@+/, '').replace(/\s+/g, '_');
+  }
+
+  if (isOwnerMiguel) {
+    return 'vortexgraphics';
+  }
+
+  if (raw && typeof raw === 'string' && raw.trim()) {
+    return raw.replace(/^@+/, '').replace(/\s+/g, '_');
+  }
+
+  const bName = resolveCreativeName(userProfile);
+  return bName ? bName.toLowerCase().replace(/[^a-z0-9_]/g, '_') : 'vortexgraphics';
+};
+
+export const resolveCreativeLogo = (userProfile: any, profileAvatarUrl?: string | null): string => {
+  if (profileAvatarUrl && typeof profileAvatarUrl === 'string' && profileAvatarUrl.trim() && !isPromoterAvatarUrl(profileAvatarUrl)) {
+    return profileAvatarUrl;
+  }
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+  const cm = userProfile?.creative_metadata;
+
+  const saved = typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null;
+  if (saved && typeof saved === 'string' && saved.trim()) {
+    return saved.trim();
+  }
+
+  const cand =
+    userProfile?.creative_avatar ||
+    cm?.avatar_url ||
+    cm?.image ||
+    cm?.logo_url ||
+    userProfile?.creative_profile?.avatar ||
+    userProfile?.creative_profile?.avatar_url;
+
+  if (cand && typeof cand === 'string' && cand.trim()) {
+    return cand.trim();
+  }
+
+  if (isOwnerMiguel) {
+    return VORTEX_GRAPHICS_DEFAULT_AVATAR;
+  }
+
+  return CREATIVE_GENERIC_DEFAULT_AVATAR;
+};
+
+export const resolveCreativeCover = (userProfile: any, profileCoverUrl?: string | null): string | null => {
+  if (profileCoverUrl && typeof profileCoverUrl === 'string' && profileCoverUrl.trim()) {
+    return profileCoverUrl;
+  }
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+  const cm = userProfile?.creative_metadata;
+
+  const saved = typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_banner') : null;
+  if (saved && typeof saved === 'string' && saved.trim()) {
+    return saved.trim();
+  }
+
+  const cand =
+    userProfile?.creative_banner ||
+    cm?.banner_url ||
+    cm?.cover_url ||
+    userProfile?.creative_profile?.banner ||
+    userProfile?.creative_profile?.cover_url;
+
+  if (cand && typeof cand === 'string' && cand.trim()) {
+    return cand.trim();
+  }
+
+  if (isOwnerMiguel) {
+    return VORTEX_GRAPHICS_DEFAULT_COVER;
+  }
+
+  return CREATIVE_GENERIC_DEFAULT_COVER;
+};
+
+export const resolveCreativeBio = (userProfile: any): string => {
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+  const cm = userProfile?.creative_metadata;
+  const cand =
+    cm?.bio ||
+    cm?.biography ||
+    userProfile?.creative_bio ||
+    (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_bio') : null);
+
+  if (cand && typeof cand === 'string' && cand.trim()) {
+    return cand.trim();
+  }
+
+  if (isOwnerMiguel) {
+    return 'Heavy vector specialist, halftone master, custom punk typography and production-ready CMYK separated files.';
+  }
+
+  return 'Visual artist, creative director, & audio specialist.';
+};
+
+export const resolveCreativeLocation = (userProfile: any): string => {
+  const cm = userProfile?.creative_metadata;
+  const loc = cm?.city || cm?.base_location || userProfile?.creative_city || (isMiguelNameOrProfile(userProfile) ? 'Detroit' : (userProfile?.city || ''));
+  const state = cm?.state || cm?.state_province || userProfile?.creative_state || (isMiguelNameOrProfile(userProfile) ? 'MI' : (userProfile?.state_province || userProfile?.state || ''));
+
+  const clean = formatCleanLocation(loc, state);
+  if (clean) return clean;
+  return isMiguelNameOrProfile(userProfile) ? 'Detroit, MI' : (userProfile?.location_code || userProfile?.city_state || 'Detroit, MI');
 };
 
 export const resolvePromoterLogo = (userProfile: any, profileAvatarUrl?: string | null): string => {
@@ -334,28 +526,21 @@ export const resolveEffectiveAvatar = (portalRole: string, activeBand: any, user
   }
   if (effectiveRole === 'label') {
     return (
-      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_label_avatar') || localStorage.getItem('nexus_user_avatar')) : null) ||
+      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_label_avatar')) : null) ||
       userProfile?.label_avatar || 
       userProfile?.avatar_url ||
       ''
     );
   }
   if (effectiveRole === 'creative') {
-    return (
-      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_avatar') || localStorage.getItem('nexus_user_avatar')) : null) ||
-      userProfile?.creative_avatar || 
-      userProfile?.creative_metadata?.avatar_url || 
-      userProfile?.creative_metadata?.image || 
-      userProfile?.avatar_url ||
-      ''
-    );
+    return resolveCreativeLogo(userProfile, profileAvatarUrl);
   }
   if (effectiveRole === 'promoter') {
     return resolvePromoterLogo(userProfile, profileAvatarUrl);
   }
 
   // Personal / Industry Pro / Fan Role candidate filtering:
-  if (profileAvatarUrl && typeof profileAvatarUrl === 'string' && profileAvatarUrl.trim() && !isPromoterAvatarUrl(profileAvatarUrl)) {
+  if (profileAvatarUrl && typeof profileAvatarUrl === 'string' && profileAvatarUrl.trim() && !isPromoterAvatarUrl(profileAvatarUrl) && !isCreativeAvatarUrl(profileAvatarUrl)) {
     return profileAvatarUrl;
   }
 
@@ -368,7 +553,7 @@ export const resolveEffectiveAvatar = (portalRole: string, activeBand: any, user
   ];
 
   for (const cand of rawCandidates) {
-    if (cand && typeof cand === 'string' && cand.trim() && !isPromoterAvatarUrl(cand) && !cand.includes('undefined') && !cand.includes('null')) {
+    if (cand && typeof cand === 'string' && cand.trim() && !isPromoterAvatarUrl(cand) && !isCreativeAvatarUrl(cand) && !cand.includes('undefined') && !cand.includes('null')) {
       return cand.trim();
     }
   }
@@ -382,17 +567,17 @@ export const resolveEffectiveCover = (portalRole: string, activeBand: any, userP
     return resolveBandCover(activeBand, userProfile, profileCoverUrl);
   }
   if (effectiveRole === 'label') {
-    return userProfile?.label_banner || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_label_banner') || localStorage.getItem('nexus_user_banner')) : null) || null;
+    return userProfile?.label_banner || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_label_banner')) : null) || null;
   }
   if (effectiveRole === 'creative') {
-    return userProfile?.creative_banner || userProfile?.creative_metadata?.banner_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_user_banner')) : null) || null;
+    return resolveCreativeCover(userProfile, profileCoverUrl);
   }
   if (effectiveRole === 'promoter') {
     return resolvePromoterCover(userProfile, profileCoverUrl);
   }
 
   // Personal / Industry Pro / Fan Role cover candidate filtering:
-  if (profileCoverUrl && typeof profileCoverUrl === 'string' && profileCoverUrl.trim() && !isPromoterCoverUrl(profileCoverUrl)) {
+  if (profileCoverUrl && typeof profileCoverUrl === 'string' && profileCoverUrl.trim() && !isPromoterCoverUrl(profileCoverUrl) && !isCreativeCoverUrl(profileCoverUrl)) {
     return profileCoverUrl;
   }
 
@@ -406,7 +591,7 @@ export const resolveEffectiveCover = (portalRole: string, activeBand: any, userP
   ];
 
   for (const cand of rawCandidates) {
-    if (cand && typeof cand === 'string' && cand.trim() && !isPromoterCoverUrl(cand) && !cand.includes('undefined') && !cand.includes('null')) {
+    if (cand && typeof cand === 'string' && cand.trim() && !isPromoterCoverUrl(cand) && !isCreativeCoverUrl(cand) && !cand.includes('undefined') && !cand.includes('null')) {
       return cand.trim();
     }
   }

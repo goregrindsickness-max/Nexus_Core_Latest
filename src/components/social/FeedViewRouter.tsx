@@ -10,6 +10,7 @@ import { ClipsView } from './ClipsView';
 import { formatPostTimestamp } from '../../utils/socialFeedUtils';
 import { getComposerRoleTheme } from './CreatePostCard';
 import { mergePostWithReactions } from './utils/reactionStore';
+import { isMiguelNameOrProfile } from './utils/profileUtils';
 
 export const FeedViewRouter: React.FC<any> = (props) => {
   const [feedStreamScope, setFeedStreamScope] = React.useState<'all' | 'workspace'>('all');
@@ -257,6 +258,22 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                   setEventTicketUrl={props.setEventTicketUrl}
                   eventData={props.eventData}
                   setEventData={props.setEventData}
+                  classifiedType={props.classifiedType}
+                  setClassifiedType={props.setClassifiedType}
+                  classifiedTitle={props.classifiedTitle}
+                  setClassifiedTitle={props.setClassifiedTitle}
+                  classifiedPrice={props.classifiedPrice}
+                  setClassifiedPrice={props.setClassifiedPrice}
+                  classifiedCondition={props.classifiedCondition}
+                  setClassifiedCondition={props.setClassifiedCondition}
+                  classifiedBrand={props.classifiedBrand}
+                  setClassifiedBrand={props.setClassifiedBrand}
+                  classifiedYear={props.classifiedYear}
+                  setClassifiedYear={props.setClassifiedYear}
+                  classifiedLocation={props.classifiedLocation}
+                  setClassifiedLocation={props.setClassifiedLocation}
+                  classifiedDescription={props.classifiedDescription}
+                  setClassifiedDescription={props.setClassifiedDescription}
                 />
               </div>
 
@@ -430,6 +447,15 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                 post.tag?.toLowerCase().includes('gallery') ||
                 post.type === 'photo';
               if (!isPhoto) return false;
+            } else if (filter === 'bulletin' || filter === 'gear' || filter === 'classifieds') {
+              const isBulletin =
+                Boolean(post.classifiedData || post.classified_data) ||
+                post.category === 'gear' ||
+                post.category === 'classifieds' ||
+                post.type === 'gear' ||
+                post.type === 'classifieds' ||
+                ['GEAR SWAP', 'CLASSIFIED', 'CLASSIFIEDS', 'BULLETIN', 'GEAR'].includes(post.tag?.toUpperCase() || '');
+              if (!isBulletin) return false;
             } else if (filter === 'followed' || filter === 'following') {
               const authorName = (post?.author?.name || (post as any)?.profile?.name || (post as any)?.author_name || (post as any)?.authorName || '').toLowerCase().trim();
               const authorId = post?.author?.id || post?.author_id || post?.profile_id || post?.user_id || post?.band_id;
@@ -512,18 +538,28 @@ export const FeedViewRouter: React.FC<any> = (props) => {
         const isFilterActive = Boolean(props.activeFeedCategoryFilter && props.activeFeedCategoryFilter !== 'all');
 
         const postsToPass = filteredFeed.length > 0 ? filteredFeed.map((p: any) => {
+          const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+          const pAuthorName = String(p.author?.name || p.authorName || '').toLowerCase().trim();
+          const pAuthorHandle = String(p.author?.handle || p.authorHandle || p.author?.console_handle || '').toLowerCase().trim();
+          const cleanUserHandle = String(userProfile?.console_handle || userProfile?.handle || '').toLowerCase().replace(/^@/, '').trim();
+          const cleanUserName = String(userProfile?.name || userProfile?.full_name || '').toLowerCase().trim();
+          
+          const isHandleMatch = cleanUserHandle && cleanUserHandle !== 'user' && (
+            pAuthorHandle === `@${cleanUserHandle}` ||
+            pAuthorHandle === cleanUserHandle ||
+            pAuthorName === `@${cleanUserHandle}` ||
+            pAuthorName === cleanUserHandle
+          );
+          const isNameMatch = cleanUserName && cleanUserName !== 'user' && cleanUserName !== 'nexus member' && cleanUserName !== 'anonymous' && (
+            pAuthorName === cleanUserName
+          );
+          const isIdMatch = userProfile?.id && (p.author?.id === userProfile.id || p.profile_id === userProfile.id || p.user_id === userProfile.id || p.authorId === userProfile.id);
+
           const isSelf = Boolean(
-            p.author?.isYou ||
-            p.isYou ||
-            (userProfile?.id && (p.author?.id === userProfile.id || p.profile_id === userProfile.id || p.user_id === userProfile.id)) ||
-            (userProfile?.console_handle && p.author?.name && (
-              p.author.name.toLowerCase().includes(userProfile.console_handle.toLowerCase().replace(/^@/, '')) ||
-              (p.authorName && p.authorName.toLowerCase().includes(userProfile.console_handle.toLowerCase().replace(/^@/, '')))
-            )) ||
-            (userProfile?.name && p.author?.name && (
-              p.author.name.toLowerCase().includes(userProfile.name.toLowerCase()) ||
-              (p.authorName && p.authorName.toLowerCase().includes(userProfile.name.toLowerCase()))
-            ))
+            isIdMatch ||
+            isHandleMatch ||
+            isNameMatch ||
+            (isOwnerMiguel && (pAuthorName.includes('goregrinder') || pAuthorName.includes('bdmceo') || pAuthorHandle.includes('bdmceo')))
           );
 
           const postWorkspace = (p.workspace_type || p.workspaceType || p.author?.workspace_type || p.author?.workspaceType || '').toLowerCase();
@@ -568,6 +604,9 @@ export const FeedViewRouter: React.FC<any> = (props) => {
             merchData: p.merchData,
             ticketData: p.ticketData,
             eventData: p.eventData || p.event_data,
+            classifiedData: p.classifiedData || p.classified_data,
+            classified_data: p.classifiedData || p.classified_data,
+            category: p.category || (p.classifiedData?.listingType) || (p.classified_data?.listingType),
             isVipExclusive: p.isVipExclusive || p.is_vip_exclusive,
             requiredTier: p.requiredTier || p.required_tier,
             vipDiscountPct: p.vipDiscountPct || p.vip_discount_pct,
@@ -599,7 +638,7 @@ export const FeedViewRouter: React.FC<any> = (props) => {
         }) : (isFilterActive ? [] : labelPosts.map((p: any) => mergePostWithReactions(p, userProfile?.id)));
 
         return (
-          <div className="max-w-2xl mx-auto pt-2 pb-2 px-4">
+          <div className="max-w-2xl mx-auto pt-2 pb-28 sm:pb-24 px-4">
             {/* Stream Scope Toggle Bar */}
             {isWorkspace && (
               <div className="flex items-center justify-between mb-3 px-1">
@@ -643,10 +682,11 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                   {props.activeFeedCategoryFilter === 'merch' && '👕'}
                   {props.activeFeedCategoryFilter === 'audio' && '🎙️'}
                   {props.activeFeedCategoryFilter === 'photos' && '📸'}
+                  {props.activeFeedCategoryFilter === 'bulletin' && '📌'}
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-white uppercase tracking-wider">
-                    No {(props.activeFeedCategoryFilter === 'followed' || props.activeFeedCategoryFilter === 'following') ? 'Followed Posts' : props.activeFeedCategoryFilter === 'tour' ? 'Tour Dates' : props.activeFeedCategoryFilter === 'merch' ? 'Merch Drops' : props.activeFeedCategoryFilter === 'audio' ? 'Demos & Tapes' : 'Photo Pit Snaps'} Yet
+                    No {(props.activeFeedCategoryFilter === 'followed' || props.activeFeedCategoryFilter === 'following') ? 'Followed Posts' : props.activeFeedCategoryFilter === 'tour' ? 'Tour Dates' : props.activeFeedCategoryFilter === 'merch' ? 'Merch Drops' : props.activeFeedCategoryFilter === 'audio' ? 'Demos & Tapes' : props.activeFeedCategoryFilter === 'bulletin' ? 'Bulletin & Gear Notices' : 'Photo Pit Snaps'} Yet
                   </h3>
                   <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto">
                     {(props.activeFeedCategoryFilter === 'followed' || props.activeFeedCategoryFilter === 'following')
@@ -836,6 +876,12 @@ export const FeedViewRouter: React.FC<any> = (props) => {
         chats={props.chats}
         setChats={props.setChats}
         allProfiles={allProfiles}
+        setFeed={setFeed}
+        setLabelPosts={setLabelPosts}
+        onAddFeedPost={(p: any) => {
+          setFeed((prev: any[]) => [p, ...prev]);
+          setLabelPosts((prev: any[]) => [p, ...prev]);
+        }}
       />
 
       {/* FORUM VIEW */}

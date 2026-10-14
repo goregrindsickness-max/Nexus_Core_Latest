@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { isMiguelNameOrProfile } from '../social/utils/profileUtils';
 import {
   Home,
   Plus,
@@ -29,6 +30,15 @@ import {
   LogOut,
 } from 'lucide-react';
 import { Band, UserProfile, normalizeRegisteredWorkspaces } from '../../types';
+import { 
+  resolveEffectiveAvatar, 
+  resolveCreativeName, 
+  resolveCreativeHandle, 
+  resolvePromoterName, 
+  resolvePromoterHandle,
+  resolveBandName,
+  resolveBandHandle 
+} from '../../utils/bandProfileUtils';
 
 export interface AppNavigationBarProps {
   activeTab: string;
@@ -536,38 +546,39 @@ export function AppNavigationBar({
                               customBadges: ['🎪 Event Promoter', '⚡ Nexus Live'],
                               bio: (updated as any)?.promoter_metadata?.bio || (updated as any)?.promoter_bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.',
                               promoter_metadata: (updated as any)?.promoter_metadata || {}
-                            } : {
-                              id: updated?.id || null,
-                              name: updated?.name || updated?.full_name || 'Miguel Goregrinder Medina',
-                              legalName: updated?.full_name || updated?.name || 'Miguel Goregrinder Medina',
-                              handle: (updated?.console_handle && !updated.console_handle.toLowerCase().includes('virulent') && updated.console_handle !== '@user' && updated.console_handle !== 'user') 
+                            } : (() => {
+                              const isOwnerMiguel = isMiguelNameOrProfile(updated);
+                              const userFallbackHandle = updated?.console_handle || (updated as any)?.handle || (updated as any)?.username || updated?.screen_name || (updated?.name && !updated.name.toLowerCase().includes('miguel') ? updated.name.replace(/\s+/g, '_').toLowerCase() : (updated?.email ? updated.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') : (isOwnerMiguel ? 'bdmCEO' : 'member')));
+                              const personalHandle = updated?.console_handle && (!updated.console_handle.toLowerCase().includes('virulent') || isOwnerMiguel) && (!updated.console_handle.toLowerCase().includes('bdmceo') || isOwnerMiguel) && updated.console_handle !== '@user' && updated.console_handle !== 'user'
                                 ? (updated.console_handle.startsWith('@') ? updated.console_handle : `@${updated.console_handle}`) 
-                                : '@bdmCEO',
-                              console_handle: (updated?.console_handle && !updated.console_handle.toLowerCase().includes('virulent') && updated.console_handle !== '@user' && updated.console_handle !== 'user') 
-                                ? (updated.console_handle.startsWith('@') ? updated.console_handle : `@${updated.console_handle}`) 
-                                : '@bdmCEO',
-                              username: (updated?.console_handle && !updated.console_handle.toLowerCase().includes('virulent') && updated.console_handle !== '@user' && updated.console_handle !== 'user') 
-                                ? (updated.console_handle.startsWith('@') ? updated.console_handle : `@${updated.console_handle}`) 
-                                : '@bdmCEO',
-                              avatar: updated?.avatar_url || null,
-                              avatar_url: updated?.avatar_url || null,
-                              banner: updated?.banner_url || null,
-                              banner_url: updated?.banner_url || null,
-                              cover_url: updated?.banner_url || null,
-                              location: (updated as any)?.location || 'USA / Global',
-                              role: isFanAcc ? 'Fan Listener' : (isProAcc ? 'Industry Pro' : (updated?.role || 'Member')),
-                              type: isFanAcc || isProAcc ? 'user' : (currentAcc || 'user'),
-                              account_type: currentAcc,
-                              isPersonal: isFanAcc || isProAcc,
-                              isBandProfile: false,
-                              isYou: true,
-                              badges: (updated as any)?.badges || (isFanAcc ? ['🤘 Fan'] : ['💼 Industry Pro']),
-                              customBadges: (updated as any)?.badges || (isFanAcc ? ['🤘 Fan'] : ['💼 Industry Pro']),
-                              bio: (updated as any)?.bio || (updated as any)?.blurb || 'User profile on the Nexus network.',
-                              followersCount: 0,
-                              followingCount: 0,
-                              hasProAccess: !isFanAcc
-                            }
+                                : (userFallbackHandle.startsWith('@') ? userFallbackHandle : `@${userFallbackHandle}`);
+                              return {
+                                id: updated?.id || null,
+                                name: updated?.name || updated?.full_name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Member Profile'),
+                                legalName: updated?.full_name || updated?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Member Profile'),
+                                handle: personalHandle,
+                                console_handle: personalHandle,
+                                username: personalHandle,
+                                avatar: updated?.avatar_url || null,
+                                avatar_url: updated?.avatar_url || null,
+                                banner: updated?.banner_url || null,
+                                banner_url: updated?.banner_url || null,
+                                cover_url: updated?.banner_url || null,
+                                location: (updated as any)?.location || 'USA / Global',
+                                role: isFanAcc ? 'Fan Listener' : (isProAcc ? 'Industry Pro' : (updated?.role || 'Member')),
+                                type: isFanAcc || isProAcc ? 'user' : (currentAcc || 'user'),
+                                account_type: currentAcc,
+                                isPersonal: isFanAcc || isProAcc,
+                                isBandProfile: false,
+                                isYou: true,
+                                badges: (updated as any)?.badges || (isFanAcc ? ['🤘 Fan'] : ['💼 Industry Pro']),
+                                customBadges: (updated as any)?.badges || (isFanAcc ? ['🤘 Fan'] : ['💼 Industry Pro']),
+                                bio: (updated as any)?.bio || (updated as any)?.blurb || 'User profile on the Nexus network.',
+                                followersCount: 0,
+                                followingCount: 0,
+                                hasProAccess: !isFanAcc
+                              };
+                            })()
                           }));
                         }, 100);
                       }}
@@ -599,37 +610,30 @@ export function AppNavigationBar({
                       <div className="w-9 h-9 rounded-full overflow-hidden border border-emerald-500/30 bg-zinc-800 flex items-center justify-center text-xs font-black">
                         {(() => {
                           const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
-                          if (r === 'band') return activeBand?.logo_url || null;
-                          if (r === 'creative') return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
-                          if (r === 'label') return userProfile?.label_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_avatar') : null) || null;
-                          if (r === 'promoter') return (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.avatar_url || null;
-                          return userProfile?.avatar_url || (userProfile as any)?.avatar || (userProfile as any)?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null) || null;
-                        })() ? (
-                          <img 
-                            src={(() => {
-                              const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
-                              if (r === 'band') return activeBand?.logo_url;
-                              if (r === 'creative') return userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
-                              if (r === 'label') return userProfile?.label_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_avatar') : null);
-                              if (r === 'promoter') return (userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar')) : null) || userProfile?.avatar_url;
-                              return userProfile?.avatar_url || (userProfile as any)?.avatar || (userProfile as any)?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null);
-                            })() || ""} 
-                            alt={userProfile?.name} 
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-emerald-400">
-                            {(() => {
-                              const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
-                              if (r === 'band') return activeBand?.name;
-                              if (r === 'creative') return userProfile?.creative_metadata?.business_name;
-                              if (r === 'label') return userProfile?.label_company_name;
-                              if (r === 'promoter') return userProfile?.promoter_metadata?.brand_name;
-                              return userProfile?.name;
-                            })()?.charAt(0).toUpperCase() || 'U'}
-                          </span>
-                        )}
+                          const avatar = resolveEffectiveAvatar(r, activeBand, userProfile);
+                          if (avatar) {
+                            return (
+                              <img 
+                                src={avatar} 
+                                alt={userProfile?.name} 
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-cover"
+                              />
+                            );
+                          }
+                          const name = r === 'band' 
+                            ? resolveBandName(activeBand, userProfile) 
+                            : r === 'creative' 
+                            ? resolveCreativeName(userProfile) 
+                            : r === 'promoter' 
+                            ? resolvePromoterName(userProfile) 
+                            : (userProfile?.name || 'U');
+                          return (
+                            <span className="text-emerald-400">
+                              {name?.charAt(0).toUpperCase() || 'U'}
+                            </span>
+                          );
+                        })()}
                       </div>
                       <div className="min-w-0">
                         <h5 className="text-[11px] font-bold text-white truncate">
@@ -637,10 +641,10 @@ export function AppNavigationBar({
                             const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
                             if (r === 'industry_pro') return 'Industry Pro';
                             if (r === 'fan_only') return 'Fan Only';
-                            if (r === 'promoter') return userProfile?.promoter_metadata?.brand_name || 'Promoter Gateway';
-                            if (r === 'creative') return userProfile?.creative_metadata?.business_name || 'Creative Hub';
+                            if (r === 'promoter') return resolvePromoterName(userProfile);
+                            if (r === 'creative') return resolveCreativeName(userProfile);
                             if (r === 'label') return userProfile?.label_company_name || 'Pro Label';
-                            return activeBand?.name || userProfile?.bandName || 'Artist';
+                            return resolveBandName(activeBand, userProfile);
                           })()}
                         </h5>
                         <p className="text-[10px] text-zinc-500 font-mono truncate">
@@ -648,10 +652,10 @@ export function AppNavigationBar({
                             const r = userProfile?.active_workspace || userProfile?.account_type || 'industry_pro';
                             if (r === 'industry_pro') return '@' + (userProfile?.console_handle || userProfile?.screen_name || 'pro_user').replace(/^@+/, '').replace(/\s+/g, '');
                             if (r === 'fan_only') return '@' + (userProfile?.console_handle || userProfile?.screen_name || 'fan_only').replace(/^@+/, '').replace(/\s+/g, '');
-                            if (r === 'promoter') return '@' + ((userProfile as any)?.promoter_handle || 'promoter_pro').replace(/^@+/, '');
-                            if (r === 'creative') return '@' + ((userProfile as any)?.creative_handle || 'creative_pro').replace(/^@+/, '');
+                            if (r === 'promoter') return '@' + resolvePromoterHandle(userProfile).replace(/^@+/, '');
+                            if (r === 'creative') return '@' + resolveCreativeHandle(userProfile).replace(/^@+/, '');
                             if (r === 'label') return '@' + (userProfile?.label_url_slug || 'label_pro').replace(/^@+/, '');
-                            return '@' + (activeBand?.name || userProfile?.bandName || 'band_core').replace(/^@+/, '').replace(/\s+/g, '');
+                            return '@' + resolveBandHandle(activeBand, userProfile).replace(/^@+/, '');
                           })()}
                         </p>
                       </div>

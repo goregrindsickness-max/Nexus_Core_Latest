@@ -13,6 +13,8 @@ import {
   resolveBandName,
   resolveBandBio,
   resolveBandLocation,
+  resolveCreativeName,
+  resolveCreativeHandle,
   resolveEffectiveAvatar,
   resolveEffectiveCover,
   resolvePromoterName,
@@ -384,7 +386,7 @@ export const LeftProfileDrawer: React.FC<LeftProfileDrawerProps> = (props) => {
 if (!leftDrawerOpen) return null;
 
   return (
-        <div className="fixed inset-0 z-[250] flex">
+        <div className={`fixed inset-0 ${isCommunityCuratorOpen ? 'z-[1000020]' : 'z-[250]'} flex`}>
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md transition-opacity" onClick={() => setLeftDrawerOpen(false)} />
           <div className="relative w-[85%] sm:w-80 max-w-sm bg-[#030303] border-r border-zinc-900 h-full flex flex-col animate-in slide-in-from-left duration-300 shadow-[0_0_80px_rgba(0,0,0,0.95)] overflow-hidden bg-[linear-gradient(to_right,rgba(239,68,68,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(239,68,68,0.06)_1px,transparent_1px)] [background-size:20px_20px]">
             {/* Ambient Aura Glows for Left Drawer */}
@@ -408,7 +410,13 @@ if (!leftDrawerOpen) return null;
               <div className="flex items-center gap-4 relative z-10">
                 {(() => {
                   const effectiveAvatar = resolveEffectiveAvatar(portalRole || 'industry_pro', activeBand, userProfile, profileAvatarUrl);
-                  const effectiveName = portalRole === 'band' ? resolveBandName(activeBand, userProfile) : portalRole === 'promoter' ? resolvePromoterName(userProfile) : ((portalRole as any) === 'label' ? (userProfile?.label_company_name || 'Pro Label') : (profileFullLegalName || 'User'));
+                  const effectiveName = portalRole === 'band' 
+                    ? resolveBandName(activeBand, userProfile) 
+                    : portalRole === 'creative'
+                    ? resolveCreativeName(userProfile)
+                    : portalRole === 'promoter' 
+                    ? resolvePromoterName(userProfile) 
+                    : ((portalRole as any) === 'label' ? (userProfile?.label_company_name || 'Pro Label') : (profileFullLegalName || 'User'));
                   return effectiveAvatar ? (
                     <img src={effectiveAvatar} className="w-14 h-14 rounded-full object-cover border border-rose-500/40 shrink-0 shadow-lg" alt="Profile" />
                   ) : (
@@ -424,12 +432,11 @@ if (!leftDrawerOpen) return null;
                         ? (userProfile?.label_company_name || 'Pro Label') 
                         : (portalRole === 'band'
                             ? resolveBandName(activeBand, userProfile)
-                            : portalRole === 'promoter'
-                                ? resolvePromoterName(userProfile)
-                                : (['creative'].includes(portalRole) || isEmbedded
-                                    ? (profileFullLegalName || (profileHandle ? `@${profileHandle.replace(/^@+/, '')}` : 'Workspace'))
-                                    : (profileHandle ? `@${profileHandle.replace(/^@+/, '')}` : (profileFullLegalName || 'Guest'))))
-                      }
+                            : portalRole === 'creative'
+                                ? resolveCreativeName(userProfile)
+                                : portalRole === 'promoter'
+                                    ? resolvePromoterName(userProfile)
+                                    : (profileHandle ? `@${profileHandle.replace(/^@+/, '')}` : (profileFullLegalName || 'Guest')))}
                     </h2>
                     {isEmbedded && (
                       <span className="text-[7px] font-black uppercase tracking-wider bg-rose-500/20 border border-rose-500/40 text-rose-400 px-1.5 py-0.5 rounded">
@@ -440,11 +447,13 @@ if (!leftDrawerOpen) return null;
                   <p className="text-[9px] text-zinc-400 font-mono truncate mt-0.5">
                     {(portalRole as any) === 'label'
                       ? `Active User: ${userProfile?.name || 'Active Operator'}`
-                      : (portalRole === 'band'
+                      : portalRole === 'band'
                           ? `@${resolveBandHandle(activeBand, userProfile)} • BAND ACCOUNT`
-                          : (['creative', 'promoter'].includes(portalRole) || isEmbedded
-                              ? `@${(portalRole === 'promoter' ? resolvePromoterHandle(userProfile) : profileHandle || 'pro').replace(/^@+/, '')} • ${portalRole.toUpperCase()} ACCOUNT`
-                              : (profileFullLegalName || `@${(profileHandle || 'user').replace(/^@+/, '')}`)))
+                          : portalRole === 'creative'
+                              ? `@${resolveCreativeHandle(userProfile)} • CREATIVE ACCOUNT`
+                              : portalRole === 'promoter'
+                                  ? `@${resolvePromoterHandle(userProfile)} • PROMOTER ACCOUNT`
+                                  : (profileFullLegalName || `@${(profileHandle || 'user').replace(/^@+/, '')}`)
                     }
                   </p>
                 </div>
@@ -721,11 +730,11 @@ if (!leftDrawerOpen) return null;
                               <div className="grid grid-cols-2 gap-3">
                                 {/* Readonly Avatar */}
                                 <div className="space-y-1">
-                                  <label className="text-[10px] uppercase font-bold text-zinc-500">{portalRole === 'band' ? 'Band Logo' : ((portalRole as any) === 'label' ? 'Label Avatar' : 'Profile Avatar')}</label>
+                                  <label className="text-[10px] uppercase font-bold text-zinc-500">{portalRole === 'band' ? 'Band Logo' : (portalRole === 'creative' ? 'Creative Avatar' : ((portalRole as any) === 'label' ? 'Label Avatar' : (portalRole === 'promoter' ? 'Promoter Logo' : 'Profile Avatar')))}</label>
                                   <div className="flex items-center gap-2 mt-1">
                                     <div className="w-12 h-12 rounded-full border border-zinc-800 bg-zinc-950 flex items-center justify-center overflow-hidden">
                                       {(() => {
-                                        const logo = portalRole === 'band' ? resolveBandLogo(activeBand, userProfile) : (profileAvatarUrl || activeBand?.logo_url);
+                                        const logo = resolveEffectiveAvatar(portalRole || 'industry_pro', activeBand, userProfile, profileAvatarUrl);
                                         return logo ? (
                                           <img src={logo} className="w-full h-full object-cover opacity-90" alt="Avatar" />
                                         ) : (
@@ -739,11 +748,11 @@ if (!leftDrawerOpen) return null;
 
                                 {/* Readonly Cover */}
                                 <div className="space-y-1">
-                                  <label className="text-[10px] uppercase font-bold text-zinc-500">{portalRole === 'band' ? 'Band Cover Banner' : ((portalRole as any) === 'label' ? 'Label Banner' : 'Cover Banner')}</label>
+                                  <label className="text-[10px] uppercase font-bold text-zinc-500">{portalRole === 'band' ? 'Band Cover Banner' : (portalRole === 'creative' ? 'Creative Banner' : ((portalRole as any) === 'label' ? 'Label Banner' : (portalRole === 'promoter' ? 'Promoter Banner' : 'Cover Banner')))}</label>
                                   <div className="flex items-center gap-2 mt-1">
                                     <div className="w-16 h-12 rounded border border-zinc-800 bg-zinc-950 flex items-center justify-center overflow-hidden">
                                       {(() => {
-                                        const cover = portalRole === 'band' ? resolveBandCover(activeBand, userProfile) : (profileCoverUrl || activeBand?.cover_url);
+                                        const cover = resolveEffectiveCover(portalRole || 'industry_pro', activeBand, userProfile, profileCoverUrl);
                                         return cover ? (
                                           <img src={cover} className="w-full h-full object-cover opacity-90" alt="Cover" />
                                         ) : (
@@ -757,22 +766,38 @@ if (!leftDrawerOpen) return null;
                               </div>
 
                               <div>
-                                <label className="text-[10px] uppercase font-bold text-zinc-400">{portalRole === 'band' ? 'Band / Artist Entity Name' : ((portalRole as any) === 'label' ? 'Record Label Entity Name' : 'Corporate Entity Name')}</label>
+                                <label className="text-[10px] uppercase font-bold text-zinc-400">{portalRole === 'band' ? 'Band / Artist Entity Name' : (portalRole === 'creative' ? 'Creative Business / Brand Name' : ((portalRole as any) === 'label' ? 'Record Label Entity Name' : (portalRole === 'promoter' ? 'Promoter Brand Name' : 'Entity Name')))}</label>
                                 <input 
                                   type="text" 
-                                  value={portalRole === 'band' ? resolveBandName(activeBand, userProfile) : (profileFullLegalName || '')} 
+                                  value={
+                                    portalRole === 'band' 
+                                      ? resolveBandName(activeBand, userProfile) 
+                                      : portalRole === 'creative'
+                                      ? resolveCreativeName(userProfile)
+                                      : portalRole === 'promoter'
+                                      ? resolvePromoterName(userProfile)
+                                      : ((portalRole as any) === 'label' ? (userProfile?.label_company_name || 'Pro Label') : (profileFullLegalName || ''))
+                                  } 
                                   disabled
                                   className="w-full mt-1 bg-zinc-950/50 border border-zinc-850/50 rounded-xl px-3 py-2.5 text-xs text-zinc-400 disabled:cursor-not-allowed font-medium" 
                                 />
                               </div>
 
                               <div>
-                                <label className="text-[10px] uppercase font-bold text-zinc-400">{portalRole === 'band' ? 'Band Handle / Screen Name' : ((portalRole as any) === 'label' ? 'Label Handle / Screen Name' : 'Brand Handle / Screen Name')}</label>
+                                <label className="text-[10px] uppercase font-bold text-zinc-400">{portalRole === 'band' ? 'Band Handle / Screen Name' : (portalRole === 'creative' ? 'Creative Handle / Screen Name' : ((portalRole as any) === 'label' ? 'Label Handle / Screen Name' : (portalRole === 'promoter' ? 'Promoter Handle / Screen Name' : 'Handle / Screen Name')))}</label>
                                 <div className="relative mt-1">
                                   <span className="absolute left-3.5 top-2.5 text-zinc-600 text-xs font-mono">@</span>
                                   <input 
                                     type="text" 
-                                    value={portalRole === 'band' ? resolveBandHandle(activeBand, userProfile).replace(/^@+/, '') : (profileHandle || '').replace(/^@+/, '')} 
+                                    value={
+                                      portalRole === 'band' 
+                                        ? resolveBandHandle(activeBand, userProfile).replace(/^@+/, '') 
+                                        : portalRole === 'creative'
+                                        ? resolveCreativeHandle(userProfile).replace(/^@+/, '')
+                                        : portalRole === 'promoter'
+                                        ? resolvePromoterHandle(userProfile).replace(/^@+/, '')
+                                        : ((portalRole as any) === 'label' ? (userProfile?.label_url_slug || 'label_pro').replace(/^@+/, '') : (profileHandle || '').replace(/^@+/, ''))
+                                    } 
                                     disabled
                                     className="w-full bg-zinc-950/50 border border-zinc-850/50 rounded-xl py-2.5 pl-7 pr-3 text-xs text-zinc-400 disabled:cursor-not-allowed font-medium" 
                                   />

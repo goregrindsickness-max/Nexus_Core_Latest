@@ -79,18 +79,17 @@ export const resolveActiveUserId = async (supabase: any): Promise<string | null>
     }
   }
 
-  // 3. Scan localStorage values for any UUID match
-  const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key) continue;
-    const val = localStorage.getItem(key) || '';
-    const match = val.match(uuidRegex);
-    if (match) {
-      console.log(`[Profile Resolver] Extracted fallback UUID from key (${key}):`, match[0]);
-      return match[0];
+  // 3. Check current user profile storage key if it contains a verified user ID
+  try {
+    const coreProfile = localStorage.getItem('nexus_core_user_profile');
+    if (coreProfile) {
+      const parsed = JSON.parse(coreProfile);
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (parsed?.id && uuidRegex.test(parsed.id)) {
+        return parsed.id;
+      }
     }
-  }
+  } catch (_) {}
 
   return null;
 };
@@ -248,6 +247,10 @@ export const syncPostToSupabase = async (post: any, directUserId?: string): Prom
 
     const workspaceType = post.workspace_type || post.workspaceType || post.author?.workspace_type || post.author?.workspaceType || post.author?.portalRole || post.portalRole || post.account_type || 'social';
 
+    // Clean author object - never store client-relative isYou in the remote database
+    const cleanAuthor = { ...(post.author || {}) };
+    delete cleanAuthor.isYou;
+
     const normalizedPost = {
       ...post,
       id: postUuid,
@@ -272,12 +275,12 @@ export const syncPostToSupabase = async (post: any, directUserId?: string): Prom
       merchData: post.merchData,
       eventData: post.eventData,
       author: {
-        ...post.author,
-        isYou: true,
+        ...cleanAuthor,
         workspace_type: workspaceType,
         workspaceType: workspaceType
       }
     };
+    delete (normalizedPost as any).isYou;
 
     console.log('[syncPostToSupabase] Publishing post UUID:', postUuid, 'for user UUID:', userId, 'workspace:', workspaceType);
 

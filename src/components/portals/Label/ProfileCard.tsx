@@ -513,11 +513,11 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       full_name: fetchedProfileData.full_name || fetchedProfileData.name || baseTarget.full_name || baseTarget.name,
       name: fetchedProfileData.full_name || fetchedProfileData.name || baseTarget.name,
       console_handle: (baseTarget?.isYou || selectedUserProfile?.isYou)
-        ? '@bdmCEO'
-        : (fetchedProfileData.console_handle || fetchedProfileData.username || fetchedProfileData.handle || baseTarget.console_handle),
+        ? (isOwnerMiguel ? '@bdmCEO' : (userProfile?.console_handle || userProfile?.handle || (userProfile?.name ? `@${userProfile.name.replace(/\s+/g, '_').toLowerCase()}` : '@member')))
+        : (fetchedProfileData.console_handle || fetchedProfileData.username || fetchedProfileData.handle || baseTarget.console_handle || (isOwnerMiguel ? '@bdmCEO' : '@member')),
       handle: (baseTarget?.isYou || selectedUserProfile?.isYou)
-        ? '@bdmCEO'
-        : (fetchedProfileData.console_handle || fetchedProfileData.username || fetchedProfileData.handle || baseTarget.handle),
+        ? (isOwnerMiguel ? '@bdmCEO' : (userProfile?.console_handle || userProfile?.handle || (userProfile?.name ? `@${userProfile.name.replace(/\s+/g, '_').toLowerCase()}` : '@member')))
+        : (fetchedProfileData.console_handle || fetchedProfileData.username || fetchedProfileData.handle || baseTarget.handle || (isOwnerMiguel ? '@bdmCEO' : '@member')),
       city: fetchedProfileData.city || baseTarget.city,
       state_province: fetchedProfileData.state_province || baseTarget.state_province,
       country: fetchedProfileData.country || baseTarget.country,
@@ -554,8 +554,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       bio: bData.bio || baseTarget.bio,
       custom_slug: isArtistOrBand ? (bData.custom_slug || baseTarget.custom_slug) : (fetchedProfileData?.custom_slug || baseTarget.custom_slug),
       console_handle: (baseTarget?.isYou || selectedUserProfile?.isYou)
-        ? '@bdmCEO'
-        : (isArtistOrBand && bData.custom_slug ? `@${bData.custom_slug.replace('@', '')}` : (baseTarget.console_handle || baseTarget.handle || '@bdmCEO')),
+        ? (isOwnerMiguel ? '@bdmCEO' : (userProfile?.console_handle || userProfile?.handle || (userProfile?.name ? `@${userProfile.name.replace(/\s+/g, '_').toLowerCase()}` : '@member')))
+        : (isArtistOrBand && bData.custom_slug ? `@${bData.custom_slug.replace('@', '')}` : (baseTarget.console_handle || baseTarget.handle || (isOwnerMiguel ? '@bdmCEO' : '@member'))),
       genre: bData.genre || baseTarget.genre,
       genre_tags: bData.genre_tags || (bData.genre ? [bData.genre] : baseTarget.genre_tags),
       lineup: bData.lineup || baseTarget.lineup,
@@ -567,11 +567,11 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     } : {
       name: baseTarget?.name || baseTarget?.legalName || baseTarget?.full_name || 'User',
       console_handle: (baseTarget?.isYou || selectedUserProfile?.isYou)
-        ? '@bdmCEO'
+        ? (isOwnerMiguel ? '@bdmCEO' : (userProfile?.console_handle || userProfile?.handle || (userProfile?.name ? `@${userProfile.name.replace(/\s+/g, '_').toLowerCase()}` : '@member')))
         : (baseTarget?.console_handle || baseTarget?.handle || (
             targetRole === 'industry_pro' 
-              ? (userProfile?.console_handle || userProfile?.handle || 'pro_user')
-              : 'user'
+              ? (userProfile?.console_handle || userProfile?.handle || (isOwnerMiguel ? '@bdmCEO' : '@pro_user'))
+              : '@user'
           ))
     })
   };
@@ -1096,11 +1096,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     }
                   }
 
-                  const isMiguelProfile = !selectedUserProfile.isBandProfile && selectedUserProfile.type !== 'band' && !!(
-                    selectedUserProfile.name?.toLowerCase().includes('miguel') ||
-                    selectedUserProfile.name?.toLowerCase().includes('goregrinder') ||
-                    selectedUserProfile.email?.toLowerCase().includes('goregrindsickness')
-                  );
+                  const isMiguelProfile = !selectedUserProfile.isBandProfile && selectedUserProfile.type !== 'band' && isMiguelNameOrProfile(selectedUserProfile);
 
                   if (isMiguelProfile) {
                     badgesToRender.push({
@@ -1129,7 +1125,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       prof.role.toLowerCase().includes('bass')
                     )) ||
                     (isTargetSelf && (userProfile?.band_id || (typeof userProfile?.band_name === 'string' && userProfile.band_name.trim()) || userProfile?.band_profile_id)) ||
-                    isMiguelProfile
+                    (isTargetSelf && isMiguelProfile)
                   );
 
                   if (isTiedToBand) {
@@ -1139,18 +1135,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     });
                   }
 
+                  const isProfMiguel = isMiguelNameOrProfile(prof);
                   const hasPromoterBadge = Boolean(
-                    workspaces.includes('promoter') ||
-                    prof?.promoter_id ||
-                    (typeof prof?.promoter_name === 'string' && prof.promoter_name.trim()) ||
-                    (typeof prof?.promoter_agency === 'string' && prof.promoter_agency.trim()) ||
-                    (typeof prof?.promoter_brand === 'string' && prof.promoter_brand.trim()) ||
-                    (typeof prof?.agency_name === 'string' && prof.agency_name.trim()) ||
+                    prof?.account_type === 'promoter' ||
+                    prof?.active_workspace === 'promoter' ||
                     (prof?.promoter_metadata && typeof prof.promoter_metadata === 'object' && (
-                      (typeof prof.promoter_metadata.brand_name === 'string' && prof.promoter_metadata.brand_name.trim()) ||
-                      (typeof prof.promoter_metadata.agency_name === 'string' && prof.promoter_metadata.agency_name.trim()) ||
-                      prof.promoter_metadata.is_registered === true
-                    ))
+                      prof.promoter_metadata.is_registered === true ||
+                      (isProfMiguel && (prof.promoter_metadata.brand_name || prof.promoter_agency)) ||
+                      (!isProfMiguel && prof.promoter_metadata.brand_name && prof.promoter_metadata.brand_name !== 'Nexus Live Productions')
+                    )) ||
+                    (isProfMiguel && (prof?.promoter_id || prof?.promoter_name)) ||
+                    (workspaces.includes('promoter') && (isProfMiguel || (prof?.promoter_metadata && prof.promoter_metadata.is_registered)))
                   );
 
                   if (hasPromoterBadge) {

@@ -8,6 +8,7 @@ import {
   resolveValidClipUserId,
   generateClipUUID,
 } from '../utils/clipsPersistenceService';
+import { ensureProfileRowExists } from '../utils/postSyncUtils';
 
 interface UploadClipModalProps {
   showUploadClipModal: boolean;
@@ -175,26 +176,27 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
         if (insErr) {
           console.warn('[UploadClipModal] Extended upsert warning:', insErr.message, insErr.code);
           // If foreign key constraint failed on user_id, retry with verified active user UUID
-          if (insErr.code === '23503' && validUserId !== '5403162d-1947-43aa-b5f6-38a1bd2a1b80') {
-            console.log('[UploadClipModal] Retrying with verified active user ID...');
-            payload.user_id = '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
-            payload.profile_id = '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
-            newClipObj.user_id = '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
-            newClipObj.profile_id = '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
-            const { data: retryData, error: retryErr } = await supabaseClient
-              .from('clips')
-              .upsert([payload], { onConflict: 'id' })
-              .select();
-            if (!retryErr && retryData && retryData[0]) {
-              console.log('[UploadClipModal] Clip persisted on retry:', retryData[0].id);
-              return retryData[0];
+          if (insErr.code === '23503') {
+            console.log('[UploadClipModal] Ensuring profile row exists for validUserId and retrying...');
+            try {
+              await ensureProfileRowExists(supabaseClient, validUserId, userProfile);
+              const { data: retryData, error: retryErr } = await supabaseClient
+                .from('clips')
+                .upsert([payload], { onConflict: 'id' })
+                .select();
+              if (!retryErr && retryData && retryData[0]) {
+                console.log('[UploadClipModal] Clip persisted on retry:', retryData[0].id);
+                return retryData[0];
+              }
+            } catch (pErr) {
+              console.warn('[UploadClipModal] Profile row check error:', pErr);
             }
           }
 
           // Core schema fallback
           const corePayload = {
             id: clipId,
-            user_id: payload.user_id || '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
+            user_id: payload.user_id || validUserId,
             video_url: activeUrl,
             title: title,
             description: caption,
@@ -263,6 +265,14 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
               console.warn('[UploadClipModal] Failed to update remote URL in DB:', upErr);
             }
 
+            try {
+              await fetch('/api/clips', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...newClipObj, video_url: remoteUrl, videoUrl: remoteUrl }),
+              });
+            } catch (_) {}
+
             // Update local state with permanent Supabase Storage URL
             setClips(prev =>
               prev.map(c =>
@@ -320,6 +330,14 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
       setUploadStatusText('Saving clip record to database...');
 
       await persistClipToSupabase(isRemotePermanent ? remoteUrl : activeClipUrl);
+
+      try {
+        await fetch('/api/clips', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newClipObj),
+        });
+      } catch (_) {}
 
       setUploadProgress(100);
       setUploadStatusText('Complete!');
