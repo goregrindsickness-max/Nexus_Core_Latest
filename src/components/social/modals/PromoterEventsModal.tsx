@@ -25,9 +25,15 @@ import {
   Eye,
   SlidersHorizontal,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ShieldCheck,
+  QrCode,
+  TicketCheck
 } from 'lucide-react';
 import { fetchArchiveShowsFromDatabase, ArchiveShowItem, parseVenueAndAddress, classifyEventType } from '../../../services/archiveShowsService';
+import BandClaimHandoverModal from './BandClaimHandoverModal';
+import { communityBandManager, CommunityBandRecord } from '../../../lib/communityBands';
+import { syncShowRsvpWithServer, trigger24hShowRemindersOnServer } from '../../../lib/pushNotifications';
 
 export interface PromoterEventsModalProps {
   isOpen: boolean;
@@ -111,6 +117,26 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
     }
   });
 
+  // Claimed Fan Passes State (stored in localStorage)
+  const [claimedPassShowIds, setClaimedPassShowIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_claimed_passes');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  // Selected Pass Show for Digital Fan Pass Modal
+  const [selectedPassShow, setSelectedPassShow] = useState<PromoterEventItem | null>(null);
+
+  // Supporting Band Claim Record for BandClaimHandoverModal
+  const [claimingBandRecord, setClaimingBandRecord] = useState<CommunityBandRecord | null>(null);
+
+  // Additional Past Shows Filters
+  const [pastYearFilter, setPastYearFilter] = useState<string>('all');
+  const [pastTypeFilter, setPastTypeFilter] = useState<string>('all');
+
   // Track expanded cards state (collapsed by default)
   const [expandedShowIds, setExpandedShowIds] = useState<Set<string>>(new Set());
 
@@ -125,6 +151,36 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
       }
       return next;
     });
+  };
+
+  // Handle Pass Issue / Toggle
+  const handleGetPass = (event: PromoterEventItem, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setClaimedPassShowIds(prev => {
+      const next = new Set(prev);
+      next.add(event.id);
+      try {
+        localStorage.setItem('nexus_claimed_passes', JSON.stringify(Array.from(next)));
+      } catch (_) {}
+      return next;
+    });
+    setSelectedPassShow(event);
+    triggerNotification?.(`🎟️ Digital Guest Entry Pass issued for "${event.title}"!`);
+  };
+
+  // Handle Supporting Band Profile Claim
+  const handleClaimBandProfile = (bandName: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    let bandRecord = communityBandManager.findByName(bandName);
+    if (!bandRecord) {
+      bandRecord = communityBandManager.upsertCommunityBand({
+        name: bandName,
+        band_name: bandName,
+        genre: 'Metal / Hardcore',
+        verification_status: 'community_archive'
+      });
+    }
+    setClaimingBandRecord(bandRecord);
   };
 
   const [dbArchiveShows, setDbArchiveShows] = useState<ArchiveShowItem[]>([]);
@@ -273,10 +329,32 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
       if (isRsvped) {
         next.delete(event.id);
         triggerNotification?.(`Cancelled RSVP for "${event.title}"`);
+        syncShowRsvpWithServer({
+          show_id: event.id,
+          show_title: event.title,
+          show_date: event.dateRaw || event.date,
+          venue_name: event.venue,
+          city: event.city,
+          user_id: userProfile?.id,
+          user_email: userProfile?.email,
+          action: 'cancel'
+        });
       } else {
         next.add(event.id);
         triggerNotification?.(`🔥 RSVP Confirmed! Added "${event.title}" to your Pit List.`);
         
+        // Sync RSVP with server show_rsvps table & register VAPID push subscription
+        syncShowRsvpWithServer({
+          show_id: event.id,
+          show_title: event.title,
+          show_date: event.dateRaw || event.date,
+          venue_name: event.venue,
+          city: event.city,
+          user_id: userProfile?.id,
+          user_email: userProfile?.email,
+          action: 'rsvp'
+        });
+
         // Dispatch global event for Sonic XP & timeline feeds
         try {
           window.dispatchEvent(new CustomEvent('nexus_show_rsvped', {
@@ -301,7 +379,18 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
         triggerNotification?.(`⏰ Reminder removed for "${event.title}"`);
       } else {
         next.add(event.id);
-        triggerNotification?.(`⏰ Show reminder scheduled for "${event.title}"!`);
+        triggerNotification?.(`⏰ 24h VAPID push reminder scheduled for "${event.title}"!`);
+        // Sync RSVP with show_rsvps table to guarantee 24h push delivery
+        syncShowRsvpWithServer({
+          show_id: event.id,
+          show_title: event.title,
+          show_date: event.dateRaw || event.date,
+          venue_name: event.venue,
+          city: event.city,
+          user_id: userProfile?.id,
+          user_email: userProfile?.email,
+          action: 'rsvp'
+        });
       }
       try {
         localStorage.setItem('nexus_show_reminders', JSON.stringify(Array.from(next)));
@@ -433,18 +522,52 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
   const pastEventsCount = profileEvents.filter(ev => ev.isPast || (ev.dateRaw && ev.dateRaw.split('T')[0] < todayStr)).length;
 
   const filteredEvents = profileEvents.filter(ev => {
+    const isPastDate = Boolean(ev.dateRaw && ev.dateRaw.split('T')[0] < todayStr);
+    const isPastShow = Boolean(ev.isPast || isPastDate);
+
     if (filterType === 'rsvps') {
       return rsvpedShowIds.has(ev.id);
     }
     
     if (filterType === 'past') {
-      const isPastDate = Boolean(ev.dateRaw && ev.dateRaw.split('T')[0] < todayStr);
-      return Boolean(ev.isPast || isPastDate);
+      if (!isPastShow) return false;
+
+      // Year Filter
+      if (pastYearFilter !== 'all') {
+        const dateStr = (ev.date || '') + ' ' + (ev.dateRaw || '');
+        if (!dateStr.includes(pastYearFilter)) {
+          return false;
+        }
+      }
+
+      // Type Filter
+      if (pastTypeFilter !== 'all') {
+        if (pastTypeFilter === 'festival' && ev.type !== 'festival') return false;
+        if (pastTypeFilter === 'tour' && ev.type !== 'tour') return false;
+        if (pastTypeFilter === 'club_gig' && ev.type !== 'club_gig' && ev.type !== 'showcase') return false;
+      }
+
+      // Search Query Filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchTitle = ev.title.toLowerCase().includes(q);
+        const matchVenue = (ev.venue || '').toLowerCase().includes(q);
+        const matchVenueAddr = (ev.venueAddress || '').toLowerCase().includes(q);
+        const matchCity = (ev.city || '').toLowerCase().includes(q);
+        const matchDate = (ev.date || '').toLowerCase().includes(q);
+        const matchLineup = Array.isArray(ev.lineup) && ev.lineup.some(b => typeof b === 'string' && b.toLowerCase().includes(q));
+        const matchNotes = (ev.description || ev.historicalNotes || '').toLowerCase().includes(q);
+
+        if (!matchTitle && !matchVenue && !matchVenueAddr && !matchCity && !matchDate && !matchLineup && !matchNotes) {
+          return false;
+        }
+      }
+
+      return true;
     }
 
     // For upcoming categories, filter out past shows
-    const isPastDate = Boolean(ev.dateRaw && ev.dateRaw.split('T')[0] < todayStr);
-    if (ev.isPast || isPastDate) {
+    if (isPastShow) {
       return false;
     }
 
@@ -457,10 +580,11 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const matchTitle = ev.title.toLowerCase().includes(q);
-      const matchVenue = ev.venue.toLowerCase().includes(q);
-      const matchCity = ev.city.toLowerCase().includes(q);
-      const matchLineup = ev.lineup.some(b => b.toLowerCase().includes(q));
-      if (!matchTitle && !matchVenue && !matchCity && !matchLineup) return false;
+      const matchVenue = (ev.venue || '').toLowerCase().includes(q);
+      const matchVenueAddr = (ev.venueAddress || '').toLowerCase().includes(q);
+      const matchCity = (ev.city || '').toLowerCase().includes(q);
+      const matchLineup = Array.isArray(ev.lineup) && ev.lineup.some(b => typeof b === 'string' && b.toLowerCase().includes(q));
+      if (!matchTitle && !matchVenue && !matchVenueAddr && !matchCity && !matchLineup) return false;
     }
     return true;
   });
@@ -725,6 +849,62 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
           </div>
         </div>
 
+        {/* Secondary Sub-Bar for Past Shows Search & Filter */}
+        {filterType === 'past' && (
+          <div className="p-3 bg-zinc-900/90 border-b border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 font-mono text-xs animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+              <span className="text-[10px] uppercase font-bold text-amber-400 flex items-center gap-1">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                Past Shows Search Filters:
+              </span>
+
+              {/* Year Dropdown */}
+              <select
+                value={pastYearFilter}
+                onChange={(e) => setPastYearFilter(e.target.value)}
+                className="bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+              >
+                <option value="all">📅 All Years</option>
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
+                <option value="2024">2024</option>
+                <option value="2023">2023</option>
+                <option value="2022">2022</option>
+              </select>
+
+              {/* Show Type Dropdown */}
+              <select
+                value={pastTypeFilter}
+                onChange={(e) => setPastTypeFilter(e.target.value)}
+                className="bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+              >
+                <option value="all">🎪 All Event Types</option>
+                <option value="tour">🚀 Tour Stops</option>
+                <option value="festival">🔥 Festivals</option>
+                <option value="club_gig">🎸 Club Gigs</option>
+              </select>
+
+              {(pastYearFilter !== 'all' || pastTypeFilter !== 'all' || searchQuery.trim()) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPastYearFilter('all');
+                    setPastTypeFilter('all');
+                    setSearchQuery('');
+                  }}
+                  className="text-[10px] text-amber-400 hover:text-amber-300 underline font-bold cursor-pointer"
+                >
+                  Reset Filters
+                </button>
+              )}
+            </div>
+
+            <div className="text-[11px] text-zinc-400">
+              Showing <strong className="text-amber-300">{filteredEvents.length}</strong> past dates
+            </div>
+          </div>
+        )}
+
         {/* Events Content List */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           {filteredEvents.length === 0 ? (
@@ -951,14 +1131,30 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                                 ⭐ {promoterProfile?.band_name || promoterProfile?.name || targetName}
                               </span>
                             )}
-                            {cleanedLineup.map((band: string, idx: number) => (
-                              <span 
-                                key={`${event.id}-band-${idx}`}
-                                className="px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-lg text-xs font-mono font-semibold"
-                              >
-                                {band}
-                              </span>
-                            ))}
+                            {cleanedLineup.map((band: string, idx: number) => {
+                              const bandRec = communityBandManager.findByName(band);
+                              const isClaimed = bandRec?.verification_status === 'verified_official';
+
+                              return (
+                                <div 
+                                  key={`${event.id}-band-${idx}`}
+                                  className="px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-lg text-xs font-mono font-semibold flex items-center gap-2"
+                                >
+                                  <span>{band}</span>
+                                  {!isClaimed && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleClaimBandProfile(band, e)}
+                                      className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors flex items-center gap-1 cursor-pointer"
+                                      title={`Claim official Nexus profile for ${band}`}
+                                    >
+                                      <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                                      <span>Claim Profile</span>
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
 
@@ -1069,24 +1265,24 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (isPastShow) return;
-                                if (openCheckout) {
-                                  openCheckout('ticket', {
-                                    name: event.title,
-                                    venue: event.venue,
-                                    date: event.date,
-                                    price: parseFloat((event.price || '25').replace(/[^0-9.]/g, '')) || 25
-                                  });
-                                }
-                                triggerNotification?.(`🎟️ Adding pass for "${event.title}" to secure checkout...`);
+                                handleGetPass(event, e);
                               }}
                               className={`w-full sm:w-auto px-4 py-2 text-xs font-black uppercase font-mono rounded-xl transition-all flex items-center justify-center gap-1.5 ${
                                 isPastShow
                                   ? 'bg-zinc-900 text-zinc-500 border border-zinc-800 cursor-not-allowed opacity-60 shadow-none'
+                                  : claimedPassShowIds.has(event.id)
+                                  ? 'bg-amber-400 text-black shadow-[0_0_15px_rgba(245,158,11,0.3)] cursor-pointer'
                                   : 'bg-yellow-500 hover:bg-yellow-400 active:scale-95 text-black shadow-[0_0_15px_rgba(234,179,8,0.25)] cursor-pointer'
                               }`}
                             >
                               <Ticket className="w-3.5 h-3.5" />
-                              <span>{isPastShow ? 'Passes Expired (Concluded)' : 'Get Passes'}</span>
+                              <span>
+                                {isPastShow 
+                                  ? 'Passes Expired (Concluded)' 
+                                  : claimedPassShowIds.has(event.id) 
+                                  ? '🎟️ Pass Issued (View Pass)' 
+                                  : 'Get Guest Pass'}
+                              </span>
                             </button>
                           </div>
                         </div>
@@ -1114,6 +1310,136 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
             Close View
           </button>
         </div>
+
+        {/* Digital Fan Pass Modal Overlay */}
+        {selectedPassShow && (
+          <div className="fixed inset-0 z-[1000010] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="w-full max-w-md bg-[#090a0f] border border-amber-500/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col font-mono">
+              {/* Header */}
+              <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-amber-950/40 via-zinc-900 to-zinc-950 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TicketCheck className="w-5 h-5 text-amber-400" />
+                  <h3 className="font-bold text-white uppercase text-sm tracking-wider">Digital Guest Entry Pass</h3>
+                </div>
+                <button
+                  onClick={() => setSelectedPassShow(null)}
+                  className="p-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Pass Body */}
+              <div className="p-5 space-y-4">
+                {/* Pass Graphic Card */}
+                <div className="p-4 rounded-xl bg-gradient-to-br from-zinc-900 via-zinc-950 to-black border border-amber-500/30 shadow-lg relative overflow-hidden space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-amber-500 text-black">
+                        VIP PIT ACCESS PASS
+                      </span>
+                      <h4 className="text-base font-black text-white uppercase tracking-wide mt-1">
+                        {selectedPassShow.title}
+                      </h4>
+                    </div>
+                    <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
+                  </div>
+
+                  <div className="text-xs text-zinc-300 space-y-1 pt-2 border-t border-zinc-850">
+                    <div>📍 Venue: <strong className="text-amber-300">{selectedPassShow.venue}</strong></div>
+                    {selectedPassShow.venueAddress && (
+                      <div className="text-zinc-400">Address: {selectedPassShow.venueAddress}</div>
+                    )}
+                    <div>🌆 City: {selectedPassShow.city}</div>
+                    <div>📅 Date: <strong className="text-white">{selectedPassShow.date}</strong></div>
+                    <div>⏰ Doors: {selectedPassShow.doorsTime || '7:00 PM'}</div>
+                  </div>
+
+                  {/* Barcode Graphic */}
+                  <div className="pt-3 border-t border-dashed border-zinc-800 flex flex-col items-center justify-center space-y-1">
+                    <div className="flex gap-1 items-center h-8 bg-white p-2 rounded w-full justify-center">
+                      {[...Array(24)].map((_, i) => (
+                        <div key={i} className={`h-full ${i % 3 === 0 ? 'w-1.5 bg-black' : i % 2 === 0 ? 'w-1 bg-black' : 'w-0.5 bg-black'}`} />
+                      ))}
+                    </div>
+                    <span className="text-[9px] text-zinc-500 font-mono tracking-widest uppercase">
+                      PASS #{selectedPassShow.id.slice(-8).toUpperCase()} • VALIDATED
+                    </span>
+                  </div>
+                </div>
+
+                {/* Reminder Toggle */}
+                <div className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className={`w-4 h-4 ${remindedShowIds.has(selectedPassShow.id) ? 'text-purple-400 fill-purple-400' : 'text-zinc-400'}`} />
+                    <div>
+                      <div className="text-xs font-bold text-white">Show Reminder Notification</div>
+                      <div className="text-[10px] text-zinc-400">Receive an alert 24 hours before doors open</div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleReminder(selectedPassShow)}
+                    className={`px-3 py-1 rounded text-xs font-bold uppercase transition-colors cursor-pointer ${
+                      remindedShowIds.has(selectedPassShow.id)
+                        ? 'bg-purple-900 text-purple-200 border border-purple-500'
+                        : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                    }`}
+                  >
+                    {remindedShowIds.has(selectedPassShow.id) ? 'Enabled' : 'Enable'}
+                  </button>
+                </div>
+                {/* Test VAPID Push Trigger */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      triggerNotification?.("⚡ Triggering 24h VAPID push reminder service...");
+                      const res = await trigger24hShowRemindersOnServer();
+                      if (res.success) {
+                        triggerNotification?.(`🔔 VAPID Push Service executed! Checked ${res.checked || 0} RSVPs (${res.remindersSent || 0} push sent)`);
+                      } else {
+                        triggerNotification?.("🔔 VAPID Push Service triggered!");
+                      }
+                    }}
+                    className="w-full py-1.5 bg-purple-950/60 hover:bg-purple-900/80 border border-purple-500/30 rounded-lg text-[10px] text-purple-300 font-mono font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Bell className="w-3 h-3 text-purple-400" /> Test 24h VAPID Push Notification Service
+                  </button>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex items-center justify-between">
+                <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" /> Saved to My Profile Passes
+                </span>
+
+                <button
+                  onClick={() => setSelectedPassShow(null)}
+                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-black text-xs font-black uppercase rounded-lg transition-colors cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Supporting Band Claim Handover Modal */}
+        {claimingBandRecord && (
+          <BandClaimHandoverModal
+            isOpen={Boolean(claimingBandRecord)}
+            onClose={() => setClaimingBandRecord(null)}
+            bandRecord={claimingBandRecord}
+            currentUserId={userProfile?.id || promoterProfile?.id || 'guest'}
+            onClaimSuccess={(claimedBand) => {
+              triggerNotification?.(`🎉 Successfully claimed official profile for "${claimedBand.name}"!`);
+              setClaimingBandRecord(null);
+            }}
+          />
+        )}
       </motion.div>
     </div>
   );

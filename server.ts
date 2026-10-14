@@ -1475,6 +1475,337 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     }
   });
 
+  // ============================================================
+  // SHOW RSVPS & 24-HOUR VAPID PUSH REMINDER SERVICE ENGINE
+  // ============================================================
+  const SHOW_RSVPS_FILE = path.join(process.cwd(), "data", "show_rsvps.json");
+
+  interface ShowRsvp {
+    id: string;
+    show_id: string;
+    user_id?: string;
+    user_email?: string;
+    show_title: string;
+    show_date: string;
+    venue_name?: string;
+    city?: string;
+    reminder_sent_24h?: boolean;
+    created_at: string;
+  }
+
+  function readShowRsvps(): ShowRsvp[] {
+    try {
+      if (fs.existsSync(SHOW_RSVPS_FILE)) {
+        return JSON.parse(fs.readFileSync(SHOW_RSVPS_FILE, "utf-8")) || [];
+      }
+    } catch (e) {
+      console.warn("[SHOW RSVPS] Could not read file:", e);
+    }
+    return [];
+  }
+
+  function writeShowRsvps(rsvps: ShowRsvp[]) {
+    try {
+      const dir = path.dirname(SHOW_RSVPS_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(SHOW_RSVPS_FILE, JSON.stringify(rsvps, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[SHOW RSVPS] Could not write file:", e);
+    }
+  }
+
+  async function syncRsvpToSupabase(rsvp: ShowRsvp) {
+    const supabase = getSupabaseService();
+    if (supabase) {
+      try {
+        await supabase.from('show_rsvps').upsert({
+          id: rsvp.id,
+          show_id: rsvp.show_id,
+          user_id: rsvp.user_id || null,
+          user_email: rsvp.user_email || null,
+          show_title: rsvp.show_title,
+          show_date: rsvp.show_date,
+          venue_name: rsvp.venue_name || null,
+          city: rsvp.city || null,
+          reminder_sent_24h: rsvp.reminder_sent_24h || false,
+          created_at: rsvp.created_at
+        }, { onConflict: 'id' });
+      } catch (err: any) {
+        console.warn("[SHOW RSVPS SUPABASE SYNC NOTICE]", err?.message || err);
+      }
+    }
+  }
+
+  async function checkAndSend24hShowReminders() {
+    console.log("[SHOW REMINDERS SERVICE] Executing 24h VAPID push reminder check for show RSVPs...");
+    let rsvps = readShowRsvps();
+
+    // Sync with Supabase show_rsvps table if present
+    const supabase = getSupabaseService();
+    if (supabase) {
+      try {
+        const { data: dbRsvps, error: dbErr } = await supabase.from('show_rsvps').select('*');
+        if (!dbErr && Array.isArray(dbRsvps)) {
+          const map = new Map(rsvps.map(r => [r.id, r]));
+          dbRsvps.forEach((item: any) => {
+            const itemKey = item.id || `rsvp_${item.show_id}_${item.user_id || item.user_email || 'anon'}`;
+            map.set(itemKey, {
+              id: itemKey,
+              show_id: String(item.show_id),
+              user_id: item.user_id,
+              user_email: item.user_email,
+              show_title: item.show_title || item.title || "Live Concert",
+              show_date: item.show_date || item.date || new Date().toISOString().split('T')[0],
+              venue_name: item.venue_name || item.venue,
+              city: item.city,
+              reminder_sent_24h: Boolean(item.reminder_sent_24h),
+              created_at: item.created_at || new Date().toISOString()
+            });
+          });
+          rsvps = Array.from(map.values());
+          writeShowRsvps(rsvps);
+        }
+      } catch (err: any) {
+        console.warn("[SHOW REMINDERS SERVICE] Supabase query notice:", err?.message || err);
+      }
+    }
+
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const todayStr = now.toISOString().split('T')[0];
+
+    let sentCount = 0;
+    const allSubs = readPushSubscriptions();
+
+    for (const rsvp of rsvps) {
+      if (rsvp.reminder_sent_24h) continue;
+
+      const rawDateStr = rsvp.show_date || '';
+      const cleanDateStr = rawDateStr.split('T')[0];
+
+      let is24hWindow = false;
+      if (cleanDateStr === tomorrowStr || cleanDateStr === todayStr) {
+        is24hWindow = true;
+      } else {
+        const showTimeMs = new Date(rawDateStr).getTime();
+        if (!isNaN(showTimeMs)) {
+          const hoursDiff = (showTimeMs - now.getTime()) / (1000 * 60 * 60);
+          if (hoursDiff >= -2 && hoursDiff <= 32) {
+            is24hWindow = true;
+          }
+        }
+      }
+
+      if (!is24hWindow) continue;
+
+      // Find matching subscriptions for the fan who RSVP'd
+      let targetSubs = allSubs.filter(s => {
+        if (rsvp.user_id && (s.userId === rsvp.user_id || s.userEmail === rsvp.user_id)) return true;
+        if (rsvp.user_email && s.userEmail?.toLowerCase() === rsvp.user_email.toLowerCase()) return true;
+        return false;
+      });
+
+      // Broadcast to active push endpoints if no direct user ID is tied to subscription
+      if (targetSubs.length === 0 && allSubs.length > 0) {
+        targetSubs = allSubs;
+      }
+
+      if (targetSubs.length === 0) {
+        console.log(`[SHOW REMINDERS SERVICE] No active push subscriptions found for RSVP ${rsvp.id} ("${rsvp.show_title}")`);
+        continue;
+      }
+
+      const payload = JSON.stringify({
+        title: `🔥 Concert Tomorrow: ${rsvp.show_title}`,
+        body: `Reminder: You have an RSVP for ${rsvp.show_title}${rsvp.venue_name ? ` at ${rsvp.venue_name}` : ''}${rsvp.city ? ` (${rsvp.city})` : ''} tomorrow! Your digital pass is ready in your pit list.`,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag: `nexus-rsvp-24h-${rsvp.show_id}`,
+        targetTab: "social",
+        category: "vip_guestlist_access",
+        workspace: "fan_only",
+        data: {
+          showId: rsvp.show_id,
+          showTitle: rsvp.show_title,
+          venueName: rsvp.venue_name,
+          city: rsvp.city,
+          type: "24h_show_reminder"
+        },
+        timestamp: Date.now()
+      });
+
+      let pushDelivered = false;
+      for (const subEntry of targetSubs) {
+        try {
+          if (subEntry.subscription?.endpoint?.startsWith('native://')) {
+            pushDelivered = true;
+            continue;
+          }
+          await webpush.sendNotification(subEntry.subscription, payload);
+          pushDelivered = true;
+        } catch (pushErr: any) {
+          console.warn(`[SHOW REMINDERS SERVICE] Push delivery exception for ${subEntry.id}:`, pushErr?.message || pushErr);
+        }
+      }
+
+      if (pushDelivered || targetSubs.length > 0) {
+        rsvp.reminder_sent_24h = true;
+        sentCount++;
+        console.log(`[SHOW REMINDERS SERVICE SUCCESS] Sent 24h VAPID push notification to ${targetSubs.length} device(s) for "${rsvp.show_title}" (ID: ${rsvp.show_id})`);
+
+        recordEmailLog(
+          "/api/push/show-reminders-24h",
+          rsvp.user_email || "fan@nexuscore.app",
+          "push-gateway@nexuscore.app",
+          `24h Show Push Reminder: ${rsvp.show_title}`,
+          "SUCCESS",
+          { showId: rsvp.show_id, venue: rsvp.venue_name, devicesNotified: targetSubs.length }
+        );
+
+        if (supabase) {
+          try {
+            await supabase.from('show_rsvps').update({ reminder_sent_24h: true }).eq('show_id', rsvp.show_id);
+          } catch (_) {}
+        }
+      }
+    }
+
+    writeShowRsvps(rsvps);
+    return { checked: rsvps.length, remindersSent: sentCount, timestamp: new Date().toISOString() };
+  }
+
+  // API ROUTE: Get all RSVPs for current user or show
+  app.get("/api/shows/rsvps", (req, res) => {
+    try {
+      const { userId, userEmail, showId } = req.query;
+      let rsvps = readShowRsvps();
+      if (userId) {
+        rsvps = rsvps.filter(r => r.user_id === userId || r.user_email === userId);
+      }
+      if (userEmail) {
+        rsvps = rsvps.filter(r => r.user_email?.toLowerCase() === String(userEmail).toLowerCase());
+      }
+      if (showId) {
+        rsvps = rsvps.filter(r => r.show_id === showId);
+      }
+      res.json({ success: true, count: rsvps.length, rsvps });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to load RSVPs" });
+    }
+  });
+
+  // API ROUTE: Add or update RSVP in show_rsvps table & local cache
+  app.post("/api/shows/rsvp", express.json(), async (req, res) => {
+    try {
+      const { show_id, show_title, show_date, venue_name, city, user_id, user_email, pushSubscription } = req.body;
+      if (!show_id || !show_title) {
+        return res.status(400).json({ error: "show_id and show_title are required" });
+      }
+
+      const rsvps = readShowRsvps();
+      const rsvpKey = `rsvp_${show_id}_${user_id || user_email || 'anon'}`;
+      const existingIdx = rsvps.findIndex(r => r.id === rsvpKey || (r.show_id === String(show_id) && (r.user_id === user_id || r.user_email === user_email)));
+
+      const rsvpRecord: ShowRsvp = {
+        id: existingIdx >= 0 ? rsvps[existingIdx].id : rsvpKey,
+        show_id: String(show_id),
+        user_id: user_id || (existingIdx >= 0 ? rsvps[existingIdx].user_id : undefined),
+        user_email: user_email || (existingIdx >= 0 ? rsvps[existingIdx].user_email : undefined),
+        show_title: String(show_title),
+        show_date: String(show_date || new Date().toISOString().split('T')[0]),
+        venue_name: venue_name || (existingIdx >= 0 ? rsvps[existingIdx].venue_name : undefined),
+        city: city || (existingIdx >= 0 ? rsvps[existingIdx].city : undefined),
+        reminder_sent_24h: false,
+        created_at: existingIdx >= 0 ? rsvps[existingIdx].created_at : new Date().toISOString()
+      };
+
+      if (existingIdx >= 0) {
+        rsvps[existingIdx] = rsvpRecord;
+      } else {
+        rsvps.push(rsvpRecord);
+      }
+
+      writeShowRsvps(rsvps);
+      await syncRsvpToSupabase(rsvpRecord);
+
+      // Register push subscription if provided in body
+      if (pushSubscription && pushSubscription.endpoint) {
+        const subs = readPushSubscriptions();
+        const subEndpoint = pushSubscription.endpoint;
+        const subIdx = subs.findIndex(s => s.subscription?.endpoint === subEndpoint);
+        const subEntry = {
+          id: subIdx >= 0 ? subs[subIdx].id : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          subscription: pushSubscription,
+          userId: user_id || user_email,
+          userEmail: user_email,
+          created_at: new Date().toISOString(),
+          last_used_at: new Date().toISOString()
+        };
+        if (subIdx >= 0) subs[subIdx] = subEntry; else subs.push(subEntry);
+        writePushSubscriptions(subs);
+      }
+
+      console.log(`[SHOW RSVP SUCCESS] Registered RSVP for "${show_title}" (ID: ${show_id}, User: ${user_email || user_id || 'anon'})`);
+      res.json({ success: true, rsvp: rsvpRecord });
+    } catch (err: any) {
+      console.error("[SHOW RSVP ERROR]", err);
+      res.status(500).json({ error: err.message || "Failed to register RSVP" });
+    }
+  });
+
+  // API ROUTE: Cancel RSVP
+  app.delete("/api/shows/rsvp/:showId", express.json(), async (req, res) => {
+    try {
+      const { showId } = req.params;
+      const { userId, userEmail } = req.body || {};
+
+      let rsvps = readShowRsvps();
+      rsvps = rsvps.filter(r => {
+        if (r.show_id !== showId) return true;
+        if (userId && r.user_id === userId) return false;
+        if (userEmail && r.user_email?.toLowerCase() === String(userEmail).toLowerCase()) return false;
+        if (!userId && !userEmail) return false; // delete all matching showId
+        return true;
+      });
+
+      writeShowRsvps(rsvps);
+
+      const supabase = getSupabaseService();
+      if (supabase) {
+        try {
+          let q = supabase.from('show_rsvps').delete().eq('show_id', showId);
+          if (userId) q = q.eq('user_id', userId);
+          else if (userEmail) q = q.eq('user_email', userEmail);
+          await q;
+        } catch (_) {}
+      }
+
+      res.json({ success: true, showId });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to cancel RSVP" });
+    }
+  });
+
+  // API ROUTE: Manually trigger 24h VAPID push reminder dispatch for show RSVPs
+  app.post("/api/push/trigger-show-reminders", async (req, res) => {
+    try {
+      const result = await checkAndSend24hShowReminders();
+      res.json({ success: true, ...result });
+    } catch (err: any) {
+      console.error("[TRIGGER SHOW REMINDERS ERROR]", err);
+      res.status(500).json({ error: err.message || "Failed to trigger show reminders" });
+    }
+  });
+
+  // Start background service timer: checks show RSVPs for 24h push reminders every 15 minutes
+  setTimeout(() => {
+    checkAndSend24hShowReminders().catch(err => console.warn("[BACKGROUND SHOW REMINDERS STARTUP NOTICE]", err));
+  }, 5000);
+  setInterval(() => {
+    checkAndSend24hShowReminders().catch(err => console.warn("[BACKGROUND SHOW REMINDERS CRON NOTICE]", err));
+  }, 15 * 60 * 1000);
+
   // Bandcamp URL resolver API: resolves any Bandcamp track or album URL into an embed player URL & metadata
   app.post("/api/bandcamp/resolve", async (req, res) => {
     try {

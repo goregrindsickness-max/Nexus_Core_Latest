@@ -903,3 +903,86 @@ class DevicePushManager {
 }
 
 export const pushManager = new DevicePushManager();
+
+/**
+ * Synchronizes a show RSVP with the server's show_rsvps database table and registers VAPID push subscription
+ */
+export async function syncShowRsvpWithServer(rsvpData: {
+  show_id: string;
+  show_title: string;
+  show_date: string;
+  venue_name?: string;
+  city?: string;
+  user_id?: string;
+  user_email?: string;
+  action?: 'rsvp' | 'cancel';
+}): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const userId = rsvpData.user_id || localStorage.getItem('nexus_auth_user_id') || undefined;
+    const userEmail = rsvpData.user_email || localStorage.getItem('nexus_auth_user_email') || undefined;
+
+    if (rsvpData.action === 'cancel') {
+      const res = await fetch(`/api/shows/rsvp/${rsvpData.show_id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, userEmail })
+      });
+      return res.ok;
+    }
+
+    // Auto-request push permission & obtain VAPID subscription
+    let pushSub: any = null;
+    try {
+      if ('Notification' in window && Notification.permission !== 'granted') {
+        await pushManager.requestPermission({ id: userId, email: userEmail });
+      }
+      const sub = await pushManager.subscribeToPushServer({ id: userId, email: userEmail });
+      if (sub) {
+        pushSub = sub.toJSON ? sub.toJSON() : sub;
+      }
+    } catch (e) {
+      console.warn('[PushManager] Push subscription notice during RSVP:', e);
+    }
+
+    const res = await fetch('/api/shows/rsvp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        show_id: String(rsvpData.show_id),
+        show_title: rsvpData.show_title,
+        show_date: rsvpData.show_date,
+        venue_name: rsvpData.venue_name,
+        city: rsvpData.city,
+        user_id: userId,
+        user_email: userEmail,
+        pushSubscription: pushSub
+      })
+    });
+
+    return res.ok;
+  } catch (err) {
+    console.warn('[PushManager] syncShowRsvpWithServer error:', err);
+    return false;
+  }
+}
+
+/**
+ * Manually invokes the 24-hour VAPID show push notification service on the server
+ */
+export async function trigger24hShowRemindersOnServer(): Promise<{ success: boolean; checked?: number; remindersSent?: number }> {
+  if (typeof window === 'undefined') return { success: false };
+  try {
+    const res = await fetch('/api/push/trigger-show-reminders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('[PushManager] trigger24hShowRemindersOnServer error:', err);
+  }
+  return { success: false };
+}
+
