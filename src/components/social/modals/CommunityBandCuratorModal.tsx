@@ -38,8 +38,13 @@ import {
   CommunityBandRecord,
   LineupMember,
   DiscographyRelease,
-  DiscographyTrack
+  DiscographyTrack,
+  saveBandDiscographyToCache,
+  loadBandDiscographyFromCache,
+  deduplicateDiscography,
+  markReleaseDeletedInStorage
 } from '../../../lib/communityBands';
+import { deleteReleaseFromDatabase } from '../../../services/releasesService';
 import { uploadBase64ToStorage, generateUUID, ensureUUID } from '../../../supabase';
 import { MASTER_GENRES } from '../../../constants/genres';
 import { MetalArchivesImportModal } from './MetalArchivesImportModal';
@@ -373,7 +378,14 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     }
     setLineup(loadedLineup);
 
-    setAlbums([...(band.discography || [])].sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0')));
+    let loadedAlbums = (band.discography && band.discography.length > 0) ? band.discography : [];
+    const cached = loadBandDiscographyFromCache(band.id, band.name);
+    const combined = deduplicateDiscography([...loadedAlbums, ...(cached || [])]);
+    if (combined.length > 0) {
+      loadedAlbums = combined;
+    }
+
+    setAlbums([...loadedAlbums].sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0')));
     setEditingAlbumIdx(null);
     setEditingMemberIdx(null);
     resetReleaseInputs();
@@ -554,6 +566,13 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
   };
 
   const handleRemoveAlbum = (idx: number) => {
+    const targetAlbum = albums[idx];
+    if (targetAlbum) {
+      markReleaseDeletedInStorage(targetAlbum.id, targetAlbum.title, selectedBand?.id || selectedBand?.name);
+      if (targetAlbum.id) {
+        deleteReleaseFromDatabase(targetAlbum.id, undefined, selectedBand?.id || selectedBand?.name, targetAlbum.title);
+      }
+    }
     setAlbums(albums.filter((_, i) => i !== idx));
     if (editingAlbumIdx === idx) {
       resetReleaseInputs();
@@ -701,6 +720,17 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
         }
         window.dispatchEvent(new CustomEvent('nexus_band_lineup_updated', {
           detail: { bandId: savedRecord?.id || bandId, lineup: finalLineup }
+        }));
+      } catch {}
+
+      // Cache discography to localStorage and memory for permanent resilience
+      try {
+        saveBandDiscographyToCache(bandId, name, finalAlbums);
+        if (savedRecord?.id) {
+          saveBandDiscographyToCache(savedRecord.id, name, finalAlbums);
+        }
+        window.dispatchEvent(new CustomEvent('nexus_band_discography_updated', {
+          detail: { bandId: savedRecord?.id || bandId, discography: finalAlbums }
         }));
       } catch {}
 
@@ -916,7 +946,12 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
 
                     <div className="text-[10px] text-zinc-500 font-mono mt-1.5 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-3">
-                        <span>💿 {band.discography?.length || 0} releases</span>
+                        {(() => {
+                          const discoCount = (band.discography && band.discography.length > 0)
+                            ? band.discography.length
+                            : (loadBandDiscographyFromCache(band.id, band.name)?.length || 0);
+                          return <span>💿 {discoCount} {discoCount === 1 ? 'release' : 'releases'}</span>;
+                        })()}
                         <span>👥 {band.lineup?.length || 0} members</span>
                       </div>
                       <div className="flex items-center gap-1.5">

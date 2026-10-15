@@ -9,7 +9,7 @@ import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, upsertBandToDatabase, generateUUID } from '../../../supabase';
 import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
-import { communityBandManager, CommunityBandRecord, isCommunityBandRecord } from '../../../lib/communityBands';
+import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
 import CommunityBandCuratorModal from '../../social/modals/CommunityBandCuratorModal';
 import BandClaimHandoverModal from '../../social/modals/BandClaimHandoverModal';
@@ -179,25 +179,35 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         const validBandUUID = bandIdToUse ? extractUUID(bandIdToUse) : null;
         const bandName = fetchedBandData?.name || selectedUserProfile?.name || targetProfile?.name || '';
 
+        const targetName = bandName.toLowerCase().trim();
+
         const matching = allDbReleases.filter(r => {
           if (!r) return false;
-          if (bandIdToUse && (r.band_id === bandIdToUse || (validBandUUID && r.band_id === validBandUUID))) return true;
-          if (bandName && r.label && r.label.toLowerCase() === bandName.toLowerCase()) return true;
-          if (bandName && r.title && r.title.toLowerCase().includes(bandName.toLowerCase())) return true;
+          const rBandId = String(r.band_id || '').toLowerCase().trim();
+          const rBandName = String(r.band_name || r.artist || r.artist_name || '').toLowerCase().trim();
+
+          if (bandIdToUse && (rBandId === bandIdToUse.toLowerCase() || (validBandUUID && rBandId === validBandUUID.toLowerCase()))) return true;
+          if (targetName && rBandName) {
+            const normT = targetName.replace(/[^a-z0-9]/g, '');
+            const normR = rBandName.replace(/[^a-z0-9]/g, '');
+            if (normT.length > 2 && normR.length > 2 && normT === normR) return true;
+          }
           return false;
         });
 
         const matchedCommunityBand = communityBandManager.findMatch(bandName || selectedUserProfile?.name || '');
         const communityDisco = matchedCommunityBand?.discography || [];
+        const cachedDisco = loadBandDiscographyFromCache(bandIdToUse, bandName);
 
-        // STRICT SCOPING: Only use matching releases for this band or this band's community discography
-        let finalReleases: any[] = [];
-        if (matching.length > 0) {
-          finalReleases = matching;
-        } else if (communityDisco.length > 0) {
-          finalReleases = communityDisco.map((cd: any) => ({
+        // Resiliently combine matching releases, community archive discography, and local cache
+        const allCandidates: any[] = [];
+        if (matching.length > 0) allCandidates.push(...matching);
+        if (communityDisco.length > 0) {
+          allCandidates.push(...communityDisco.map((cd: any) => ({
             id: cd.id,
             band_id: validBandUUID || bandIdToUse,
+            band_name: bandName,
+            artist: bandName,
             title: cd.title,
             type: cd.type || 'album',
             release_date: cd.year || '',
@@ -207,10 +217,44 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
             cover_url: cd.cover_url || cd.cover_image || cd.coverUrl || cd.coverImage || cd.image_url || '',
             cover_image: cd.cover_url || cd.cover_image || cd.coverUrl || cd.coverImage || cd.image_url || '',
             tracks: cd.tracks || []
-          }));
-        } else {
-          finalReleases = [];
+          })));
         }
+        if (cachedDisco.length > 0) {
+          allCandidates.push(...cachedDisco.map((cd: any) => ({
+            id: cd.id,
+            band_id: validBandUUID || bandIdToUse,
+            band_name: bandName,
+            artist: bandName,
+            title: cd.title,
+            type: cd.type || 'album',
+            release_date: cd.year || '',
+            release_year: cd.year || '',
+            label: cd.label || cd.release_info || '',
+            catalog_id: cd.catalog_id || '',
+            cover_url: cd.cover_url || cd.cover_image || cd.coverUrl || cd.coverImage || cd.image_url || '',
+            cover_image: cd.cover_url || cd.cover_image || cd.coverUrl || cd.coverImage || cd.image_url || '',
+            tracks: cd.tracks || []
+          })));
+        }
+
+        // Deduplicate releases by title to prevent duplicate entries while retaining richest artwork
+        const seenReleaseTitles = new Map<string, any>();
+        for (const rel of allCandidates) {
+          if (!rel || !rel.title) continue;
+          const norm = rel.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (!norm) continue;
+          if (!seenReleaseTitles.has(norm)) {
+            seenReleaseTitles.set(norm, rel);
+          } else {
+            const existing = seenReleaseTitles.get(norm)!;
+            const existingCover = existing.cover_url || existing.cover_image || existing.coverUrl;
+            const newCover = rel.cover_url || rel.cover_image || rel.coverUrl;
+            if (!existingCover && newCover) {
+              seenReleaseTitles.set(norm, { ...existing, cover_url: newCover, cover_image: newCover, coverUrl: newCover, coverImage: newCover });
+            }
+          }
+        }
+        const finalReleases = Array.from(seenReleaseTitles.values());
 
         if (isMounted && finalReleases.length > 0) {
           const mapped = finalReleases.map((row: any) => {
@@ -259,8 +303,19 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       }
     }
     fetchReleases();
-    return () => { isMounted = false; };
-  }, [selectedUserProfile?.id, targetProfile?.id, fetchedBandData?.id]);
+
+    const handleDiscoUpdate = () => {
+      if (isMounted) fetchReleases();
+    };
+    window.addEventListener('nexus_band_discography_updated', handleDiscoUpdate);
+    window.addEventListener('nexus_community_bands_updated', handleDiscoUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('nexus_band_discography_updated', handleDiscoUpdate);
+      window.removeEventListener('nexus_community_bands_updated', handleDiscoUpdate);
+    };
+  }, [selectedUserProfile?.id, targetProfile?.id, fetchedBandData?.id, selectedUserProfile?.name, targetProfile?.name, fetchedBandData?.name]);
   const [tickerUpdateText, setTickerUpdateText] = React.useState<string>(() => {
     const targetId = selectedUserProfile?.id || 'guest';
     const stored = localStorage.getItem(`nexus_active_ticker_${targetId}`);

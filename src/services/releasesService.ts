@@ -4,6 +4,8 @@ import { labelCatalogStore } from '../utils/indexedDB';
 import { uploadBase64ToStorage } from './storageService';
 import { ensureUUID, executeWithSchemaResilience } from './schemaResilienceService';
 
+import { markReleaseDeletedInStorage, communityBandManager, saveBandDiscographyToCache } from '../lib/communityBands';
+
 const getActiveSupabase = (portalType?: 'band' | 'promoter' | 'creative') => {
   return getSupabase(portalType) || singletonSupabase;
 };
@@ -199,22 +201,30 @@ export async function persistReleasesLocallyAndServer(releases: any[]): Promise<
 }
 
 function mapDbRowToRelease(row: any): CatalogRelease {
+  const cover = row.cover_image || row.cover_url || row.coverImage || row.coverUrl || row.image_url || '';
   return {
     id: row.id,
     catalogId: row.catalog_id || row.catalogId,
+    catalog_id: row.catalog_id || row.catalogId,
     title: row.title,
     coverColor: row.cover_color || row.coverColor,
     type: row.type || row.format_type || 'Album',
     releaseDate: row.release_date || row.releaseDate,
+    release_date: row.release_date || row.releaseDate,
     label: row.label,
     genre: row.genre,
-    coverImage: row.cover_image || row.cover_url || row.coverImage,
-    coverUrl: row.cover_url || row.cover_image || row.coverUrl,
+    coverImage: cover,
+    coverUrl: cover,
+    cover_image: cover,
+    cover_url: cover,
     tracks: Array.isArray(row.tracks) ? row.tracks : (typeof row.tracks === 'string' ? JSON.parse(row.tracks) : []),
     formats: typeof row.formats === 'object' && row.formats ? row.formats : (typeof row.formats === 'string' ? JSON.parse(row.formats) : {}),
     digital: Array.isArray(row.digital) ? row.digital : (typeof row.digital === 'string' ? JSON.parse(row.digital) : []),
     audio_vault_path: row.audio_vault_path,
     band_id: row.band_id,
+    band_name: row.band_name || row.artist || row.artist_name || '',
+    artist: row.artist || row.band_name || row.artist_name || '',
+    artist_name: row.artist_name || row.band_name || row.artist || '',
     label_id: row.label_id,
     status: row.status || 'active',
     created_at: row.created_at,
@@ -324,15 +334,21 @@ export async function upsertReleaseToDatabase(
     const rawPayload: Record<string, any> = {
       id: release.id ? ensureUUID(release.id) : ensureUUID(`rel-${targetBandId}-${Date.now()}`),
       band_id: targetBandId,
+      band_name: release.band_name || release.artist || (release as any).artist_name || null,
+      artist: release.artist || release.band_name || (release as any).artist_name || null,
+      artist_name: release.artist_name || release.artist || release.band_name || null,
       label_id: isValidUUID(release.label_id) ? release.label_id : null,
       title: release.title,
       catalog_id: release.catalogId || (release as any).catalog_id || null,
+      catalogId: release.catalogId || (release as any).catalog_id || null,
       type: release.type || 'Album',
       release_date: release.releaseDate || (release as any).release_date || null,
       label: release.label || null,
       genre: release.genre || null,
       cover_image: finalCoverUrl,
       cover_url: finalCoverUrl,
+      coverImage: finalCoverUrl,
+      coverUrl: finalCoverUrl,
       tracks: release.tracks || [],
       formats: release.formats || {},
       digital: release.digital || [],
@@ -343,8 +359,8 @@ export async function upsertReleaseToDatabase(
 
     const payload = sanitizeReleaseForDb(rawPayload);
 
-    // Guaranteed upfront local + server persistence
-    await persistReleasesLocallyAndServer([payload]);
+    // Guaranteed upfront local + server persistence with rich artist & release metadata
+    await persistReleasesLocallyAndServer([rawPayload]);
 
     // 1. Resilient upsert to Supabase
     let res = await executeWithSchemaResilience(
@@ -470,12 +486,17 @@ export async function upsertReleasesBatchToDatabase(
       str ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str) : false;
 
     // Auto-provision band row in Supabase 'bands' table before inserting releases to ensure foreign key integrity
+    let existingBandName = '';
     try {
       const { data: existingBand } = await client
         .from('bands')
         .select('id, band_name')
         .eq('id', targetBandId)
         .maybeSingle();
+
+      if (existingBand?.band_name) {
+        existingBandName = existingBand.band_name;
+      }
 
       if (!existingBand) {
         let resolvedName = '';
@@ -491,6 +512,7 @@ export async function upsertReleasesBatchToDatabase(
         if (!resolvedName) {
           resolvedName = 'Artist';
         }
+        existingBandName = resolvedName;
         const slug = resolvedName.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
 
         const bandPayload: any = {
@@ -546,18 +568,26 @@ export async function upsertReleasesBatchToDatabase(
         }
       }
 
+      const resolvedBandName = release.band_name || release.artist || (release as any).artist_name || existingBandName || '';
+
       const rawPayload: Record<string, any> = {
         id: releaseId,
         band_id: targetBandId,
+        band_name: resolvedBandName,
+        artist: resolvedBandName,
+        artist_name: resolvedBandName,
         label_id: isValidUUID(release.label_id) ? release.label_id : null,
         title: release.title || `Release ${idx + 1}`,
         catalog_id: release.catalogId || release.catalog_id || null,
+        catalogId: release.catalogId || release.catalog_id || null,
         type: release.type || 'Album',
         release_date: release.releaseDate || release.release_date || release.year || String(new Date().getFullYear()),
         label: release.label || release.release_info || null,
         genre: release.genre || null,
         cover_image: finalCoverUrl,
         cover_url: finalCoverUrl,
+        coverImage: finalCoverUrl,
+        coverUrl: finalCoverUrl,
         tracks: Array.isArray(release.tracks) ? release.tracks : [],
         formats: typeof release.formats === 'object' && release.formats ? release.formats : {},
         digital: Array.isArray(release.digital) ? release.digital : [],
@@ -582,8 +612,22 @@ export async function upsertReleasesBatchToDatabase(
     }
     const finalPayloads = Array.from(dedupedPayloadsMap.values());
 
-    // Guaranteed upfront local + server persistence for all releases
-    await persistReleasesLocallyAndServer(finalPayloads);
+    // Guaranteed upfront local + server persistence with rich artist & release metadata
+    const richPayloads = releaseList.map((r, idx) => {
+      const cover = r.cover_url || r.cover_image || r.coverUrl || r.coverImage || r.image_url || null;
+      return {
+        ...r,
+        id: ensureUUID(r.id || `rel-${targetBandId}-${idx}-${Date.now()}`),
+        band_id: targetBandId,
+        band_name: r.band_name || r.artist || (r as any).artist_name || existingBandName || '',
+        artist: r.artist || r.band_name || existingBandName || '',
+        cover_url: cover,
+        cover_image: cover,
+        coverUrl: cover,
+        coverImage: cover
+      };
+    });
+    await persistReleasesLocallyAndServer(richPayloads);
 
     // 2. Execute bulk upsert to Supabase
     let dataResult: any = null;
@@ -666,20 +710,50 @@ export async function upsertReleasesBatchToDatabase(
 }
 
 /**
- * Delete a release from the Supabase database and local/server cache
+ * Delete a release from the Supabase database and local/server cache by ID or title
  */
 export async function deleteReleaseFromDatabase(
   releaseId: string,
-  portalType?: 'band' | 'promoter' | 'creative'
+  portalType?: 'band' | 'promoter' | 'creative',
+  bandIdOrName?: string,
+  releaseTitle?: string
 ): Promise<boolean> {
   try {
+    const cleanId = String(releaseId || '').trim();
+    const cleanTitle = (releaseTitle || '').toLowerCase().trim();
+    const cleanBand = (bandIdOrName || '').toLowerCase().trim();
+
+    // Mark in persistent deletion storage set
+    markReleaseDeletedInStorage(cleanId, releaseTitle, bandIdOrName);
+
+    // Update communityBandManager in memory and cache
+    try {
+      if (cleanBand) {
+        const matchedBand = communityBandManager.getById(cleanBand) || communityBandManager.findByName(cleanBand);
+        if (matchedBand && Array.isArray(matchedBand.discography)) {
+          matchedBand.discography = matchedBand.discography.filter((r: any) => {
+            if (!r) return false;
+            if (cleanId && r.id === cleanId) return false;
+            if (cleanTitle && (r.title || '').toLowerCase().trim() === cleanTitle) return false;
+            return true;
+          });
+          saveBandDiscographyToCache(matchedBand.id, matchedBand.name, matchedBand.discography);
+        }
+      }
+    } catch (_) {}
+
     // 1. Delete from local IndexedDB
     try {
       const raw = await labelCatalogStore.getItem('label_catalog_releases');
       if (raw) {
         const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
         if (Array.isArray(parsed)) {
-          const filtered = parsed.filter((r: any) => r && r.id !== releaseId);
+          const filtered = parsed.filter((r: any) => {
+            if (!r) return false;
+            if (cleanId && r.id === cleanId) return false;
+            if (cleanTitle && r.title && r.title.toLowerCase().trim() === cleanTitle) return false;
+            return true;
+          });
           await labelCatalogStore.setItem('label_catalog_releases', JSON.stringify(filtered));
         }
       }
@@ -692,7 +766,12 @@ export async function deleteReleaseFromDatabase(
         if (raw) {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
-            const filtered = parsed.filter((r: any) => r && r.id !== releaseId);
+            const filtered = parsed.filter((r: any) => {
+              if (!r) return false;
+              if (cleanId && r.id === cleanId) return false;
+              if (cleanTitle && r.title && r.title.toLowerCase().trim() === cleanTitle) return false;
+              return true;
+            });
             localStorage.setItem('nexus_core_releases_cache', JSON.stringify(filtered));
           }
         }
@@ -702,23 +781,44 @@ export async function deleteReleaseFromDatabase(
     // 3. Delete from server-side cache
     try {
       if (typeof fetch !== 'undefined') {
-        await fetch(`/api/releases/${releaseId}`, { method: 'DELETE' });
+        if (cleanId) {
+          await fetch(`/api/releases/${cleanId}`, { method: 'DELETE' });
+        }
+        await fetch('/api/releases/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: cleanId,
+            bandId: cleanBand,
+            bandName: cleanBand,
+            title: cleanTitle
+          })
+        });
       }
     } catch (_) {}
 
     // 4. Opportunistically delete from Supabase
     const client = getActiveSupabase(portalType);
-    const { error } = await client
-      .from('releases')
-      .delete()
-      .eq('id', releaseId);
-
-    if (error && error.code !== '42501') {
-      console.warn('[releasesService] Delete database error:', error.message);
+    if (cleanId) {
+      const { error } = await client.from('releases').delete().eq('id', cleanId);
+      if (error && error.code !== '42501') {
+        console.warn('[releasesService] Delete database error:', error.message);
+      }
+    } else if (cleanTitle && cleanBand) {
+      await client.from('releases').delete().eq('band_id', cleanBand).ilike('title', cleanTitle);
     }
+
     return true;
   } catch (err) {
     console.warn('[releasesService] Exception deleting release:', err);
     return true;
   }
+}
+
+export async function deleteReleaseFromDatabaseByTitle(
+  releaseTitle: string,
+  bandIdOrName?: string,
+  portalType?: 'band' | 'promoter' | 'creative'
+): Promise<boolean> {
+  return deleteReleaseFromDatabase('', portalType, bandIdOrName, releaseTitle);
 }

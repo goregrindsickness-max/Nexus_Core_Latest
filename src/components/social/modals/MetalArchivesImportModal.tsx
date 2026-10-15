@@ -235,10 +235,11 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
               catalog_id: r.catalogId || '',
               label: r.label || '',
               tracks: (r.tracks || []).map((t: any, tIdx: number) => ({
-                number: t.number || tIdx + 1,
+                number: typeof t.number === 'number' ? t.number : (parseInt(t.num) || tIdx + 1),
                 title: t.title || `Track ${tIdx + 1}`,
                 duration: t.duration || '3:30',
-                lyrics: t.lyrics || undefined
+                lyrics: t.lyrics || undefined,
+                previewUrl: t.previewUrl || t.preview_url || undefined
               }))
             }));
 

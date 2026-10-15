@@ -192,16 +192,86 @@ export async function scrapeMetalArchivesBand(
 
   // 3. Client-side direct Apple Music / iTunes fallback (CORS friendly)
   try {
-    const itRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanName)}&entity=album&limit=25`);
+    const itRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanName)}&entity=album&limit=30`);
     if (itRes.ok) {
       const itData = await itRes.json();
-      const results = itData.results || [];
-      if (results.length > 0) {
-        const releases: CatalogRelease[] = results.map((item: any, idx: number) => {
+      const rawResults = itData.results || [];
+      const filtered = rawResults.filter((a: any) => {
+        const artist = (a.artistName || '').toLowerCase().trim();
+        const query = cleanName.toLowerCase().trim();
+        return artist === query || artist.includes(query) || query.includes(artist);
+      });
+      const finalResults = filtered.length > 0 ? filtered : rawResults;
+
+      if (finalResults.length > 0) {
+        // Perform batch tracklist lookup for collectionIds
+        const collectionIds = finalResults.map((item: any) => item.collectionId).filter(Boolean);
+        const songsByCollection = new Map<number, any[]>();
+
+        if (collectionIds.length > 0) {
+          const chunkSize = 8;
+          for (let i = 0; i < collectionIds.length; i += chunkSize) {
+            const chunk = collectionIds.slice(i, i + chunkSize);
+            try {
+              const trRes = await fetch(`https://itunes.apple.com/lookup?id=${chunk.join(',')}&entity=song&limit=300`);
+              if (trRes.ok) {
+                const trData = await trRes.json();
+                (trData.results || []).forEach((sItem: any) => {
+                  if (sItem.wrapperType === 'track' && sItem.collectionId) {
+                    const list = songsByCollection.get(sItem.collectionId) || [];
+                    list.push(sItem);
+                    songsByCollection.set(sItem.collectionId, list);
+                  }
+                });
+              }
+            } catch (trErr) {
+              console.warn('[metalArchivesScraper] Direct iTunes song lookup notice:', trErr);
+            }
+          }
+
+          // Individual fallback for any collectionId missing tracks
+          for (const item of finalResults) {
+            if (item.collectionId && (!songsByCollection.has(item.collectionId) || songsByCollection.get(item.collectionId)!.length === 0)) {
+              try {
+                const indRes = await fetch(`https://itunes.apple.com/lookup?id=${item.collectionId}&entity=song`);
+                if (indRes.ok) {
+                  const indData = await indRes.json();
+                  const indTracks = (indData.results || []).filter((r: any) => r.wrapperType === 'track');
+                  if (indTracks.length > 0) {
+                    songsByCollection.set(item.collectionId, indTracks);
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+        }
+
+        const releases: CatalogRelease[] = finalResults.map((item: any, idx: number) => {
           const rawTitle = item.collectionName || 'Untitled Album';
           const year = (item.releaseDate || '').substring(0, 4) || '';
           const rawLabel = item.copyright?.replace(/^℗\s*\d{4}\s*/, '') || item.artistName || 'Independent';
           const hdCover = item.artworkUrl100 ? item.artworkUrl100.replace('100x100bb', '600x600bb') : null;
+
+          const rawSongs = songsByCollection.get(item.collectionId) || [];
+          rawSongs.sort((a: any, b: any) => (a.trackNumber || 0) - (b.trackNumber || 0));
+
+          const parsedTracks: ReleaseTrack[] = rawSongs.length > 0
+            ? rawSongs.map((s: any, tIdx: number) => {
+                const durMs = s.trackTimeMillis;
+                const durationStr = durMs
+                  ? `${Math.floor(durMs / 60000)}:${Math.floor((durMs % 60000) / 1000).toString().padStart(2, '0')}`
+                  : '3:30';
+                return {
+                  id: `s-${s.trackId || tIdx + 1}`,
+                  num: String(s.trackNumber || tIdx + 1),
+                  title: s.trackName || `Track ${tIdx + 1}`,
+                  duration: durationStr,
+                  previewUrl: s.previewUrl || s.preview_url || undefined
+                };
+              })
+            : [
+                { id: `t_${idx}_1`, num: '1', title: rawTitle, duration: '3:45' }
+              ];
 
           return {
             id: ensureUUID(`it-${item.collectionId || idx}`),
@@ -219,9 +289,7 @@ export async function scrapeMetalArchivesBand(
             coverUrl: hdCover,
             image_url: hdCover,
             source: 'Apple Music',
-            tracks: [
-              { id: `t_${idx}_1`, num: '1', title: rawTitle, duration: '3:45' }
-            ]
+            tracks: parsedTracks
           };
         });
 

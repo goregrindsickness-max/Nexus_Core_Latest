@@ -98,3 +98,9 @@ CREATE POLICY "Allow public delete of releases" ON public."releases"
     FOR DELETE
     TO public
     USING (true);
+
+-- 5. Explicit Table Permissions for Anon, Authenticated, and Service Role
+GRANT ALL ON TABLE public."releases" TO anon;
+GRANT ALL ON TABLE public."releases" TO authenticated;
+GRANT ALL ON TABLE public."releases" TO service_role;
+

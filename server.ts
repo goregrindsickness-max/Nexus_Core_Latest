@@ -565,11 +565,13 @@ async function startServer() {
     try {
       if (fs.existsSync(storiesCacheFile)) {
         const content = await fs.promises.readFile(storiesCacheFile, 'utf8');
-        const parsed = JSON.parse(content);
-        if (Array.isArray(parsed)) {
-          parsed.forEach((s: any) => {
-            if (s && s.id) storiesMap.set(s.id, s);
-          });
+        if (content && content.trim()) {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((s: any) => {
+              if (s && s.id) storiesMap.set(s.id, s);
+            });
+          }
         }
       }
     } catch (e) {
@@ -748,11 +750,13 @@ async function startServer() {
     try {
       if (fs.existsSync(clipsCacheFile)) {
         const content = await fs.promises.readFile(clipsCacheFile, 'utf8');
-        const parsed = JSON.parse(content);
-        if (Array.isArray(parsed)) {
-          parsed.forEach((c: any) => {
-            if (c && c.id) clipsMap.set(String(c.id), c);
-          });
+        if (content && content.trim()) {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((c: any) => {
+              if (c && c.id) clipsMap.set(String(c.id), c);
+            });
+          }
         }
       }
     } catch (e) {
@@ -3462,12 +3466,12 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       const fetchITunesCatalog = async (band: string): Promise<any[]> => {
         try {
           let results: any[] = [];
+          const bLower = band.toLowerCase().trim();
 
           // 1. First attempt: Search for artist and lookup official albums
           const artistRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(band)}&entity=musicArtist&limit=3`);
           if (artistRes.ok) {
             const artistData = await artistRes.json() as any;
-            const bLower = band.toLowerCase().trim();
             const matchingArtist = (artistData.results || []).find((a: any) => {
               const aName = (a.artistName || '').toLowerCase().trim();
               return aName === bLower || aName.includes(bLower) || bLower.includes(aName);
@@ -3484,10 +3488,56 @@ Return a valid JSON object matching the requested schema. If any field is not fo
 
           // 2. Fallback attempt: Search by album entity directly
           if (results.length === 0) {
-            const itRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(band)}&entity=album&limit=30`);
+            const itRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(band)}&entity=album&limit=50`);
             if (itRes.ok) {
               const itData = await itRes.json() as any;
-              results = itData?.results || [];
+              const filtered = (itData?.results || []).filter((a: any) => {
+                const aName = (a.artistName || '').toLowerCase().trim();
+                return aName === bLower || aName.includes(bLower) || bLower.includes(aName);
+              });
+              results = filtered.length > 0 ? filtered : (itData?.results || []);
+            }
+          }
+
+          // 3. Batch song tracklist lookup for all found collectionIds
+          const collectionIds = results.map((item: any) => item.collectionId).filter(Boolean);
+          const songsByCollection = new Map<number, any[]>();
+
+          if (collectionIds.length > 0) {
+            const chunkSize = 8;
+            for (let i = 0; i < collectionIds.length; i += chunkSize) {
+              const chunk = collectionIds.slice(i, i + chunkSize);
+              try {
+                const songLookupRes = await fetch(`https://itunes.apple.com/lookup?id=${chunk.join(',')}&entity=song&limit=300`);
+                if (songLookupRes.ok) {
+                  const songLookupData = await songLookupRes.json() as any;
+                  (songLookupData.results || []).forEach((sItem: any) => {
+                    if (sItem.wrapperType === 'track' && sItem.collectionId) {
+                      const list = songsByCollection.get(sItem.collectionId) || [];
+                      list.push(sItem);
+                      songsByCollection.set(sItem.collectionId, list);
+                    }
+                  });
+                }
+              } catch (batchErr) {
+                console.warn('[iTunes batch track lookup notice]:', batchErr);
+              }
+            }
+
+            // Fallback: If any album has 0 songs in map, do single lookup by collectionId
+            for (const item of results) {
+              if (item.collectionId && (!songsByCollection.has(item.collectionId) || songsByCollection.get(item.collectionId)!.length === 0)) {
+                try {
+                  const indRes = await fetch(`https://itunes.apple.com/lookup?id=${item.collectionId}&entity=song`);
+                  if (indRes.ok) {
+                    const indData = await indRes.json() as any;
+                    const indTracks = (indData.results || []).filter((r: any) => r.wrapperType === 'track');
+                    if (indTracks.length > 0) {
+                      songsByCollection.set(item.collectionId, indTracks);
+                    }
+                  }
+                } catch (_) {}
+              }
             }
           }
 
@@ -3497,6 +3547,27 @@ Return a valid JSON object matching the requested schema. If any field is not fo
             const rawLabel = item.copyright?.replace(/^℗\s*\d{4}\s*/, '') || item.artistName || 'Independent';
             const hdCover = item.artworkUrl100 ? item.artworkUrl100.replace('100x100bb', '600x600bb') : null;
             const normType = normalizeRelType(rawTitle);
+
+            const rawSongs = songsByCollection.get(item.collectionId) || [];
+            rawSongs.sort((a: any, b: any) => (a.trackNumber || 0) - (b.trackNumber || 0));
+
+            const parsedTracks = rawSongs.length > 0
+              ? rawSongs.map((s: any, tIdx: number) => {
+                  const durMs = s.trackTimeMillis;
+                  const durationStr = durMs
+                    ? `${Math.floor(durMs / 60000)}:${Math.floor((durMs % 60000) / 1000).toString().padStart(2, '0')}`
+                    : '3:30';
+                  return {
+                    id: `s-${s.trackId || tIdx + 1}`,
+                    num: String(s.trackNumber || tIdx + 1),
+                    title: s.trackName || `Track ${tIdx + 1}`,
+                    duration: durationStr,
+                    previewUrl: s.previewUrl || s.preview_url || undefined
+                  };
+                })
+              : [
+                  { id: `t1`, num: '1', title: rawTitle, duration: '3:45' }
+                ];
 
             return {
               id: `it-${item.collectionId || idx}`,
@@ -3515,10 +3586,8 @@ Return a valid JSON object matching the requested schema. If any field is not fo
               coverUrl: hdCover,
               image_url: hdCover,
               source: 'Apple Music',
-              trackCount: item.trackCount || 1,
-              tracks: [
-                { id: `t1`, num: '1', title: rawTitle, duration: '3:45' }
-              ]
+              trackCount: item.trackCount || parsedTracks.length,
+              tracks: parsedTracks
             };
           });
         } catch (err) {
@@ -3740,35 +3809,58 @@ Return a valid JSON object matching the requested schema. If any field is not fo
         return yearB - yearA;
       });
 
-      // Enrich top 5 releases with iTunes tracklists if collectionId is present
-      await Promise.all(
-        allFoundReleases.slice(0, 8).map(async (rel) => {
-          if (rel.collectionId && (!rel.tracks || rel.tracks.length <= 1)) {
+      // Batch & individual enrich ALL releases missing full tracklists using Apple Music / iTunes collectionIds or title lookup
+      const missingTrackReleases = allFoundReleases.filter(r => !r.tracks || r.tracks.length <= 1);
+      if (missingTrackReleases.length > 0) {
+        for (const rel of missingTrackReleases) {
+          if (!rel.collectionId && rel.title) {
+            try {
+              const sr = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanName + ' ' + rel.title)}&entity=album&limit=1`);
+              if (sr.ok) {
+                const sd = await sr.json() as any;
+                if (sd.results?.[0]?.collectionId) {
+                  rel.collectionId = sd.results[0].collectionId;
+                  if (!rel.cover_url && sd.results[0].artworkUrl100) {
+                    const hd = sd.results[0].artworkUrl100.replace('100x100bb', '600x600bb');
+                    rel.cover_url = hd;
+                    rel.cover_image = hd;
+                    rel.coverUrl = hd;
+                    rel.coverImage = hd;
+                  }
+                }
+              }
+            } catch (_) {}
+          }
+
+          if (rel.collectionId) {
             try {
               const trRes = await fetch(`https://itunes.apple.com/lookup?id=${rel.collectionId}&entity=song`);
               if (trRes.ok) {
                 const trData = await trRes.json() as any;
-                const songs = (trData.results || []).slice(1);
-                if (songs.length > 0) {
-                  rel.tracks = songs.map((s: any) => {
+                const rawSongs = (trData.results || []).filter((s: any) => s.wrapperType === 'track');
+                if (rawSongs.length > 0) {
+                  rawSongs.sort((a: any, b: any) => (a.trackNumber || 0) - (b.trackNumber || 0));
+                  rel.tracks = rawSongs.map((s: any, tIdx: number) => {
                     const durMs = s.trackTimeMillis;
                     const durationStr = durMs
                       ? `${Math.floor(durMs / 60000)}:${Math.floor((durMs % 60000) / 1000).toString().padStart(2, '0')}`
                       : '3:30';
                     return {
-                      id: `s-${s.trackId}`,
-                      num: String(s.trackNumber || 1),
+                      id: `s-${s.trackId || tIdx + 1}`,
+                      num: String(s.trackNumber || tIdx + 1),
                       title: s.trackName || 'Untitled Track',
                       duration: durationStr,
-                      previewUrl: s.previewUrl
+                      previewUrl: s.previewUrl || s.preview_url || undefined
                     };
                   });
                 }
               }
-            } catch (err) {}
+            } catch (batchErr) {
+              console.warn('[Server album track individual enrichment notice]:', batchErr);
+            }
           }
-        })
-      );
+        }
+      }
 
       return res.json({
         bandName: cleanName,
@@ -3793,8 +3885,10 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     try {
       if (fs.existsSync(venuesCacheFile)) {
         const content = await fs.promises.readFile(venuesCacheFile, 'utf8');
-        const parsed = JSON.parse(content);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (content && content.trim()) {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
       }
     } catch (e) {
       console.warn('[SERVER VENUES] Local cache read warning:', e);
@@ -3964,9 +4058,11 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     try {
       if (fs.existsSync(tourPackagesCacheFile)) {
         const content = await fs.promises.readFile(tourPackagesCacheFile, 'utf8');
-        const parsed = JSON.parse(content);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter((t: any) => !isServerCommunityTour(t));
+        if (content && content.trim()) {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.filter((t: any) => !isServerCommunityTour(t));
+          }
         }
       }
     } catch (e) {
@@ -4106,8 +4202,10 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     try {
       if (fs.existsSync(inventoryCacheFile)) {
         const content = await fs.promises.readFile(inventoryCacheFile, 'utf8');
-        const parsed = JSON.parse(content);
-        if (Array.isArray(parsed)) return parsed;
+        if (content && content.trim()) {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) return parsed;
+        }
       }
     } catch (e) {
       console.warn('[SERVER INVENTORY] Cache read warning:', e);
@@ -4293,14 +4391,29 @@ Return a valid JSON object matching the requested schema. If any field is not fo
    * RELEASES / DISCOGRAPHY LOCAL & SERVER PERSISTENCE
    * Serves as reliable persistent fallback when Supabase table permissions are restricted
    */
-  const releasesCacheFile = path.join(uploadsDir, 'releases_cache.json');
+  /**
+   * RELEASES / DISCOGRAPHY LOCAL & SERVER PERSISTENCE
+   * Guaranteed persistence in data/releases_cache.json with uploads fallback
+   * Serves as reliable persistent fallback when Supabase table permissions are restricted (42501)
+   */
+  const primaryReleasesFile = path.join(process.cwd(), 'data', 'releases_cache.json');
+  const uploadsReleasesFile = path.join(uploadsDir, 'releases_cache.json');
 
   async function loadCachedReleases(): Promise<any[]> {
     try {
-      if (fs.existsSync(releasesCacheFile)) {
-        const content = await fs.promises.readFile(releasesCacheFile, 'utf8');
-        const parsed = JSON.parse(content);
-        if (Array.isArray(parsed)) return parsed;
+      if (fs.existsSync(primaryReleasesFile)) {
+        const content = await fs.promises.readFile(primaryReleasesFile, 'utf8');
+        if (content && content.trim()) {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+      if (fs.existsSync(uploadsReleasesFile)) {
+        const content = await fs.promises.readFile(uploadsReleasesFile, 'utf8');
+        if (content && content.trim()) {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
       }
     } catch (e) {
       console.warn('[SERVER RELEASES] Local cache read warning:', e);
@@ -4320,7 +4433,17 @@ Return a valid JSON object matching the requested schema. If any field is not fo
           map.set(r.id, { ...(map.get(r.id) || {}), ...r, updated_at: new Date().toISOString() });
         }
       });
-      await fs.promises.writeFile(releasesCacheFile, JSON.stringify(Array.from(map.values()), null, 2), 'utf8');
+      const merged = Array.from(map.values());
+      const serialized = JSON.stringify(merged, null, 2);
+
+      // Save to primary data directory
+      const dataDir = path.dirname(primaryReleasesFile);
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+      await fs.promises.writeFile(primaryReleasesFile, serialized, 'utf8');
+
+      // Save to uploads directory as backup
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+      await fs.promises.writeFile(uploadsReleasesFile, serialized, 'utf8');
     } catch (e) {
       console.warn('[SERVER RELEASES] Local cache write warning:', e);
     }
@@ -4329,7 +4452,8 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   // GET /api/releases
   app.get('/api/releases', async (req: express.Request, res: express.Response) => {
     try {
-      const bandId = req.query.band_id as string;
+      const bandId = (req.query.band_id as string || '').trim().toLowerCase();
+      const bandName = (req.query.band_name as string || '').trim().toLowerCase();
       const cached = await loadCachedReleases();
       let dbReleases: any[] = [];
       const supabase = getSupabaseService();
@@ -4347,12 +4471,39 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       dbReleases.forEach(r => { if (r && r.id) map.set(r.id, { ...(map.get(r.id) || {}), ...r }); });
 
       let list = Array.from(map.values());
-      if (bandId) {
-        list = list.filter(r => !r.band_id || r.band_id === bandId);
+      if (bandId || bandName) {
+        list = list.filter(r => {
+          if (!r) return false;
+          const rBandId = String(r.band_id || '').toLowerCase().trim();
+          const rBandName = String(r.band_name || r.artist || r.artist_name || '').toLowerCase().trim();
+          const rTitle = String(r.title || '').toLowerCase().trim();
+
+          if (bandId && (rBandId === bandId || rBandId.replace(/-/g, '') === bandId.replace(/-/g, ''))) return true;
+          if (bandName && rBandName && (rBandName === bandName || rBandName.includes(bandName) || bandName.includes(rBandName))) return true;
+          if (bandName && r.label && r.label.toLowerCase() === bandName) return true;
+          return false;
+        });
       }
-      res.json({ success: true, releases: list });
+      res.json({ success: true, releases: list, total: list.length });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to load releases' });
+    }
+  });
+
+  // GET /api/releases/band/:idOrName
+  app.get('/api/releases/band/:idOrName', async (req: express.Request, res: express.Response) => {
+    try {
+      const target = decodeURIComponent(req.params.idOrName || '').trim().toLowerCase();
+      const cached = await loadCachedReleases();
+      const matched = cached.filter(r => {
+        if (!r) return false;
+        const bId = String(r.band_id || '').toLowerCase().trim();
+        const bName = String(r.band_name || r.artist || r.artist_name || '').toLowerCase().trim();
+        return bId === target || bId.replace(/-/g, '') === target.replace(/-/g, '') || bName === target || bName.includes(target) || target.includes(bName);
+      });
+      res.json({ success: true, releases: matched, count: matched.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to load band releases' });
     }
   });
 
@@ -4371,8 +4522,25 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       const supabase = getSupabaseService();
       if (supabase) {
         try {
-          await supabase.from('releases').upsert(listToSave, { onConflict: 'id' });
-        } catch (_) {}
+          const sanitizedForDb = listToSave.map(r => ({
+            id: r.id,
+            band_id: r.band_id,
+            title: r.title,
+            type: r.type || 'album',
+            release_date: r.release_date || r.releaseDate || r.year || String(new Date().getFullYear()),
+            cover_image: r.cover_image || r.cover_url || r.coverImage || r.coverUrl || null,
+            cover_url: r.cover_url || r.cover_image || r.coverUrl || r.coverImage || null,
+            label: r.label || null,
+            catalog_id: r.catalog_id || r.catalogId || null,
+            tracks: Array.isArray(r.tracks) ? r.tracks : [],
+            genre: r.genre || null,
+            status: r.status || 'active',
+            updated_at: new Date().toISOString()
+          }));
+          await supabase.from('releases').upsert(sanitizedForDb, { onConflict: 'id' });
+        } catch (dbErr: any) {
+          console.warn('[SERVER RELEASES] Supabase opportunistic sync notice (42501 or constraint):', dbErr?.message || dbErr);
+        }
       }
 
       const updated = await loadCachedReleases();
@@ -4388,7 +4556,13 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       const releaseId = req.params.id;
       const existing = await loadCachedReleases();
       const filtered = existing.filter((r: any) => r && r.id !== releaseId);
-      await fs.promises.writeFile(releasesCacheFile, JSON.stringify(filtered, null, 2), 'utf8');
+      const serialized = JSON.stringify(filtered, null, 2);
+      if (fs.existsSync(path.dirname(primaryReleasesFile))) {
+        await fs.promises.writeFile(primaryReleasesFile, serialized, 'utf8');
+      }
+      if (fs.existsSync(uploadsDir)) {
+        await fs.promises.writeFile(uploadsReleasesFile, serialized, 'utf8');
+      }
 
       const supabase = getSupabaseService();
       if (supabase) {
@@ -4398,6 +4572,59 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       }
 
       res.json({ success: true, releaseId });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to delete release' });
+    }
+  });
+
+  // POST /api/releases/delete (Deletes by ID or Title & Band)
+  app.post('/api/releases/delete', express.json(), async (req: express.Request, res: express.Response) => {
+    try {
+      const { id, bandId, bandName, title } = req.body || {};
+      const releaseId = (id || '').trim();
+      const relTitle = (title || '').toLowerCase().trim();
+      const bId = (bandId || '').toLowerCase().trim();
+      const bName = (bandName || '').toLowerCase().trim();
+
+      const existing = await loadCachedReleases();
+      const filtered = existing.filter((r: any) => {
+        if (!r) return false;
+        if (releaseId && r.id === releaseId) return false;
+        if (relTitle) {
+          const rTitle = (r.title || '').toLowerCase().trim();
+          const rBandId = String(r.band_id || '').toLowerCase().trim();
+          const rBandName = String(r.band_name || r.artist || r.artist_name || '').toLowerCase().trim();
+
+          const matchesBand = (!bId && !bName)
+            ? true
+            : (bId && (rBandId === bId || rBandId.replace(/-/g, '') === bId.replace(/-/g, ''))) ||
+              (bName && (rBandName === bName || rBandName.includes(bName) || bName.includes(rBandName)));
+
+          if (rTitle === relTitle && matchesBand) return false;
+        }
+        return true;
+      });
+
+      const serialized = JSON.stringify(filtered, null, 2);
+      if (fs.existsSync(path.dirname(primaryReleasesFile))) {
+        await fs.promises.writeFile(primaryReleasesFile, serialized, 'utf8');
+      }
+      if (fs.existsSync(uploadsDir)) {
+        await fs.promises.writeFile(uploadsReleasesFile, serialized, 'utf8');
+      }
+
+      const supabase = getSupabaseService();
+      if (supabase) {
+        try {
+          if (releaseId) {
+            await supabase.from('releases').delete().eq('id', releaseId);
+          } else if (relTitle && bId) {
+            await supabase.from('releases').delete().eq('band_id', bId).ilike('title', relTitle);
+          }
+        } catch (_) {}
+      }
+
+      res.json({ success: true, releaseId, title: relTitle });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to delete release' });
     }
