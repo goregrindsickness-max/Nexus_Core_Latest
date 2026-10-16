@@ -4988,6 +4988,205 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     }
   });
 
+  // ==========================================
+  // SHAKE / INSTABUG AUTOMATED BUG REPORTS API
+  // ==========================================
+  const primaryBugReportsFile = path.join(process.cwd(), 'data', 'bug_reports.json');
+  const uploadsBugReportsFile = path.join(uploadsDir, 'bug_reports.json');
+
+  async function loadCachedBugReports(): Promise<any[]> {
+    try {
+      if (fs.existsSync(primaryBugReportsFile)) {
+        const content = await fs.promises.readFile(primaryBugReportsFile, 'utf8');
+        if (content && content.trim()) {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) {
+            return parsed.filter((r: any) => {
+              const str = ((r.message || '') + ' ' + (r.title || '') + ' ' + (r.stack || '')).toLowerCase();
+              return !str.includes('websocket') && !str.includes('@vite/client');
+            });
+          }
+        }
+      }
+      if (fs.existsSync(uploadsBugReportsFile)) {
+        const content = await fs.promises.readFile(uploadsBugReportsFile, 'utf8');
+        if (content && content.trim()) {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) {
+            return parsed.filter((r: any) => {
+              const str = ((r.message || '') + ' ' + (r.title || '') + ' ' + (r.stack || '')).toLowerCase();
+              return !str.includes('websocket') && !str.includes('@vite/client');
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[BUG REPORTS CACHE] Local cache read warning:', err);
+    }
+    return [];
+  }
+
+  async function saveCachedBugReports(reports: any[]) {
+    try {
+      const serialized = JSON.stringify(reports, null, 2);
+      const dataDir = path.dirname(primaryBugReportsFile);
+      if (!fs.existsSync(dataDir)) await fs.promises.mkdir(dataDir, { recursive: true });
+      await fs.promises.writeFile(primaryBugReportsFile, serialized, 'utf8');
+
+      if (fs.existsSync(uploadsDir)) {
+        await fs.promises.writeFile(uploadsBugReportsFile, serialized, 'utf8');
+      }
+    } catch (err) {
+      console.warn('[BUG REPORTS CACHE] Write error:', err);
+    }
+  }
+
+  // GET /api/bug-reports
+  app.get('/api/bug-reports', async (req: express.Request, res: express.Response) => {
+    try {
+      const reports = await loadCachedBugReports();
+      const { status, category, search } = req.query;
+      let filtered = [...reports];
+      if (status && typeof status === 'string' && status !== 'all') {
+        filtered = filtered.filter(r => r.status === status);
+      }
+      if (category && typeof category === 'string' && category !== 'all') {
+        filtered = filtered.filter(r => r.category === category);
+      }
+      if (search && typeof search === 'string') {
+        const q = search.toLowerCase();
+        filtered = filtered.filter(r =>
+          (r.message && r.message.toLowerCase().includes(q)) ||
+          (r.title && r.title.toLowerCase().includes(q)) ||
+          (r.endpoint && r.endpoint.toLowerCase().includes(q))
+        );
+      }
+      filtered.sort((a, b) => new Date(b.lastSeenAt || b.timestamp || 0).getTime() - new Date(a.lastSeenAt || a.timestamp || 0).getTime());
+      res.json({ success: true, count: filtered.length, reports: filtered });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to get bug reports' });
+    }
+  });
+
+  // POST /api/bug-reports
+  app.post('/api/bug-reports', express.json({ limit: '10mb' }), async (req: express.Request, res: express.Response) => {
+    try {
+      const newReport = req.body;
+      if (!newReport || !newReport.message) {
+        return res.status(400).json({ error: 'Invalid bug report: message is required' });
+      }
+
+      // Ignore benign development environment WebSocket noise
+      const combinedCheck = ((newReport.message || '') + ' ' + (newReport.title || '') + ' ' + (newReport.stack || '')).toLowerCase();
+      if (combinedCheck.includes('websocket') || combinedCheck.includes('@vite/client')) {
+        return res.json({ success: true, ignored: true });
+      }
+
+      const reports = await loadCachedBugReports();
+      const fingerprint = newReport.fingerprint || `${newReport.category || 'unknown'}-${newReport.message.slice(0, 80)}`;
+
+      const existingIdx = reports.findIndex((r: any) => r.fingerprint === fingerprint || (r.id && r.id === newReport.id));
+
+      if (existingIdx >= 0) {
+        const existing = reports[existingIdx];
+        existing.occurrences = (existing.occurrences || 1) + 1;
+        existing.lastSeenAt = newReport.lastSeenAt || new Date().toISOString();
+        if (newReport.breadcrumbs && Array.isArray(newReport.breadcrumbs) && newReport.breadcrumbs.length > 0) {
+          existing.breadcrumbs = newReport.breadcrumbs;
+        }
+        if (newReport.stack && !existing.stack) existing.stack = newReport.stack;
+        if (newReport.httpStatus) existing.httpStatus = newReport.httpStatus;
+        if (newReport.httpResponseBody) existing.httpResponseBody = newReport.httpResponseBody;
+        reports.splice(existingIdx, 1);
+        reports.unshift(existing);
+      } else {
+        const reportToSave = {
+          id: newReport.id || `bug-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          fingerprint,
+          title: newReport.title || newReport.message.slice(0, 60),
+          message: newReport.message,
+          category: newReport.category || 'runtime_exception',
+          severity: newReport.severity || 'medium',
+          isNonUiBreaking: newReport.isNonUiBreaking !== undefined ? newReport.isNonUiBreaking : true,
+          occurrences: newReport.occurrences || 1,
+          firstSeenAt: newReport.firstSeenAt || new Date().toISOString(),
+          lastSeenAt: newReport.lastSeenAt || new Date().toISOString(),
+          status: newReport.status || 'new',
+          stack: newReport.stack || '',
+          componentStack: newReport.componentStack || '',
+          endpoint: newReport.endpoint || '',
+          httpMethod: newReport.httpMethod || '',
+          httpStatus: newReport.httpStatus,
+          httpResponseBody: newReport.httpResponseBody,
+          url: newReport.url || '',
+          routeOrTab: newReport.routeOrTab || '',
+          activeBandName: newReport.activeBandName || '',
+          activeBandId: newReport.activeBandId || '',
+          userEmail: newReport.userEmail || '',
+          userId: newReport.userId || '',
+          userAgent: newReport.userAgent || '',
+          viewport: newReport.viewport || { width: 0, height: 0 },
+          online: newReport.online !== undefined ? newReport.online : true,
+          breadcrumbs: Array.isArray(newReport.breadcrumbs) ? newReport.breadcrumbs.slice(-35) : []
+        };
+        reports.unshift(reportToSave);
+      }
+
+      const capped = reports.slice(0, 200);
+      await saveCachedBugReports(capped);
+
+      res.json({ success: true, count: capped.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to save bug report' });
+    }
+  });
+
+  // PATCH /api/bug-reports/:id
+  app.patch('/api/bug-reports/:id', express.json(), async (req: express.Request, res: express.Response) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const reports = await loadCachedBugReports();
+      const report = reports.find((r: any) => r.id === id);
+      if (!report) return res.status(404).json({ error: 'Report not found' });
+      if (status) report.status = status;
+      await saveCachedBugReports(reports);
+      res.json({ success: true, report });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to update bug report' });
+    }
+  });
+
+  // DELETE /api/bug-reports/:id
+  app.delete('/api/bug-reports/:id', async (req: express.Request, res: express.Response) => {
+    try {
+      const { id } = req.params;
+      let reports = await loadCachedBugReports();
+      reports = reports.filter((r: any) => r.id !== id);
+      await saveCachedBugReports(reports);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to delete bug report' });
+    }
+  });
+
+  // POST /api/bug-reports/clear
+  app.post('/api/bug-reports/clear', express.json(), async (req: express.Request, res: express.Response) => {
+    try {
+      const { mode } = req.body || {};
+      let reports = await loadCachedBugReports();
+      if (mode === 'resolved_only') {
+        reports = reports.filter((r: any) => r.status !== 'resolved');
+      } else {
+        reports = [];
+      }
+      await saveCachedBugReports(reports);
+      res.json({ success: true, remaining: reports.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to clear bug reports' });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");

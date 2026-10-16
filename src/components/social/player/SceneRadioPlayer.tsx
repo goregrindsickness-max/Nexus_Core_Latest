@@ -22,7 +22,8 @@ import {
   Volume2,
   VolumeX,
   Minimize2,
-  Maximize2
+  Maximize2,
+  Battery
 } from 'lucide-react';
 import { RADIO_PLAYLISTS, FRONTEND_FALLBACK_PLAYLISTS } from '../../../data/socialFeedMockData';
 import {
@@ -37,6 +38,7 @@ import {
   markSceneRadioUserActive,
   isSceneRadioImmune
 } from '../utils/mediaPlaybackCoordinator';
+import { persistentAudioService } from '../../../services/persistentAudioService';
 
 export interface SceneRadioPlayerProps {
   showSceneRadio?: boolean;
@@ -641,6 +643,128 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     }
   };
 
+  // Wire up native MediaSession API (Lock screen metadata, notification tray controls)
+  useEffect(() => {
+    const curTrack = playlistVideos[currentVideoIndex];
+    const genreName = RADIO_PLAYLISTS[selectedRadioGenre]?.name || 'Scene Radio';
+
+    if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+      try {
+        const title = curTrack?.title || `${genreName} Stream`;
+        const artist = curTrack?.author || `Nexus ${genreName} Radio`;
+        const artwork = curTrack?.thumbnailUrl || '/icon-512.png';
+
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title,
+          artist,
+          album: `Nexus Scene Radio • ${genreName}`,
+          artwork: [
+            { src: artwork, sizes: '96x96', type: 'image/png' },
+            { src: artwork, sizes: '128x128', type: 'image/png' },
+            { src: artwork, sizes: '256x256', type: 'image/png' },
+            { src: artwork, sizes: '512x512', type: 'image/png' },
+          ]
+        });
+
+        navigator.mediaSession.setActionHandler('play', () => {
+          if (!sceneRadioPlayingRef.current) togglePlayPause();
+        });
+        navigator.mediaSession.setActionHandler('pause', () => {
+          if (sceneRadioPlayingRef.current) togglePlayPause();
+        });
+        navigator.mediaSession.setActionHandler('nexttrack', () => {
+          handleNextSong();
+        });
+        navigator.mediaSession.setActionHandler('previoustrack', () => {
+          handlePrevSong();
+        });
+        navigator.mediaSession.setActionHandler('stop', () => {
+          if (sceneRadioPlayingRef.current) togglePlayPause();
+        });
+      } catch (err) {
+        console.warn('[RADIO PLAYER] MediaSession registration note:', err);
+      }
+    }
+  }, [currentVideoIndex, playlistVideos, selectedRadioGenre]);
+
+  // Synchronize playback state with MediaSession and native Android BackgroundAudioService
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.playbackState = sceneRadioPlaying ? 'playing' : 'paused';
+      } catch (_) {}
+    }
+
+    // Forward to native Android BackgroundAudioService if running in Capacitor
+    try {
+      const nativeBridge = (window as any).NexusNativeAudio;
+      if (nativeBridge) {
+        const curTrack = playlistVideos[currentVideoIndex];
+        const genreName = RADIO_PLAYLISTS[selectedRadioGenre]?.name || 'Scene Radio';
+        const title = curTrack?.title || `${genreName} Stream`;
+        const artist = curTrack?.author || `Nexus Radio (${genreName})`;
+
+        if (sceneRadioPlaying) {
+          nativeBridge.startForegroundAudio(title, artist, genreName);
+        } else {
+          nativeBridge.pauseForegroundAudio();
+        }
+      }
+    } catch (e) {
+      console.warn('[RADIO PLAYER] Native bridge sync notice:', e);
+    }
+  }, [sceneRadioPlaying, currentVideoIndex, playlistVideos, selectedRadioGenre]);
+
+  // Listen for native audio interruptions (e.g. phone call, audio focus loss, headset unplugged)
+  useEffect(() => {
+    const handleNativeInterruption = (e: any) => {
+      const action = e.detail?.action;
+      if (action === 'pause' && sceneRadioPlayingRef.current) {
+        if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
+          try {
+            ytPlayerRef.current.pauseVideo();
+          } catch (_) {}
+        }
+        setSceneRadioPlaying(false);
+        triggerNotification?.('🎧 Audio paused due to incoming call or unplugged headset');
+      } else if (action === 'resume' && !sceneRadioPlayingRef.current) {
+        if (ytPlayerRef.current && typeof ytPlayerRef.current.playVideo === 'function') {
+          try {
+            ytPlayerRef.current.playVideo();
+            setSceneRadioPlaying(true);
+          } catch (_) {}
+        }
+      }
+    };
+
+    window.addEventListener('nexus_native_audio_interruption', handleNativeInterruption);
+
+    // Also handle browser-level headset unplugging
+    let handleDeviceChange: any = null;
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices && typeof navigator.mediaDevices.addEventListener === 'function') {
+      handleDeviceChange = () => {
+        if (sceneRadioPlayingRef.current) {
+          if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
+            try {
+              ytPlayerRef.current.pauseVideo();
+            } catch (_) {}
+          }
+          setSceneRadioPlaying(false);
+          triggerNotification?.('🎧 Headset disconnected — radio paused');
+        }
+      };
+      navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    }
+
+    return () => {
+      window.removeEventListener('nexus_native_audio_interruption', handleNativeInterruption);
+      if (handleDeviceChange && navigator.mediaDevices) {
+        navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+      }
+    };
+  }, [triggerNotification]);
+
+
   // Select a specific track from the playlist queue
   const handleSelectSpecificTrack = (video: any) => {
     hasUserInteractedWithRadio.current = true;
@@ -881,6 +1005,18 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                       </button>
                     );
                   })}
+                  <button
+                    onClick={() => {
+                      persistentAudioService.requestBatteryExemption();
+                      triggerNotification?.('🔋 Requested Unrestricted Battery access for background radio');
+                    }}
+                    title="Allow Background Audio playback in Android system settings"
+                    className="ml-auto px-2.5 py-1.5 rounded-lg text-[9px] font-mono text-zinc-400 hover:text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 bg-zinc-900/60 hover:bg-emerald-950/20 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                  >
+                    <Battery className="w-3 h-3 text-emerald-400" />
+                    <span className="hidden sm:inline">Background Keep-Alive</span>
+                    <span className="sm:hidden">Keep-Alive</span>
+                  </button>
                 </div>
 
                 {/* Active Track Control Panel */}

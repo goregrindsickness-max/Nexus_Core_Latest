@@ -7,6 +7,7 @@ import { CheckCircle, MapPin } from 'lucide-react';
 import { SonicFootprint } from '../../profile/SonicFootprint';
 import { formatLocationDisplay } from '../../../constants/location';
 import { useUserPresence } from '../../../lib/presence';
+import { isPromoterAvatarUrl } from '../../../utils/bandProfileUtils';
 
 // Keep ListenerMetric exports
 export type { ListenerMetric } from '../../profile/SonicFootprint';
@@ -74,11 +75,13 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onActionClick
 
   const roleColorHex = isBand ? '#39ff14' : isLabel ? '#ff6b00' : isCreative ? '#ff00aa' : isPromoter ? '#ffff00' : isIndustry ? '#8b5cf6' : '#00f0ff';
 
-  const isPersonal = profile?.isIndustryProPersonal === true || 
+  const isPersonal = profile?.isPersonal === false ? false : (
+    profile?.isIndustryProPersonal === true || 
     profile?.isPersonal === true || 
-    profile?.isYou === true || 
-    (profile?.email && String(profile.email).includes('goregrindsickness')) || 
-    (profile?.name && String(profile.name).toLowerCase().includes('miguel'));
+    (profile?.isYou === true && !isBand && !isLabel && !isCreative && !isPromoter) || 
+    ((profile?.email && String(profile.email).includes('goregrindsickness')) && !isBand && !isLabel && !isCreative && !isPromoter) || 
+    ((profile?.name && String(profile.name).toLowerCase().includes('miguel')) && !isBand && !isLabel && !isCreative && !isPromoter)
+  );
 
   const isWorkspace = !isPersonal && (isBand || isLabel || isCreative || isPromoter);
 
@@ -237,53 +240,78 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = (props) => 
   const targetRole = (baseTarget?.role || baseTarget?.portalRole || baseTarget?.account_type || baseTarget?.type || '').toLowerCase();
   const currentPortal = (props.portalRole || '').toLowerCase();
 
-  const isPersonal = baseTarget?.isIndustryProPersonal === true || 
-    baseTarget?.isPersonal === true || 
-    baseTarget?.account_type === 'industry_pro' ||
-    baseTarget?.account_type === 'industry pro' ||
-    targetRole.includes('industry') ||
-    targetRole.includes('pro') ||
-    currentPortal === 'industry_pro' ||
-    currentPortal === 'fan_only' ||
-    (baseTarget?.isYou === true && currentPortal !== 'band' && currentPortal !== 'creative' && currentPortal !== 'label' && currentPortal !== 'promoter') ||
-    targetRole.includes('fan') || 
-    targetRole === 'user' ||
-    targetRole.includes('supporter') ||
-    targetRole.includes('listener');
+  // 1. Explicit Creative Profile / Workspace check
+  const isCreative = Boolean(
+    baseTarget?.type === 'creative' || 
+    baseTarget?.account_type === 'creative' || 
+    baseTarget?.isCreativeProfile === true || 
+    baseTarget?.workspace_type === 'creative' ||
+    baseTarget?.portalRole === 'creative' ||
+    targetRole === 'creative' ||
+    targetRole === 'creative pro' ||
+    (typeof baseTarget?.name === 'string' && baseTarget.name.toLowerCase().includes('vortex')) ||
+    (typeof baseTarget?.creative_name === 'string' && baseTarget.creative_name.toLowerCase().includes('vortex')) ||
+    (typeof baseTarget?.business_name === 'string' && baseTarget.business_name.toLowerCase().includes('vortex')) ||
+    Boolean(baseTarget?.creative_metadata) ||
+    Boolean(baseTarget?.creative_avatar && !isPromoterAvatarUrl(baseTarget.creative_avatar)) ||
+    (baseTarget?.isPersonal !== true && (targetRole.includes('designer') || targetRole.includes('photographer') || targetRole.includes('videographer')))
+  );
 
-  if (!isPersonal && (baseTarget?.type === 'creative' || baseTarget?.account_type === 'creative' || baseTarget?.isCreativeProfile === true || targetRole === 'creative' || targetRole.includes('creative') || targetRole.includes('designer') || targetRole.includes('photographer') || targetRole.includes('videographer'))) {
+  if (isCreative) {
     return <CreativeProfileCard {...props} />;
   }
 
-  if (!isPersonal && (baseTarget?.type === 'label' || baseTarget?.account_type === 'label' || baseTarget?.isLabelProfile === true || targetRole === 'label' || targetRole.includes('label'))) {
-    return <LabelProfileCard {...props} />;
-  }
-
-  const isPromoter = !isPersonal && (
+  // 2. Explicit Promoter Profile / Workspace check
+  const isPromoter = Boolean(
     baseTarget?.type === 'promoter' || 
     baseTarget?.account_type === 'promoter' || 
     baseTarget?.isPromoterProfile === true || 
     baseTarget?.is_promoter === true ||
-    targetRole === 'promoter' || 
-    targetRole.includes('promoter') || 
-    targetRole.includes('venue') ||
+    baseTarget?.workspace_type === 'promoter' ||
+    baseTarget?.portalRole === 'promoter' ||
+    targetRole === 'promoter' ||
+    targetRole === 'event promoter' ||
+    targetRole === 'venue promoter' ||
+    (typeof baseTarget?.name === 'string' && (baseTarget.name.toLowerCase().includes('nexus live') || baseTarget.name.toLowerCase().includes('promoter') || baseTarget.name.toLowerCase().includes('pure domination') || baseTarget.name.toLowerCase().includes('domination fest'))) ||
+    (typeof baseTarget?.entity_name === 'string' && (baseTarget.entity_name.toLowerCase().includes('nexus live') || baseTarget.entity_name.toLowerCase().includes('promoter') || baseTarget.entity_name.toLowerCase().includes('pure domination') || baseTarget.entity_name.toLowerCase().includes('domination fest'))) ||
+    (typeof baseTarget?.agency_name === 'string' && (baseTarget.agency_name.toLowerCase().includes('nexus live') || baseTarget.agency_name.toLowerCase().includes('promoter'))) ||
     Boolean(baseTarget?.promoter_metadata) ||
     Boolean(baseTarget?.promoter_agency) ||
-    (typeof baseTarget?.name === 'string' && (baseTarget.name.toLowerCase().includes('nexus live') || baseTarget.name.toLowerCase().includes('pure domination') || baseTarget.name.toLowerCase().includes('domination fest'))) ||
-    (typeof baseTarget?.entity_name === 'string' && (baseTarget.entity_name.toLowerCase().includes('nexus live') || baseTarget.entity_name.toLowerCase().includes('pure domination') || baseTarget.entity_name.toLowerCase().includes('domination fest')))
+    Boolean(baseTarget?.promoter_logo) ||
+    (baseTarget?.isPersonal !== true && (targetRole.includes('venue') || targetRole.includes('booking')))
   );
 
   if (isPromoter) {
     return <PromoterProfileCard {...props} />;
   }
 
-  const isArtistOrBand = !isPersonal && !!(
+  // 3. Explicit Record Label Profile / Workspace check
+  const isLabel = Boolean(
+    baseTarget?.type === 'label' || 
+    baseTarget?.account_type === 'label' || 
+    baseTarget?.isLabelProfile === true || 
+    baseTarget?.workspace_type === 'label' ||
+    baseTarget?.portalRole === 'label' ||
+    (baseTarget?.isPersonal !== true && (targetRole === 'label' || targetRole.includes('record label')))
+  );
+
+  if (isLabel) {
+    return <LabelProfileCard {...props} />;
+  }
+
+  // 4. Explicit Band / Artist Profile check
+  const isArtistOrBand = Boolean(
     baseTarget?.isBandProfile === true ||
     baseTarget?.isBand === true ||
     baseTarget?.type === 'band' ||
-    targetRole === 'band' ||
-    (targetRole.includes('band') && !targetRole.includes('fan')) ||
-    (targetRole.includes('artist') && !targetRole.includes('fan'))
+    baseTarget?.account_type === 'band' ||
+    baseTarget?.workspace_type === 'band' ||
+    (baseTarget?.isPersonal !== true && (
+      targetRole === 'band' ||
+      targetRole === 'artist' ||
+      (targetRole.includes('band') && !targetRole.includes('fan') && !targetRole.includes('user')) ||
+      (targetRole.includes('artist') && !targetRole.includes('fan') && !targetRole.includes('user'))
+    ))
   );
 
   if (isArtistOrBand) {

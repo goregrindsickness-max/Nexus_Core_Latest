@@ -782,9 +782,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     console_handle: resolvedPromoterHandleStr,
     handle: resolvedPromoterHandleStr,
     name: resolvedPromoterBrandName,
+    agency_name: resolvedPromoterBrandName,
+    promoter_agency: resolvedPromoterBrandName,
+    promoter_brand: resolvedPromoterBrandName,
+    promoter_name: resolvedPromoterBrandName,
+    brand_name: resolvedPromoterBrandName,
+    entity_name: resolvedPromoterBrandName,
     full_name: resolvedPromoterBrandName,
     avatar: resolvedPromoterLogo,
     avatar_url: resolvedPromoterLogo,
+    logo: resolvedPromoterLogo,
+    logo_url: resolvedPromoterLogo,
     promoter_logo: resolvedPromoterLogo,
     cover_url: resolvedPromoterCover,
     banner_url: resolvedPromoterCover,
@@ -799,8 +807,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       allowed_workspaces: fetchedProfileData.allowed_workspaces || baseTarget.allowed_workspaces,
       homebase: fetchedProfileData.homebase || baseTarget.homebase,
       location: formatLocationDisplay(fetchedProfileData) || baseTarget.location,
-      avatar: resolvedPromoterLogo || fetchedProfileData.avatar_url || fetchedProfileData.avatar || baseTarget.avatar,
-      avatar_url: resolvedPromoterLogo || fetchedProfileData.avatar_url || fetchedProfileData.avatar || baseTarget.avatar_url,
       top_song_url: (selectedUserProfile?.isYou || baseTarget?.isYou) ? (localAnthemUrl || fetchedProfileData.top_song_url || baseTarget?.top_song_url) : (fetchedProfileData.top_song_url !== undefined && fetchedProfileData.top_song_url !== null && fetchedProfileData.top_song_url !== '' ? fetchedProfileData.top_song_url : baseTarget?.top_song_url),
       top_song_title: (selectedUserProfile?.isYou || baseTarget?.isYou) ? (localAnthemTitle || fetchedProfileData.top_song_title || baseTarget?.top_song_title) : (fetchedProfileData.top_song_title || fetchedProfileData.favoriteSong || baseTarget?.top_song_title || baseTarget?.favoriteSong),
       favoriteSong: (selectedUserProfile?.isYou || baseTarget?.isYou) ? (localAnthemTitle ? (localAnthemArtist ? `${localAnthemArtist} - ${localAnthemTitle}` : localAnthemTitle) : fetchedProfileData.favoriteSong || baseTarget?.favoriteSong) : (fetchedProfileData.favoriteSong || fetchedProfileData.top_song_title || baseTarget?.favoriteSong || baseTarget?.top_song_title),
@@ -808,10 +814,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       featured_youtube_url: (selectedUserProfile?.isYou || baseTarget?.isYou) ? (localAnthemUrl || fetchedProfileData.featured_youtube_url || fetchedProfileData.top_song_url || baseTarget?.featured_youtube_url) : (fetchedProfileData.featured_youtube_url || fetchedProfileData.top_song_url || baseTarget?.featured_youtube_url),
     } : {}),
     ...(bData ? {
-      name: bData.band_name || bData.name || baseTarget.name,
-      band_name: bData.band_name || bData.name || baseTarget.band_name,
-      avatar: resolvedPromoterLogo || bData.logo_url || bData.avatar_url || baseTarget.avatar,
-      avatar_url: resolvedPromoterLogo || bData.logo_url || bData.avatar_url || baseTarget.avatar_url,
+      band_name: bData.band_name || bData.name,
       genre: bData.genre || baseTarget.genre,
       genre_tags: bData.genre_tags || (bData.genre ? [bData.genre] : baseTarget.genre_tags),
       lineup: bData.lineup || baseTarget.lineup,
@@ -820,9 +823,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       metal_archives_url: bData.metal_archives_url || baseTarget.metal_archives_url,
       booking_email: bData.booking_email || baseTarget.booking_email,
       booking_phone: bData.booking_phone || baseTarget.booking_phone,
-    } : {
-      name: baseTarget?.name || baseTarget?.legalName || baseTarget?.full_name || 'Nexus Live Productions',
-    })
+    } : {}),
   };
 
   const prof = effTarget;
@@ -1605,7 +1606,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     }
                     if (!matchingBandProfile) {
                       const targetEmailLower = (effTarget?.email || baseTarget?.email || selectedUserProfile?.email || (isTargetSelf ? userProfile?.email : '') || '').toLowerCase();
-                      if (targetEmailLower.includes('exposedentrails') || targetFullName.toLowerCase().includes('andre')) {
+                      const targetWords = (targetFullName || '').toLowerCase().trim().split(/[\s._-]+/).filter(Boolean);
+                      const isTargetAndreGonzalez = targetWords.some((w: string) => w === 'andre' || w === 'andré') && (targetFullName.toLowerCase().includes('gonzal') || targetEmailLower.includes('exposedentrails'));
+
+                      if (targetEmailLower.includes('exposedentrails') || isTargetAndreGonzalez) {
                         matchingBandProfile = communityBandManager.findByName('Cordyceps');
                       } else if (targetEmailLower.includes('wirstrom84') || targetFullName.toLowerCase().includes('wirstrom')) {
                         matchingBandProfile = communityBandManager.findByName('Cranial Impalement');

@@ -7,7 +7,7 @@ import { formatLocationDisplay } from '../../../constants/location';
 import { useUserPresence } from '../../../lib/presence';
 import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, upsertBandToDatabase, generateUUID } from '../../../supabase';
-import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER } from '../../../utils/bandProfileUtils';
+import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER, resolvePromoterLogo, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
 import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
@@ -27,6 +27,7 @@ import { CrtTvFrame } from '../../profile/CrtTvFrame';
 import { ReleaseDetailsModal } from './ReleaseDetailsModal';
 import PublicStorefrontView from '../../sales/PublicStorefrontView';
 import { fetchReleasesFromDatabase } from '../../../services/releasesService';
+import { VORTEX_GRAPHICS_SVG_AVATAR, PROMOTER_SVG_AVATAR } from '../../../utils/imageFallbacks';
 
 export type { ListenerMetric };
 export { calculateListenerMetrics };
@@ -1174,23 +1175,42 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
   const hasLineup = displayLineup.length > 0;
 
-  const handleLineupMemberClick = (mem: any) => {
-    const matchedProf = allProfiles.find((p: any) => {
+  const matchLineupMemberToProfile = (mem: any) => {
+    if (!mem || !Array.isArray(allProfiles)) return null;
+    return allProfiles.find((p: any) => {
       if (!p) return false;
       if (mem.id && p.id === mem.id) return true;
       const mName = (mem.name || '').toLowerCase().trim();
       const pName = (p.full_name || p.name || '').toLowerCase().trim();
       const pUser = (p.username || '').toLowerCase().trim();
       const pEmail = (p.email || '').toLowerCase().trim();
+
       if (isMiguelNameOrProfile(mem)) {
         return pEmail.includes('goregrindsickness') || pUser.includes('goregrinder') || pName.includes('miguel');
       }
-      if (pEmail.includes('exposedentrails') && (mName.includes('andre') || mName.includes('gonzal') || mName.includes('gonzalez') || mName.includes('gonzales'))) {
-        return true;
+
+      // Safeguard: Alexandre Brochu is in Necroticgorebeast, NEVER Andre Gonzalez in Cordyceps
+      if (mName.includes('alexandre') || mName.includes('brochu')) {
+        if (pEmail.includes('exposedentrails') || pName.includes('gonzal') || pUser.includes('cordyceps')) {
+          return false;
+        }
       }
+
+      // Accurate check for Andre Gonzalez (Cordyceps)
+      const mWords = mName.split(/[\s._-]+/).filter(Boolean);
+      const isMemAndre = mWords.some((w: string) => w === 'andre' || w === 'andré');
+      const isMemGonzal = mName.includes('gonzal');
+      if (isMemAndre && isMemGonzal) {
+        if (pEmail.includes('exposedentrails') || (pName.includes('andre') && pName.includes('gonzal'))) {
+          return true;
+        }
+      }
+
+      // Christopher Wirstrom (Cranial Impalement)
       if (pEmail.includes('wirstrom') && (mName.includes('christopher') || mName.includes('wirstrom'))) {
         return true;
       }
+
       // Safeguard: Emmanuel Flores is NOT in Origin (Mike Flores is in Origin)
       if (mName.includes('flores') && (mName.includes('mike') || mName.includes('michael'))) {
         if (pName.includes('emmanuel') || pUser.includes('emmanuel') || pEmail.includes('emmanuel')) {
@@ -1202,6 +1222,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           return false;
         }
       }
+
       if (mName && pName && (
         pName === mName ||
         pName.includes(mName) ||
@@ -1212,7 +1233,11 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         return true;
       }
       return false;
-    });
+    }) || null;
+  };
+
+  const handleLineupMemberClick = (mem: any) => {
+    const matchedProf = matchLineupMemberToProfile(mem);
 
     if (matchedProf) {
       setSelectedUserProfile(matchedProf);
@@ -2082,34 +2107,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           </div>
                           <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                             {displayLineup.map((mem: any, mIdx: number) => {
-                              const matchedProf = allProfiles.find((p: any) => {
-                                if (!p) return false;
-                                if (mem.id && p.id === mem.id) return true;
-                                const mName = (mem.name || '').toLowerCase().trim();
-                                const pName = (p.full_name || p.name || '').toLowerCase().trim();
-                                const pUser = (p.username || '').toLowerCase().trim();
-                                const pEmail = (p.email || '').toLowerCase().trim();
-                                if (isMiguelNameOrProfile(mem)) {
-                                  return pEmail.includes('goregrindsickness') || pUser.includes('goregrinder') || pName.includes('miguel');
-                                }
-                                if (pEmail.includes('exposedentrails') && (mName.includes('andre') || mName.includes('gonzal') || mName.includes('gonzalez') || mName.includes('gonzales'))) {
-                                  return true;
-                                }
-                                if (pEmail.includes('wirstrom') && (mName.includes('christopher') || mName.includes('wirstrom'))) {
-                                  return true;
-                                }
-                                if (mName && pName && (
-                                  pName === mName ||
-                                  pName.includes(mName) ||
-                                  mName.includes(pName) ||
-                                  pName.replace(/[^a-z0-9]/g, '') === mName.replace(/[^a-z0-9]/g, '') ||
-                                  (mName.split(' ')[0] === pName.split(' ')[0] && mName.replace(/[sz]$/, '') === pName.replace(/[sz]$/, ''))
-                                )) {
-                                  return true;
-                                }
-                                return false;
-                              });
-
+                              const matchedProf = matchLineupMemberToProfile(mem);
                               const isActive = !!matchedProf;
                               const avatarUrl = matchedProf?.avatar_url || matchedProf?.avatar;
 
@@ -2310,7 +2308,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     }
                     if (!matchingBandProfile) {
                       const targetEmailLower = (effTarget?.email || baseTarget?.email || selectedUserProfile?.email || (isTargetSelf ? userProfile?.email : '') || '').toLowerCase();
-                      if (targetEmailLower.includes('exposedentrails') || targetFullName.toLowerCase().includes('andre')) {
+                      const targetWords = (targetFullName || '').toLowerCase().trim().split(/[\s._-]+/).filter(Boolean);
+                      const isTargetAndreGonzalez = targetWords.some((w: string) => w === 'andre' || w === 'andré') && (targetFullName.toLowerCase().includes('gonzal') || targetEmailLower.includes('exposedentrails'));
+
+                      if (targetEmailLower.includes('exposedentrails') || isTargetAndreGonzalez) {
                         matchingBandProfile = communityBandManager.findByName('Cordyceps');
                       } else if (targetEmailLower.includes('wirstrom84') || targetFullName.toLowerCase().includes('wirstrom')) {
                         matchingBandProfile = communityBandManager.findByName('Cranial Impalement');
@@ -2527,7 +2528,14 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                   if (hasPromoter) {
                     const name = String(rawPromoterName).trim();
-                    const logo = matchingPromoterProfile?.promoter_logo || matchingPromoterProfile?.logo_url || effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=300';
+                    const logo = 
+                      (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 
+                      matchingPromoterProfile?.promoter_logo || 
+                      (matchingPromoterProfile?.logo_url && !matchingPromoterProfile.logo_url.includes('unsplash') && matchingPromoterProfile.logo_url !== userProfile?.avatar_url ? matchingPromoterProfile.logo_url : null) || 
+                      effTarget?.promoter_logo || 
+                      effTarget?.promoter_metadata?.logo_url || 
+                      (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || 
+                      resolvePromoterLogo(effTarget);
                     const rawSub = effTarget?.promoter_metadata?.region || effTarget?.target_region || (isTargetSelf ? (userProfile?.promoter_metadata?.region || userProfile?.target_region) : null) || effTarget.venue || effTarget.location || 'Promoter & Venue Booking';
                     const subtitle = rawSub && rawSub !== 'Promoter & Venue Booking' ? (formatCleanLocation(rawSub) || rawSub) : rawSub;
 
@@ -2543,18 +2551,31 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       onClick: () => {
                         const promoterProfileObj = {
                           ...effTarget,
-                          id: effTarget.promoter_id || (typeof promoterWsRef === 'object' && promoterWsRef?.id) || `promoter_${effTarget.id || Date.now()}`,
+                          id: effTarget.promoter_id || (typeof promoterWsRef === 'object' && promoterWsRef?.id) || (isTargetSelf && isOwnerMiguel ? '5403162d-1947-43aa-b5f6-38a1bd2a1b80' : `promoter_${effTarget.id || Date.now()}`),
                           name,
                           agency_name: name,
+                          promoter_agency: name,
+                          promoter_brand: name,
+                          promoter_name: name,
+                          brand_name: name,
+                          entity_name: name,
                           type: 'promoter',
                           role: 'Promoter',
                           portalRole: 'promoter',
                           account_type: 'promoter',
                           isPersonal: false,
+                          isBandProfile: false,
+                          isBand: false,
+                          isIndustryProPersonal: false,
+                          isPromoterProfile: true,
+                          is_promoter: true,
                           avatar: logo,
                           avatar_url: logo,
+                          logo,
+                          logo_url: logo,
+                          promoter_logo: logo,
                           location: subtitle,
-                          bio: effTarget.bio || `Official Promoter & Booking entity for ${name}.`
+                          bio: effTarget.promoter_bio || effTarget.promoter_metadata?.bio || (isTargetSelf ? (userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio) : null) || effTarget.bio || `Official Promoter & Booking entity for ${name}.`
                         };
                         setSelectedUserProfile(promoterProfileObj);
                         triggerNotification?.(`🎪 Opening Promoter Profile for ${name}...`);
@@ -2586,16 +2607,21 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     effTarget.creative_business_name || 
                     effTarget.business_name || 
                     (isTargetSelf ? (userProfile?.creative_business_name || userProfile?.creative_name || userProfile?.creative_metadata?.business_name) : null) ||
-                    matchingCreativeProfile?.name || 
                     (typeof creativeWsRef === 'object' && creativeWsRef?.name ? creativeWsRef.name : null) || 
-                    (hasWorkspaceType('creative') ? (effTarget.name && !['user', 'user name', 'industry pro', 'pro_user', 'fan listener', 'member', 'fan_core', 'listener'].includes(String(effTarget.name).toLowerCase().trim()) ? `${effTarget.name} Studios` : 'Vortex Graphics') : null);
+                    'Vortex Graphics';
                   const hasCreativeWorkspace = (hasWorkspaceType('creative') || Boolean(matchingCreativeProfile) || Boolean(effTarget.business_name) || Boolean(effTarget.creative_name) || Boolean(effTarget.creative_id) || (isTargetSelf && Boolean(userProfile?.creative_id || userProfile?.creative_name || userProfile?.creative_business_name))) && Boolean(rawCreativeName) && String(rawCreativeName).trim() !== '';
 
                   const hasCreative = !isCurrentProfileCreative && hasCreativeWorkspace;
 
                   if (hasCreative) {
                     const name = String(rawCreativeName).trim();
-                    const logo = matchingCreativeProfile?.creative_avatar || effTarget?.creative_avatar || (isTargetSelf ? userProfile?.creative_avatar : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
+                    const logo = 
+                      (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 
+                      matchingCreativeProfile?.creative_avatar || 
+                      effTarget?.creative_avatar || 
+                      effTarget?.creative_metadata?.avatar_url || 
+                      (isTargetSelf ? (userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url) : null) || 
+                      resolveCreativeLogo(effTarget);
                     const subtitle = effTarget.primary_specialty || effTarget.specialty || 'Creative Media & Sound Design';
 
                     entities.push({
@@ -2608,14 +2634,14 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       logo,
                       subtitle,
                       onClick: () => {
-                        const creativeBanner = matchingCreativeProfile?.creative_banner || matchingCreativeProfile?.banner_url || matchingCreativeProfile?.cover_url || effTarget?.creative_banner || (isTargetSelf ? userProfile?.creative_banner : null) || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200';
+                        const creativeBanner = matchingCreativeProfile?.creative_banner || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_creative_cover')) : null) || effTarget?.creative_banner || (isTargetSelf ? userProfile?.creative_banner : null) || VORTEX_GRAPHICS_DEFAULT_COVER;
                         const creativeHandle = matchingCreativeProfile?.creative_handle || matchingCreativeProfile?.console_handle || matchingCreativeProfile?.handle || effTarget?.creative_handle || (isTargetSelf ? userProfile?.creative_handle : null) || 'vortexgraphics';
                         const creativeName = name || matchingCreativeProfile?.business_name || matchingCreativeProfile?.creative_name || effTarget?.creative_name || (isTargetSelf ? userProfile?.creative_business_name : null) || 'Vortex Graphics';
 
                         const creativeProfileObj = {
                           ...(matchingCreativeProfile || {}),
                           ...(!matchingCreativeProfile ? effTarget : {}),
-                          id: matchingCreativeProfile?.id || effTarget.creative_id || (typeof creativeWsRef === 'object' && creativeWsRef?.id) || `creative_${effTarget.id || Date.now()}`,
+                          id: matchingCreativeProfile?.id || effTarget.creative_id || (typeof creativeWsRef === 'object' && creativeWsRef?.id) || (isTargetSelf && isOwnerMiguel ? 'c-vortex' : `creative_${effTarget.id || Date.now()}`),
                           name: creativeName,
                           business_name: creativeName,
                           creative_name: creativeName,
@@ -2625,9 +2651,14 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           portalRole: 'creative',
                           account_type: 'creative',
                           isPersonal: false,
+                          isBandProfile: false,
+                          isBand: false,
                           isIndustryProPersonal: false,
+                          isCreativeProfile: true,
                           avatar: logo,
                           avatar_url: logo,
+                          logo,
+                          logo_url: logo,
                           creative_avatar: logo,
                           creative_banner: creativeBanner,
                           banner: creativeBanner,
@@ -2637,7 +2668,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           console_handle: creativeHandle,
                           handle: creativeHandle,
                           specialty: subtitle,
-                          bio: matchingCreativeProfile?.bio || effTarget.bio || `Official Creative Specialist Profile for ${creativeName}.`
+                          bio: matchingCreativeProfile?.bio || effTarget?.creative_bio || effTarget?.creative_metadata?.bio || (isTargetSelf ? (userProfile?.creative_metadata?.bio || userProfile?.creative_bio) : null) || effTarget.bio || `Official Creative Specialist Profile for ${creativeName}.`
                         };
                         setSelectedUserProfile(creativeProfileObj);
                         triggerNotification?.(`🎨 Opening Creative Profile for ${creativeName}...`);
@@ -4317,34 +4348,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                               <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                                 {displayLineup.map((mem: any, mIdx: number) => {
-                                  const matchedProf = allProfiles.find((p: any) => {
-                                    if (!p) return false;
-                                    if (mem.id && p.id === mem.id) return true;
-                                    const mName = (mem.name || '').toLowerCase().trim();
-                                    const pName = (p.full_name || p.name || '').toLowerCase().trim();
-                                    const pUser = (p.username || '').toLowerCase().trim();
-                                    const pEmail = (p.email || '').toLowerCase().trim();
-                                    if (isMiguelNameOrProfile(mem)) {
-                                      return pEmail.includes('goregrindsickness') || pUser.includes('goregrinder') || pName.includes('miguel');
-                                    }
-                                    if (pEmail.includes('exposedentrails') && (mName.includes('andre') || mName.includes('gonzal') || mName.includes('gonzalez') || mName.includes('gonzales'))) {
-                                      return true;
-                                    }
-                                    if (pEmail.includes('wirstrom') && (mName.includes('christopher') || mName.includes('wirstrom'))) {
-                                      return true;
-                                    }
-                                    if (mName && pName && (
-                                      pName === mName ||
-                                      pName.includes(mName) ||
-                                      mName.includes(pName) ||
-                                      pName.replace(/[^a-z0-9]/g, '') === mName.replace(/[^a-z0-9]/g, '') ||
-                                      (mName.split(' ')[0] === pName.split(' ')[0] && mName.replace(/[sz]$/, '') === pName.replace(/[sz]$/, ''))
-                                    )) {
-                                      return true;
-                                    }
-                                    return false;
-                                  });
-
+                                  const matchedProf = matchLineupMemberToProfile(mem);
                                   const isActive = !!matchedProf;
                                   const avatarUrl = matchedProf?.avatar_url || matchedProf?.avatar;
 

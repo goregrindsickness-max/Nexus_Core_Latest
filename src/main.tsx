@@ -7,6 +7,12 @@ import "./utils/resetApp";
 import { purgeDeletedAndZombieBands } from './lib/communityBands.ts';
 import './index.css';
 import './focus-overrides.css';
+import { bugMonitor } from './services/bugMonitorService';
+
+// Initialize Shake & Instabug autonomous bug observation engine
+try {
+  bugMonitor.init();
+} catch (e) {}
 
 // Purge any stale mock/deleted bands from previous sessions
 try {

@@ -3169,8 +3169,22 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       },
       {
         "id": "ngb-2",
-        "name": "Alex Brochu",
+        "name": "Michael Chamberland",
         "role": "Guitars",
+        "status": "active",
+        "years": "2017–present"
+      },
+      {
+        "id": "ngb-3",
+        "name": "Alexandre Brochu",
+        "role": "Bass",
+        "status": "active",
+        "years": "2017–present"
+      },
+      {
+        "id": "ngb-4",
+        "name": "Jean-Philippe Bouchard",
+        "role": "Drums",
         "status": "active",
         "years": "2017–present"
       }

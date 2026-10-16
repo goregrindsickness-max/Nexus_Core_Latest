@@ -438,6 +438,15 @@ export function purgeDeletedAndZombieBands(): void {
             if (isDeletedOrZombieBand(itemId) || isDeletedOrZombieBand(itemName)) {
               return false;
             }
+            // Ensure Necroticgorebeast lineup has full 4-piece roster with Alexandre Brochu
+            if (itemName.toLowerCase() === 'necroticgorebeast' || itemId === 'f1fea79f-c86a-4c26-8f4f-d29b1788d8f3') {
+              item.lineup = [
+                { id: "ngb-1", name: "John Mayer", role: "Vocals", status: "active", years: "2017–present" },
+                { id: "ngb-2", name: "Michael Chamberland", role: "Guitars", status: "active", years: "2017–present" },
+                { id: "ngb-3", name: "Alexandre Brochu", role: "Bass", status: "active", years: "2017–present" },
+                { id: "ngb-4", name: "Jean-Philippe Bouchard", role: "Drums", status: "active", years: "2017–present" }
+              ];
+            }
             return true;
           });
           safeLocalStorage.setItem(key, JSON.stringify(filtered));
@@ -872,7 +881,8 @@ export class CommunityBandManager {
     const cleanParts = clean.split(/\s+/).filter(Boolean);
 
     // Fast explicit aliases for verified community musicians
-    if (clean.includes('exposedentrails') || (clean.includes('andre') && (clean.includes('gonzal') || cleanParts.some(p => p.startsWith('gonz'))))) {
+    const isAndreGonzalez = cleanParts.some(p => p === 'andre' || p === 'andré') && (clean.includes('gonzal') || cleanParts.some(p => p.startsWith('gonz')));
+    if (clean.includes('exposedentrails') || isAndreGonzalez) {
       const cord = this.findByName('Cordyceps');
       if (cord) return cord;
     }
@@ -922,7 +932,9 @@ export class CommunityBandManager {
               (cleanFirst === 'rob' && mFirst === 'robert') ||
               (cleanFirst === 'robert' && mFirst === 'rob') ||
               (cleanFirst === 'alex' && mFirst === 'alexander') ||
-              (cleanFirst === 'alexander' && mFirst === 'alex');
+              (cleanFirst === 'alexander' && mFirst === 'alex') ||
+              (cleanFirst === 'alex' && mFirst === 'alexandre') ||
+              (cleanFirst === 'alexandre' && mFirst === 'alex');
 
             if (!firstMatch) return false;
 

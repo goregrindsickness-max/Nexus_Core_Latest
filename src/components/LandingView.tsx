@@ -35,36 +35,8 @@ export const LandingView: React.FC<LandingViewProps> = ({ onEnterApp }) => {
   const [apkFileName, setApkFileName] = useState('Nexus-Core-v1.0.apk');
   const [apkFileSize, setApkFileSize] = useState('7.5 MB');
   const [apkDownloadUrl, setApkDownloadUrl] = useState(
-    'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/downloads/Nexus-Core-v1.0.apk'
+    'https://github.com/nexus-core/releases/releases/latest/download/Nexus-Core-v1.0.apk'
   );
-
-  // Dynamically resolve APK file name & size from Supabase 'downloads' bucket
-  useEffect(() => {
-    const fetchApkDetails = async () => {
-      try {
-        const supabase = getSupabase();
-        const { data, error } = await supabase.storage.from('downloads').list('');
-        if (!error && data && data.length > 0) {
-          const apkFile = data.find((f: any) => f.name.toLowerCase().endsWith('.apk')) || data[0];
-          if (apkFile) {
-            setApkFileName(apkFile.name);
-            if (apkFile.metadata?.size) {
-              const mb = (apkFile.metadata.size / (1024 * 1024)).toFixed(1);
-              setApkFileSize(`${mb} MB`);
-            }
-            const { data: urlData } = supabase.storage.from('downloads').getPublicUrl(apkFile.name);
-            if (urlData?.publicUrl) {
-              setApkDownloadUrl(urlData.publicUrl);
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Unable to query downloads storage:', err);
-      }
-    };
-
-    fetchApkDetails();
-  }, []);
 
   // Concert crowd photography flashes (monochromatic/silver)
   useEffect(() => {

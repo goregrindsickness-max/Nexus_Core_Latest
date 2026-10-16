@@ -701,7 +701,7 @@ class TourPackageManagerService {
     try {
       const { data: showsData, error: showsError } = await supabase
         .from('shows')
-        .select('*')
+        .select('id, show_name, headliner, show_date, date, doors_time, venue_name, city, price, support_lineup, guarantee_amount, revenue, currency, settlement_currency, venue_capacity, expected_attendance, created_at')
         .order('date', { ascending: true });
 
       if (!showsError && showsData && Array.isArray(showsData) && showsData.length > 0) {

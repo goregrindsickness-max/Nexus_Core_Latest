@@ -406,8 +406,8 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                           const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
                           const pm = (userProfile as any)?.promoter_metadata || {};
                           const promoterAgencyName = pm.brand_name || pm.agency_name || (userProfile as any)?.promoter_agency || (isOwnerMiguel ? 'Nexus Live Productions' : (userProfile?.name ? `${userProfile.name} Productions` : 'Promoter Operations'));
-                          const promoterLogo = pm.logo_url || (userProfile as any)?.promoter_logo || (userProfile as any)?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : (userProfile?.avatar_url || ''));
-                          const promoterCover = pm.banner_url || pm.cover_url || (userProfile as any)?.promoter_cover_image || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : (userProfile?.banner_url || ''));
+                          const promoterLogo = (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || pm.logo_url || (userProfile as any)?.promoter_logo || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : (userProfile?.promoter_logo || ''));
+                          const promoterCover = (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || pm.banner_url || pm.cover_url || (userProfile as any)?.promoter_cover_image || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : (userProfile?.promoter_cover_image || ''));
                           const promoterBio = pm.bio || (userProfile as any)?.promoter_bio || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null) || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent live event promoter.');
                           const rawHandle = (userProfile as any)?.promoter_handle || (promoterAgencyName ? `@${promoterAgencyName.replace(/\s+/g, '')}` : (isOwnerMiguel ? '@NexusLive' : '@promoter'));
                           const resolvedHandle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
@@ -452,8 +452,8 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
 
                         if (portalRole === 'creative') {
                           const creativeName = resolveCreativeName(userProfile);
-                          const creativeAvatar = resolveCreativeLogo(userProfile, profileAvatarUrl);
-                          const creativeBanner = resolveCreativeCover(userProfile, profileCoverUrl);
+                          const creativeAvatar = resolveCreativeLogo(userProfile);
+                          const creativeBanner = resolveCreativeCover(userProfile);
                           const creativeBio = resolveCreativeBio(userProfile);
                           const creativeHandle = resolveCreativeHandle(userProfile);
                           const creativeLoc = resolveCreativeLocation(userProfile);

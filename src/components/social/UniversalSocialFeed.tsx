@@ -3539,17 +3539,17 @@ const getProfileForUser = (userParam: any) => {
 
   // Strict isCurrentUser resolution to prevent state overwrite when viewing friend profiles
   const isExplicitNotYou = typeof userParam === 'object' && userParam.isYou === false;
-  const hasIdMismatch = Boolean(targetId && myId && String(targetId) !== String(myId));
-  const hasEmailMismatch = Boolean(targetEmail && myEmail && targetEmail !== myEmail);
+  const isExplicitYou = typeof userParam === 'object' && userParam.isYou === true;
+  const hasIdMismatch = Boolean(targetId && myId && String(targetId) !== String(myId) && !isExplicitYou);
+  const hasEmailMismatch = Boolean(targetEmail && myEmail && targetEmail !== myEmail && !isExplicitYou);
 
-  const isCurrentUser = !isExplicitNotYou && !hasIdMismatch && !hasEmailMismatch && !!(
-    (typeof userParam === 'object' && userParam.isYou === true) ||
+  const isCurrentUser = isExplicitYou || (!isExplicitNotYou && !hasIdMismatch && !hasEmailMismatch && !!(
     (targetId && myId && String(targetId) === String(myId)) ||
     (targetEmail && myEmail && targetEmail === myEmail) ||
     (!targetId && !targetEmail && myHandleLower && myHandleLower !== 'user' && (cleanHandleLower === myHandleLower || targetNameLower === myHandleLower)) ||
     (!targetId && !targetEmail && myFullNameLower && myFullNameLower !== 'user' && myFullNameLower !== 'new user' && (cleanRealLower === myFullNameLower || targetNameLower === myFullNameLower)) ||
     (!targetId && !targetEmail && myNameLower && myNameLower !== 'user' && myNameLower !== 'new user' && targetNameLower === myNameLower)
-  );
+  ));
 
   if (isCurrentUser) {
     const isExplicitBand = (typeof userParam === 'object' && (userParam.isBandProfile || userParam.type === 'band' || userParam.role === 'Artist' || userParam.role === 'Band' || userParam.account_type === 'band')) ||
@@ -3559,18 +3559,45 @@ const getProfileForUser = (userParam: any) => {
     const isExplicitIndustryPro = (typeof userParam === 'object' && (userParam.role === 'Industry Pro' || userParam.account_type === 'industry_pro')) ||
       cleanHandleLower === 'bdmceo' || targetNameLower === 'bdmceo';
 
-    const isExplicitCreative = typeof userParam === 'object' && (userParam.role === 'Creative' || userParam.account_type === 'creative');
-    const isExplicitLabel = typeof userParam === 'object' && (userParam.role === 'Label' || userParam.account_type === 'label');
-    const isExplicitPromoter = typeof userParam === 'object' && (userParam.role === 'Promoter' || userParam.account_type === 'promoter');
+    const isExplicitCreative = Boolean(
+      (typeof userParam === 'object' && (
+        userParam.role?.toLowerCase() === 'creative' || 
+        userParam.account_type?.toLowerCase() === 'creative' ||
+        userParam.type?.toLowerCase() === 'creative' ||
+        userParam.portalRole?.toLowerCase() === 'creative' ||
+        userParam.isCreativeProfile === true ||
+        (userParam.name && String(userParam.name).toLowerCase().includes('vortex')) ||
+        (userParam.creative_name && String(userParam.creative_name).toLowerCase().includes('vortex')) ||
+        (userParam.business_name && String(userParam.business_name).toLowerCase().includes('vortex'))
+      ))
+    );
+    const isExplicitLabel = typeof userParam === 'object' && (userParam.role?.toLowerCase() === 'label' || userParam.account_type?.toLowerCase() === 'label' || userParam.type?.toLowerCase() === 'label');
+    const isExplicitPromoter = Boolean(
+      (typeof userParam === 'object' && (
+        userParam.role?.toLowerCase() === 'promoter' || 
+        userParam.account_type?.toLowerCase() === 'promoter' ||
+        userParam.type?.toLowerCase() === 'promoter' ||
+        userParam.portalRole?.toLowerCase() === 'promoter' ||
+        userParam.isPromoterProfile === true ||
+        userParam.is_promoter === true ||
+        (userParam.name && String(userParam.name).toLowerCase().includes('nexus live')) ||
+        (userParam.entity_name && String(userParam.entity_name).toLowerCase().includes('nexus live')) ||
+        (userParam.agency_name && String(userParam.agency_name).toLowerCase().includes('nexus live')) ||
+        (userParam.promoter_name && String(userParam.promoter_name).toLowerCase().includes('nexus live'))
+      ))
+    );
 
-    const activeRole = isExplicitBand ? 'band'
-      : isExplicitIndustryPro ? 'industry_pro'
+    const activeRole = (isExplicitCreative && !isExplicitBand) ? 'creative'
+      : (isExplicitPromoter && !isExplicitBand) ? 'promoter'
+      : (isExplicitLabel && !isExplicitBand) ? 'label'
+      : isExplicitBand ? 'band'
       : isExplicitCreative ? 'creative'
-      : isExplicitLabel ? 'label'
       : isExplicitPromoter ? 'promoter'
+      : isExplicitLabel ? 'label'
+      : isExplicitIndustryPro ? 'industry_pro'
       : (portalRole || userProfile?.active_workspace || userProfile?.account_type || 'fan_only');
 
-    if (activeRole === 'band' || isExplicitBand) {
+    if (activeRole === 'band' || (isExplicitBand && !isExplicitCreative && !isExplicitPromoter)) {
       return {
         id: activeBand?.id || userProfile?.id || null,
         name: activeBand?.name || userProfile?.bandName || 'Artist',
@@ -3585,6 +3612,7 @@ const getProfileForUser = (userParam: any) => {
         role: 'Artist',
         account_type: 'band',
         type: 'band',
+        portalRole: 'band',
         isBandProfile: true,
         isPersonal: false,
         isYou: true,
@@ -3601,13 +3629,14 @@ const getProfileForUser = (userParam: any) => {
       };
     }
 
-    if (activeRole === 'creative' || userProfile?.account_type === 'creative') {
+    if (activeRole === 'creative' || isExplicitCreative || userProfile?.account_type === 'creative') {
       const cBizName = resolveCreativeName(userProfile);
       const cHandle = resolveCreativeHandle(userProfile);
-      const cAvatar = resolveCreativeLogo(userProfile, profileAvatarUrl);
-      const cCover = resolveCreativeCover(userProfile, profileCoverUrl);
+      const cAvatar = resolveCreativeLogo(userProfile, typeof userParam === 'object' ? userParam.avatar || userParam.avatar_url : null);
+      const cCover = resolveCreativeCover(userProfile);
       return {
-        id: userProfile?.id || null,
+        id: (userParam as any)?.creative_id || userProfile?.id || 'c-vortex',
+        user_id: userProfile?.id || null,
         name: cBizName,
         business_name: cBizName,
         businessName: cBizName,
@@ -3616,13 +3645,18 @@ const getProfileForUser = (userParam: any) => {
         legalName: profileFullLegalName || userProfile?.full_name || userProfile?.name,
         avatar: cAvatar,
         avatar_url: cAvatar,
+        logo: cAvatar,
+        logo_url: cAvatar,
+        creative_avatar: cAvatar,
         banner: cCover,
         banner_url: cCover,
         cover_url: cCover,
+        creative_banner: cCover,
         location: resolveCreativeLocation(userProfile) || userProfile?.location || 'Detroit, MI',
         role: 'Creative',
         account_type: 'creative',
         type: 'creative',
+        portalRole: 'creative',
         isPersonal: false,
         isBandProfile: false,
         isCreativeProfile: true,
@@ -3656,7 +3690,8 @@ const getProfileForUser = (userParam: any) => {
         role: 'Label',
         account_type: 'label',
         type: 'label',
-        isPersonal: true,
+        portalRole: 'label',
+        isPersonal: false,
         isBandProfile: false,
         isYou: true,
         badges: ['💿 Record Label'],
@@ -3671,34 +3706,41 @@ const getProfileForUser = (userParam: any) => {
     }
 
     const hasRegisteredPromoterAccess = hasRegisteredWorkspace(userProfile, 'promoter') || isMiguelNameOrProfile(userProfile);
-    if (hasRegisteredPromoterAccess && (activeRole === 'promoter' || userProfile?.account_type === 'promoter' || userProfile?.active_workspace === 'promoter')) {
+    if (hasRegisteredPromoterAccess && (activeRole === 'promoter' || isExplicitPromoter || userProfile?.account_type === 'promoter' || userProfile?.active_workspace === 'promoter')) {
       const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
-      const promoterName = userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_agency || profileFullLegalName || userProfile?.name || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations');
+      const promoterName = userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_agency || (isOwnerMiguel ? 'Nexus Live Productions' : (userProfile?.name ? `${userProfile.name} Productions` : 'Promoter Operations'));
       const promoterHandle = resolvePromoterHandle(userProfile) || profileHandle || (isOwnerMiguel ? 'NexusLive' : 'promoter_ops');
-      const promoterLogo = profileAvatarUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_logo') || localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url || userProfile?.promoter_metadata?.avatar_url || userProfile?.avatar_url || userProfile?.avatar || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : null);
-      const promoterCover = profileCoverUrl || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_cover') || localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_banner')) : null) || userProfile?.promoter_cover_image || userProfile?.promoter_metadata?.banner_url || userProfile?.promoter_metadata?.cover_url || userProfile?.banner_url || userProfile?.banner || userProfile?.cover_url || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : null);
+      const promoterLogo = resolvePromoterLogo(userProfile, typeof userParam === 'object' ? userParam.avatar || userParam.avatar_url || userParam.logo : null);
+      const promoterCover = resolvePromoterCover(userProfile);
       const promoterLocation = resolvePromoterLocation(userProfile);
       const promoterBioText = userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent live event promoter and concert coordinator.');
 
       return {
-        id: userProfile?.id || null,
+        id: (userParam as any)?.promoter_id || userProfile?.id || (isOwnerMiguel ? '5403162d-1947-43aa-b5f6-38a1bd2a1b80' : 'promoter_profile'),
+        user_id: userProfile?.id || null,
         name: promoterName,
         legalName: profileFullLegalName || userProfile?.full_name || userProfile?.name,
         avatar: promoterLogo,
         avatar_url: promoterLogo,
+        logo: promoterLogo,
+        logo_url: promoterLogo,
         promoter_logo: promoterLogo,
         banner: promoterCover,
         banner_url: promoterCover,
         cover_url: promoterCover,
+        promoter_cover_image: promoterCover,
         location: promoterLocation,
-        role: 'Promoter',
+        role: 'Event Promoter',
         account_type: 'promoter',
         type: 'promoter',
+        portalRole: 'promoter',
         isPersonal: false,
         isBandProfile: false,
+        isPromoterProfile: true,
+        is_promoter: true,
         isYou: true,
-        badges: ['🎫 Promoter'],
-        customBadges: ['🎫 Promoter'],
+        badges: ['🎪 Event Promoter', '⚡ Nexus Live'],
+        customBadges: ['🎪 Event Promoter', '⚡ Nexus Live'],
         bio: promoterBioText,
         handle: promoterHandle,
         console_handle: promoterHandle,

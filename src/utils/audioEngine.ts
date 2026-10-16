@@ -408,6 +408,7 @@ export interface PlayableTrackInfo {
   artist?: string;
   album?: string;
   coverUrl?: string;
+  artworkUrl?: string;
   audioUrl?: string;
   url?: string;
   duration?: string | number;
@@ -633,6 +634,17 @@ class UniversalAudioPlayer {
               this.isPlaying = true;
               this.isSynthesizing = false;
               this.callbacks.onStateChange?.(true);
+              if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+                try {
+                  navigator.mediaSession.metadata = new MediaMetadata({
+                    title: track.title || 'Track Audio',
+                    artist: track.artist || 'Nexus Artist',
+                    album: track.album || 'Nexus Core',
+                    artwork: (track.artworkUrl || track.coverUrl) ? [{ src: (track.artworkUrl || track.coverUrl)!, sizes: '512x512', type: 'image/png' }] : undefined
+                  });
+                  navigator.mediaSession.playbackState = 'playing';
+                } catch (_) {}
+              }
             })
             .catch((err) => {
               console.warn('[UniversalAudioPlayer] play() rejected (falling back to procedural synth):', err);
@@ -657,6 +669,11 @@ class UniversalAudioPlayer {
     }
     this.stopProceduralSynth();
     this.callbacks.onStateChange?.(false);
+    if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.playbackState = 'paused';
+      } catch (_) {}
+    }
   }
 
   public resume(): void {

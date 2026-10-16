@@ -177,7 +177,24 @@ export function sanitizeShowForDb(show: any): any {
   if (show.age_restriction) dbShow.age_restriction = show.age_restriction;
   if (show.age) dbShow.age = show.age;
   if (show.safety_code) dbShow.safety_code = show.safety_code;
-  if (show.flyer_url) dbShow.flyer_url = show.flyer_url;
+  if (show.flyer_url) {
+    if (typeof show.flyer_url === 'string' && show.flyer_url.startsWith('data:image/')) {
+      // Base64 image detected: Never write raw base64 string directly to Postgres column
+      dbShow.flyer_url = null;
+      if (typeof window !== 'undefined' && show.id) {
+        ensureImagesUploadedToStorage({ id: show.id, flyer_url: show.flyer_url }).then((cleaned) => {
+          if (cleaned?.flyer_url && !cleaned.flyer_url.startsWith('data:')) {
+            const client = getSupabase();
+            if (client) {
+              client.from('shows').update({ flyer_url: cleaned.flyer_url }).eq('id', show.id).then();
+            }
+          }
+        }).catch(() => {});
+      }
+    } else {
+      dbShow.flyer_url = show.flyer_url;
+    }
+  }
   if (show.ticket_url) dbShow.ticket_url = show.ticket_url;
   if (show.external_ticket_url) dbShow.external_ticket_url = show.external_ticket_url;
   if (show.status) dbShow.status = show.status;
@@ -905,7 +922,7 @@ export function subscribeToTable(table: string, onEvent: (payload: any) => void)
   if (!supabase) return null;
 
   const channel = supabase
-    .channel(`${table}-realtime-changes-${Date.now()}-${Math.random()}`)
+    .channel(`realtime_sync_${table}`)
     .on(
       'postgres_changes',
       {
@@ -927,3 +944,108 @@ export function subscribeToTable(table: string, onEvent: (payload: any) => void)
     }
   };
 }
+
+/**
+ * One-time migration utility that scans public.shows, releases, bands, profiles, and nexus_posts
+ * for column values starting with 'data:image/', uploads the binary to Supabase Storage, and updates the row.
+ */
+export async function runBase64StorageMigration(): Promise<{ processed: number; errors: number }> {
+  const supabase = getSupabase();
+  if (!supabase) return { processed: 0, errors: 0 };
+
+  let processed = 0;
+  let errors = 0;
+
+  try {
+    // 1. Shows (flyer_url)
+    const { data: showsData } = await supabase.from('shows').select('id, flyer_url').ilike('flyer_url', 'data:image%');
+    if (showsData && showsData.length > 0) {
+      for (const show of showsData) {
+        if (show.flyer_url && show.flyer_url.startsWith('data:image/')) {
+          try {
+            const cleaned = await ensureImagesUploadedToStorage({ id: show.id, flyer_url: show.flyer_url });
+            if (cleaned?.flyer_url && !cleaned.flyer_url.startsWith('data:')) {
+              await supabase.from('shows').update({ flyer_url: cleaned.flyer_url }).eq('id', show.id);
+              processed++;
+            }
+          } catch { errors++; }
+        }
+      }
+    }
+
+    // 2. Releases (cover_image, cover_url)
+    const { data: relData } = await supabase.from('releases').select('id, cover_image, cover_url').or('cover_image.ilike.data:image%,cover_url.ilike.data:image%');
+    if (relData && relData.length > 0) {
+      for (const rel of relData) {
+        const rawImg = rel.cover_image || rel.cover_url;
+        if (rawImg && rawImg.startsWith('data:image/')) {
+          try {
+            const cleaned = await ensureImagesUploadedToStorage({ id: rel.id, cover_image: rawImg });
+            if (cleaned?.cover_image && !cleaned.cover_image.startsWith('data:')) {
+              await supabase.from('releases').update({ cover_image: cleaned.cover_image, cover_url: cleaned.cover_image }).eq('id', rel.id);
+              processed++;
+            }
+          } catch { errors++; }
+        }
+      }
+    }
+
+    // 3. Bands (avatar_url, logo_url, banner_url)
+    const { data: bandsData } = await supabase.from('bands').select('id, avatar_url, logo_url, banner_url').or('avatar_url.ilike.data:image%,logo_url.ilike.data:image%,banner_url.ilike.data:image%');
+    if (bandsData && bandsData.length > 0) {
+      for (const band of bandsData) {
+        const payload: any = { id: band.id };
+        if (band.avatar_url?.startsWith('data:image/')) payload.avatar_url = band.avatar_url;
+        if (band.logo_url?.startsWith('data:image/')) payload.logo_url = band.logo_url;
+        if (band.banner_url?.startsWith('data:image/')) payload.banner_url = band.banner_url;
+        if (Object.keys(payload).length > 1) {
+          try {
+            const cleaned = await ensureImagesUploadedToStorage(payload);
+            await supabase.from('bands').update(cleaned).eq('id', band.id);
+            processed++;
+          } catch { errors++; }
+        }
+      }
+    }
+
+    // 4. Profiles (avatar_url, avatar, banner_url)
+    const { data: profData } = await supabase.from('profiles').select('id, avatar_url, avatar, banner_url').or('avatar_url.ilike.data:image%,avatar.ilike.data:image%,banner_url.ilike.data:image%');
+    if (profData && profData.length > 0) {
+      for (const prof of profData) {
+        const payload: any = { id: prof.id };
+        if (prof.avatar_url?.startsWith('data:image/')) payload.avatar_url = prof.avatar_url;
+        if (prof.avatar?.startsWith('data:image/')) payload.avatar = prof.avatar;
+        if (prof.banner_url?.startsWith('data:image/')) payload.banner_url = prof.banner_url;
+        if (Object.keys(payload).length > 1) {
+          try {
+            const cleaned = await ensureImagesUploadedToStorage(payload);
+            await supabase.from('profiles').update(cleaned).eq('id', prof.id);
+            processed++;
+          } catch { errors++; }
+        }
+      }
+    }
+
+    // 5. Posts (media_url, image_url, avatar_url)
+    const { data: postsData } = await supabase.from('nexus_posts').select('id, media_url, image_url').or('media_url.ilike.data:image%,image_url.ilike.data:image%');
+    if (postsData && postsData.length > 0) {
+      for (const post of postsData) {
+        const payload: any = { id: post.id };
+        if (post.media_url?.startsWith('data:image/')) payload.media_url = post.media_url;
+        if (post.image_url?.startsWith('data:image/')) payload.image_url = post.image_url;
+        if (Object.keys(payload).length > 1) {
+          try {
+            const cleaned = await ensureImagesUploadedToStorage(payload);
+            await supabase.from('nexus_posts').update(cleaned).eq('id', post.id);
+            processed++;
+          } catch { errors++; }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[runBase64StorageMigration] Migration warning:', err);
+  }
+
+  return { processed, errors };
+}
+

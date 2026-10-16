@@ -38,10 +38,10 @@ export function compressAndTranscodeImageToWebP(file: any): Promise<any> {
       img.onload = () => {
         let width = img.width;
         let height = img.height;
-        const maxEdge = 1200;
+        const maxEdge = 1080;
 
         // Strip EXIF coordinates/camera tags by drawing onto 2D canvas,
-        // and systematically downscale to maximum 1200px constraint on longest edge
+        // and systematically downscale to maximum 1080px constraint on longest edge
         if (width > maxEdge || height > maxEdge) {
           if (width > height) {
             height = Math.round((height * maxEdge) / width);
@@ -305,7 +305,7 @@ export async function uploadBase64ToStorage(
             .from(targetBucket)
             .upload(currentPath, blob, {
               upsert: true,
-              cacheControl: '3600',
+              cacheControl: '31536000',
               contentType: mimeType,
             });
 
@@ -313,7 +313,7 @@ export async function uploadBase64ToStorage(
             const finalPath = uploadData.path || currentPath;
             const { data: publicUrlData } = client.storage.from(targetBucket).getPublicUrl(finalPath);
             if (publicUrlData?.publicUrl && !publicUrlData.publicUrl.startsWith('data:')) {
-              const finalPublicUrl = `${publicUrlData.publicUrl}?t=${timestamp}`;
+              const finalPublicUrl = publicUrlData.publicUrl;
               console.log(`[STORAGE UPLOAD SUCCESS] Stored image in bucket "${targetBucket}" (${finalPath}):`, finalPublicUrl);
               return finalPublicUrl;
             }

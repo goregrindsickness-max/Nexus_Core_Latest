@@ -337,13 +337,13 @@ export function getSupabase(customPortalType?: 'band' | 'promoter' | 'creative')
                           // Preemptively ensure auth session is active and refreshed before upload execution
                           await ensureValidSupabaseAuthSession(target);
 
-                          // Apply valid numeric max-age CDN caching header in seconds ('3600')
+                          // Apply valid numeric max-age CDN caching header in seconds ('31536000')
                           const updatedOptions = {
                             ...optionsArg,
                             cacheControl:
                               typeof optionsArg?.cacheControl === 'string' && /^\d+$/.test(optionsArg.cacheControl)
                                 ? optionsArg.cacheControl
-                                : '3600',
+                                : '31536000',
                             upsert: optionsArg?.upsert ?? true,
                           };
 

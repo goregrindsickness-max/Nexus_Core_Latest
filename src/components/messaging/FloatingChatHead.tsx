@@ -652,7 +652,7 @@ export const FloatingChatHead: React.FC = () => {
     if (!currentUserId || !supabase) return;
 
     const globalChannel = supabase
-      .channel(`floating_chats_incoming_${currentUserId}_${Date.now()}`)
+      .channel(`floating_chats_incoming_${currentUserId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'nexus_chats' },

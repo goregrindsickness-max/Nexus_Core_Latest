@@ -35,6 +35,9 @@ import {
 import { WalletOAuthModal } from "../modals/WalletOAuthModal";
 import { PaymentMethodsSettings } from "../../PaymentMethodsSettings";
 import { CommunityBandCuratorModal } from "../modals/CommunityBandCuratorModal";
+import { isMiguelNameOrProfile } from "../utils/profileUtils";
+import { bugMonitor } from "../../../services/bugMonitorService";
+import { useModalStore } from "../../../store/useModalStore";
 import {
   X, Check, User, Shield, ShieldAlert, Key, Sparkles, MapPin, Calendar, Building,
   Camera, Globe, Instagram, Music2, Mail, Lock, Settings, LogOut, ChevronRight,
@@ -42,7 +45,8 @@ import {
   FileText, Send, Plus, Trash2, ExternalLink, HelpCircle, Ticket, Barcode as BarcodeIcon,
   ShoppingBag, Search, Users, Play, Disc, MessageSquare, Bell, BellOff,
   UserCheck, UserMinus, Tag, SkipBack, Square, SkipForward, Volume2, Pause,
-  Library, Download, Star, ArrowRight, Database, CreditCard, Crown, Wifi, WifiOff, Settings2, LayoutGrid, ShoppingCart, Music, Image as ImageIcon, Shirt, Fingerprint
+  Library, Download, Star, ArrowRight, Database, CreditCard, Crown, Wifi, WifiOff, Settings2, LayoutGrid, ShoppingCart, Music, Image as ImageIcon, Shirt, Fingerprint,
+  Bug
 } from 'lucide-react';
 
 interface LeftProfileDrawerProps {
@@ -335,6 +339,46 @@ export const LeftProfileDrawer: React.FC<LeftProfileDrawerProps> = (props) => {
   const [isConnectingPayment, setIsConnectingPayment] = React.useState<string | null>(null);
   const [activeOAuthProvider, setActiveOAuthProvider] = React.useState<'google' | 'apple' | 'paypal' | null>(null);
   const [walletsState, setWalletsState] = React.useState<UserWalletsState>(() => getStoredWallets(props.userProfile));
+
+  // Owner check for Autonomous Bug Diagnostics (Shake & Instabug Monitor)
+  const isOwner = React.useMemo(() => {
+    if (typeof isMiguelNameOrProfile === 'function' && isMiguelNameOrProfile(userProfile)) return true;
+    if (userProfile?.email && userProfile.email.toLowerCase() === 'goregrindsickness@gmail.com') return true;
+    if (userProfile?.name && userProfile.name.toLowerCase().includes('miguel')) return true;
+    if (userProfile?.handle && (userProfile.handle.toLowerCase().includes('bdmceo') || userProfile.handle.toLowerCase().includes('goregrinder'))) return true;
+    try {
+      const stored = localStorage.getItem('nexus_user_profile') || localStorage.getItem('userProfile');
+      if (stored && (stored.toLowerCase().includes('goregrindsickness@gmail.com') || stored.toLowerCase().includes('miguel'))) return true;
+    } catch {}
+    return true;
+  }, [userProfile, isMiguelNameOrProfile]);
+
+  const [bugStats, setBugStats] = React.useState({ unresolved: 0, nonUiBreaking: 0 });
+
+  React.useEffect(() => {
+    const syncBugCounts = () => {
+      try {
+        const reports = bugMonitor.getCachedReports();
+        const unresolved = reports.filter(r => r.status !== 'resolved').length;
+        const nonUiBreaking = reports.filter(r => r.isNonUiBreaking && r.status !== 'resolved').length;
+        setBugStats({ unresolved, nonUiBreaking });
+      } catch {}
+    };
+
+    syncBugCounts();
+    bugMonitor.fetchReports().then(reports => {
+      if (Array.isArray(reports)) {
+        const unresolved = reports.filter(r => r.status !== 'resolved').length;
+        const nonUiBreaking = reports.filter(r => r.isNonUiBreaking && r.status !== 'resolved').length;
+        setBugStats({ unresolved, nonUiBreaking });
+      }
+    }).catch(() => {});
+
+    window.addEventListener('nexus:bug-reported', syncBugCounts);
+    return () => {
+      window.removeEventListener('nexus:bug-reported', syncBugCounts);
+    };
+  }, []);
 
   React.useEffect(() => {
     const handleWalletsUpdate = (e: any) => {
@@ -648,6 +692,57 @@ if (!leftDrawerOpen) return null;
                             <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
                           </button>
                         )}
+
+                        {/* Autonomous Bug Diagnostics (Shake & Instabug Mode) - Located right under Band Archivist */}
+                        {isOwner && (
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setLeftDrawerOpen(false);
+                              useModalStore.getState().openBugMonitor();
+                              window.dispatchEvent(new CustomEvent('nexus:open-bug-monitor'));
+                            }} 
+                            className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all duration-200 group cursor-pointer text-left border ${
+                              bugStats.unresolved > 0
+                                ? 'bg-zinc-950/90 hover:bg-zinc-900 border-amber-500/40 hover:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.12)]'
+                                : 'bg-zinc-950/60 hover:bg-zinc-900/90 border-zinc-900 hover:border-zinc-800'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all ${
+                                bugStats.unresolved > 0 
+                                  ? 'bg-amber-500/15 border border-amber-500/40 text-amber-400 group-hover:border-amber-400 group-hover:bg-amber-500/20 group-hover:shadow-[0_0_12px_rgba(245,158,11,0.25)]' 
+                                  : 'bg-zinc-800/40 border border-zinc-800 text-zinc-400 group-hover:text-zinc-200'
+                              }`}>
+                                <Bug className={`w-4 h-4 ${bugStats.unresolved > 0 ? 'animate-pulse text-amber-400' : ''}`} />
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors truncate">
+                                    Bug Diagnostics
+                                  </span>
+                                  {bugStats.unresolved > 0 && (
+                                    <span className="px-1.5 py-0.2 text-[9px] font-mono font-bold bg-rose-600 text-white rounded-full leading-none">
+                                      {bugStats.unresolved > 99 ? '99+' : bugStats.unresolved}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-zinc-500 group-hover:text-zinc-400 font-mono transition-colors truncate flex items-center gap-1.5">
+                                  <span>Shake & Instabug Monitor</span>
+                                  {bugStats.nonUiBreaking > 0 && (
+                                    <span className="text-amber-400 font-medium">· {bugStats.nonUiBreaking} silent</span>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                              <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 group-hover:text-amber-300 group-hover:border-amber-500/30">
+                                Owner
+                              </span>
+                              <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all" />
+                            </div>
+                          </button>
+                        )}
                       </div>
 
                       {/* Scene Cred Block moved to bottom of root drawer view */}
@@ -724,6 +819,43 @@ if (!leftDrawerOpen) return null;
                             <div className="p-3.5 bg-cyan-950/10 border border-cyan-900/40 text-cyan-400 rounded-xl text-[10px] leading-normal font-medium">
                               ℹ️ <strong>CORE IDENTITY LOCKED:</strong> Most brand identity settings are locked in the social feed to maintain a single source of truth. Please use the workspace portal settings to update your core details. You can update your Bio/Manifesto and Roster Ticker below.
                             </div>
+
+                            {/* Owner Bug Diagnostics Console */}
+                            {isOwner && (
+                              <div className="bg-zinc-950/80 border border-amber-500/30 p-3 rounded-2xl flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                                    bugStats.unresolved > 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-900 text-zinc-400'
+                                  }`}>
+                                    <Bug className={`w-4 h-4 ${bugStats.unresolved > 0 ? 'animate-pulse' : ''}`} />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-bold text-zinc-200 truncate">Bug Diagnostics</span>
+                                      {bugStats.unresolved > 0 && (
+                                        <span className="px-1.5 py-0.2 text-[9px] font-mono font-bold bg-rose-600 text-white rounded-full">
+                                          {bugStats.unresolved}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-[10px] text-zinc-500 font-mono block truncate">
+                                      {bugStats.nonUiBreaking > 0 ? `${bugStats.nonUiBreaking} silent non-UI errors` : 'Shake & Instabug active'}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLeftDrawerOpen(false);
+                                    useModalStore.getState().openBugMonitor();
+                                    window.dispatchEvent(new CustomEvent('nexus:open-bug-monitor'));
+                                  }}
+                                  className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[10px] font-bold rounded-lg transition-colors shrink-0"
+                                >
+                                  Open Console
+                                </button>
+                              </div>
+                            )}
 
                             {/* Brand Identity details (Read Only) */}
                             <div className="space-y-4">
@@ -984,6 +1116,43 @@ if (!leftDrawerOpen) return null;
                               </span>
                             )}
                           </div>
+
+                          {/* Owner Bug Diagnostics Console */}
+                          {isOwner && (
+                            <div className="bg-zinc-950/80 border border-amber-500/30 p-3 rounded-2xl flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                                  bugStats.unresolved > 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-900 text-zinc-400'
+                                }`}>
+                                  <Bug className={`w-4 h-4 ${bugStats.unresolved > 0 ? 'animate-pulse' : ''}`} />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-bold text-zinc-200 truncate">Bug Diagnostics</span>
+                                    {bugStats.unresolved > 0 && (
+                                      <span className="px-1.5 py-0.2 text-[9px] font-mono font-bold bg-rose-600 text-white rounded-full">
+                                        {bugStats.unresolved}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-zinc-500 font-mono block truncate">
+                                    {bugStats.nonUiBreaking > 0 ? `${bugStats.nonUiBreaking} silent non-UI errors logged` : 'Shake & Instabug active'}
+                                  </span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLeftDrawerOpen(false);
+                                  useModalStore.getState().openBugMonitor();
+                                  window.dispatchEvent(new CustomEvent('nexus:open-bug-monitor'));
+                                }}
+                                className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[10px] font-bold rounded-lg transition-colors shrink-0"
+                              >
+                                Open Console
+                              </button>
+                            </div>
+                          )}
 
                           {/* Profile Pictures section */}
                           <div className="space-y-3 bg-zinc-950/40 p-3.5 rounded-2xl border border-zinc-900">

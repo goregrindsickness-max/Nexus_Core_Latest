@@ -20,6 +20,7 @@ import { HomeV2DashboardView } from './components/dashboard/HomeV2DashboardView'
 import { BrandNavigationHeader } from './components/navigation/BrandNavigationHeader';
 import { NexusTopBar } from './components/navigation/NexusTopBar';
 import { GlobalModalsContainer } from './components/modals/GlobalModalsContainer';
+import { BugMonitorDrawer } from './components/common/BugMonitorDrawer';
 import { useModalStore } from './store/useModalStore';
 import { MainTabRouter } from './components/views/MainTabRouter';
 import { AnimatedCount, AnimatedText } from "./components/AnimatedElements";
@@ -134,7 +135,11 @@ import {
   resolveCreativeLogo, 
   resolveCreativeCover, 
   resolveCreativeBio, 
-  resolveCreativeLocation 
+  resolveCreativeLocation,
+  resolvePromoterLogo,
+  resolvePromoterCover,
+  resolvePromoterHandle,
+  resolvePromoterLocation
 } from './utils/bandProfileUtils';
 import { initOfflineQueue, getSupabase, testSupabaseConnection, getSupabaseUrl, getSupabaseAnonKey, subscribeToTable, sanitizeInventoryItemForDb, executeWithSchemaResilience, getOfflineQueue, processOfflineQueue, isBypassRequiredError, handleDatabaseFailover, saveToFailoverCache, generateUUID, uploadBase64ToStorage, fetchUserBands, sanitizeBandPayload, ensureValidSupabaseAuthSession, autoSyncCreativeProfile, autoSyncPromoterProfile, normalizeLoadedProfile, fetchUserCreatives, resolveInventoryImageUrl, fetchInventoryItems } from './supabase';
 import AlbumArt from './components/AlbumArt';
@@ -2495,6 +2500,151 @@ export default function App() {
 
   const handleOpenMyProfile = () => {
     const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+    const activeWs = userProfile?.active_workspace || userProfile?.account_type;
+
+    if (activeWs === 'creative') {
+      const creativeName = resolveCreativeName(userProfile);
+      const creativeLogo = resolveCreativeLogo(userProfile);
+      const creativeCover = resolveCreativeCover(userProfile);
+      const creativeHandle = resolveCreativeHandle(userProfile);
+      const creativeBio = resolveCreativeBio(userProfile);
+      const creativeLoc = resolveCreativeLocation(userProfile);
+
+      const detailPayload = {
+        id: (userProfile as any)?.creative_id || userProfile?.id || 'creative:vortex',
+        user_id: userProfile?.id,
+        name: creativeName,
+        legalName: userProfile?.full_name || userProfile?.name,
+        business_name: creativeName,
+        creative_name: creativeName,
+        creative_business_name: creativeName,
+        handle: creativeHandle.startsWith('@') ? creativeHandle : `@${creativeHandle}`,
+        console_handle: creativeHandle.startsWith('@') ? creativeHandle : `@${creativeHandle}`,
+        username: creativeHandle.startsWith('@') ? creativeHandle : `@${creativeHandle}`,
+        avatar: creativeLogo,
+        avatar_url: creativeLogo,
+        logo: creativeLogo,
+        logo_url: creativeLogo,
+        creative_avatar: creativeLogo,
+        banner: creativeCover,
+        banner_url: creativeCover,
+        cover_url: creativeCover,
+        creative_banner: creativeCover,
+        location: creativeLoc,
+        role: 'Creative',
+        account_type: 'creative',
+        type: 'creative',
+        portalRole: 'creative',
+        isPersonal: false,
+        isCreativeProfile: true,
+        isBandProfile: false,
+        isYou: true,
+        badges: ['🛠️ Creative Pro', '🎨 Designer'],
+        customBadges: ['🛠️ Creative Pro', '🎨 Designer'],
+        bio: creativeBio,
+        creative_metadata: (userProfile as any)?.creative_metadata || {}
+      };
+
+      setActiveTab('social');
+      triggerNotification?.("⚡ Opening your Creative workspace profile...");
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
+      }, 100);
+      return;
+    }
+
+    if (activeWs === 'promoter') {
+      const pm = (userProfile as any)?.promoter_metadata || {};
+      const promoterName = pm.brand_name || pm.agency_name || (userProfile as any)?.promoter_agency || (isOwnerMiguel ? 'Nexus Live Productions' : (userProfile?.name ? `${userProfile.name} Productions` : 'Promoter Operations'));
+      const promoterLogo = resolvePromoterLogo(userProfile);
+      const promoterCover = resolvePromoterCover(userProfile);
+      const promoterBioText = pm.bio || (userProfile as any)?.promoter_bio || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent live event promoter.');
+      const rawHandle = (userProfile as any)?.promoter_handle || resolvePromoterHandle(userProfile);
+      const resolvedHandle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
+
+      const detailPayload = {
+        id: (userProfile as any)?.promoter_id || userProfile?.id || (isOwnerMiguel ? '5403162d-1947-43aa-b5f6-38a1bd2a1b80' : 'promoter_profile'),
+        user_id: userProfile?.id,
+        email: userProfile?.email || '',
+        name: promoterName,
+        legalName: userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Promoter User'),
+        full_name: userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Promoter User'),
+        handle: resolvedHandle,
+        console_handle: resolvedHandle,
+        username: resolvedHandle,
+        avatar: promoterLogo,
+        avatar_url: promoterLogo,
+        logo: promoterLogo,
+        logo_url: promoterLogo,
+        promoter_logo: promoterLogo,
+        banner: promoterCover,
+        banner_url: promoterCover,
+        cover: promoterCover,
+        cover_url: promoterCover,
+        promoter_cover_image: promoterCover,
+        location: resolvePromoterLocation(userProfile),
+        role: 'Event Promoter',
+        account_type: 'promoter',
+        type: 'promoter',
+        portalRole: 'promoter',
+        isPersonal: false,
+        isPromoterProfile: true,
+        is_promoter: true,
+        isBandProfile: false,
+        isYou: true,
+        badges: ['🎪 Event Promoter', '⚡ Nexus Live'],
+        customBadges: ['🎪 Event Promoter', '⚡ Nexus Live'],
+        bio: promoterBioText,
+        promoter_metadata: pm
+      };
+
+      setActiveTab('social');
+      triggerNotification?.("⚡ Opening your Promoter workspace profile...");
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
+      }, 100);
+      return;
+    }
+
+    if (activeWs === 'band' && activeBand) {
+      const bandName = activeBand?.name || 'Band';
+      const bandHandle = (activeBand as any)?.custom_slug || (activeBand as any)?.slug || '@band';
+      const bandLogo = (activeBand as any)?.logo_url || null;
+      const bandCover = (activeBand as any)?.banner_url || (activeBand as any)?.cover_url || null;
+      const bandBio = activeBand?.bio || 'Band profile.';
+      const detailPayload = {
+        id: activeBand?.id || 'band:active',
+        name: bandName,
+        legalName: bandName,
+        handle: bandHandle.startsWith('@') ? bandHandle : `@${bandHandle}`,
+        avatar: bandLogo,
+        avatar_url: bandLogo,
+        logo: bandLogo,
+        logo_url: bandLogo,
+        banner: bandCover,
+        banner_url: bandCover,
+        cover: bandCover,
+        cover_url: bandCover,
+        location: activeBand?.homebase || 'Global',
+        role: 'Band / Artist',
+        account_type: 'band',
+        type: 'band',
+        portalRole: 'band',
+        isPersonal: false,
+        isBandProfile: true,
+        isYou: true,
+        badges: ['⚡ Band Core', '🎵 Metal'],
+        bio: bandBio
+      };
+
+      setActiveTab('social');
+      triggerNotification?.("⚡ Opening your Band workspace profile...");
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
+      }, 100);
+      return;
+    }
+
     const userFallbackHandle = userProfile?.console_handle || userProfile?.handle || userProfile?.username || userProfile?.screen_name || (userProfile?.name && !userProfile.name.toLowerCase().includes('miguel') ? userProfile.name.replace(/\s+/g, '_').toLowerCase() : (userProfile?.email ? userProfile.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') : (isOwnerMiguel ? 'bdmCEO' : 'member')));
     const personalHandle = userProfile?.console_handle && (!userProfile.console_handle.toLowerCase().includes('virulent') || isOwnerMiguel) && (!userProfile.console_handle.toLowerCase().includes('bdmceo') || isOwnerMiguel) && userProfile.console_handle !== '@user' && userProfile.console_handle !== 'user'
       ? (userProfile.console_handle.startsWith('@') ? userProfile.console_handle : `@${userProfile.console_handle}`)
@@ -2969,7 +3119,7 @@ export default function App() {
         try {
           const { data: showsDb, error: showsErr } = await supabase
             .from('shows')
-            .select('*')
+            .select('id, show_name, headliner, show_date, date, doors_time, venue_name, city, price, support_lineup, flyer_url, created_at')
             .order('date', { ascending: true });
           if (!showsErr && showsDb) {
             if (showsDb.length > 0) {
@@ -2981,7 +3131,7 @@ export default function App() {
                 supabase.from('shows').delete().in('id', Array.from(mockShowIds)).then();
               }
 
-              let mergedShows = realShows as Show[];
+              let mergedShows = (realShows as any[]) as Show[];
               try {
                 const existing = localStorage.getItem('nexus_core_shows_extended');
                 const extendedMap = existing ? JSON.parse(existing) : {};
@@ -3003,7 +3153,7 @@ export default function App() {
                 const seenShowSigs = new Set<string>();
                 const uniqueShows: Show[] = [];
 
-                for (const s of realShows) {
+                for (const s of (realShows as any[])) {
                   const extra = extendedMap[s.id] || (s.show_name ? Object.values(extendedMap).find((v: any) => v.name === s.show_name || v.show_name === s.show_name || (v.date === s.date && v.city === s.city)) : null);
                   const formatted: Show = {
                     ...s,
@@ -3012,6 +3162,7 @@ export default function App() {
                     venue: s.venue || s.venue_name || s.venue_address || s.name || s.show_name,
                     venue_name: s.venue_name || s.venue || s.name,
                     date: s.date || s.show_date,
+                    status: s.status || 'confirmed',
                     ...(extra || {})
                   };
 
@@ -4929,6 +5080,13 @@ list.push({
       {/* Real-time overlay portals */}
       <FloatingChatHead />
       <AvatarPopupOverlay />
+
+      {/* Autonomous Shake & Instabug Bug Monitor (Private Owner Console) */}
+      <BugMonitorDrawer
+        userProfile={userProfile}
+        activeTab={activeTab as string}
+        activeBand={activeBand}
+      />
     </div>
   );
 }

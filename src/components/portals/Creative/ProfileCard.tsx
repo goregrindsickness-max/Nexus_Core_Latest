@@ -7,6 +7,7 @@ import { formatLocationDisplay } from '../../../constants/location';
 import { useUserPresence } from '../../../lib/presence';
 import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert } from '../../../supabase';
+import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
 import { isCommunityBandRecord } from '../../../lib/seedBandsData';
 import { communityBandManager } from '../../../lib/communityBands';
@@ -18,6 +19,7 @@ import { BandcampEmbedCard } from '../../social/embeds/BandcampEmbedCard';
 import { ProfileMarketplaceTab } from '../../profile/ProfileMarketplaceTab';
 import { GalleryTab } from '../../profile/GalleryTab';
 import { CrtTvFrame } from '../../profile/CrtTvFrame';
+import { VORTEX_GRAPHICS_SVG_AVATAR, VORTEX_GRAPHICS_SVG_COVER } from '../../../utils/imageFallbacks';
 
 export type { ListenerMetric };
 export { calculateListenerMetrics };
@@ -712,7 +714,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
   const bData = isCurrentUserBand ? (fetchedBandData || localSavedBand) : null;
 
-  const isCreativeTarget = (baseTarget?.account_type === 'creative' || baseTarget?.type === 'creative' || baseTarget?.role === 'Creative' || baseTarget?.workspace_type === 'creative' || baseTarget?.workspaceType === 'creative') && !baseTarget?.isIndustryProPersonal;
+  const isCreativeTarget = Boolean(
+    baseTarget?.isCreativeProfile === true ||
+    baseTarget?.account_type === 'creative' || 
+    baseTarget?.type === 'creative' || 
+    baseTarget?.role === 'Creative' || 
+    baseTarget?.workspace_type === 'creative' || 
+    baseTarget?.workspaceType === 'creative' ||
+    (typeof baseTarget?.name === 'string' && baseTarget.name.toLowerCase().includes('vortex')) ||
+    (typeof baseTarget?.creative_name === 'string' && baseTarget.creative_name.toLowerCase().includes('vortex')) ||
+    (typeof baseTarget?.business_name === 'string' && baseTarget.business_name.toLowerCase().includes('vortex'))
+  );
 
   const creativeBizName = baseTarget?.business_name || baseTarget?.businessName || baseTarget?.creative_business_name || baseTarget?.creative_name || fetchedCreativeData?.business_name || fetchedCreativeData?.creative_name || fetchedCreativeData?.name || fetchedProfileData?.creative_business_name || fetchedProfileData?.creative_name || fetchedProfileData?.creative_metadata?.business_name || (baseTarget?.isYou ? (userProfile?.creative_business_name || userProfile?.creative_name) : null);
   const creativeHandleVal = baseTarget?.creative_handle || fetchedCreativeData?.handle || fetchedCreativeData?.creative_handle || fetchedProfileData?.creative_handle || (baseTarget?.isYou ? userProfile?.creative_handle : null);
@@ -723,8 +735,44 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const fallbackCreativeHandle = isTargetMiguel ? '@bdmCEO' : (personalName && !personalName.toLowerCase().includes('miguel') ? `@${personalName.replace(/\s+/g, '_').toLowerCase()}` : (userProfile?.email ? `@${userProfile.email.split('@')[0]}` : '@member'));
   const personalHandle = (!rawPersonalHandle || (isTargetMiguel && rawPersonalHandle.toLowerCase().includes('virulent')) || (!isTargetMiguel && (rawPersonalHandle.toLowerCase().includes('bdmceo') || rawPersonalHandle.toLowerCase().includes('goregrinder')))) ? fallbackCreativeHandle : (rawPersonalHandle.startsWith('@') ? rawPersonalHandle : `@${rawPersonalHandle}`);
 
+  const localSavedCreativeAvatar = typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null;
+  const localSavedCreativeBanner = typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_banner') : null;
+
+  const personalUserAvatar = userProfile?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null);
+  const resolvedCreativeAvatar = (
+    (localSavedCreativeAvatar && !isPromoterAvatarUrl(localSavedCreativeAvatar) ? localSavedCreativeAvatar : null) ||
+    (fetchedCreativeData?.avatar_url && fetchedCreativeData.avatar_url !== personalUserAvatar && !isPromoterAvatarUrl(fetchedCreativeData.avatar_url) ? fetchedCreativeData.avatar_url : null) ||
+    (fetchedCreativeData?.creative_avatar && fetchedCreativeData.creative_avatar !== personalUserAvatar && !isPromoterAvatarUrl(fetchedCreativeData.creative_avatar) ? fetchedCreativeData.creative_avatar : null) ||
+    (baseTarget?.creative_avatar && baseTarget.creative_avatar !== personalUserAvatar && !isPromoterAvatarUrl(baseTarget.creative_avatar) ? baseTarget.creative_avatar : null) ||
+    (baseTarget?.avatar && baseTarget.avatar !== personalUserAvatar && !baseTarget.avatar.includes('photo-1535713875002') && !baseTarget.avatar.includes('photo-1534528741775') && !isPromoterAvatarUrl(baseTarget.avatar) ? baseTarget.avatar : null) ||
+    (fetchedProfileData?.creative_avatar && fetchedProfileData.creative_avatar !== personalUserAvatar && !isPromoterAvatarUrl(fetchedProfileData.creative_avatar) ? fetchedProfileData.creative_avatar : null) ||
+    (fetchedProfileData?.creative_metadata?.avatar_url && fetchedProfileData.creative_metadata.avatar_url !== personalUserAvatar && !isPromoterAvatarUrl(fetchedProfileData.creative_metadata.avatar_url) ? fetchedProfileData.creative_metadata.avatar_url : null) ||
+    (userProfile?.creative_avatar && userProfile.creative_avatar !== personalUserAvatar && !isPromoterAvatarUrl(userProfile.creative_avatar) ? userProfile.creative_avatar : null) ||
+    VORTEX_GRAPHICS_SVG_AVATAR
+  );
+
+  const personalUserBanner = userProfile?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_banner') : null);
+  const resolvedCreativeBanner = (
+    (localSavedCreativeBanner && !isPromoterCoverUrl(localSavedCreativeBanner) ? localSavedCreativeBanner : null) ||
+    (fetchedCreativeData?.banner_url && fetchedCreativeData.banner_url !== personalUserBanner ? fetchedCreativeData.banner_url : null) ||
+    (fetchedCreativeData?.cover_url && fetchedCreativeData.cover_url !== personalUserBanner ? fetchedCreativeData.cover_url : null) ||
+    (fetchedCreativeData?.creative_banner && fetchedCreativeData.creative_banner !== personalUserBanner ? fetchedCreativeData.creative_banner : null) ||
+    (baseTarget?.creative_banner && baseTarget.creative_banner !== personalUserBanner ? baseTarget.creative_banner : null) ||
+    (baseTarget?.banner && baseTarget.banner !== personalUserBanner && !baseTarget.banner.includes('photo-1511671782779') ? baseTarget.banner : null) ||
+    (fetchedProfileData?.creative_banner && fetchedProfileData.creative_banner !== personalUserBanner ? fetchedProfileData.creative_banner : null) ||
+    (fetchedProfileData?.creative_metadata?.banner_url && fetchedProfileData.creative_metadata.banner_url !== personalUserBanner ? fetchedProfileData.creative_metadata.banner_url : null) ||
+    (userProfile?.creative_banner && userProfile.creative_banner !== personalUserBanner ? userProfile.creative_banner : null) ||
+    VORTEX_GRAPHICS_SVG_COVER
+  );
+
   const effTarget = {
     ...baseTarget,
+    avatar: isCreativeTarget ? resolvedCreativeAvatar : (baseTarget?.avatar || userProfile?.avatar_url),
+    avatar_url: isCreativeTarget ? resolvedCreativeAvatar : (baseTarget?.avatar_url || userProfile?.avatar_url),
+    creative_avatar: isCreativeTarget ? resolvedCreativeAvatar : undefined,
+    banner: isCreativeTarget ? resolvedCreativeBanner : (baseTarget?.banner || userProfile?.banner_url),
+    banner_url: isCreativeTarget ? resolvedCreativeBanner : (baseTarget?.banner_url || userProfile?.banner_url),
+    cover_url: isCreativeTarget ? resolvedCreativeBanner : undefined,
     ...(fetchedProfileData ? {
       full_name: isCreativeTarget ? (creativeBizName || fetchedProfileData.creative_business_name || fetchedProfileData.creative_name || 'Vortex Graphics') : (personalName || fetchedProfileData.full_name || fetchedProfileData.name),
       name: isCreativeTarget ? (creativeBizName || fetchedProfileData.creative_business_name || fetchedProfileData.creative_name || 'Vortex Graphics') : (personalName || fetchedProfileData.name || fetchedProfileData.full_name),
@@ -748,18 +796,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           : (((baseTarget?.isYou || selectedUserProfile?.isYou || (userProfile?.id && (baseTarget?.id === userProfile.id || selectedUserProfile?.id === userProfile.id))))
               ? (profileBlurb || (userProfile as any)?.bio || baseTarget?.bio || '')
               : (baseTarget?.bio || ''))),
-      avatar: isCreativeTarget
-        ? (fetchedCreativeData?.avatar_url || fetchedCreativeData?.creative_avatar || fetchedProfileData?.creative_avatar || baseTarget?.creative_avatar || (baseTarget?.isYou ? userProfile?.creative_avatar : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150')
-        : (fetchedProfileData?.avatar_url || baseTarget?.avatar_url || (baseTarget?.isYou ? userProfile?.avatar_url : null) || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'),
-      avatar_url: isCreativeTarget
-        ? (fetchedCreativeData?.avatar_url || fetchedCreativeData?.creative_avatar || fetchedProfileData?.creative_avatar || baseTarget?.creative_avatar || (baseTarget?.isYou ? userProfile?.creative_avatar : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150')
-        : (fetchedProfileData?.avatar_url || baseTarget?.avatar_url || (baseTarget?.isYou ? userProfile?.avatar_url : null) || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'),
-      banner: isCreativeTarget
-        ? (fetchedCreativeData?.banner_url || fetchedCreativeData?.cover_url || fetchedCreativeData?.creative_banner || fetchedProfileData?.creative_banner || baseTarget?.creative_banner || (baseTarget?.isYou ? userProfile?.creative_banner : null) || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200')
-        : (fetchedProfileData?.banner_url || baseTarget?.banner_url || (baseTarget?.isYou ? userProfile?.banner_url : null) || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=1200'),
-      banner_url: isCreativeTarget
-        ? (fetchedCreativeData?.banner_url || fetchedCreativeData?.cover_url || fetchedCreativeData?.creative_banner || fetchedProfileData?.creative_banner || baseTarget?.creative_banner || (baseTarget?.isYou ? userProfile?.creative_banner : null) || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200')
-        : (fetchedProfileData?.banner_url || baseTarget?.banner_url || (baseTarget?.isYou ? userProfile?.banner_url : null) || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=1200'),
+      avatar: isCreativeTarget ? resolvedCreativeAvatar : (fetchedProfileData?.avatar_url || baseTarget?.avatar_url || (baseTarget?.isYou ? userProfile?.avatar_url : null) || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'),
+      avatar_url: isCreativeTarget ? resolvedCreativeAvatar : (fetchedProfileData?.avatar_url || baseTarget?.avatar_url || (baseTarget?.isYou ? userProfile?.avatar_url : null) || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'),
+      banner: isCreativeTarget ? resolvedCreativeBanner : (fetchedProfileData?.banner_url || baseTarget?.banner_url || (baseTarget?.isYou ? userProfile?.banner_url : null) || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=1200'),
+      banner_url: isCreativeTarget ? resolvedCreativeBanner : (fetchedProfileData?.banner_url || baseTarget?.banner_url || (baseTarget?.isYou ? userProfile?.banner_url : null) || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=1200'),
       top_song_url: isCreativeTarget
         ? (fetchedCreativeData?.top_song_url || fetchedCreativeData?.highlight_track_url || fetchedCreativeData?.featured_youtube_url || fetchedProfileData.top_song_url || baseTarget?.top_song_url)
         : (fetchedProfileData.top_song_url !== undefined && fetchedProfileData.top_song_url !== null && fetchedProfileData.top_song_url !== '' ? fetchedProfileData.top_song_url : baseTarget?.top_song_url),
@@ -801,7 +841,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       skills: fetchedCreativeData.skills || fetchedCreativeData.selected_skills || baseTarget?.skills,
       gear: fetchedCreativeData.gear || fetchedCreativeData.gear_tags || baseTarget?.gear,
     } : {}),
-    ...(bData ? {
+    ...(bData && !isCreativeTarget ? {
       name: bData.band_name || bData.name || baseTarget.name,
       band_name: bData.band_name || bData.name || baseTarget.band_name,
       avatar: bData.logo_url || bData.avatar_url || baseTarget.avatar || baseTarget.avatar_url,
@@ -1579,7 +1619,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     }
                     if (!matchingBandProfile) {
                       const targetEmailLower = (effTarget?.email || baseTarget?.email || selectedUserProfile?.email || (isTargetSelf ? userProfile?.email : '') || '').toLowerCase();
-                      if (targetEmailLower.includes('exposedentrails') || targetFullName.toLowerCase().includes('andre')) {
+                      const targetWords = (targetFullName || '').toLowerCase().trim().split(/[\s._-]+/).filter(Boolean);
+                      const isTargetAndreGonzalez = targetWords.some((w: string) => w === 'andre' || w === 'andré') && (targetFullName.toLowerCase().includes('gonzal') || targetEmailLower.includes('exposedentrails'));
+
+                      if (targetEmailLower.includes('exposedentrails') || isTargetAndreGonzalez) {
                         matchingBandProfile = communityBandManager.findByName('Cordyceps');
                       } else if (targetEmailLower.includes('wirstrom84') || targetFullName.toLowerCase().includes('wirstrom')) {
                         matchingBandProfile = communityBandManager.findByName('Cranial Impalement');
@@ -1815,13 +1858,24 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           id: effTarget.promoter_id || (typeof promoterWsRef === 'object' && promoterWsRef?.id) || `promoter_${effTarget.id || Date.now()}`,
                           name,
                           agency_name: name,
+                          promoter_agency: name,
+                          promoter_brand: name,
+                          promoter_name: name,
+                          brand_name: name,
+                          entity_name: name,
                           type: 'promoter',
                           role: 'Promoter',
                           portalRole: 'promoter',
                           account_type: 'promoter',
                           isPersonal: false,
+                          isIndustryProPersonal: false,
+                          isPromoterProfile: true,
+                          is_promoter: true,
                           avatar: logo,
                           avatar_url: logo,
+                          logo,
+                          logo_url: logo,
+                          promoter_logo: logo,
                           location: subtitle,
                           bio: effTarget.bio || `Official Promoter & Booking entity for ${name}.`
                         };
@@ -1855,16 +1909,20 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     effTarget.creative_business_name || 
                     effTarget.business_name || 
                     (isTargetSelf ? (userProfile?.creative_business_name || userProfile?.creative_name || userProfile?.creative_metadata?.business_name) : null) ||
-                    matchingCreativeProfile?.name || 
                     (typeof creativeWsRef === 'object' && creativeWsRef?.name ? creativeWsRef.name : null) || 
-                    (hasWorkspaceType('creative') ? (effTarget.name && !['user', 'user name', 'industry pro', 'pro_user', 'fan listener', 'member', 'fan_core', 'listener'].includes(String(effTarget.name).toLowerCase().trim()) ? `${effTarget.name} Studios` : 'Vortex Graphics') : null);
+                    'Vortex Graphics';
                   const hasCreativeWorkspace = (hasWorkspaceType('creative') || Boolean(matchingCreativeProfile) || Boolean(effTarget.business_name) || Boolean(effTarget.creative_name) || Boolean(effTarget.creative_id) || (isTargetSelf && Boolean(userProfile?.creative_id || userProfile?.creative_name || userProfile?.creative_business_name))) && Boolean(rawCreativeName) && String(rawCreativeName).trim() !== '';
 
                   const hasCreative = !isCurrentProfileCreative && hasCreativeWorkspace;
 
                   if (hasCreative) {
                     const name = String(rawCreativeName).trim();
-                    const logo = matchingCreativeProfile?.creative_avatar || effTarget?.creative_avatar || (isTargetSelf ? userProfile?.creative_avatar : null) || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150';
+                    const logo = 
+                      (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 
+                      matchingCreativeProfile?.creative_avatar || 
+                      effTarget?.creative_avatar || 
+                      (isTargetSelf ? userProfile?.creative_avatar : null) || 
+                      resolveCreativeLogo(effTarget);
                     const subtitle = effTarget.primary_specialty || effTarget.specialty || 'Creative Media & Sound Design';
 
                     entities.push({
@@ -1877,7 +1935,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       logo,
                       subtitle,
                       onClick: () => {
-                        const creativeBanner = matchingCreativeProfile?.creative_banner || matchingCreativeProfile?.banner_url || matchingCreativeProfile?.cover_url || effTarget?.creative_banner || (isTargetSelf ? userProfile?.creative_banner : null) || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200';
+                        const creativeBanner = matchingCreativeProfile?.creative_banner || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_creative_cover')) : null) || effTarget?.creative_banner || (isTargetSelf ? userProfile?.creative_banner : null) || VORTEX_GRAPHICS_DEFAULT_COVER;
                         const creativeHandle = matchingCreativeProfile?.creative_handle || matchingCreativeProfile?.console_handle || matchingCreativeProfile?.handle || effTarget?.creative_handle || (isTargetSelf ? userProfile?.creative_handle : null) || 'vortexgraphics';
                         const creativeName = name || matchingCreativeProfile?.business_name || matchingCreativeProfile?.creative_name || effTarget?.creative_name || (isTargetSelf ? userProfile?.creative_business_name : null) || 'Vortex Graphics';
 
@@ -1895,8 +1953,11 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           account_type: 'creative',
                           isPersonal: false,
                           isIndustryProPersonal: false,
+                          isCreativeProfile: true,
                           avatar: logo,
                           avatar_url: logo,
+                          logo,
+                          logo_url: logo,
                           creative_avatar: logo,
                           creative_banner: creativeBanner,
                           banner: creativeBanner,

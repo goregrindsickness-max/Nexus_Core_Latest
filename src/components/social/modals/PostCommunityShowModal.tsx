@@ -5,7 +5,7 @@ import {
   Check, ZoomIn, Layers, Music, ExternalLink 
 } from 'lucide-react';
 import { showsStore, venuesStore } from '../../../utils/indexedDB';
-import { getSupabase, sanitizeShowForDb, generateUUID, ensureUUID } from '../../../supabase';
+import { getSupabase, sanitizeShowForDb, generateUUID, ensureUUID, uploadBase64ToStorage } from '../../../supabase';
 import { compressImageInSocialFeed } from '../../../utils/socialFeedUtils';
 
 export interface PostCommunityShowModalProps {
@@ -122,8 +122,8 @@ export function PostCommunityShowModal({
 
   if (!isOpen) return null;
 
-  // Process flyer upload with compression
-  const processImageFile = (file: File, onSuccess: (dataUrl: string) => void) => {
+  // Process flyer upload with compression & immediate Storage upload
+  const processImageFile = (file: File, onSuccess: (publicUrl: string) => void) => {
     if (!file) return;
     if (file.size > 12 * 1024 * 1024) {
       triggerNotification?.('⚠️ Flyer image exceeds 12MB limit.');
@@ -133,12 +133,19 @@ export function PostCommunityShowModal({
     reader.onload = async () => {
       try {
         const raw = reader.result as string;
-        const compressed = await compressImageInSocialFeed(raw, 1200, 1200, 0.82);
-        onSuccess(compressed);
-        triggerNotification?.('✅ Flyer image attached');
+        const compressed = await compressImageInSocialFeed(raw, 1080, 1080, 0.8);
+        triggerNotification?.('⏳ Uploading flyer to storage...');
+        const uploadedUrl = await uploadBase64ToStorage(compressed, 'archives', 'community_show', 'flyer');
+        if (uploadedUrl && !uploadedUrl.startsWith('data:')) {
+          onSuccess(uploadedUrl);
+          triggerNotification?.('✅ Flyer stored in cloud');
+        } else {
+          onSuccess(compressed);
+          triggerNotification?.('✅ Flyer attached');
+        }
       } catch {
         onSuccess(reader.result as string);
-        triggerNotification?.('✅ Flyer image attached');
+        triggerNotification?.('✅ Flyer attached');
       }
     };
     reader.readAsDataURL(file);

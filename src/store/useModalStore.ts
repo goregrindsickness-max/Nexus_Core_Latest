@@ -74,6 +74,12 @@ export interface ModalStoreState {
   openSettingsDrawer: () => void;
   closeSettingsDrawer: () => void;
 
+  // 12. Bug Diagnostics Monitor Console (Shake & Instabug)
+  isBugMonitorOpen: boolean;
+  setIsBugMonitorOpen: (open: boolean) => void;
+  openBugMonitor: () => void;
+  closeBugMonitor: () => void;
+
   // Utility to close all open dialogs
   closeAllModals: () => void;
 }
@@ -159,6 +165,12 @@ export const useModalStore = create<ModalStoreState>((set) => ({
   openSettingsDrawer: () => set({ isSettingsDrawerOpen: true }),
   closeSettingsDrawer: () => set({ isSettingsDrawerOpen: false }),
 
+  // 12. Bug Diagnostics Monitor Console
+  isBugMonitorOpen: false,
+  setIsBugMonitorOpen: (open) => set({ isBugMonitorOpen: open }),
+  openBugMonitor: () => set({ isBugMonitorOpen: true }),
+  closeBugMonitor: () => set({ isBugMonitorOpen: false }),
+
   // Global helper
   closeAllModals: () => set({
     isModalOpen: false,
@@ -173,7 +185,8 @@ export const useModalStore = create<ModalStoreState>((set) => ({
     transferPreselectedId: null,
     isLiveTeamActivityOpen: false,
     showWorkspaceRegistration: false,
-    isSettingsDrawerOpen: false
+    isSettingsDrawerOpen: false,
+    isBugMonitorOpen: false
   })
 }));
 
@@ -194,4 +207,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('nexus_open_workspace_registration', ((e: CustomEvent) => {
     useModalStore.getState().openWorkspaceRegistration(e?.detail?.role);
   }) as EventListener);
+  window.addEventListener('nexus:open-bug-monitor', () => {
+    useModalStore.getState().openBugMonitor();
+  });
 }

@@ -1338,7 +1338,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     }
                     if (!matchingBandProfile) {
                       const targetEmailLower = (effTarget?.email || baseTarget?.email || selectedUserProfile?.email || (isTargetSelf ? userProfile?.email : '') || '').toLowerCase();
-                      if (targetEmailLower.includes('exposedentrails') || targetFullName.toLowerCase().includes('andre')) {
+                      const targetWords = (targetFullName || '').toLowerCase().trim().split(/[\s._-]+/).filter(Boolean);
+                      const isTargetAndreGonzalez = targetWords.some((w: string) => w === 'andre' || w === 'andré') && (targetFullName.toLowerCase().includes('gonzal') || targetEmailLower.includes('exposedentrails'));
+
+                      if (targetEmailLower.includes('exposedentrails') || isTargetAndreGonzalez) {
                         matchingBandProfile = communityBandManager.findByName('Cordyceps');
                       } else if (targetEmailLower.includes('wirstrom84') || targetFullName.toLowerCase().includes('wirstrom')) {
                         matchingBandProfile = communityBandManager.findByName('Cranial Impalement');
