@@ -2271,9 +2271,9 @@ try {
         setProfileHandle(parsed.profileHandle);
       }
 
-      const parentAvatar = portalRole === 'label' ? userProfile?.label_avatar 
-        : portalRole === 'creative' ? (userProfile?.creative_avatar || userProfile?.creative_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || userProfile?.avatar_url)
-        : portalRole === 'promoter' ? ((userProfile as any)?.promoter_logo || userProfile?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null))
+      const parentAvatar = portalRole === 'label' ? (userProfile?.label_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_avatar') : null))
+        : portalRole === 'creative' ? resolveCreativeLogo(userProfile)
+        : portalRole === 'promoter' ? resolvePromoterLogo(userProfile)
         : (userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null));
       
       if (parentAvatar) setProfileAvatarUrl(parentAvatar);
@@ -4582,8 +4582,9 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
       timeAgo: 'Just now',
       authorId: userProfile?.id || 'current_user',
       authorName: sellerDisplayName,
-      authorAvatar: userProfile?.avatar || userProfile?.avatar_url || '',
-      authorRole: portalRole === 'band' ? 'Band / Artist' : portalRole === 'label' ? 'Record Label' : portalRole === 'promoter' ? 'Promoter' : 'Community Member',
+      authorAvatar: resolveEffectiveAvatar(portalRole, activeBand, userProfile, profileAvatarUrl),
+      authorRole: portalRole === 'band' ? 'Band / Artist' : portalRole === 'label' ? 'Record Label' : portalRole === 'promoter' ? 'Venue Promoter' : portalRole === 'creative' ? 'Creative Pro' : 'Community Member',
+      workspace_type: portalRole,
       location: newListingItem.location,
       message: newListingDescription.trim() || `${newListingTitle.trim()} - Pinned to the Community Bulletin Board`,
       content: newListingDescription.trim() || `${newListingTitle.trim()} - Pinned to the Community Bulletin Board`,

@@ -49,7 +49,7 @@ import {
 } from '../embeds';
 import { GigProximityPill } from './GigProximityPill';
 import { isMiguelNameOrProfile } from '../utils/profileUtils';
-import { resolveCreativeLogo, resolveBandLogo, resolvePromoterLogo } from '../../../utils/bandProfileUtils';
+import { resolveCreativeLogo, resolveBandLogo, resolvePromoterLogo, DEFAULT_PERSONAL_AVATAR } from '../../../utils/bandProfileUtils';
 import { getResilientFallback } from '../../../utils/imageFallbacks';
 
 // Global cache of failed avatar URLs across all PostCard instances to prevent remount flashing loops
@@ -632,18 +632,33 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   // Determine appropriate live workspace avatar fallback
   const liveAuthorAvatar = isCreative
-    ? resolveCreativeLogo(userProfile)
+    ? resolveCreativeLogo(userProfile, validRawPostAvatar)
     : isArtistOrBand
     ? resolveBandLogo(post, userProfile)
     : isPromoter
-    ? resolvePromoterLogo(userProfile)
+    ? resolvePromoterLogo(userProfile, validRawPostAvatar)
     : validLiveSelfAvatar;
 
-  // Priority: If the post itself has a valid raw post avatar (band logo, creative logo, etc.), ALWAYS use it.
-  // If author is self and raw avatar is missing/failed, fall back to the appropriate live workspace avatar.
-  const displayAvatar = (!isRawAvatarKnownFailed && validRawPostAvatar)
-    ? validRawPostAvatar
-    : (isAuthorSelf ? (liveAuthorAvatar || validLiveSelfAvatar || null) : (isRawAvatarKnownFailed ? null : (validRawPostAvatar || null)));
+  const isPersonalAvatarUrl = Boolean(
+    validRawPostAvatar && (
+      validRawPostAvatar === validLiveSelfAvatar ||
+      validRawPostAvatar === userProfile?.avatar_url ||
+      validRawPostAvatar === DEFAULT_PERSONAL_AVATAR ||
+      validRawPostAvatar.includes('photo-1535713875002') ||
+      validRawPostAvatar.includes('photo-1534528741775')
+    )
+  );
+
+  // For dedicated workspace posts (Creative Pro, Venue Promoter, Band / Artist), if validRawPostAvatar is missing or is just the author's personal user avatar, force the dedicated workspace logo!
+  const isWorkspaceRole = isCreative || isPromoter || isArtistOrBand || isLabel;
+  const useWorkspaceLogo = isWorkspaceRole && (isPersonalAvatarUrl || !validRawPostAvatar || isAuthorSelf);
+
+  // Priority: Use workspace logo for workspace posts; otherwise fall back to raw post avatar
+  const displayAvatar = (useWorkspaceLogo && liveAuthorAvatar)
+    ? liveAuthorAvatar
+    : ((!isRawAvatarKnownFailed && validRawPostAvatar)
+        ? validRawPostAvatar
+        : (isAuthorSelf ? (liveAuthorAvatar || validLiveSelfAvatar || null) : (isRawAvatarKnownFailed ? null : (validRawPostAvatar || null))));
 
   const [avatarImgSrc, setAvatarImgSrc] = useState<string | null>(() => {
     if (displayAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar)) return displayAvatar;

@@ -108,10 +108,18 @@ public class BackgroundAudioService extends Service {
             } else if (ACTION_PAUSE.equals(action)) {
                 releaseWakeLock();
                 startForegroundWithNotification(currentTitle, currentArtist, false);
+                Intent pauseIntent = new Intent("com.nexus.core.AUDIO_INTERRUPTION_PAUSE");
+                sendBroadcast(pauseIntent);
             } else if (ACTION_STOP.equals(action)) {
                 releaseWakeLock();
                 abandonAudioFocus();
-                stopForeground(true);
+                Intent pauseIntent = new Intent("com.nexus.core.AUDIO_INTERRUPTION_PAUSE");
+                sendBroadcast(pauseIntent);
+                try {
+                    stopForeground(true);
+                } catch (Exception e) {
+                    Log.w(TAG, "stopForeground error", e);
+                }
                 stopSelf();
             }
         }
@@ -212,12 +220,48 @@ public class BackgroundAudioService extends Service {
                 .setOngoing(isPlaying)
                 .setAutoCancel(false);
 
+        if (isPlaying) {
+            Intent pauseIntent = new Intent(this, BackgroundAudioService.class);
+            pauseIntent.setAction(ACTION_PAUSE);
+            PendingIntent pausePendingIntent = PendingIntent.getService(
+                    this,
+                    1,
+                    pauseIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
+            );
+            builder.addAction(android.R.drawable.ic_media_pause, "Pause", pausePendingIntent);
+        } else {
+            Intent playIntent = new Intent(this, BackgroundAudioService.class);
+            playIntent.setAction(ACTION_START);
+            PendingIntent playPendingIntent = PendingIntent.getService(
+                    this,
+                    2,
+                    playIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
+            );
+            builder.addAction(android.R.drawable.ic_media_play, "Play", playPendingIntent);
+        }
+
+        Intent stopIntent = new Intent(this, BackgroundAudioService.class);
+        stopIntent.setAction(ACTION_STOP);
+        PendingIntent stopPendingIntent = PendingIntent.getService(
+                this,
+                3,
+                stopIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
+        );
+        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPendingIntent);
+
         Notification notification = builder.build();
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-        } else {
-            startForeground(NOTIFICATION_ID, notification);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error starting foreground service notification", e);
         }
     }
 

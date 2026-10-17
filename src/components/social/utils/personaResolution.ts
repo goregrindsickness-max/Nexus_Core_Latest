@@ -1,5 +1,5 @@
 import { hasRegisteredWorkspace } from '../../../types';
-import { resolveBandName, resolveBandLogo, resolveCreativeName, resolveCreativeLogo } from '../../../utils/bandProfileUtils';
+import { resolveBandName, resolveBandLogo, resolveCreativeName, resolveCreativeLogo, resolvePromoterLogo } from '../../../utils/bandProfileUtils';
 import { isMiguelNameOrProfile } from './profileUtils';
 
 export interface PostingPersona {
@@ -173,7 +173,7 @@ export function getAvailablePersonas({
     }, true);
   } else if (normalizedRole === 'promoter') {
     const promoterName = userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_name || 'Promoter Gateway';
-    const promoterAvatar = userProfile?.promoter_metadata?.logo || userProfile?.promoter_logo || liveUserAvatar;
+    const promoterAvatar = resolvePromoterLogo(userProfile, profileAvatarUrl);
     addPersona({
       id: 'workspace:promoter',
       type: 'promoter',
@@ -275,7 +275,7 @@ export function getAvailablePersonas({
       id: 'workspace:promoter',
       type: 'promoter',
       name: userProfile.promoter_metadata?.brand_name || userProfile.promoter_name,
-      avatarUrl: userProfile.promoter_metadata?.logo || userProfile.promoter_logo || liveUserAvatar,
+      avatarUrl: resolvePromoterLogo(userProfile, profileAvatarUrl),
       roleBadge: 'Promoter',
       subtitle: 'Venue Promoter Gateway',
       realName: legalName,

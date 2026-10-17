@@ -53,7 +53,11 @@ public class MainActivity extends BridgeActivity {
                 serviceIntent.putExtra(BackgroundAudioService.EXTRA_GENRE, genre);
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(serviceIntent);
+                    try {
+                        startForegroundService(serviceIntent);
+                    } catch (Exception ex) {
+                        startService(serviceIntent);
+                    }
                 } else {
                     startService(serviceIntent);
                 }
@@ -71,7 +75,11 @@ public class MainActivity extends BridgeActivity {
                 serviceIntent.putExtra(BackgroundAudioService.EXTRA_ARTIST, artist);
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(serviceIntent);
+                    try {
+                        startForegroundService(serviceIntent);
+                    } catch (Exception ex) {
+                        startService(serviceIntent);
+                    }
                 } else {
                     startService(serviceIntent);
                 }
@@ -147,6 +155,9 @@ public class MainActivity extends BridgeActivity {
                     settings.setDatabaseEnabled(true);
                     // Crucial: allow media playback without requiring direct user gesture per track transition
                     settings.setMediaPlaybackRequiresUserGesture(false);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+                    }
                 }
 
                 // Register native audio bridge into JavaScript window.NexusNativeAudio
@@ -154,6 +165,13 @@ public class MainActivity extends BridgeActivity {
             }
         } catch (Exception e) {
             e.printStackTrace();
+        }
+
+        // Request Notification Permission on Android 13+ (API 33+) for persistent foreground service notifications
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 101);
+            }
         }
 
         // Register interruption receivers for headphones disconnect & audio focus events

@@ -11,6 +11,7 @@ import { formatPostTimestamp } from '../../utils/socialFeedUtils';
 import { getComposerRoleTheme } from './CreatePostCard';
 import { mergePostWithReactions } from './utils/reactionStore';
 import { isMiguelNameOrProfile } from './utils/profileUtils';
+import { resolveCreativeLogo, resolvePromoterLogo, resolveBandLogo } from '../../utils/bandProfileUtils';
 
 export const FeedViewRouter: React.FC<any> = (props) => {
   const [feedStreamScope, setFeedStreamScope] = React.useState<'all' | 'workspace'>('all');
@@ -41,6 +42,7 @@ export const FeedViewRouter: React.FC<any> = (props) => {
   }, [normRole, props.activeBand, props.userProfile]);
 
   const {
+    activeBand,
     activeTab,
     setActiveTab,
     userProfile,
@@ -563,17 +565,30 @@ export const FeedViewRouter: React.FC<any> = (props) => {
           );
 
           const postWorkspace = (p.workspace_type || p.workspaceType || p.author?.workspace_type || p.author?.workspaceType || '').toLowerCase();
-          const isBandPost = postWorkspace === 'band' || p.authorRole === 'Band / Artist' || p.author?.role === 'Band / Artist' || Boolean(p.author?.isBand);
+          const pAuthorRole = String(p.authorRole || p.author?.role || '').toLowerCase();
+
+          const isBandPost = postWorkspace === 'band' || pAuthorRole.includes('artist') || pAuthorRole.includes('band') || Boolean(p.author?.isBand);
+          const isCreativePost = postWorkspace === 'creative' || pAuthorRole.includes('creative') || pAuthorRole.includes('photographer') || pAuthorRole.includes('media');
+          const isPromoterPost = postWorkspace === 'promoter' || pAuthorRole.includes('promoter') || pAuthorRole.includes('venue');
 
           const rawAvatar = typeof p.author?.avatar === 'string' ? p.author.avatar : (typeof p.authorAvatar === 'string' ? p.authorAvatar : undefined);
           const isGenericUiAvatar = rawAvatar && (rawAvatar.includes('ui-avatars.com') || rawAvatar === 'U' || rawAvatar === 'Anon');
 
-          // For personal/industry pro posts by current user, liveUserAvatar is authoritative over stale/corrupted snapshots
-          const resolvedAuthorAvatar = (isSelf && !isBandPost && liveUserAvatar)
-            ? liveUserAvatar
-            : ((!isGenericUiAvatar && rawAvatar)
-              ? rawAvatar
-              : (isSelf ? liveUserAvatar : (!isGenericUiAvatar ? rawAvatar : undefined)));
+          let resolvedAuthorAvatar: string | undefined;
+
+          if (isCreativePost || (isSelf && portalRole === 'creative' && !isBandPost && !isPromoterPost)) {
+            resolvedAuthorAvatar = resolveCreativeLogo(userProfile, rawAvatar);
+          } else if (isPromoterPost || (isSelf && portalRole === 'promoter' && !isBandPost && !isCreativePost)) {
+            resolvedAuthorAvatar = resolvePromoterLogo(userProfile, rawAvatar);
+          } else if (isBandPost || (isSelf && portalRole === 'band')) {
+            resolvedAuthorAvatar = resolveBandLogo(activeBand, userProfile, rawAvatar);
+          } else {
+            resolvedAuthorAvatar = (isSelf && liveUserAvatar)
+              ? liveUserAvatar
+              : ((!isGenericUiAvatar && rawAvatar)
+                ? rawAvatar
+                : (isSelf ? liveUserAvatar : (!isGenericUiAvatar ? rawAvatar : undefined)));
+          }
 
           const parsedPost = {
             id: p.id,
