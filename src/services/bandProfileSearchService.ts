@@ -53,7 +53,13 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
     const locParts = [city, state, b.country].filter(Boolean);
     const location = locParts.length > 0 ? locParts.join(', ') : (b.location || '');
 
-    const avatar = b.logo_url || b.cover_url || b.avatar_url || b.avatar || b.image || '';
+    const discCover = b.discography?.[0]?.cover_url || b.discography?.[0]?.cover_image || b.discography?.[0]?.image_url;
+
+    let avatar = b.logo_url || b.avatar_url || b.avatar || b.logo || b.profile_image || b.image || discCover || '';
+    if (!avatar && (b.cover_url || b.banner_url)) {
+      avatar = b.cover_url || b.banner_url;
+    }
+
     const banner = b.banner_url || b.cover_url || '';
     const isVerified = b.is_verified === true || b.verification_status === 'verified_official';
     const followersCount = b.followers_count || 150;
@@ -75,10 +81,17 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
       displayText: `${name}${location ? ` • ${location}` : ''}${genre ? ` (${genre})` : ''}`
     };
 
-    // If already exists, prefer database source with avatar
+    // If already exists, prefer database source with real verified logo
     if (bandMap.has(lowerName)) {
       const existing = bandMap.get(lowerName)!;
-      if (!existing.avatar && avatar) {
+      if (source === 'database') {
+        bandMap.set(lowerName, {
+          ...existing,
+          ...opt,
+          avatar: avatar || existing.avatar,
+          source: 'database'
+        });
+      } else if (!existing.avatar && avatar) {
         bandMap.set(lowerName, { ...existing, avatar });
       }
     } else {
@@ -86,28 +99,7 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
     }
   };
 
-  // 1. Load from INITIAL_COMMUNITY_BANDS
-  if (Array.isArray(INITIAL_COMMUNITY_BANDS)) {
-    INITIAL_COMMUNITY_BANDS.forEach((b) => addBandToMap(b, 'community'));
-  }
-
-  // 2. Load from localStorage nexus_bands_list
-  try {
-    const local = localStorage.getItem('nexus_bands_list');
-    if (local) {
-      const parsed = JSON.parse(local);
-      if (Array.isArray(parsed)) {
-        parsed.forEach((b) => addBandToMap(b, 'database'));
-      }
-    }
-  } catch (_) {}
-
-  // 3. Load extraBands passed from props/context
-  if (Array.isArray(extraBands)) {
-    extraBands.forEach((b) => addBandToMap(b, 'profile'));
-  }
-
-  // 4. Query live Supabase database
+  // 1. Live Supabase database 'bands' table (Highest priority authoritative band entities)
   try {
     const client = getSupabase();
     if (client) {
@@ -120,8 +112,36 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
       if (dbBands && !bErr && Array.isArray(dbBands)) {
         dbBands.forEach((b) => addBandToMap(b, 'database'));
       }
+    }
+  } catch (err) {
+    console.warn('[bandProfileSearchService] Supabase bands query notice:', err);
+  }
 
-      // Query profiles with account_type = 'band'
+  // 2. Load from INITIAL_COMMUNITY_BANDS
+  if (Array.isArray(INITIAL_COMMUNITY_BANDS)) {
+    INITIAL_COMMUNITY_BANDS.forEach((b) => addBandToMap(b, 'community'));
+  }
+
+  // 3. Load from localStorage nexus_bands_list
+  try {
+    const local = localStorage.getItem('nexus_bands_list');
+    if (local) {
+      const parsed = JSON.parse(local);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((b) => addBandToMap(b, 'database'));
+      }
+    }
+  } catch (_) {}
+
+  // 4. Load extraBands passed from props/context
+  if (Array.isArray(extraBands)) {
+    extraBands.forEach((b) => addBandToMap(b, 'profile'));
+  }
+
+  // 5. Query dedicated band accounts from profiles table (ONLY if workspace/account_type is strictly band)
+  try {
+    const client = getSupabase();
+    if (client) {
       const { data: pBands, error: pErr } = await client
         .from('profiles')
         .select('*')
@@ -130,13 +150,13 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
 
       if (pBands && !pErr && Array.isArray(pBands)) {
         pBands.forEach((p) => {
-          const bName = p.bandName || p.full_name || p.display_name || p.name;
-          if (bName) {
+          const bName = p.band_name || p.bandName;
+          if (bName && !bandMap.has(bName.toLowerCase())) {
             addBandToMap(
               {
                 ...p,
                 band_name: bName,
-                avatar_url: p.avatar_url || p.avatar
+                avatar_url: p.band_logo || p.avatar_url || p.avatar || p.logo_url
               },
               'profile'
             );
@@ -145,7 +165,7 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
       }
     }
   } catch (err) {
-    console.warn('[bandProfileSearchService] Supabase query notice:', err);
+    console.warn('[bandProfileSearchService] Supabase profile query notice:', err);
   }
 
   const results = Array.from(bandMap.values()).sort((a, b) =>

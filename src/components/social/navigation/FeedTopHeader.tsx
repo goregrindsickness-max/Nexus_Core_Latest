@@ -36,7 +36,8 @@ import {
   resolveEffectiveAvatar,
   resolveEffectiveCover,
   resolvePromoterName,
-  resolvePromoterHandle
+  resolvePromoterHandle,
+  resolvePromoterLogo
 } from '../../../utils/bandProfileUtils';
 import { BandWorkspaceNavBanner } from './BandWorkspaceNavBanner';
 import { PromoterWorkspaceNavBanner } from './PromoterWorkspaceNavBanner';

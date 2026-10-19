@@ -173,6 +173,8 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                   portalRole={props.portalRole}
                   activeBand={props.activeBand}
                   bands={props.bands}
+                  allProfiles={allProfiles}
+                  discoverProfiles={discoverProfiles}
                   profileFullLegalName={props.profileFullLegalName}
                   profileHandle={props.profileHandle}
                   profileAvatarUrl={props.profileAvatarUrl}

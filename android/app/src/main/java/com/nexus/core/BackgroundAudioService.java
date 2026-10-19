@@ -56,13 +56,13 @@ public class BackgroundAudioService extends Service {
         public void onAudioFocusChange(int focusChange) {
             switch (focusChange) {
                 case AudioManager.AUDIOFOCUS_LOSS:
-                case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
-                    Log.d(TAG, "Audio focus lost. Signaling pause.");
+                    Log.d(TAG, "Audio focus permanently lost. Signaling pause.");
                     Intent pauseIntent = new Intent("com.nexus.core.AUDIO_INTERRUPTION_PAUSE");
                     sendBroadcast(pauseIntent);
                     break;
+                case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
                 case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
-                    Log.d(TAG, "Audio focus ducking requested.");
+                    Log.d(TAG, "Transient audio focus loss/ducking requested.");
                     break;
                 case AudioManager.AUDIOFOCUS_GAIN:
                     Log.d(TAG, "Audio focus regained.");

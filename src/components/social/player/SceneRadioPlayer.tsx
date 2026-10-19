@@ -687,50 +687,52 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     }
   }, [currentVideoIndex, playlistVideos, selectedRadioGenre]);
 
-  // Synchronize playback state with MediaSession and native Android BackgroundAudioService
+  // Synchronize playback state with persistentAudioService, MediaSession, and native Android Foreground Service
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
-      try {
-        navigator.mediaSession.playbackState = sceneRadioPlaying ? 'playing' : 'paused';
-      } catch (_) {}
-    }
+    const curTrack = playlistVideos[currentVideoIndex];
+    const genreName = RADIO_PLAYLISTS[selectedRadioGenre]?.name || 'Scene Radio';
+    const title = curTrack?.title || `${genreName} Radio Track`;
+    const artist = curTrack?.author || `Nexus Radio (${genreName})`;
+    const artwork = curTrack?.thumbnailUrl || '/icon-512.png';
 
-    // Forward to native Android BackgroundAudioService if running in Capacitor
-    try {
-      const nativeBridge = (window as any).NexusNativeAudio;
-      if (nativeBridge) {
-        const curTrack = playlistVideos[currentVideoIndex];
-        const genreName = RADIO_PLAYLISTS[selectedRadioGenre]?.name || 'Scene Radio';
-        const title = curTrack?.title || `${genreName} Stream`;
-        const artist = curTrack?.author || `Nexus Radio (${genreName})`;
-
-        if (sceneRadioPlaying) {
-          nativeBridge.startForegroundAudio(title, artist, genreName);
-        } else {
-          nativeBridge.pauseForegroundAudio();
-        }
-      }
-    } catch (e) {
-      console.warn('[RADIO PLAYER] Native bridge sync notice:', e);
+    if (sceneRadioPlaying) {
+      persistentAudioService.play({
+        id: curTrack?.videoId || `radio_${selectedRadioGenre}_${currentVideoIndex}`,
+        title: title,
+        artist: artist,
+        album: `Nexus Scene Radio • ${genreName}`,
+        genre: genreName,
+        artworkUrl: artwork,
+        audioUrl: curTrack?.audioUrl || 'https://actions.google.com/sounds/v1/ambiences/metal_scraping.ogg',
+        isLiveStream: true
+      });
+    } else {
+      persistentAudioService.pause();
     }
   }, [sceneRadioPlaying, currentVideoIndex, playlistVideos, selectedRadioGenre]);
 
-  // Listen for native audio interruptions (e.g. phone call, audio focus loss, headset unplugged)
+  // Listen for native audio interruptions (e.g. phone call or headset unplugged)
   useEffect(() => {
     const handleNativeInterruption = (e: any) => {
       const action = e.detail?.action;
       if (action === 'pause' && sceneRadioPlayingRef.current) {
+        if (isSceneRadioImmune()) {
+          console.log('[RADIO PLAYER] Ignoring native pause during immunity window');
+          return;
+        }
         if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
           try {
             ytPlayerRef.current.pauseVideo();
           } catch (_) {}
         }
+        persistentAudioService.pause();
         setSceneRadioPlaying(false);
         triggerNotification?.('🎧 Audio paused due to incoming call or unplugged headset');
       } else if (action === 'resume' && !sceneRadioPlayingRef.current) {
         if (ytPlayerRef.current && typeof ytPlayerRef.current.playVideo === 'function') {
           try {
             ytPlayerRef.current.playVideo();
+            markSceneRadioUserActive(3000);
             setSceneRadioPlaying(true);
           } catch (_) {}
         }

@@ -42,6 +42,19 @@ import { BandcampEmbedCard } from './embeds/BandcampEmbedCard';
 import { BandcampSearchHelper } from './embeds/BandcampSearchHelper';
 import { VenueAutocompleteInput } from './VenueAutocompleteInput';
 import { BandTagAutocomplete } from './BandTagAutocomplete';
+import { BUILT_IN_BLACK_BOOK_VENUES } from '../../services/venueSearchService';
+import { getAllRealBandProfiles } from '../../services/bandProfileSearchService';
+import { 
+  DEFAULT_PERSONAL_AVATAR, 
+  resolveBandLogo, 
+  resolvePromoterLogo, 
+  resolveCreativeLogo 
+} from '../../utils/bandProfileUtils';
+import { 
+  VIRULENT_EXCISION_SVG_LOGO,
+  PROMOTER_SVG_AVATAR,
+  VORTEX_GRAPHICS_SVG_AVATAR
+} from '../../utils/imageFallbacks';
 
 
 export type ComposerRoleTheme = 'band' | 'creative' | 'promoter' | 'label' | 'industry_pro' | 'fan_only';
@@ -265,6 +278,8 @@ export interface CreatePostCardProps {
   handleCreatePost: (e: React.FormEvent) => void;
   availableIdentities?: Array<{ id: string; name: string }>;
   bands?: any[];
+  allProfiles?: any[];
+  discoverProfiles?: any[];
 
   // Video & Venue
   youtubeUrl?: string;
@@ -397,6 +412,8 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
   handleCreatePost,
   availableIdentities = [],
   bands = [],
+  allProfiles = [],
+  discoverProfiles = [],
   youtubeUrl = '',
   setYoutubeUrl,
   taggedVenue = '',
@@ -651,7 +668,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
 
   const [scrapedLocation, setScrapedLocation] = useState<string | null>(null);
   const [isScrapingLocation, setIsScrapingLocation] = useState<boolean>(false);
-  const [includeAutoLocation, setIncludeAutoLocation] = useState<boolean>(false);
+  const [includeAutoLocation, setIncludeAutoLocation] = useState<boolean>(true);
 
   // Real-time duplicate check for Show / Fest / Tour event details
   const dupCheck = useMemo(() => {
@@ -679,7 +696,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     triggerNotification?.('Event details cleared.');
   };
 
-  // Mention State
+  // Expanded Mention / Tag State (@ query for Profiles, Bands, and Venues)
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionSuggestions, setMentionSuggestions] = useState<any[]>([]);
   const [mentionIndex, setMentionIndex] = useState<number>(-1);
@@ -692,29 +709,284 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
       return;
     }
     
-    const searchMentions = async () => {
-      const supabase = getSupabase();
-      if (!supabase) return;
-      
+    let isMounted = true;
+
+    const searchAll = async () => {
+      const results: any[] = [];
+      const q = (mentionQuery || '').toLowerCase().trim();
+      const seenBandNames = new Set<string>();
+      const seenUserKeys = new Set<string>();
+      const seenUserNames = new Set<string>();
+
+      // 1. Search Real Band Profiles App-Wide (Supabase 'bands' table, Community Seeds, Context Bands)
       try {
-        let query = supabase.from('profiles').select('id, name, full_name, console_handle, avatar, profile_image').limit(5);
-        if (mentionQuery) {
-          query = query.or(`console_handle.ilike.%${mentionQuery}%,name.ilike.%${mentionQuery}%`);
-        }
-        
-        const { data, error } = await query;
-        if (!error && data) {
-          setMentionSuggestions(data);
-        }
+        const realBands = await getAllRealBandProfiles(bands || []);
+        const matchedBands = realBands.filter((b) => {
+          const bName = (b.name || '').toLowerCase();
+          const bGenre = (b.genre || '').toLowerCase();
+          const bLoc = (b.location || '').toLowerCase();
+          const bSlug = (b.slug || '').toLowerCase();
+          return !q || bName.includes(q) || bGenre.includes(q) || bLoc.includes(q) || bSlug.includes(q);
+        }).slice(0, 10);
+
+        matchedBands.forEach((b) => {
+          const bandNameLower = (b.name || '').toLowerCase().trim();
+          if (!bandNameLower || seenBandNames.has(bandNameLower)) return;
+          seenBandNames.add(bandNameLower);
+
+          const key = `band_${b.id || b.name}`;
+          
+          // Guarantee authentic band logos for specific core bands if missing
+          let bandAvatar = b.avatar || (b as any).logo_url || (b as any).avatar_url;
+          if (bandNameLower.includes('virulent excision') && (!bandAvatar || bandAvatar.includes('default') || bandAvatar.includes('profile-avatar'))) {
+            bandAvatar = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396';
+          } else if (bandNameLower.includes('cranial impalement') && (!bandAvatar || bandAvatar.includes('default') || bandAvatar.includes('profile-avatar'))) {
+            bandAvatar = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790608983047_1790608983069.jpg?t=1790608983069';
+          }
+          if (!bandAvatar || bandAvatar.includes('profile-avatar') || bandAvatar.includes('photo-1534528741775')) {
+            bandAvatar = resolveBandLogo({ name: b.name, id: b.id }, null) || (bandNameLower.includes('virulent excision') ? VIRULENT_EXCISION_SVG_LOGO : 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400');
+          }
+
+          results.push({
+            id: key,
+            tagType: 'band',
+            name: b.name,
+            handle: b.slug || b.name,
+            avatar: bandAvatar,
+            subtitle: `🎵 Band ${b.genre ? `• ${b.genre}` : ''}${b.location ? ` • ${b.location}` : ''}`
+          });
+        });
       } catch (e) {
-        console.warn("Error fetching mentions:", e);
+        console.warn("[CreatePostCard] Band search notice:", e);
+      }
+
+      // Helper to process and register personal/scene profiles and their associated entities
+      const processProfile = (p: any, source: string) => {
+        if (!p) return;
+        const fullName = (p.full_name || p.name || p.display_name || '').trim();
+        const handle = (p.console_handle || p.handle || p.username || '').trim().replace(/^@+/, '');
+        const email = (p.email || '').trim().toLowerCase();
+        const accType = (p.account_type || p.active_workspace || p.role || p.portalRole || '').toLowerCase();
+
+        const isFan = accType === 'fan' || accType === 'fan_only' || accType.includes('fan');
+        const isIndustryPro = accType === 'industry pro' || accType === 'industry_pro' || accType.includes('industry');
+        const affiliatedBand = (p.band_name || p.bandName || '').trim();
+        const affiliatedBandLower = affiliatedBand.toLowerCase();
+
+        // 1. Check & Register Promoter Entity if present on this profile
+        const promoterBrand = (
+          p.promoter_name || 
+          p.promoter_agency || 
+          p.promoter_brand || 
+          p.brand_name ||
+          p.agency_name ||
+          p.promoter_metadata?.brand_name || 
+          p.promoter_metadata?.agency_name || 
+          (accType === 'promoter' ? (fullName || p.name) : '') || 
+          ''
+        ).trim();
+
+        if (promoterBrand && promoterBrand.toLowerCase() !== fullName.toLowerCase()) {
+          const promNameLower = promoterBrand.toLowerCase();
+          const promMatches = !q ||
+            promNameLower.includes(q) ||
+            'promoter'.includes(q) ||
+            (p.promoter_region || p.promoter_metadata?.region || p.city || '').toLowerCase().includes(q);
+
+          const promKey = `promoter_${(p.promoter_id || p.id || promoterBrand).toString().toLowerCase()}`;
+          const promDedupKey = `promoter_${promNameLower}`;
+
+          if (promMatches && !seenUserKeys.has(promKey) && !seenUserNames.has(promDedupKey)) {
+            seenUserKeys.add(promKey);
+            seenUserNames.add(promDedupKey);
+
+            let promoterAvatar = p.promoter_logo || p.promoter_metadata?.promoter_logo || p.promoter_metadata?.logo_url;
+            if (!promoterAvatar || promoterAvatar.includes('default') || promoterAvatar.includes('profile-avatar')) {
+              promoterAvatar = resolvePromoterLogo(p);
+            }
+            if (!promoterAvatar || promoterAvatar.includes('photo-1534528741775') || promoterAvatar.includes('profile-avatar')) {
+              if (promNameLower.includes('nexus live')) {
+                promoterAvatar = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
+              } else {
+                promoterAvatar = PROMOTER_SVG_AVATAR;
+              }
+            }
+
+            const region = p.promoter_region || p.promoter_metadata?.region || p.promoter_metadata?.city || p.city || 'North Texas';
+
+            results.push({
+              id: promKey,
+              tagType: 'promoter',
+              name: promoterBrand,
+              fullName: promoterBrand,
+              handle: promoterBrand,
+              avatar: promoterAvatar,
+              subtitle: `🎪 Promoter • ${region}`
+            });
+          }
+        }
+
+        // 2. Check & Register Creative Entity if present on this profile
+        const creativeBrand = (
+          p.creative_name || 
+          p.creative_business_name || 
+          p.business_name ||
+          p.creative_metadata?.business_name || 
+          (accType === 'creative' ? (fullName || p.name) : '') || 
+          ''
+        ).trim();
+
+        if (creativeBrand && creativeBrand.toLowerCase() !== fullName.toLowerCase()) {
+          const crNameLower = creativeBrand.toLowerCase();
+          const crMatches = !q ||
+            crNameLower.includes(q) ||
+            'creative'.includes(q) ||
+            (p.creative_metadata?.specialty || '').toLowerCase().includes(q);
+
+          const crKey = `creative_${(p.creative_id || p.id || creativeBrand).toString().toLowerCase()}`;
+          const crDedupKey = `creative_${crNameLower}`;
+
+          if (crMatches && !seenUserKeys.has(crKey) && !seenUserNames.has(crDedupKey)) {
+            seenUserKeys.add(crKey);
+            seenUserNames.add(crDedupKey);
+
+            const creativeAvatar = p.creative_avatar || p.creative_metadata?.avatar_url || resolveCreativeLogo(p) || VORTEX_GRAPHICS_SVG_AVATAR;
+
+            results.push({
+              id: crKey,
+              tagType: 'creative',
+              name: creativeBrand,
+              fullName: creativeBrand,
+              handle: creativeBrand,
+              avatar: creativeAvatar,
+              subtitle: `🎨 Creative • Media & Design`
+            });
+          }
+        }
+
+        // 3. Check & Register Personal/Scene Profile (People)
+        const isDedicatedBandAccount = !isFan && !isIndustryPro && !fullName && (accType === 'band' || p.isBandProfile);
+        if (isDedicatedBandAccount) {
+          return;
+        }
+
+        if (accType === 'promoter' && !fullName && promoterBrand) {
+          return;
+        }
+
+        const displayName = fullName || (handle ? `@${handle}` : '') || p.name || 'Scene Member';
+        const nameLower = displayName.toLowerCase().trim();
+        const handleLower = handle.toLowerCase();
+        const fullLower = fullName.toLowerCase();
+
+        const matches = !q ||
+          nameLower.includes(q) ||
+          handleLower.includes(q) ||
+          fullLower.includes(q) ||
+          email.includes(q) ||
+          affiliatedBandLower.includes(q) ||
+          (isFan && ('fan'.includes(q) || 'fan only'.includes(q))) ||
+          (isIndustryPro && ('industry'.includes(q) || 'pro'.includes(q)));
+
+        if (!matches) return;
+
+        const tagType = isFan ? 'fan' : isIndustryPro ? 'industry_pro' : 'user';
+        const key = `user_${source}_${p.id || handle || displayName}`;
+        const dedupNameKey = `${tagType}_${(handle || displayName).toLowerCase()}`;
+
+        if (!seenUserKeys.has(key) && !seenUserNames.has(dedupNameKey)) {
+          seenUserKeys.add(key);
+          seenUserNames.add(dedupNameKey);
+
+          const avatar = p.avatar_url || p.avatar || p.image || p.profile_avatar || p.user_avatar || DEFAULT_PERSONAL_AVATAR;
+
+          let subtitle = '';
+          if (isFan) {
+            subtitle = handle ? `@${handle} • Fan Profile` : 'Fan Community Profile';
+          } else if (isIndustryPro) {
+            subtitle = handle 
+              ? `@${handle} • Industry Pro${affiliatedBand ? ` (${affiliatedBand})` : ''}` 
+              : `Industry Pro${affiliatedBand ? ` (${affiliatedBand})` : ''}`;
+          } else {
+            subtitle = handle ? `@${handle} • Scene Member` : 'Scene Member';
+          }
+
+          results.push({
+            id: key,
+            tagType,
+            name: displayName,
+            fullName,
+            handle: handle || displayName,
+            avatar,
+            subtitle
+          });
+        }
+      };
+
+      // 2. Search In-Memory Profiles Pool (allProfiles, discoverProfiles, userProfile)
+      const inMemoryPool = [
+        ...(allProfiles || []),
+        ...(discoverProfiles || []),
+        ...(userProfile ? [userProfile] : [])
+      ];
+      inMemoryPool.forEach((p) => processProfile(p, 'mem'));
+
+      // 3. Query Live Supabase Profiles Table to ensure every single registered user is reachable
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          let profQuery = supabase
+            .from('profiles')
+            .select('id, full_name, console_handle, avatar_url, banner_url, account_type, active_workspace, role_badge, bio, email, band_name, promoter_name, creative_name, promoter_logo, label_name')
+            .limit(20);
+          if (q) {
+            profQuery = profQuery.or(`console_handle.ilike.%${q}%,full_name.ilike.%${q}%,email.ilike.%${q}%,band_name.ilike.%${q}%,account_type.ilike.%${q}%`);
+          }
+          const { data, error } = await profQuery;
+          if (!error && data) {
+            data.forEach((p) => processProfile(p, 'db'));
+          }
+        } catch (e) {
+          console.warn("[CreatePostCard] Profile query notice:", e);
+        }
+      }
+
+      // 4. Search Venues (Curated Black Book Directory)
+      const matchedVenues = BUILT_IN_BLACK_BOOK_VENUES.filter((v) => {
+        const vName = (v.name || '').toLowerCase();
+        const vCity = (v.city || '').toLowerCase();
+        const vState = (v.state || '').toLowerCase();
+        return !q || vName.includes(q) || vCity.includes(q) || vState.includes(q);
+      }).slice(0, 4);
+
+      matchedVenues.forEach((v) => {
+        const key = `venue_${v.id}`;
+        if (!seenUserKeys.has(key)) {
+          seenUserKeys.add(key);
+          results.push({
+            id: key,
+            tagType: 'venue',
+            name: v.name,
+            handle: v.name,
+            fullAddress: v.fullAddress,
+            city: v.city,
+            state: v.state,
+            subtitle: `📍 ${v.city ? `${v.city}, ${v.state}` : 'Venue'}${v.capacity ? ` • Cap: ${v.capacity}` : ''}`
+          });
+        }
+      });
+
+      if (isMounted) {
+        setMentionSuggestions(results);
       }
     };
     
-    // Simple debounce
-    const timeout = setTimeout(searchMentions, 300);
-    return () => clearTimeout(timeout);
-  }, [mentionQuery]);
+    const timeout = setTimeout(searchAll, 120);
+    return () => {
+      isMounted = false;
+      clearTimeout(timeout);
+    };
+  }, [mentionQuery, bands, availableIdentities, allProfiles, discoverProfiles, userProfile]);
 
   const fetchAutoLocation = async () => {
     setIsScrapingLocation(true);
@@ -752,7 +1024,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     const fullLoc = locName || 'Local Scene';
     setScrapedLocation(fullLoc);
     setIsScrapingLocation(false);
-    setIncludeAutoLocation(false);
+    setIncludeAutoLocation(true);
     if (triggerNotification) {
       triggerNotification(`📍 Location detected: ${fullLoc}`);
     }
@@ -789,9 +1061,6 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (scrapedLocation && includeAutoLocation && setTaggedVenue && !taggedVenue) {
-      setTaggedVenue(scrapedLocation);
-    }
     if (activeScheduledTime) {
       if (handleSchedulePost) {
         handleSchedulePost(e, activeScheduledTime);
@@ -856,15 +1125,11 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     const cursorPosition = e.target.selectionStart;
     const textBeforeCursor = val.slice(0, cursorPosition);
     
-    // Check if the user is typing an @mention
-    const match = textBeforeCursor.match(/@([a-zA-Z0-9_]*)$/);
+    // Check if the user is typing an @tag
+    const match = textBeforeCursor.match(/@([a-zA-Z0-9_\-\s]{0,25})$/);
     if (match) {
       setMentionQuery(match[1]);
       setMentionIndex(0);
-      
-      // Calculate basic position
-      // For a real robust solution, we'd use getBoundingClientRect or an off-screen mirror,
-      // but a simple fixed absolute position works for MVP popups inside a relative container.
       setMentionCursorPos({ top: 30, left: 10 }); 
     } else {
       setMentionQuery(null);
@@ -890,15 +1155,47 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     }
   };
 
-  const selectMention = (profile: any) => {
+  const selectMention = (item: any) => {
+    if (!item) return;
     const cursorPosition = textareaRef.current?.selectionStart || newPostText.length;
     const textBeforeCursor = newPostText.slice(0, cursorPosition);
     const textAfterCursor = newPostText.slice(cursorPosition);
     
-    const textBeforeMatch = textBeforeCursor.replace(/@([a-zA-Z0-9_]*)$/, '');
-    const mentionText = `@${profile.console_handle || profile.name} `;
+    const textBeforeMatch = textBeforeCursor.replace(/@([a-zA-Z0-9_\-\s]{0,25})$/, '');
     
-    const finalVal = textBeforeMatch + mentionText + textAfterCursor;
+    let mentionTagText = '';
+    if (item.tagType === 'band') {
+      mentionTagText = `@${item.name} `;
+      if (setTaggedBands && !taggedBands.includes(item.name)) {
+        setTaggedBands([...taggedBands, item.name]);
+      }
+      if (triggerNotification) triggerNotification(`🎵 Tagged band @${item.name}`);
+    } else if (item.tagType === 'venue') {
+      mentionTagText = `@${item.name} `;
+      if (setTaggedVenue) {
+        setTaggedVenue(item.name);
+      }
+      if (setEventLocationName && !eventLocationName) {
+        setEventLocationName(item.name);
+      }
+      if (item.fullAddress && setEventAddress && !eventAddress) {
+        setEventAddress(item.fullAddress);
+      }
+      if (triggerNotification) triggerNotification(`📍 Tagged venue "${item.name}"`);
+    } else if (item.tagType === 'promoter') {
+      mentionTagText = `@${item.name} `;
+      if (triggerNotification) triggerNotification(`🎪 Tagged promoter @${item.name}`);
+    } else if (item.tagType === 'creative') {
+      mentionTagText = `@${item.name} `;
+      if (triggerNotification) triggerNotification(`🎨 Tagged creative @${item.name}`);
+    } else if (item.tagType === 'label') {
+      mentionTagText = `@${item.name} `;
+      if (triggerNotification) triggerNotification(`🏷️ Tagged record label @${item.name}`);
+    } else {
+      mentionTagText = `@${item.handle || item.name} `;
+    }
+    
+    const finalVal = textBeforeMatch + mentionTagText + textAfterCursor;
     setNewPostText(finalVal);
     
     setMentionQuery(null);
@@ -908,7 +1205,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
-        const newPos = textBeforeMatch.length + mentionText.length;
+        const newPos = textBeforeMatch.length + mentionTagText.length;
         textareaRef.current.setSelectionRange(newPos, newPos);
       }
     }, 10);
@@ -952,126 +1249,31 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
       />
 
       {/* Header & Identity Section */}
-      <div className="flex flex-col gap-2.5 pb-3 border-b border-zinc-800/80 mb-3 relative z-10">
-        {/* Top Tier: User Identity (Avatar + Name + Sparkles + Role Badge) & Desktop Persona Switcher */}
-        <div className="flex items-center justify-between gap-2 min-w-0 w-full">
-          {/* Author Identity */}
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <div 
-              className="w-8 h-8 rounded-full border p-0.5 bg-black/60 shrink-0 overflow-hidden transition-all"
-              style={{ borderColor: `${theme.glowHex}80`, boxShadow: `0 0 10px ${theme.glowHex}40` }}
-            >
-              {avatarUrl ? (
-                <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover rounded-full" referrerPolicy="no-referrer" />
-              ) : (
-                <div className="w-full h-full rounded-full bg-zinc-900 flex items-center justify-center font-black text-xs" style={{ color: theme.glowHex }}>
-                  {displayName.charAt(0).toUpperCase()}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1.5 min-w-0 flex-nowrap">
-              <Sparkles className="w-3.5 h-3.5 animate-pulse shrink-0" style={{ color: theme.glowHex }} />
-              <span className="text-[11.5px] sm:text-xs font-mono font-bold uppercase tracking-wider text-white truncate max-w-[140px] xs:max-w-[180px] sm:max-w-[220px]">
-                {displayName}
-              </span>
-              {/* Role Badge Tag */}
-              <span className={`text-[8px] sm:text-[8.5px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase shrink-0 whitespace-nowrap ${theme.badgeBg} ${theme.badgeText} ${theme.accentBorder}`}>
-                {roleBadgeTitle}
-              </span>
-            </div>
-          </div>
-
-          {/* Desktop Identity Selector */}
-          {availablePersonas.length > 1 ? (
-            <div className="hidden sm:flex items-center gap-1.5 shrink-0 ml-2">
-              <span className="text-[9px] font-mono text-zinc-400 shrink-0">Posting as:</span>
-              <select
-                value={activePersona.id}
-                onChange={(e) => setPostIdentity(e.target.value)}
-                className={`bg-[#07050d] text-[10px] font-mono font-bold border rounded-lg px-2.5 py-1 focus:outline-none transition-all cursor-pointer max-w-[220px] truncate ${theme.badgeText} ${theme.accentBorder}`}
-                title="Select which workspace or band persona you are publishing as"
-              >
-                {availablePersonas.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.roleBadge})
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="hidden sm:flex items-center gap-1.5 shrink-0 ml-2 text-[9px] font-mono text-zinc-400">
-              <span>Posting as:</span>
-              <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${theme.badgeBg} ${theme.badgeText} ${theme.accentBorder}`}>
-                {activePersona.name}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Sub-Tier: Location Scraper & Mobile Persona Switcher */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 w-full">
-          {/* Auto Location Scraper Display */}
-          <div className="flex items-center gap-1 min-w-0">
-            {isScrapingLocation ? (
-              <span className="text-[9px] font-mono text-zinc-400 animate-pulse flex items-center gap-1">
-                <RefreshCw className="w-2.5 h-2.5 animate-spin text-rose-400" /> Scraper detecting location...
-              </span>
-            ) : scrapedLocation ? (
-              <div className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-400 bg-emerald-950/70 px-2 py-0.5 rounded border border-emerald-800/80 shadow-sm max-w-full">
-                <MapPin className="w-2.5 h-2.5 text-rose-400 shrink-0" />
-                <span className="truncate max-w-[150px] xs:max-w-[200px] sm:max-w-[260px] font-bold">{scrapedLocation}</span>
-                <button
-                  type="button"
-                  title="Re-scrape current location"
-                  onClick={fetchAutoLocation}
-                  className="text-zinc-400 hover:text-white ml-0.5 cursor-pointer p-0.5"
-                >
-                  <RefreshCw className="w-2.5 h-2.5" />
-                </button>
-                <button
-                  type="button"
-                  title={includeAutoLocation ? "Location attached to post. Click to detach." : "Click to attach location to post."}
-                  onClick={() => {
-                    const next = !includeAutoLocation;
-                    setIncludeAutoLocation(next);
-                    if (next) {
-                      if (setTaggedVenue && scrapedLocation) {
-                        setTaggedVenue(scrapedLocation);
-                      }
-                    } else {
-                      if (setTaggedVenue && taggedVenue === scrapedLocation) {
-                        setTaggedVenue('');
-                      }
-                    }
-                  }}
-                  className={`ml-1 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase transition-colors cursor-pointer shrink-0 whitespace-nowrap ${
-                    includeAutoLocation ? 'bg-emerald-800 text-white shadow-sm' : 'bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700'
-                  }`}
-                >
-                  {includeAutoLocation ? 'ATTACHED ✓' : '+ ATTACH'}
-                </button>
-              </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-zinc-800/80 mb-3 relative z-10">
+        {/* Left Side: Avatar + Posting as Dropdown */}
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <div 
+            className="w-9 h-9 rounded-full border p-0.5 bg-black/60 shrink-0 overflow-hidden transition-all"
+            style={{ borderColor: `${theme.glowHex}80`, boxShadow: `0 0 10px ${theme.glowHex}40` }}
+          >
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover rounded-full" referrerPolicy="no-referrer" />
             ) : (
-              <button
-                type="button"
-                onClick={fetchAutoLocation}
-                className={`text-[9px] font-mono hover:text-white flex items-center gap-1 px-2 py-0.5 rounded border transition-colors cursor-pointer ${theme.badgeBg} ${theme.badgeText} ${theme.accentBorder}`}
-              >
-                <MapPin className="w-2.5 h-2.5 text-rose-400" />
-                <span>Detect Location</span>
-              </button>
+              <div className="w-full h-full rounded-full bg-zinc-900 flex items-center justify-center font-black text-xs" style={{ color: theme.glowHex }}>
+                {(displayName || 'U').charAt(0).toUpperCase()}
+              </div>
             )}
           </div>
 
-          {/* Mobile-Only Persona Switcher (Clean dedicated full-width strip on mobile) */}
-          {availablePersonas.length > 1 && (
-            <div className="flex sm:hidden items-center justify-between gap-1.5 w-full bg-black/40 px-2.5 py-1.5 rounded-lg border border-zinc-800/80 mt-0.5">
-              <span className="text-[9px] font-mono text-zinc-400 shrink-0 font-bold uppercase tracking-wider">Posting as:</span>
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <span className="text-[10px] sm:text-xs font-mono text-zinc-400 shrink-0 font-bold uppercase tracking-wider">
+              Posting as:
+            </span>
+            {availablePersonas.length > 1 ? (
               <select
                 value={activePersona.id}
                 onChange={(e) => setPostIdentity(e.target.value)}
-                className={`bg-[#07050d] text-[10px] font-mono font-bold border rounded-md px-2 py-1 focus:outline-none transition-all cursor-pointer flex-1 max-w-[210px] truncate ml-1 ${theme.badgeText} ${theme.accentBorder}`}
+                className={`bg-[#07050d] text-xs font-mono font-bold border rounded-lg px-2.5 py-1.5 focus:outline-none transition-all cursor-pointer max-w-[200px] xs:max-w-[250px] sm:max-w-[300px] truncate ${theme.badgeText} ${theme.accentBorder}`}
                 title="Select which workspace or band persona you are publishing as"
               >
                 {availablePersonas.map((p) => (
@@ -1080,8 +1282,65 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                   </option>
                 ))}
               </select>
+            ) : (
+              <span className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg border ${theme.badgeBg} ${theme.badgeText} ${theme.accentBorder} truncate max-w-[240px]`}>
+                {activePersona.name} ({activePersona.roleBadge})
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Right Side: Location Badge & Scope Selector */}
+        <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-center flex-wrap">
+          {/* Automatic Location Display */}
+          {isScrapingLocation ? (
+            <span className="text-[9.5px] font-mono text-zinc-400 animate-pulse flex items-center gap-1 bg-black/40 px-2.5 py-1 rounded-lg border border-zinc-800">
+              <RefreshCw className="w-3 h-3 animate-spin text-rose-400" /> Detecting location...
+            </span>
+          ) : scrapedLocation ? (
+            <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 bg-emerald-950/70 px-2.5 py-1 rounded-lg border border-emerald-800/80 shadow-sm max-w-full">
+              <MapPin className="w-3 h-3 text-rose-400 shrink-0" />
+              <span className="truncate max-w-[120px] xs:max-w-[160px] sm:max-w-[200px] font-bold">{scrapedLocation}</span>
+              <button
+                type="button"
+                title="Clear location"
+                onClick={() => {
+                  setScrapedLocation(null);
+                  setIncludeAutoLocation(false);
+                  if (setTaggedVenue && taggedVenue === scrapedLocation) {
+                    setTaggedVenue('');
+                  }
+                }}
+                className="text-zinc-400 hover:text-rose-400 ml-0.5 cursor-pointer p-0.5"
+              >
+                <X className="w-3 h-3" />
+              </button>
             </div>
+          ) : (
+            <button
+              type="button"
+              onClick={fetchAutoLocation}
+              className={`text-[10px] font-mono hover:text-white flex items-center gap-1 px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${theme.badgeBg} ${theme.badgeText} ${theme.accentBorder}`}
+            >
+              <MapPin className="w-3 h-3 text-rose-400" />
+              <span>Detect Location</span>
+            </button>
           )}
+
+          {/* Scope Selector Button moved next to Location */}
+          <button
+            type="button"
+            onClick={() => togglePanel('scope')}
+            className={`text-[10px] font-mono font-bold hover:text-white flex items-center gap-1 px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+              postScope !== 'public' || activePanel === 'scope'
+                ? `${theme.activeBtnStyle} text-cyan-300 border-cyan-500/60 shadow-[0_0_10px_rgba(6,182,212,0.3)]`
+                : `${theme.badgeBg} ${theme.badgeText} ${theme.accentBorder}`
+            }`}
+            title="Select transmission privacy scope"
+          >
+            <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
+            <span>SCOPE: {postScope.toUpperCase()}</span>
+          </button>
         </div>
       </div>
 
@@ -1093,57 +1352,131 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
             value={newPostText}
             onChange={handleTextareaChange}
             onKeyDown={handleTextareaKeyDown}
-            placeholder="Share an update, photo, or setlist from the pit..."
-            maxLength={1000}
-            className={`w-full bg-[#0d0914] border rounded-xl p-3 pb-7 text-xs text-white placeholder:text-zinc-600 focus:outline-none font-mono resize-none min-h-[95px] transition-all ${theme.inputBorder} ${theme.inputFocus}`}
-            rows={4}
+            placeholder="Share an update, setlist, or news... Type @ to tag profiles, bands, or venues!"
+            maxLength={1500}
+            className={`w-full bg-[#0d0914] border rounded-xl p-3.5 pb-8 text-xs text-white placeholder:text-zinc-500 focus:outline-none font-mono resize-none min-h-[115px] transition-all ${theme.inputBorder} ${theme.inputFocus}`}
+            rows={5}
           />
           <div className="absolute bottom-2.5 right-3 text-[9px] font-mono text-zinc-500 select-none pointer-events-none">
-            {newPostText.length} / 1000
+            {newPostText.length} / 1500
           </div>
           
-          {/* Mention Popover */}
+          {/* Mention & Tag Popover */}
           {mentionQuery !== null && mentionCursorPos && (
             <div 
-              className="absolute z-50 bg-[#111319] border border-[#00ffcc]/30 rounded-xl shadow-2xl overflow-hidden w-64 max-h-48 overflow-y-auto"
+              className="absolute z-50 bg-[#111319] border border-zinc-700 rounded-xl shadow-2xl overflow-hidden w-72 max-h-56 overflow-y-auto font-mono"
               style={{ top: mentionCursorPos.top + 20, left: mentionCursorPos.left }}
             >
+              <div className="px-2.5 py-1.5 bg-black/80 border-b border-zinc-800 text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                <span>TAG PROFILE, BAND, OR VENUE</span>
+                <span className="text-[8px] text-zinc-500">↑↓ + ENTER</span>
+              </div>
               {mentionSuggestions.length > 0 ? (
-                <div className="flex flex-col">
-                  {mentionSuggestions.map((prof, i) => (
+                <div className="flex flex-col divide-y divide-zinc-800/60">
+                  {mentionSuggestions.map((item, i) => (
                     <button
                       type="button"
-                      key={prof.id ? `mention-${prof.id}-${i}` : `mention-${i}`}
-                      className={`flex items-center gap-2 p-2 w-full text-left transition-colors ${
-                        i === mentionIndex ? 'bg-[#00ffcc]/20' : 'hover:bg-zinc-800'
+                      key={item.id ? `tag-${item.id}-${i}` : `tag-${i}`}
+                      className={`flex items-center justify-between gap-2 p-2 w-full text-left transition-colors cursor-pointer ${
+                        i === mentionIndex ? 'bg-purple-900/40 text-white' : 'hover:bg-zinc-800/80 text-zinc-300'
                       }`}
-                      onClick={() => selectMention(prof)}
+                      onClick={() => selectMention(item)}
                     >
-                      <div className="w-6 h-6 rounded-full bg-zinc-900 border border-zinc-700 overflow-hidden shrink-0">
-                        {(prof.avatar || prof.profile_image) ? (
-                          <img src={prof.avatar || prof.profile_image} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="w-full h-full flex items-center justify-center text-[10px] text-zinc-400 font-bold uppercase">
-                            {(prof.console_handle || prof.name || 'U').charAt(0)}
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center relative">
+                          {item.tagType === 'venue' ? (
+                            <MapPin className="w-3.5 h-3.5 text-rose-400" />
+                          ) : (
+                            <>
+                              <span className="text-[10px] text-zinc-400 font-bold uppercase select-none">
+                                {(item.name || item.handle || 'U').charAt(0)}
+                              </span>
+                              {item.avatar && (
+                                <img 
+                                  src={item.avatar} 
+                                  alt={item.name}
+                                  className="absolute inset-0 w-full h-full object-cover rounded-full" 
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    const target = e.currentTarget as HTMLImageElement;
+                                    let fallback = DEFAULT_PERSONAL_AVATAR;
+                                    if (item.tagType === 'band') {
+                                      if (item.name?.toLowerCase().includes('virulent excision')) {
+                                        fallback = VIRULENT_EXCISION_SVG_LOGO;
+                                      } else if (item.name?.toLowerCase().includes('cranial impalement')) {
+                                        fallback = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790608983047_1790608983069.jpg?t=1790608983069';
+                                      } else {
+                                        fallback = resolveBandLogo({ name: item.name }, null) || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400';
+                                      }
+                                    } else if (item.tagType === 'promoter') {
+                                      fallback = item.name?.toLowerCase().includes('nexus live')
+                                        ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601'
+                                        : PROMOTER_SVG_AVATAR;
+                                    } else if (item.tagType === 'creative') {
+                                      fallback = VORTEX_GRAPHICS_SVG_AVATAR;
+                                    }
+                                    if (target.src !== fallback) {
+                                      target.src = fallback;
+                                    } else {
+                                      target.style.display = 'none';
+                                    }
+                                  }}
+                                />
+                              )}
+                            </>
+                          )}
+                        </div>
+                        <div className="flex flex-col overflow-hidden min-w-0">
+                          <span className="text-xs font-bold text-white truncate">
+                            {item.name}
                           </span>
-                        )}
+                          {item.subtitle && (
+                            <span className="text-[9px] text-zinc-400 truncate">
+                              {item.subtitle}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex flex-col overflow-hidden min-w-0">
-                        <span className="text-xs font-mono font-bold text-white truncate">
-                          {prof.console_handle || prof.name || 'Unknown'}
-                        </span>
-                        {prof.full_name && (
-                          <span className="text-[9px] font-mono text-zinc-400 truncate">
-                            {prof.full_name}
-                          </span>
-                        )}
-                      </div>
+
+                      <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase shrink-0 ${
+                        item.tagType === 'band'
+                          ? 'bg-pink-950 text-pink-300 border-pink-500/40'
+                          : item.tagType === 'venue'
+                          ? 'bg-yellow-950 text-yellow-300 border-yellow-500/40'
+                          : item.tagType === 'fan'
+                          ? 'bg-blue-950 text-blue-300 border-blue-500/40'
+                          : item.tagType === 'industry_pro'
+                          ? 'bg-rose-950 text-rose-300 border-rose-500/40'
+                          : item.tagType === 'promoter'
+                          ? 'bg-amber-950 text-amber-300 border-amber-500/40'
+                          : item.tagType === 'creative'
+                          ? 'bg-fuchsia-950 text-fuchsia-300 border-fuchsia-500/40'
+                          : item.tagType === 'label'
+                          ? 'bg-orange-950 text-orange-300 border-orange-500/40'
+                          : 'bg-cyan-950 text-cyan-300 border-cyan-500/40'
+                      }`}>
+                        {item.tagType === 'band'
+                          ? '🎵 BAND'
+                          : item.tagType === 'venue'
+                          ? '📍 VENUE'
+                          : item.tagType === 'fan'
+                          ? '💙 FAN'
+                          : item.tagType === 'industry_pro'
+                          ? '🎟️ PRO'
+                          : item.tagType === 'promoter'
+                          ? '🎪 PROMOTER'
+                          : item.tagType === 'creative'
+                          ? '🎨 CREATIVE'
+                          : item.tagType === 'label'
+                          ? '🏷️ LABEL'
+                          : '👤 USER'}
+                      </span>
                     </button>
                   ))}
                 </div>
               ) : (
-                <div className="p-3 text-xs font-mono text-zinc-500 text-center">
-                  {mentionQuery ? 'No profiles found.' : 'Type a handle to search...'}
+                <div className="p-3 text-xs text-zinc-500 text-center">
+                  {mentionQuery ? 'No matching profile, band, or venue found.' : 'Type to search...'}
                 </div>
               )}
             </div>
@@ -1211,170 +1544,123 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           </div>
         )}
 
-        {/* Reordered & Refactored Action Buttons Layout */}
-        <div className="space-y-2">
+        {/* Attachment Action Buttons Layout (4 Rows of 2) */}
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
           {/* Row 1: +PHOTO/ MEDIA, +EVENT / TICKETS */}
-          <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={() => togglePanel('media')}
-              className={`w-full px-2 py-2 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                activePanel === 'media' || newPostImageUrl || selectedMediaFiles.length > 0
-                  ? theme.activeBtnStyle
-                  : theme.inactiveBtnStyle
-              }`}
-            >
-              <ImageIcon className="w-3 h-3 shrink-0" style={{ color: theme.glowHex }} />
-              <span className="truncate">+PHOTO/ MEDIA</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => togglePanel('media')}
+            className={`w-full px-2 py-2.5 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
+              activePanel === 'media' || newPostImageUrl || selectedMediaFiles.length > 0
+                ? theme.activeBtnStyle
+                : theme.inactiveBtnStyle
+            }`}
+          >
+            <ImageIcon className="w-3.5 h-3.5 shrink-0" style={{ color: theme.glowHex }} />
+            <span className="truncate">+PHOTO / MEDIA</span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() => togglePanel('event')}
-              className={`w-full px-2 py-2 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                eventTitle || eventData || activePanel === 'event'
-                  ? 'bg-amber-950/70 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.35)] font-bold'
-                  : theme.inactiveBtnStyle
-              }`}
-            >
-              <Ticket className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-              <span className="truncate text-amber-300">
-                {eventTitle ? '✓ EVENT ATTACHED' : '+EVENT / TICKETS'}
-              </span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => togglePanel('event')}
+            className={`w-full px-2 py-2.5 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
+              eventTitle || eventData || activePanel === 'event'
+                ? 'bg-amber-950/70 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.35)] font-bold'
+                : theme.inactiveBtnStyle
+            }`}
+          >
+            <Ticket className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+            <span className="truncate text-amber-300">
+              {eventTitle ? '✓ EVENT ATTACHED' : '+EVENT / TICKETS'}
+            </span>
+          </button>
 
-          {/* Row 2: +Video, +Music, +Poll */}
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={() => togglePanel('video')}
-              className={`w-full px-2 py-2 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                activePanel === 'video' || youtubeUrl
-                  ? theme.activeBtnStyle
-                  : theme.inactiveBtnStyle
-              }`}
-            >
-              <Video className="w-3 h-3 shrink-0" style={{ color: theme.glowHex }} />
-              <span className="truncate">+VIDEO</span>
-            </button>
+          {/* Row 2: +VIDEO, +MUSIC */}
+          <button
+            type="button"
+            onClick={() => togglePanel('video')}
+            className={`w-full px-2 py-2.5 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
+              activePanel === 'video' || youtubeUrl
+                ? theme.activeBtnStyle
+                : theme.inactiveBtnStyle
+            }`}
+          >
+            <Video className="w-3.5 h-3.5 shrink-0" style={{ color: theme.glowHex }} />
+            <span className="truncate">+VIDEO</span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                if (setShowSongModal) setShowSongModal(true);
-                else togglePanel('song');
-              }}
-              className={`w-full px-2 py-2 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                attachedSong || activePanel === 'song'
-                  ? theme.activeBtnStyle
-                  : theme.inactiveBtnStyle
-              }`}
-            >
-              <Music className="w-3 h-3 shrink-0" style={{ color: theme.glowHex }} />
-              <span className="truncate">+MUSIC</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (setShowSongModal) setShowSongModal(true);
+              else togglePanel('song');
+            }}
+            className={`w-full px-2 py-2.5 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
+              attachedSong || activePanel === 'song'
+                ? theme.activeBtnStyle
+                : theme.inactiveBtnStyle
+            }`}
+          >
+            <Music className="w-3.5 h-3.5 shrink-0" style={{ color: theme.glowHex }} />
+            <span className="truncate">+MUSIC</span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() => togglePanel('poll')}
-              className={`w-full px-2 py-2 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                activePanel === 'poll' || pollQuestion
-                  ? theme.activeBtnStyle
-                  : theme.inactiveBtnStyle
-              }`}
-            >
-              <BarChart2 className="w-3 h-3 shrink-0" style={{ color: theme.glowHex }} />
-              <span className="truncate">+POLL</span>
-            </button>
-          </div>
+          {/* Row 3: +POLL, +MERCH DROP */}
+          <button
+            type="button"
+            onClick={() => togglePanel('poll')}
+            className={`w-full px-2 py-2.5 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
+              activePanel === 'poll' || pollQuestion
+                ? theme.activeBtnStyle
+                : theme.inactiveBtnStyle
+            }`}
+          >
+            <BarChart2 className="w-3.5 h-3.5 shrink-0" style={{ color: theme.glowHex }} />
+            <span className="truncate">+POLL</span>
+          </button>
 
-          {/* Row 3: +Merch Drop, +Tape/ Demo, +Classified / Gear */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (setShowMerchDropModal) setShowMerchDropModal(true);
-                else togglePanel('merch');
-              }}
-              className={`w-full px-2 py-2 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                merchDropName || activePanel === 'merch'
-                  ? theme.activeBtnStyle
-                  : theme.inactiveBtnStyle
-              }`}
-            >
-              <ShoppingBag className="w-3 h-3 shrink-0" style={{ color: theme.glowHex }} />
-              <span className="truncate">+MERCH DROP</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (setShowMerchDropModal) setShowMerchDropModal(true);
+              else togglePanel('merch');
+            }}
+            className={`w-full px-2 py-2.5 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
+              merchDropName || activePanel === 'merch'
+                ? theme.activeBtnStyle
+                : theme.inactiveBtnStyle
+            }`}
+          >
+            <ShoppingBag className="w-3.5 h-3.5 shrink-0" style={{ color: theme.glowHex }} />
+            <span className="truncate">+MERCH DROP</span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() => togglePanel('tape')}
-              className={`w-full px-2 py-2 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                activePanel === 'tape' || tapeTitle || tapeAudioUrl
-                  ? theme.activeBtnStyle
-                  : theme.inactiveBtnStyle
-              }`}
-            >
-              <Radio className="w-3 h-3 animate-pulse shrink-0" style={{ color: theme.glowHex }} />
-              <span className="truncate">+TAPE/ DEMO</span>
-            </button>
+          {/* Row 4: +TAPE / DEMO, +CLASSIFIED / GEAR */}
+          <button
+            type="button"
+            onClick={() => togglePanel('tape')}
+            className={`w-full px-2 py-2.5 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
+              activePanel === 'tape' || tapeTitle || tapeAudioUrl
+                ? theme.activeBtnStyle
+                : theme.inactiveBtnStyle
+            }`}
+          >
+            <Radio className="w-3.5 h-3.5 animate-pulse shrink-0" style={{ color: theme.glowHex }} />
+            <span className="truncate">+TAPE / DEMO</span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() => togglePanel('classified')}
-              className={`w-full px-2 py-2 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                activePanel === 'classified' || localClassifiedTitle
-                  ? 'bg-amber-950/70 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
-                  : theme.inactiveBtnStyle
-              }`}
-            >
-              <Pin className="w-3 h-3 shrink-0 text-amber-400 rotate-45" />
-              <span className="truncate">+CLASSIFIED/ GEAR</span>
-            </button>
-          </div>
-
-          {/* Row 4: +Tag Band, +Tag Venue, +Scope (3-Button Layout) */}
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={() => togglePanel('band')}
-              className={`w-full px-2 py-2 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                activePanel === 'band' || taggedBands.length > 0
-                  ? theme.activeBtnStyle
-                  : theme.inactiveBtnStyle
-              }`}
-            >
-              <Users className="w-3 h-3 shrink-0" style={{ color: theme.glowHex }} />
-              <span className="truncate">+TAG BAND</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => togglePanel('venue')}
-              className={`w-full px-2 py-2 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                activePanel === 'venue' || taggedVenue
-                  ? theme.activeBtnStyle
-                  : theme.inactiveBtnStyle
-              }`}
-            >
-              <MapPin className="w-3 h-3 shrink-0" style={{ color: theme.glowHex }} />
-              <span className="truncate">+VENUE</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => togglePanel('scope')}
-              className={`w-full px-2 py-2 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                activePanel === 'scope' || postScope !== 'public'
-                  ? theme.activeBtnStyle
-                  : theme.inactiveBtnStyle
-              }`}
-            >
-              <Globe className="w-3 h-3 shrink-0" style={{ color: theme.glowHex }} />
-              <span className="truncate">+SCOPE</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => togglePanel('classified')}
+            className={`w-full px-2 py-2.5 rounded-xl border text-[10px] font-mono tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer truncate ${
+              activePanel === 'classified' || localClassifiedTitle
+                ? 'bg-amber-950/70 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
+                : theme.inactiveBtnStyle
+            }`}
+          >
+            <Pin className="w-3.5 h-3.5 shrink-0 text-amber-400 rotate-45" />
+            <span className="truncate">+CLASSIFIED / GEAR</span>
+          </button>
         </div>
 
         {/* Dynamic Panels */}
@@ -1721,81 +2007,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           </div>
         )}
 
-        {/* Tag Venue Panel */}
-        {activePanel === 'venue' && (
-          <div className={`${theme.panelBg} p-3 rounded-xl border ${theme.panelBorder} space-y-2 animate-in fade-in duration-150`}>
-            <div className={`flex items-center justify-between text-[10px] font-mono ${theme.badgeText} font-bold uppercase`}>
-              <span className="flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                TAG VENUE & SHOW LOCATION
-              </span>
-              <button type="button" onClick={() => setActivePanel(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-3.5 h-3.5" /></button>
-            </div>
 
-            <VenueAutocompleteInput
-              value={taggedVenue}
-              onChange={(venue, venueData) => {
-                if (setTaggedVenue) setTaggedVenue(venue);
-                if (venueData && !eventLocationName && setEventLocationName) {
-                  setEventLocationName(venueData.name);
-                }
-                if (venueData?.fullAddress && !eventAddress && setEventAddress) {
-                  setEventAddress(venueData.fullAddress);
-                }
-              }}
-              placeholder="Search Black Book or Google Places venue (e.g. Chain Reaction, The Echo)..."
-              theme={{
-                innerPanelBg: theme.innerPanelBg,
-                inputBorder: theme.inputBorder,
-                inputFocus: theme.inputFocus,
-                badgeBg: theme.badgeBg,
-                badgeText: theme.badgeText,
-                accentText: theme.accentText
-              }}
-              onClose={() => setActivePanel(null)}
-            />
-          </div>
-        )}
-
-        {/* Tag Band Panel */}
-        {activePanel === 'band' && (
-          <div className={`${theme.panelBg} p-3 rounded-xl border ${theme.panelBorder} space-y-2.5 animate-in fade-in duration-150`}>
-            <div className={`flex items-center justify-between text-[10px] font-mono ${theme.badgeText} font-bold uppercase`}>
-              <span className="flex items-center gap-1.5">
-                <Music className={`w-3.5 h-3.5 ${theme.accentText}`} />
-                TAG BAND PROFILES IN THIS POST
-              </span>
-              <button type="button" onClick={() => setActivePanel(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-3.5 h-3.5" /></button>
-            </div>
-            
-            <BandTagAutocomplete
-              taggedBands={taggedBands}
-              onAddBand={(bandName) => {
-                if (setTaggedBands && !taggedBands.includes(bandName)) {
-                  setTaggedBands([...taggedBands, bandName]);
-                }
-              }}
-              onRemoveBand={(bandName) => {
-                if (setTaggedBands) {
-                  setTaggedBands(taggedBands.filter((b) => b !== bandName));
-                }
-              }}
-              availableBands={bands}
-              theme={{
-                innerPanelBg: theme.innerPanelBg,
-                inputBorder: theme.inputBorder,
-                inputFocus: theme.inputFocus,
-                badgeBg: theme.badgeBg,
-                badgeText: theme.badgeText,
-                accentText: theme.accentText,
-                accentBg: theme.accentBg,
-                accentBorder: theme.accentBorder,
-                attachedTagBg: theme.attachedTagBg
-              }}
-              onClose={() => setActivePanel(null)}
-            />
-          </div>
-        )}
 
         {/* Attach Song / Track Panel */}
         {activePanel === 'song' && (
@@ -2690,21 +2902,6 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
               </span>
             )}
 
-            {taggedVenue && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded ${theme.attachedTagBg} text-[10px] font-mono ${theme.badgeText}`}>
-                <MapPin className={`w-3 h-3 ${theme.attachedTagIcon}`} />
-                <span>{taggedVenue}</span>
-                <button type="button" onClick={() => setTaggedVenue && setTaggedVenue('')} className="hover:text-rose-400 ml-0.5"><X className="w-3 h-3" /></button>
-              </span>
-            )}
-
-            {!taggedVenue && scrapedLocation && includeAutoLocation && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-[10px] font-mono text-emerald-300">
-                <MapPin className="w-3 h-3 text-rose-400" />
-                <span>LOC: {scrapedLocation}</span>
-                <button type="button" onClick={() => setIncludeAutoLocation(false)} className="hover:text-rose-400 ml-0.5"><X className="w-3 h-3" /></button>
-              </span>
-            )}
 
             {attachedSong && (
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded ${theme.attachedTagBg} text-[10px] font-mono ${theme.badgeText}`}>
@@ -2832,38 +3029,36 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           </div>
         )}
 
-        {/* Prominent Full-Width Submit Button */}
+        {/* Integrated Post & Schedule Button Container */}
         <div className="pt-2">
-          <button
-            type="submit"
-            disabled={!newPostText.trim() && !newPostImageUrl && !tapeAudioUrl && !pollQuestion && !merchDropName && !eventTitle && !eventData && !localClassifiedTitle}
-            className={`w-full py-3 sm:py-3.5 rounded-xl disabled:bg-zinc-800/80 disabled:border-zinc-800 disabled:text-zinc-500 disabled:shadow-none font-mono font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed active:scale-[0.99] ${theme.buttonBg}`}
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>
-              {activeScheduledTime
-                ? `QUEUE FOR ${new Date(activeScheduledTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
-                : 'POST TO GLOBAL NETWORK'}
-            </span>
-          </button>
+          <div className="flex items-center gap-2 w-full">
+            <button
+              type="submit"
+              disabled={!newPostText.trim() && !newPostImageUrl && !tapeAudioUrl && !pollQuestion && !merchDropName && !eventTitle && !eventData && !localClassifiedTitle}
+              className={`flex-1 py-3 sm:py-3.5 px-4 rounded-xl disabled:bg-zinc-800/80 disabled:border-zinc-800 disabled:text-zinc-500 disabled:shadow-none font-mono font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed active:scale-[0.99] ${theme.buttonBg}`}
+            >
+              <Send className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">
+                {activeScheduledTime
+                  ? `QUEUE FOR ${new Date(activeScheduledTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                  : 'POST TO GLOBAL NETWORK'}
+              </span>
+            </button>
 
-          {/* Post Scheduler Button placed directly under the main post button */}
-          <button
-            type="button"
-            onClick={() => setShowScheduler(!showScheduler)}
-            className={`w-full mt-2 py-2 px-3 rounded-xl border text-xs font-mono font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              showScheduler || activeScheduledTime
-                ? theme.activeBtnStyle
-                : theme.inactiveBtnStyle
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5 shrink-0 animate-pulse" style={{ color: theme.glowHex }} />
-            <span>
-              {activeScheduledTime
-                ? `⏰ SCHEDULED: ${new Date(activeScheduledTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
-                : 'SCHEDULE TRANSMISSION / POST'}
-            </span>
-          </button>
+            {/* Integrated Clock Schedule Trigger Button on Far Right */}
+            <button
+              type="button"
+              onClick={() => setShowScheduler(!showScheduler)}
+              className={`py-3 sm:py-3.5 px-3.5 rounded-xl border font-mono font-bold text-xs transition-all flex items-center justify-center cursor-pointer shrink-0 ${
+                showScheduler || activeScheduledTime
+                  ? 'bg-amber-950/80 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
+                  : `${theme.inactiveBtnStyle} hover:text-amber-400 hover:border-amber-500/50`
+              }`}
+              title={activeScheduledTime ? `Scheduled for ${new Date(activeScheduledTime).toLocaleString()}` : "Schedule post dispatch time"}
+            >
+              <Clock className={`w-4 h-4 ${activeScheduledTime ? 'text-amber-400 animate-pulse' : ''}`} />
+            </button>
+          </div>
 
           {/* Expandable Scheduler Drawer/Panel */}
           {(showScheduler || activeScheduledTime) && (

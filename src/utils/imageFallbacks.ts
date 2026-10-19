@@ -66,11 +66,17 @@ export function getResilientFallback(url?: string | null, fallbackType: 'avatar'
     }
   }
 
-  if (clean.includes('avatar') || clean.includes('logo')) {
-    return VIRULENT_EXCISION_SVG_LOGO;
+  if (clean.includes('virulent') || clean.includes('excision')) {
+    return fallbackType === 'banner' ? VIRULENT_EXCISION_SVG_COVER : VIRULENT_EXCISION_SVG_LOGO;
+  }
+  if (clean.includes('promoter')) {
+    return fallbackType === 'banner' ? PROMOTER_SVG_COVER : PROMOTER_SVG_AVATAR;
+  }
+  if (clean.includes('creative') || clean.includes('vortex')) {
+    return fallbackType === 'banner' ? VORTEX_GRAPHICS_SVG_COVER : VORTEX_GRAPHICS_SVG_AVATAR;
   }
   if (clean.includes('banner') || clean.includes('cover')) {
-    return VIRULENT_EXCISION_SVG_COVER;
+    return GENERIC_BAND_COVER;
   }
   if (clean.includes('merch') || clean.includes('shirt') || clean.includes('vinyl') || clean.includes('gear')) {
     return GENERIC_MERCH_THUMBNAIL;
