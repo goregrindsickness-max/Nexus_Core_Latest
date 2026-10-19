@@ -33,10 +33,10 @@ interface Flash {
 export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashViewProps) {
   const [flashes, setFlashes] = useState<Flash[]>([]);
   const [downloadState, setDownloadState] = useState<'idle' | 'downloading' | 'completed' | 'error'>('idle');
-  const [apkFileName, setApkFileName] = useState('Nexus-Core-v1.0.apk');
-  const [apkFileSize, setApkFileSize] = useState('7.5 MB');
+  const [apkFileName, setApkFileName] = useState('Nexus-Core-v1.5.3.apk');
+  const [apkFileSize, setApkFileSize] = useState('27.2 MB');
   const [apkDownloadUrl, setApkDownloadUrl] = useState(
-    'https://github.com/nexus-core/releases/releases/latest/download/Nexus-Core-v1.0.apk'
+    'https://github.com/goregrindsickness-max/Nexus_Core_Latest/releases/download/Nexus-Core-v1.5.3/Nexus-Core-v1.5.3.apk'
   );
 
   // Burnout transition effect state (Real fire screen video overlay)
