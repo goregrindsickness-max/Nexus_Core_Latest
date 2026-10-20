@@ -732,14 +732,20 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const resolvedPromoterLogo = (
     fetchedPromoterRecord?.promoter_logo ||
     fetchedPromoterRecord?.logo_url ||
+    fetchedPromoterRecord?.avatar_url ||
+    fetchedPromoterRecord?.avatar ||
     fetchedProfileData?.promoter_logo ||
     fetchedProfileData?.promoter_metadata?.logo_url ||
-    (isTargetExplicitSelf ? (userProfile?.promoter_logo || (userProfile?.promoter_metadata as any)?.logo_url) : null) ||
+    fetchedProfileData?.avatar_url ||
+    fetchedProfileData?.avatar ||
+    (isTargetExplicitSelf ? (userProfile?.promoter_logo || (userProfile?.promoter_metadata as any)?.logo_url || userProfile?.avatar_url) : null) ||
     baseTarget?.promoter_logo ||
     baseTarget?.logo_url ||
     baseTarget?.logo ||
+    baseTarget?.avatar_url ||
+    baseTarget?.avatar ||
     (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) ||
-    'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601'
+    resolvePromoterLogo(baseTarget || userProfile)
   );
 
   const resolvedPromoterBrandName = (
@@ -1826,7 +1832,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
                   if (hasPromoter) {
                     const name = String(rawPromoterName).trim();
-                    const logo = matchingPromoterProfile?.promoter_logo || matchingPromoterProfile?.logo_url || effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=300';
+                    const logo = matchingPromoterProfile?.promoter_logo || matchingPromoterProfile?.logo_url || effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || resolvePromoterLogo(effTarget);
                     const rawSub = effTarget?.promoter_metadata?.region || effTarget?.target_region || (isTargetSelf ? (userProfile?.promoter_metadata?.region || userProfile?.target_region) : null) || effTarget.venue || effTarget.location || 'Promoter & Venue Booking';
                     const subtitle = rawSub && rawSub !== 'Promoter & Venue Booking' ? (formatCleanLocation(rawSub) || rawSub) : rawSub;
 

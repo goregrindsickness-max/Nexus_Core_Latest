@@ -750,18 +750,18 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     }
     setError(null);
     try {
-      const targetId = profileId || userId || selectedProfileId || '421610eb-3a87-4da6-b843-1adb4ab6aecb';
-      const targetName = (profileName || selectedProfileName || '').toLowerCase();
+      const targetId = profileId || userId || selectedProfileId || activeUserId || '421610eb-3a87-4da6-b843-1adb4ab6aecb';
+      const targetName = (profileName || selectedProfileName || selectedUserProfile?.name || selectedUserProfile?.full_name || '').toLowerCase();
 
-      // Query posts for this profile
+      // Query posts for this profile from Supabase
       let query = supabase
         .from('nexus_posts')
         .select('*')
-        .eq('profile_id', targetId);
+        .or(`profile_id.eq.${targetId},author_id.eq.${targetId},user_id.eq.${targetId}`);
 
       let { data, error: selectErr } = await query.order('created_at', { ascending: false });
 
-      // Fallback strategy: Select all posts and filter in memory by profile_id or JSONB data
+      // Fallback strategy: Select all posts if specific query yields nothing
       if (selectErr || !data || data.length === 0) {
         const fallbackAll = await supabase
           .from('nexus_posts')
@@ -769,24 +769,38 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
           .order('created_at', { ascending: false });
 
         if (!fallbackAll.error && fallbackAll.data) {
-          data = fallbackAll.data.filter((item: any) => {
-            const postObj = typeof item.data === 'string' ? JSON.parse(item.data) : (item.data || {});
-
-            if (item.profile_id === targetId || item.author_id === targetId || item.user_id === targetId) return true;
-            if (postObj) {
-              if (postObj.profile_id === targetId || postObj.postedBy === targetId || postObj.author?.id === targetId || postObj.author_id === targetId || postObj.userId === targetId) return true;
-              if (targetName && (
-                postObj.author?.name?.toLowerCase() === targetName ||
-                postObj.authorName?.toLowerCase() === targetName ||
-                postObj.author?.username?.toLowerCase() === targetName ||
-                (targetName.includes('virulent') && (postObj.author?.name?.toLowerCase()?.includes('virulent') || postObj.authorName?.toLowerCase()?.includes('virulent')))
-              )) return true;
-            }
-            return false;
-          });
+          data = fallbackAll.data;
           selectErr = null;
         }
       }
+
+      // Collect local feed posts from localStorage and feed prop
+      let localFeedItems: any[] = [];
+      try {
+        if (Array.isArray(feedRef.current)) {
+          localFeedItems = [...localFeedItems, ...feedRef.current];
+        }
+        ['nexus_feed_posts_cache', 'nexus_feed_posts', 'nexus_posts_local', 'nexus_user_feed_posts'].forEach((key) => {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) localFeedItems = [...localFeedItems, ...parsed];
+            } catch (_) {}
+          }
+        });
+      } catch (_) {}
+
+      // Combine database data and local feed items with de-duplication
+      const combinedRaw: any[] = [...(data || [])];
+      localFeedItems.forEach((localItem) => {
+        if (!localItem) return;
+        const localId = localItem.id;
+        if (!combinedRaw.some((item) => item.id === localId)) {
+          combinedRaw.push(localItem);
+        }
+      });
+      data = combinedRaw;
 
       if (selectErr) {
         console.warn('Post query notice:', selectErr.message);
@@ -819,6 +833,23 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
       );
 
       const isMatchingWorkspacePost = (item: any, postObj: any) => {
+        const itemProfileId = item.profile_id || item.author_id || item.user_id || postObj.profile_id || postObj.postedBy || postObj.author?.id || postObj.author_id || postObj.userId;
+        const authorName = String(
+          postObj.author?.name ||
+          postObj.authorName ||
+          postObj.author?.username ||
+          item.author_name ||
+          ''
+        ).toLowerCase();
+
+        // Rule A: If post explicitly authored by or belongs to this target ID or name, ALWAYS match on this profile card!
+        if (
+          (itemProfileId && (itemProfileId === targetId || itemProfileId === profileId || itemProfileId === userId || itemProfileId === selectedProfileId || itemProfileId === activeUserId)) ||
+          (targetName && authorName.length > 0 && (authorName.includes(targetName) || targetName.includes(authorName)))
+        ) {
+          return true;
+        }
+
         const postWs = String(
           postObj.workspace_type ||
           postObj.workspaceType ||
@@ -828,117 +859,69 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
           postObj.author?.portalRole ||
           item.workspace_type ||
           ''
-        ).toLowerCase();
+        ).toLowerCase().trim();
 
-        const postRole = String(
-          postObj.authorRole ||
-          postObj.author?.role ||
-          postObj.role ||
-          item.role ||
-          ''
-        ).toLowerCase();
-
-        const authorName = String(
-          postObj.author?.name ||
-          postObj.authorName ||
-          postObj.author?.username ||
-          item.author_name ||
-          ''
-        ).toLowerCase();
-
-        const isBandPost = (
+        const isExplicitBandWs = (
           postWs === 'band' ||
           postWs === 'artist' ||
           postObj.isBand === true ||
           postObj.isBandProfile === true ||
-          postObj.author?.isBand === true ||
-          postRole === 'band' ||
-          postRole === 'artist' ||
-          postRole.includes('band') ||
-          postRole.includes('artist') ||
-          authorName.includes('virulent excision')
+          postObj.author?.isBand === true
         );
 
-        const isPromoterPost = (
+        const isExplicitPromoterWs = (
           postWs === 'promoter' ||
           postWs === 'venue' ||
           postObj.isPromoter === true ||
           postObj.isPromoterProfile === true ||
-          postObj.author?.isPromoter === true ||
-          postRole.includes('promoter') ||
-          postRole.includes('venue') ||
-          authorName.includes('pure domination') ||
-          authorName.includes('nexus live') ||
-          authorName.includes('promotions') ||
-          authorName.includes('booking')
+          postObj.author?.isPromoter === true
         );
 
-        const isCreativePost = (
+        const isExplicitCreativeWs = (
           postWs === 'creative' ||
           postWs === 'design' ||
           postObj.isCreative === true ||
           postObj.isCreativeProfile === true ||
-          postObj.author?.isCreative === true ||
-          postRole.includes('creative') ||
-          postRole.includes('designer') ||
-          postRole.includes('photographer') ||
-          postRole.includes('videographer') ||
-          authorName.includes('vortex graphics') ||
-          authorName.includes('graphics')
+          postObj.author?.isCreative === true
         );
 
-        const isLabelPost = (
+        const isExplicitLabelWs = (
           postWs === 'label' ||
           postObj.isLabel === true ||
           postObj.isLabelProfile === true ||
-          postObj.author?.isLabel === true ||
-          postRole.includes('label') ||
-          authorName.includes('records') ||
-          authorName.includes('record label')
+          postObj.author?.isLabel === true
         );
 
         // 1. If viewing Personal / Industry Pro / Fan Profile Card:
         if (isPersonalTarget || targetWorkspace.includes('industry_pro') || targetWorkspace.includes('personal') || targetWorkspace.includes('fan') || targetWorkspace === 'user') {
-          // STRICTLY filter out any non-personal posts (band, promoter, creative, label)
-          if (isBandPost || isPromoterPost || isCreativePost || isLabelPost) {
-            return false;
-          }
-          // Accept personal posts
-          if (postWs === 'industry_pro' || postWs === 'personal' || postWs === 'user' || postWs === 'fan_only' || postWs === 'fan' || !postWs) {
-            return true;
-          }
-          return false;
+          return true;
         }
 
         // 2. If viewing Promoter Workspace:
         if (targetWorkspace.includes('promoter') || targetWorkspace.includes('venue')) {
-          if (isBandPost || isCreativePost || isLabelPost) return false;
-          if (isPromoterPost) return true;
+          if (isExplicitPromoterWs) return true;
           if (selectedUserProfile?.promoter_metadata?.brand_name && authorName.includes(selectedUserProfile.promoter_metadata.brand_name.toLowerCase())) return true;
           if (targetName && authorName.includes(targetName)) return true;
-          return postWs === 'promoter';
+          return postWs === 'promoter' || !isExplicitBandWs;
         }
 
         // 3. If viewing Band / Artist Workspace:
         if (targetWorkspace.includes('band') || targetWorkspace.includes('artist')) {
-          if (isPromoterPost || isCreativePost || isLabelPost) return false;
-          if (isBandPost) return true;
+          if (isExplicitBandWs) return true;
           if (targetName && authorName.includes(targetName)) return true;
-          return postWs === 'band';
+          return postWs === 'band' || !isExplicitPromoterWs;
         }
 
         // 4. If viewing Creative Hub Workspace:
         if (targetWorkspace.includes('creative') || targetWorkspace.includes('design')) {
-          if (isBandPost || isPromoterPost || isLabelPost) return false;
-          if (isCreativePost) return true;
+          if (isExplicitCreativeWs) return true;
           if (targetName && authorName.includes(targetName)) return true;
           return postWs === 'creative';
         }
 
         // 5. If viewing Record Label Workspace:
         if (targetWorkspace.includes('label')) {
-          if (isBandPost || isPromoterPost || isCreativePost) return false;
-          if (isLabelPost) return true;
+          if (isExplicitLabelWs) return true;
           if (targetName && authorName.includes(targetName)) return true;
           return postWs === 'label';
         }
@@ -1011,23 +994,33 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
           (selectedProfileName && (postObj.author?.name?.toLowerCase() === selectedProfileName.toLowerCase() || postObj.authorName?.toLowerCase() === selectedProfileName.toLowerCase()))
         );
 
+        const postAuthorName = (postObj.author?.name || postObj.authorName || item.author_name || item.author_handle || '').trim();
+        const matchedAuthorBand = postAuthorName ? communityBandManager.findMatch(postAuthorName) : null;
+        const matchedAuthorAvatar = matchedAuthorBand?.logo_url || matchedAuthorBand?.avatar_url || null;
+
         const activeSelfAvatar = selectedUserProfile?.avatar_url || selectedUserProfile?.avatar || selectedUserProfile?.logo_url || savedLocalAvatar;
 
-        const resolvedRawAvatar = (isSelfPost && activeSelfAvatar && isValidStorageOrImageUrl(activeSelfAvatar))
-          ? activeSelfAvatar
-          : ((postObj.author?.avatar && isValidStorageOrImageUrl(postObj.author.avatar)) ? postObj.author.avatar : null) ||
+        const resolvedRawAvatar = (() => {
+          if (isSelfPost && activeSelfAvatar && isValidStorageOrImageUrl(activeSelfAvatar)) {
+            return activeSelfAvatar;
+          }
+          const explicitAuthorAvatar = 
+            ((postObj.author?.avatar && isValidStorageOrImageUrl(postObj.author.avatar)) ? postObj.author.avatar : null) ||
             ((postObj.authorAvatar && isValidStorageOrImageUrl(postObj.authorAvatar)) ? postObj.authorAvatar : null) ||
             ((postObj.author?.avatar_url && isValidStorageOrImageUrl(postObj.author.avatar_url)) ? postObj.author.avatar_url : null) ||
             ((postObj.author?.logo_url && isValidStorageOrImageUrl(postObj.author.logo_url)) ? postObj.author.logo_url : null) ||
             ((postObj.avatar && isValidStorageOrImageUrl(postObj.avatar)) ? postObj.avatar : null) ||
             ((postObj.avatar_url && isValidStorageOrImageUrl(postObj.avatar_url)) ? postObj.avatar_url : null) ||
             ((item.avatar && isValidStorageOrImageUrl(item.avatar)) ? item.avatar : null) ||
-            ((item.avatar_url && isValidStorageOrImageUrl(item.avatar_url)) ? item.avatar_url : null) ||
-            ((selectedUserProfile?.avatar_url && isValidStorageOrImageUrl(selectedUserProfile.avatar_url)) ? selectedUserProfile.avatar_url : null) ||
-            ((selectedUserProfile?.avatar && isValidStorageOrImageUrl(selectedUserProfile.avatar)) ? selectedUserProfile.avatar : null) ||
-            ((selectedUserProfile?.logo_url && isValidStorageOrImageUrl(selectedUserProfile.logo_url)) ? selectedUserProfile.logo_url : null) ||
-            (savedLocalAvatar && isValidStorageOrImageUrl(savedLocalAvatar) ? savedLocalAvatar : null) ||
-            null;
+            ((item.avatar_url && isValidStorageOrImageUrl(item.avatar_url)) ? item.avatar_url : null);
+
+          if (explicitAuthorAvatar) return explicitAuthorAvatar;
+          if (matchedAuthorAvatar) return matchedAuthorAvatar;
+          if (isSelfPost) {
+            return (selectedUserProfile?.avatar_url && isValidStorageOrImageUrl(selectedUserProfile.avatar_url)) ? selectedUserProfile.avatar_url : savedLocalAvatar;
+          }
+          return DEFAULT_PERSONAL_AVATAR;
+        })();
 
         const resolvedPollData = postObj.pollData || item.poll_data || postObj.poll_data || item.pollData || null;
 
@@ -1149,7 +1142,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                 created_at: fp.created_at || fp.timestamp || new Date().toISOString(),
                 author: {
                   name: fp.author?.name || fp.authorName || selectedProfileName || targetName || 'User',
-                  avatar: fp.author?.avatar || fp.authorAvatar || selectedUserProfile?.avatar || null,
+                  avatar: fp.author?.avatar || fp.authorAvatar || (fp.author?.name && fp.author.name.toLowerCase() === selectedProfileName.toLowerCase() ? selectedUserProfile?.avatar : null) || null,
                   role: fp.author?.role || fp.authorRole || selectedUserProfile?.role || 'Band',
                   full_name: fp.author?.full_name || fp.authorFullName,
                   workspace_type: fp.workspace_type || selectedUserProfile?.active_workspace || ''

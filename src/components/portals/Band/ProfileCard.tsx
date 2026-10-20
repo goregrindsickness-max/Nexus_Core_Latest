@@ -26,6 +26,7 @@ import { GalleryTab } from '../../profile/GalleryTab';
 import { CrtTvFrame } from '../../profile/CrtTvFrame';
 import { ReleaseDetailsModal } from './ReleaseDetailsModal';
 import PublicStorefrontView from '../../sales/PublicStorefrontView';
+import { MasterAudioUploaderModal } from './MasterAudioUploaderModal';
 import { fetchReleasesFromDatabase } from '../../../services/releasesService';
 import { VORTEX_GRAPHICS_SVG_AVATAR, PROMOTER_SVG_AVATAR } from '../../../utils/imageFallbacks';
 
@@ -154,6 +155,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const [selectedRelease, setSelectedRelease] = React.useState<any>(null);
   const [isIsolatedStorefrontOpen, setIsIsolatedStorefrontOpen] = useState(false);
   const [storefrontBandData, setStorefrontBandData] = useState<any>(null);
+  const [isAudioUploaderOpen, setIsAudioUploaderOpen] = useState(false);
 
   // Synchronous sync of communityArchiveMatch on profile selection changes
   React.useEffect(() => {
@@ -798,12 +800,14 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     const directMatch = communityArchiveMatch || (candidateName ? (communityBandManager.findMatch(candidateName) || communityBandManager.findByName(candidateName)) : null);
     if (!fetchedBandData && !directMatch && !(isOwnBand && localSavedBand)) return null;
 
-    const customUserLogo = isOwnBand ? (userProfile?.band_logo || userProfile?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null)) : null;
+    const targetBandUUID = userProfile?.band_id || fetchedBandData?.id || '';
+    const bandLogoFromStorage = typeof window !== 'undefined' ? (localStorage.getItem('nexus_core_band_avatar_' + targetBandUUID) || localStorage.getItem('nexus_band_logo')) : null;
+    const customUserLogo = isOwnBand ? (userProfile?.band_logo || bandLogoFromStorage) : null;
     const rawLogo = customUserLogo || fetchedBandData?.logo_url || fetchedBandData?.avatar_url || (isOwnBand ? localSavedBand?.logo_url : null) || directMatch?.logo_url || directMatch?.avatar_url;
     const rawAvatar = customUserLogo || fetchedBandData?.avatar_url || fetchedBandData?.logo_url || (isOwnBand ? localSavedBand?.avatar_url : null) || directMatch?.avatar_url || directMatch?.logo_url;
 
-    const targetBandUUID = userProfile?.band_id || fetchedBandData?.id || '';
-    const customUserCover = isOwnBand ? ((typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_banner') || localStorage.getItem('nexus_core_band_cover_' + targetBandUUID)) : null) || userProfile?.band_cover || userProfile?.banner_url) : null;
+    const bandBannerFromStorage = typeof window !== 'undefined' ? (localStorage.getItem('nexus_core_band_cover_' + targetBandUUID) || localStorage.getItem('nexus_band_cover')) : null;
+    const customUserCover = isOwnBand ? (bandBannerFromStorage || userProfile?.band_cover) : null;
     let rawCover = customUserCover || fetchedBandData?.cover_url || fetchedBandData?.banner_url;
     if ((!rawCover || (typeof rawCover === 'string' && rawCover.includes('unsplash'))) && (directMatch?.cover_url || directMatch?.banner_url)) {
       rawCover = directMatch.cover_url || directMatch.banner_url;
@@ -1013,17 +1017,21 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     ...(bData ? {
       name: isBandTarget ? (bData.band_name || bData.name || baseTarget.name) : (fetchedProfileData?.full_name || fetchedProfileData?.name || baseTarget.name),
       band_name: bData.band_name || bData.name || baseTarget.band_name,
-      avatar: (isBandTarget && !isSelfTarget) ? (bData.logo_url || bData.avatar_url || baseTarget.avatar || baseTarget.avatar_url) : (liveUserAvatar || (isExplicitPersonal ? null : (bData.logo_url || bData.avatar_url))),
-      avatar_url: (isBandTarget && !isSelfTarget) ? (bData.logo_url || bData.avatar_url || baseTarget.avatar_url || baseTarget.avatar) : (liveUserAvatar || (isExplicitPersonal ? null : (bData.logo_url || bData.avatar_url))),
-      banner: (isBandTarget && !isSelfTarget) 
-        ? (bData.cover_url || bData.banner_url || baseTarget.banner || baseTarget.banner_url) 
-        : (liveUserBanner || (isExplicitPersonal ? null : (bData.cover_url || bData.banner_url || baseTarget.banner))),
-      banner_url: (isBandTarget && !isSelfTarget) 
-        ? (bData.cover_url || bData.banner_url || baseTarget.banner_url || baseTarget.banner) 
-        : (liveUserBanner || (isExplicitPersonal ? null : (bData.cover_url || bData.banner_url || baseTarget.banner_url))),
-      cover_url: (isBandTarget && !isSelfTarget) 
-        ? (bData.cover_url || baseTarget.cover_url) 
-        : (liveUserBanner || (isExplicitPersonal ? null : (bData.cover_url || baseTarget.cover_url))),
+      avatar: isBandTarget
+        ? (rawResolvedBandLogo || bData?.logo_url || bData?.avatar_url || directMatch?.logo_url || directMatch?.avatar_url || fetchedBandData?.logo_url || fetchedBandData?.avatar_url || baseTarget?.logo_url || baseTarget?.avatar_url || baseTarget?.avatar || liveUserAvatar)
+        : liveUserAvatar,
+      avatar_url: isBandTarget
+        ? (rawResolvedBandLogo || bData?.logo_url || bData?.avatar_url || directMatch?.logo_url || directMatch?.avatar_url || fetchedBandData?.logo_url || fetchedBandData?.avatar_url || baseTarget?.logo_url || baseTarget?.avatar_url || baseTarget?.avatar || liveUserAvatar)
+        : liveUserAvatar,
+      banner: isBandTarget
+        ? (bData?.cover_url || bData?.banner_url || directMatch?.cover_url || directMatch?.banner_url || fetchedBandData?.cover_url || fetchedBandData?.banner_url || baseTarget?.cover_url || baseTarget?.banner_url || baseTarget?.banner || liveUserBanner)
+        : liveUserBanner,
+      banner_url: isBandTarget
+        ? (bData?.cover_url || bData?.banner_url || directMatch?.cover_url || directMatch?.banner_url || fetchedBandData?.cover_url || fetchedBandData?.banner_url || baseTarget?.cover_url || baseTarget?.banner_url || baseTarget?.banner || liveUserBanner)
+        : liveUserBanner,
+      cover_url: isBandTarget
+        ? (bData?.cover_url || bData?.banner_url || directMatch?.cover_url || directMatch?.banner_url || fetchedBandData?.cover_url || fetchedBandData?.banner_url || baseTarget?.cover_url || baseTarget?.banner_url || baseTarget?.banner || liveUserBanner)
+        : liveUserBanner,
       logo_url: isBandTarget ? (bData.logo_url || baseTarget.logo_url) : (isExplicitPersonal ? null : baseTarget.logo_url),
       city: isBandTarget ? (bData.city || baseTarget.city) : (fetchedProfileData?.city || baseTarget.city),
       state_province: isBandTarget ? (bData.state_province || baseTarget.state_province) : (fetchedProfileData?.state_province || baseTarget.state_province),
@@ -2024,7 +2032,27 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       })
                     : communityList;
 
-                  const resolvedDiscography = [...rawResolved].sort((a: any, b: any) => {
+                  const filteredRawResolved = rawResolved.filter((r: any) => {
+                    if (!r) return false;
+                    const title = (r.title || '').toLowerCase().trim();
+                    const year = String(r.year || r.release_year || r.release_date || r.date || '').trim();
+                    if (title.includes('drug-induced psychosis') && (year === '2019' || r.id === 'rel-ve-2019')) return false;
+                    return true;
+                  });
+
+                  const seenTitles = new Set<string>();
+                  const uniqueResolvedDiscography: any[] = [];
+                  for (const rel of filteredRawResolved) {
+                    const normTitle = (rel.title || '').toLowerCase().trim();
+                    if (normTitle && !seenTitles.has(normTitle)) {
+                      seenTitles.add(normTitle);
+                      uniqueResolvedDiscography.push(rel);
+                    } else if (!normTitle) {
+                      uniqueResolvedDiscography.push(rel);
+                    }
+                  }
+
+                  const resolvedDiscography = [...uniqueResolvedDiscography].sort((a: any, b: any) => {
                     const parseY = (r: any) => {
                       const raw = r.year || r.release_year || r.release_date || r.date || '0';
                       const num = parseInt(String(raw).replace(/\D/g, ''), 10);
@@ -4292,8 +4320,12 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       const userCatalog = selectedUserProfile.musicCatalog || [];
                       
                       // Combine userCatalog and rawCommunityDiscography, prioritizing unique releases
-                      const combinedReleases: any[] = [...userCatalog];
-                      rawCommunityDiscography.forEach((cr: any) => {
+                      const combinedReleases: any[] = [];
+                      [...userCatalog, ...rawCommunityDiscography].forEach((cr: any) => {
+                        if (!cr) return;
+                        const title = (cr.title || '').toLowerCase().trim();
+                        const year = String(cr.year || cr.release_year || cr.release_date || cr.date || '').trim();
+                        if (title.includes('drug-induced psychosis') && (year === '2019' || cr.id === 'rel-ve-2019')) return;
                         const exists = combinedReleases.some((ur: any) => ur.id === cr.id || (ur.title && cr.title && ur.title.toLowerCase().trim() === cr.title.toLowerCase().trim()));
                         if (!exists) {
                           combinedReleases.push(cr);
@@ -4422,11 +4454,22 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                 <Disc className="w-3.5 h-3.5 text-amber-400" />
                                 Official Discography & Audio Player ({displayReleases.length})
                               </span>
-                              {sortedReleases.length === 0 && (
-                                <span className="text-[9px] font-mono text-amber-500/90 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1">
-                                  <span>*</span> audio files not loaded yet
-                                </span>
-                              )}
+                              
+                              <div className="flex items-center gap-2">
+                                {(selectedUserProfile?.isYou || isSelfTarget || isOwnBand || isCurrentUserBand || Boolean(userProfile?.id && selectedUserProfile?.id && userProfile.id === selectedUserProfile.id) || Boolean(userProfile?.band_name && selectedUserProfile?.name && userProfile.band_name.toLowerCase().trim() === selectedUserProfile.name.toLowerCase().trim())) && (
+                                  <button
+                                    onClick={() => setIsAudioUploaderOpen(true)}
+                                    className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-black text-[9px] font-mono font-black uppercase rounded-lg transition cursor-pointer flex items-center gap-1 shadow-md shadow-emerald-950/40 shrink-0"
+                                  >
+                                    <FileUp className="w-3.5 h-3.5 text-black" /> Upload WAV/MP3
+                                  </button>
+                                )}
+                                {sortedReleases.length === 0 && (
+                                  <span className="text-[9px] font-mono text-amber-500/90 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                                    <span>*</span> audio files not loaded yet
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
                             <div className="space-y-6">
@@ -4474,15 +4517,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                 
                                 return (
                                   <div key={release.id ? `rel-${release.id}-${rIdx}` : `rel-${rIdx}`} className="bg-[#0c0e12] border border-zinc-800/80 rounded-2xl overflow-hidden shadow-2xl relative flex flex-col">
-                                    <div className="flex items-center justify-between p-3 border-b border-zinc-800/80 bg-black/40 gap-3">
+                                    <div className="flex items-center justify-between p-3 border-b border-zinc-800/80 bg-black/40 gap-3 min-w-0">
                                       <div 
-                                        className="flex flex-col items-start gap-1 cursor-pointer group/title min-w-0 flex-1"
+                                        className="flex flex-col items-start gap-1 cursor-pointer group/title min-w-0 flex-1 overflow-hidden"
                                         onClick={() => setSelectedRelease(fullRel)}
                                         title="View Release Details & Full Tracklist"
                                       >
-                                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                        <div className="flex items-center gap-2 min-w-0 max-w-full">
                                           <span className="px-1.5 py-0.5 rounded bg-[#FF9900]/10 text-[#FF9900] border border-[#FF9900]/20 text-[8px] font-mono font-black uppercase tracking-widest shrink-0">{release.format || release.type || fullRel.type || 'Release'}</span>
-                                          <h4 className="text-xs font-bold text-white uppercase tracking-wider group-hover/title:text-[#FF9900] transition-colors truncate">{release.title || fullRel.title}</h4>
+                                          <h4 className="text-xs font-bold text-white uppercase tracking-wider group-hover/title:text-[#FF9900] transition-colors truncate min-w-0">{release.title || fullRel.title}</h4>
                                         </div>
                                         {!hasAnyAudio && (
                                           <span className="text-[9px] font-mono text-amber-500/90 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded inline-flex items-center gap-1 shrink-0">
@@ -4490,10 +4533,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                           </span>
                                         )}
                                       </div>
-                                      <div className="flex items-center gap-2 shrink-0">
-                                        <button className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-900/90 hover:bg-purple-800 text-white rounded-md text-[10px] font-black uppercase tracking-wider transition-colors shadow-lg border border-purple-600/40">
-                                          <ShoppingCart className="w-3 h-3" />
-                                          <span>BUY • $9.99</span>
+                                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                                        <button className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-900/90 hover:bg-purple-800 text-white rounded-md text-[10px] font-black uppercase tracking-wider transition-colors shadow-lg border border-purple-600/40 shrink-0">
+                                          <ShoppingCart className="w-3 h-3 shrink-0" />
+                                          <span className="whitespace-nowrap">BUY • $9.99</span>
                                         </button>
                                       </div>
                                     </div>
@@ -4998,6 +5041,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         />
       </div>
     )}
+
+    {/* MASTER AUDIO UPLOADER MODAL */}
+    <MasterAudioUploaderModal
+      isOpen={isAudioUploaderOpen}
+      onClose={() => setIsAudioUploaderOpen(false)}
+      bandId={selectedUserProfile?.id || fetchedBandData?.id}
+      bandName={selectedUserProfile?.name || fetchedBandData?.band_name || 'Virulent Excision'}
+      triggerNotification={triggerNotification}
+    />
   </>
 );
 };

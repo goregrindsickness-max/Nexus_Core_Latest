@@ -1985,7 +1985,7 @@ export function UniversalSocialFeed({
         setProfileBlurb(activeBand.blurb);
       }
     }
-  }, [portalRole, activeBand]);
+  }, [portalRole, activeBand?.id, activeBand?.homebase, activeBand?.founded_year, activeBand?.ticker, activeBand?.blurb]);
 
 
   // On-mount: Load from caches & Register network event listeners

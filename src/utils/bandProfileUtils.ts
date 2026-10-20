@@ -454,23 +454,28 @@ export const resolvePromoterLogo = (userProfile: any, profileAvatarUrl?: string 
     return saved.trim();
   }
 
-  const personalAvatar = userProfile?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null);
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+  const OFFICIAL_NEXUS_LIVE_LOGO = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
 
   const cand =
     (userProfile as any)?.promoter_logo ||
     pm?.logo_url ||
-    pm?.avatar_url;
+    pm?.avatar_url ||
+    userProfile?.logo_url ||
+    userProfile?.logo ||
+    userProfile?.avatar_url ||
+    userProfile?.avatar;
 
   if (cand && typeof cand === 'string' && cand.trim() && !isCreativeAvatarUrl(cand)) {
-    if (cand !== personalAvatar || cand.includes('promoter') || cand.includes('nexuslive') || cand.includes('5403162d')) {
-      return cand.trim();
-    }
+    return cand.trim();
   }
 
   if (profileAvatarUrl && typeof profileAvatarUrl === 'string' && profileAvatarUrl.trim() && !isCreativeAvatarUrl(profileAvatarUrl)) {
-    if (profileAvatarUrl !== personalAvatar || profileAvatarUrl.includes('promoter') || profileAvatarUrl.includes('nexuslive') || profileAvatarUrl.includes('5403162d')) {
-      return profileAvatarUrl.trim();
-    }
+    return profileAvatarUrl.trim();
+  }
+
+  if (isOwnerMiguel || (userProfile?.name && String(userProfile.name).toLowerCase().includes('nexus live'))) {
+    return OFFICIAL_NEXUS_LIVE_LOGO;
   }
 
   return PROMOTER_DEFAULT_AVATAR;

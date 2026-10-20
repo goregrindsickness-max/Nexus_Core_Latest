@@ -2089,7 +2089,7 @@ export default function App() {
       cover_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-cover_1787467851123.jpg?t=1787467851123',
       owner_id: userProfile?.id
     };
-  }, [bands, isBandRegistered, userProfile]);
+  }, [bands, isBandRegistered, userProfile?.id]);
 
 
   // 1. When activeBand changes, load its specific data into state and set currentLoadedBandId

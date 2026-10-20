@@ -13,6 +13,7 @@ import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -174,22 +175,30 @@ public class MainActivity extends BridgeActivity {
             }
         }
 
-        // Register interruption receivers for headphones disconnect & audio focus events
+        // Register interruption receivers for headphones disconnect & audio focus events using ContextCompat
         IntentFilter filter = new IntentFilter();
         filter.addAction("com.nexus.core.AUDIO_INTERRUPTION_PAUSE");
         filter.addAction("com.nexus.core.AUDIO_INTERRUPTION_RESUME");
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(audioInterruptionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(audioInterruptionReceiver, filter);
-        }
+        ContextCompat.registerReceiver(this, audioInterruptionReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
         isAudioInterruptionReceiverRegistered = true;
     }
 
     @Override
-    protected void onPause() {
+    public void onPause() {
         super.onPause();
-        // Do NOT pause WebView timers when activity is paused so audio streaming continues seamlessly
+        // Ensure WebView continues executing JavaScript audio streaming when backgrounded or locked
+        if (this.bridge != null && this.bridge.getWebView() != null) {
+            this.bridge.getWebView().onResume();
+        }
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        // Ensure WebView continues running in background/lockscreen
+        if (this.bridge != null && this.bridge.getWebView() != null) {
+            this.bridge.getWebView().onResume();
+        }
     }
 
     @Override

@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { InventoryItem, StagedDistroItem } from '../../../types';
 import { syncBandDiscographyToPhysicalAndDigital } from '../../../services/discographySyncService';
+import { MasterAudioUploaderModal } from './MasterAudioUploaderModal';
 
 const BANNER_PRESETS = [
   { name: 'Slayer Crimson Gradient', url: 'linear-gradient(135deg, #7a0010 0%, #140003 100%)' },
@@ -126,6 +127,9 @@ export default function DevBandDistroDeck({
   const [featuredDistroItemId, setFeaturedDistroItemId] = useState<string>(() => {
     return localStorage.getItem('distro_db_featured_id') || '';
   });
+
+  // --- Master Audio Upload Modal State ---
+  const [isMasterUploaderOpen, setIsMasterUploaderOpen] = useState(false);
 
   // --- Automated Audio Pipeline Optimization States ---
   const [audioPipelineLog, setAudioPipelineLog] = useState<string[]>([]);
@@ -483,7 +487,7 @@ export default function DevBandDistroDeck({
     if (cachedBand) {
       try {
         const parsed = JSON.parse(cachedBand);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       } catch (e) {}
     }
     const cached = localStorage.getItem('distro_db_music_tracks');
@@ -2246,12 +2250,11 @@ Keep it heavy, keep it loud!
                         <button
                           type="button"
                           onClick={() => {
-                            setTargetTrackForUpload(null);
-                            document.getElementById('local-music-uploader-batch')?.click();
+                            setIsMasterUploaderOpen(true);
                           }}
-                          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black text-[9px] font-mono font-black uppercase rounded-lg transition cursor-pointer select-none flex items-center gap-1.5 shadow-md shadow-emerald-950/40"
+                          className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black text-[10px] font-mono font-black uppercase rounded-xl transition cursor-pointer select-none flex items-center gap-1.5 shadow-lg shadow-emerald-950/40"
                         >
-                          <Upload className="w-3.5 h-3.5 text-black" /> BATCH UPLOAD (MP3/WAV)
+                          <Upload className="w-3.5 h-3.5 text-black" /> UPLOAD AUDIO MASTERS (WAV/MP3)
                         </button>
                       </div>
                     </div>
@@ -3234,6 +3237,17 @@ Keep it heavy, keep it loud!
         onChange={handleItemImgFileChange}
         className="hidden"
         accept="image/*"
+      />
+
+      <MasterAudioUploaderModal
+        isOpen={isMasterUploaderOpen}
+        onClose={() => setIsMasterUploaderOpen(false)}
+        bandId={effectiveBandId}
+        bandName={bandName}
+        triggerNotification={triggerNotification}
+        onTrackUploaded={(newTrack) => {
+          setUploadedTracks(prev => [newTrack, ...prev.filter(t => t.id !== newTrack.id)]);
+        }}
       />
 
     </div>

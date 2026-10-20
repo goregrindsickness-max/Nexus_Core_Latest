@@ -10,13 +10,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
-import android.media.AudioAttributes;
-import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.util.Log;
+import androidx.core.content.ContextCompat;
 
 public class BackgroundAudioService extends Service {
     private static final String TAG = "NexusBackgroundAudio";
@@ -33,8 +32,6 @@ public class BackgroundAudioService extends Service {
     public static final String EXTRA_GENRE = "extra_genre";
 
     private PowerManager.WakeLock wakeLock;
-    private AudioManager audioManager;
-    private AudioFocusRequest audioFocusRequest;
     private boolean isRegisteredNoisyReceiver = false;
     private String currentTitle = "Scene Radio";
     private String currentArtist = "Nexus Underground Radio";
@@ -51,32 +48,9 @@ public class BackgroundAudioService extends Service {
         }
     };
 
-    private final AudioManager.OnAudioFocusChangeListener audioFocusChangeListener = new AudioManager.OnAudioFocusChangeListener() {
-        @Override
-        public void onAudioFocusChange(int focusChange) {
-            switch (focusChange) {
-                case AudioManager.AUDIOFOCUS_LOSS:
-                    Log.d(TAG, "Audio focus permanently lost. Signaling pause.");
-                    Intent pauseIntent = new Intent("com.nexus.core.AUDIO_INTERRUPTION_PAUSE");
-                    sendBroadcast(pauseIntent);
-                    break;
-                case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
-                case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
-                    Log.d(TAG, "Transient audio focus loss/ducking requested.");
-                    break;
-                case AudioManager.AUDIOFOCUS_GAIN:
-                    Log.d(TAG, "Audio focus regained.");
-                    Intent resumeIntent = new Intent("com.nexus.core.AUDIO_INTERRUPTION_RESUME");
-                    sendBroadcast(resumeIntent);
-                    break;
-            }
-        }
-    };
-
     @Override
     public void onCreate() {
         super.onCreate();
-        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         createNotificationChannel();
 
         // Acquire partial wake lock to keep CPU active for continuous stream processing
@@ -86,9 +60,9 @@ public class BackgroundAudioService extends Service {
             wakeLock.setReferenceCounted(false);
         }
 
-        // Register noisy receiver
+        // Register noisy receiver using ContextCompat.RECEIVER_EXPORTED for ACTION_AUDIO_BECOMING_NOISY
         IntentFilter filter = new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
-        registerReceiver(becomingNoisyReceiver, filter);
+        ContextCompat.registerReceiver(this, becomingNoisyReceiver, filter, ContextCompat.RECEIVER_EXPORTED);
         isRegisteredNoisyReceiver = true;
     }
 
@@ -103,7 +77,7 @@ public class BackgroundAudioService extends Service {
                 if (artist != null && !artist.isEmpty()) currentArtist = artist;
 
                 acquireWakeLock();
-                requestAudioFocus();
+                // Native audio focus is handled natively by the WebView when playing HTML5 media
                 startForegroundWithNotification(currentTitle, currentArtist, true);
             } else if (ACTION_PAUSE.equals(action)) {
                 releaseWakeLock();
@@ -112,11 +86,14 @@ public class BackgroundAudioService extends Service {
                 sendBroadcast(pauseIntent);
             } else if (ACTION_STOP.equals(action)) {
                 releaseWakeLock();
-                abandonAudioFocus();
                 Intent pauseIntent = new Intent("com.nexus.core.AUDIO_INTERRUPTION_PAUSE");
                 sendBroadcast(pauseIntent);
                 try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    stopForeground(STOP_FOREGROUND_REMOVE);
+                } else {
                     stopForeground(true);
+                }
                 } catch (Exception e) {
                     Log.w(TAG, "stopForeground error", e);
                 }
@@ -145,35 +122,6 @@ public class BackgroundAudioService extends Service {
             } catch (Exception e) {
                 Log.w(TAG, "Could not release WakeLock", e);
             }
-        }
-    }
-
-    private void requestAudioFocus() {
-        if (audioManager == null) return;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            AudioAttributes playbackAttributes = new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build();
-
-            audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                    .setAudioAttributes(playbackAttributes)
-                    .setAcceptsDelayedFocusGain(true)
-                    .setOnAudioFocusChangeListener(audioFocusChangeListener)
-                    .build();
-
-            audioManager.requestAudioFocus(audioFocusRequest);
-        } else {
-            audioManager.requestAudioFocus(audioFocusChangeListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
-        }
-    }
-
-    private void abandonAudioFocus() {
-        if (audioManager == null) return;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
-            audioManager.abandonAudioFocusRequest(audioFocusRequest);
-        } else {
-            audioManager.abandonAudioFocus(audioFocusChangeListener);
         }
     }
 
@@ -268,7 +216,6 @@ public class BackgroundAudioService extends Service {
     @Override
     public void onDestroy() {
         releaseWakeLock();
-        abandonAudioFocus();
         if (isRegisteredNoisyReceiver) {
             try {
                 unregisterReceiver(becomingNoisyReceiver);

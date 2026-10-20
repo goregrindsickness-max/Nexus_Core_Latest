@@ -783,22 +783,19 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                 />
               </div>
 
-              <div className="flex items-center justify-between pt-1">
-                <div className="flex gap-2">
-                  {(['festival', 'tour', 'club_gig'] as const).map(t => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setNewEventType(t)}
-                      className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase transition-colors cursor-pointer ${
-                        newEventType === t 
-                          ? 'bg-yellow-500 text-black' 
-                          : 'bg-zinc-800 text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      {t.replace('_', ' ')}
-                    </button>
-                  ))}
+              <div className="flex items-center justify-between pt-1 gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] uppercase font-mono text-zinc-400">Type:</label>
+                  <select
+                    value={newEventType}
+                    onChange={(e) => setNewEventType(e.target.value as any)}
+                    className="bg-zinc-950 border border-zinc-800 text-yellow-400 text-xs font-mono font-bold px-2 py-1 rounded-lg focus:outline-none focus:border-yellow-500 cursor-pointer"
+                  >
+                    <option value="club_gig">⚡ Club Gig</option>
+                    <option value="festival">🎪 Festival</option>
+                    <option value="tour">🚐 Tour Date</option>
+                    <option value="diy_show">🎸 DIY Show</option>
+                  </select>
                 </div>
                 <button
                   type="submit"
