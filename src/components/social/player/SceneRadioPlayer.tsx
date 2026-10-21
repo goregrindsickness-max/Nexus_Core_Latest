@@ -736,6 +736,18 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
             setSceneRadioPlaying(true);
           } catch (_) {}
         }
+      } else if (action === 'next') {
+        handleNextSong();
+      } else if (action === 'previous') {
+        handlePrevSong();
+      } else if (action === 'stop') {
+        if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
+          try {
+            ytPlayerRef.current.pauseVideo();
+          } catch (_) {}
+        }
+        persistentAudioService.stop();
+        setSceneRadioPlaying(false);
       }
     };
 

@@ -792,9 +792,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     if (localStr) localSavedBand = JSON.parse(localStr);
   } catch (e) {}
 
+  const isOwnBand = Boolean(baseTarget?.isYou || selectedUserProfile?.isYou || (targetId && userProfile?.id === targetId) || (fetchedBandData?.id && userProfile?.band_id === fetchedBandData?.id) || (userProfile?.band_name && (userProfile.band_name === fetchedBandData?.band_name || userProfile.band_name === fetchedBandData?.name)));
+
   const bData = React.useMemo(() => {
     if (isExplicitPersonal) return null;
-    const isOwnBand = Boolean(baseTarget?.isYou || selectedUserProfile?.isYou || (targetId && userProfile?.id === targetId) || (fetchedBandData?.id && userProfile?.band_id === fetchedBandData?.id) || (userProfile?.band_name && (userProfile.band_name === fetchedBandData?.band_name || userProfile.band_name === fetchedBandData?.name)));
 
     const candidateName = selectedUserProfile?.band_name || selectedUserProfile?.bandName || (selectedUserProfile?.isBandProfile ? selectedUserProfile?.name : null) || targetProfile?.band_name || targetProfile?.bandName || (targetProfile?.isBandProfile ? targetProfile?.name : null);
     const directMatch = communityArchiveMatch || (candidateName ? (communityBandManager.findMatch(candidateName) || communityBandManager.findByName(candidateName)) : null);
@@ -1018,19 +1019,19 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       name: isBandTarget ? (bData.band_name || bData.name || baseTarget.name) : (fetchedProfileData?.full_name || fetchedProfileData?.name || baseTarget.name),
       band_name: bData.band_name || bData.name || baseTarget.band_name,
       avatar: isBandTarget
-        ? (rawResolvedBandLogo || bData?.logo_url || bData?.avatar_url || directMatch?.logo_url || directMatch?.avatar_url || fetchedBandData?.logo_url || fetchedBandData?.avatar_url || baseTarget?.logo_url || baseTarget?.avatar_url || baseTarget?.avatar || liveUserAvatar)
+        ? (rawResolvedBandLogo || bData?.logo_url || bData?.avatar_url || communityArchiveMatch?.logo_url || communityArchiveMatch?.avatar_url || fetchedBandData?.logo_url || fetchedBandData?.avatar_url || baseTarget?.logo_url || baseTarget?.avatar_url || baseTarget?.avatar || liveUserAvatar)
         : liveUserAvatar,
       avatar_url: isBandTarget
-        ? (rawResolvedBandLogo || bData?.logo_url || bData?.avatar_url || directMatch?.logo_url || directMatch?.avatar_url || fetchedBandData?.logo_url || fetchedBandData?.avatar_url || baseTarget?.logo_url || baseTarget?.avatar_url || baseTarget?.avatar || liveUserAvatar)
+        ? (rawResolvedBandLogo || bData?.logo_url || bData?.avatar_url || communityArchiveMatch?.logo_url || communityArchiveMatch?.avatar_url || fetchedBandData?.logo_url || fetchedBandData?.avatar_url || baseTarget?.logo_url || baseTarget?.avatar_url || baseTarget?.avatar || liveUserAvatar)
         : liveUserAvatar,
       banner: isBandTarget
-        ? (bData?.cover_url || bData?.banner_url || directMatch?.cover_url || directMatch?.banner_url || fetchedBandData?.cover_url || fetchedBandData?.banner_url || baseTarget?.cover_url || baseTarget?.banner_url || baseTarget?.banner || liveUserBanner)
+        ? (bData?.cover_url || bData?.banner_url || communityArchiveMatch?.cover_url || communityArchiveMatch?.banner_url || fetchedBandData?.cover_url || fetchedBandData?.banner_url || baseTarget?.cover_url || baseTarget?.banner_url || baseTarget?.banner || liveUserBanner)
         : liveUserBanner,
       banner_url: isBandTarget
-        ? (bData?.cover_url || bData?.banner_url || directMatch?.cover_url || directMatch?.banner_url || fetchedBandData?.cover_url || fetchedBandData?.banner_url || baseTarget?.cover_url || baseTarget?.banner_url || baseTarget?.banner || liveUserBanner)
+        ? (bData?.cover_url || bData?.banner_url || communityArchiveMatch?.cover_url || communityArchiveMatch?.banner_url || fetchedBandData?.cover_url || fetchedBandData?.banner_url || baseTarget?.cover_url || baseTarget?.banner_url || baseTarget?.banner || liveUserBanner)
         : liveUserBanner,
       cover_url: isBandTarget
-        ? (bData?.cover_url || bData?.banner_url || directMatch?.cover_url || directMatch?.banner_url || fetchedBandData?.cover_url || fetchedBandData?.banner_url || baseTarget?.cover_url || baseTarget?.banner_url || baseTarget?.banner || liveUserBanner)
+        ? (bData?.cover_url || bData?.banner_url || communityArchiveMatch?.cover_url || communityArchiveMatch?.banner_url || fetchedBandData?.cover_url || fetchedBandData?.banner_url || baseTarget?.cover_url || baseTarget?.banner_url || baseTarget?.banner || liveUserBanner)
         : liveUserBanner,
       logo_url: isBandTarget ? (bData.logo_url || baseTarget.logo_url) : (isExplicitPersonal ? null : baseTarget.logo_url),
       city: isBandTarget ? (bData.city || baseTarget.city) : (fetchedProfileData?.city || baseTarget.city),
@@ -4517,15 +4518,19 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                 
                                 return (
                                   <div key={release.id ? `rel-${release.id}-${rIdx}` : `rel-${rIdx}`} className="bg-[#0c0e12] border border-zinc-800/80 rounded-2xl overflow-hidden shadow-2xl relative flex flex-col">
-                                    <div className="flex items-center justify-between p-3 border-b border-zinc-800/80 bg-black/40 gap-3 min-w-0">
+                                    <div className="flex items-center justify-between p-3 border-b border-zinc-800/80 bg-black/40 gap-3 min-w-0 w-full">
                                       <div 
                                         className="flex flex-col items-start gap-1 cursor-pointer group/title min-w-0 flex-1 overflow-hidden"
                                         onClick={() => setSelectedRelease(fullRel)}
                                         title="View Release Details & Full Tracklist"
                                       >
-                                        <div className="flex items-center gap-2 min-w-0 max-w-full">
-                                          <span className="px-1.5 py-0.5 rounded bg-[#FF9900]/10 text-[#FF9900] border border-[#FF9900]/20 text-[8px] font-mono font-black uppercase tracking-widest shrink-0">{release.format || release.type || fullRel.type || 'Release'}</span>
-                                          <h4 className="text-xs font-bold text-white uppercase tracking-wider group-hover/title:text-[#FF9900] transition-colors truncate min-w-0">{release.title || fullRel.title}</h4>
+                                        <div className="flex items-center gap-2 min-w-0 w-full overflow-hidden">
+                                          <span className="px-1.5 py-0.5 rounded bg-[#FF9900]/10 text-[#FF9900] border border-[#FF9900]/20 text-[8px] font-mono font-black uppercase tracking-widest shrink-0">
+                                            {release.format || release.type || fullRel.type || 'Release'}
+                                          </span>
+                                          <h4 className="text-xs font-bold text-white uppercase tracking-wider group-hover/title:text-[#FF9900] transition-colors truncate min-w-0 flex-1">
+                                            {release.title || fullRel.title}
+                                          </h4>
                                         </div>
                                         {!hasAnyAudio && (
                                           <span className="text-[9px] font-mono text-amber-500/90 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded inline-flex items-center gap-1 shrink-0">
@@ -4533,10 +4538,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                           </span>
                                         )}
                                       </div>
-                                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                                      <div className="flex items-center gap-2 shrink-0">
                                         <button className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-900/90 hover:bg-purple-800 text-white rounded-md text-[10px] font-black uppercase tracking-wider transition-colors shadow-lg border border-purple-600/40 shrink-0">
                                           <ShoppingCart className="w-3 h-3 shrink-0" />
-                                          <span className="whitespace-nowrap">BUY • $9.99</span>
+                                          <span className="whitespace-nowrap">BUY • {release.price || fullRel.price ? (String(release.price || fullRel.price).startsWith('$') ? String(release.price || fullRel.price) : `$${release.price || fullRel.price}`) : '$9.99'}</span>
                                         </button>
                                       </div>
                                     </div>

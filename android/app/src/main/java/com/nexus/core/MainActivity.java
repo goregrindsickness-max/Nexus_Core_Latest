@@ -9,6 +9,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.view.KeyEvent;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
@@ -18,6 +19,7 @@ import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     private boolean isAudioInterruptionReceiverRegistered = false;
+    private static volatile boolean isAudioActive = false;
 
     private final BroadcastReceiver audioInterruptionReceiver = new BroadcastReceiver() {
         @Override
@@ -33,8 +35,25 @@ public class MainActivity extends BridgeActivity {
                             null
                         );
                     } else if ("com.nexus.core.AUDIO_INTERRUPTION_RESUME".equals(action)) {
+                        isAudioActive = true;
                         bridge.getWebView().evaluateJavascript(
                             "window.dispatchEvent(new CustomEvent('nexus_native_audio_interruption', { detail: { action: 'resume' } }));",
+                            null
+                        );
+                    } else if ("com.nexus.core.AUDIO_CONTROL_NEXT".equals(action)) {
+                        bridge.getWebView().evaluateJavascript(
+                            "window.dispatchEvent(new CustomEvent('nexus_native_audio_interruption', { detail: { action: 'next' } }));",
+                            null
+                        );
+                    } else if ("com.nexus.core.AUDIO_CONTROL_PREVIOUS".equals(action)) {
+                        bridge.getWebView().evaluateJavascript(
+                            "window.dispatchEvent(new CustomEvent('nexus_native_audio_interruption', { detail: { action: 'previous' } }));",
+                            null
+                        );
+                    } else if ("com.nexus.core.AUDIO_CONTROL_STOP".equals(action)) {
+                        isAudioActive = false;
+                        bridge.getWebView().evaluateJavascript(
+                            "window.dispatchEvent(new CustomEvent('nexus_native_audio_interruption', { detail: { action: 'stop' } }));",
                             null
                         );
                     }
@@ -47,6 +66,7 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public void startForegroundAudio(String title, String artist, String genre) {
             try {
+                isAudioActive = true;
                 Intent serviceIntent = new Intent(MainActivity.this, BackgroundAudioService.class);
                 serviceIntent.setAction(BackgroundAudioService.ACTION_START);
                 serviceIntent.putExtra(BackgroundAudioService.EXTRA_TRACK_TITLE, title);
@@ -103,6 +123,7 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public void stopForegroundAudio() {
             try {
+                isAudioActive = false;
                 Intent serviceIntent = new Intent(MainActivity.this, BackgroundAudioService.class);
                 serviceIntent.setAction(BackgroundAudioService.ACTION_STOP);
                 startService(serviceIntent);
@@ -175,12 +196,34 @@ public class MainActivity extends BridgeActivity {
             }
         }
 
-        // Register interruption receivers for headphones disconnect & audio focus events using ContextCompat
+        // Register interruption & control receivers for headset disconnect, audio focus & media notifications
         IntentFilter filter = new IntentFilter();
         filter.addAction("com.nexus.core.AUDIO_INTERRUPTION_PAUSE");
         filter.addAction("com.nexus.core.AUDIO_INTERRUPTION_RESUME");
+        filter.addAction("com.nexus.core.AUDIO_CONTROL_NEXT");
+        filter.addAction("com.nexus.core.AUDIO_CONTROL_PREVIOUS");
+        filter.addAction("com.nexus.core.AUDIO_CONTROL_STOP");
         ContextCompat.registerReceiver(this, audioInterruptionReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
         isAudioInterruptionReceiverRegistered = true;
+    }
+
+    @Override
+    public void onBackPressed() {
+        // If background audio is active, move task to back instead of finishing/destroying Activity
+        if (isAudioActive) {
+            moveTaskToBack(true);
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_BACK && isAudioActive) {
+            moveTaskToBack(true);
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
     }
 
     @Override

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Upload, 
@@ -316,9 +317,9 @@ export const MasterAudioUploaderModal: React.FC<MasterAudioUploaderModalProps> =
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof window === 'undefined') return null;
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <div className="fixed inset-0 z-[100000000] pointer-events-auto flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md font-sans">
         <audio ref={audioPlayerRef} onEnded={() => setPlayingTrackId(null)} className="hidden" />
@@ -634,7 +635,8 @@ export const MasterAudioUploaderModal: React.FC<MasterAudioUploaderModalProps> =
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };
 

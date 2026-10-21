@@ -33,11 +33,33 @@ interface Flash {
 export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashViewProps) {
   const [flashes, setFlashes] = useState<Flash[]>([]);
   const [downloadState, setDownloadState] = useState<'idle' | 'downloading' | 'completed' | 'error'>('idle');
-  const [apkFileName, setApkFileName] = useState('Nexus-Core-v1.5.3.apk');
-  const [apkFileSize, setApkFileSize] = useState('27.2 MB');
+  const [apkFileName, setApkFileName] = useState('Nexus-Core-v1.5.4.apk');
+  const [apkFileSize, setApkFileSize] = useState('28.1 MB');
   const [apkDownloadUrl, setApkDownloadUrl] = useState(
-    'https://github.com/goregrindsickness-max/Nexus_Core_Latest/releases/download/Nexus-Core-v1.5.3/Nexus-Core-v1.5.3.apk'
+    'https://github.com/goregrindsickness-max/Nexus_Core_Latest/releases/download/Nexus-Core-v1.5.4/Nexus-Core-v1.5.4.apk'
   );
+
+  // Auto-fetch latest GitHub release info dynamically
+  useEffect(() => {
+    fetch('https://api.github.com/repos/goregrindsickness-max/Nexus_Core_Latest/releases/latest')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && Array.isArray(data.assets) && data.assets.length > 0) {
+          const apkAsset = data.assets.find((a: any) => a.name.endsWith('.apk')) || data.assets[0];
+          if (apkAsset) {
+            if (apkAsset.name) setApkFileName(apkAsset.name);
+            if (apkAsset.browser_download_url) setApkDownloadUrl(apkAsset.browser_download_url);
+            if (apkAsset.size) {
+              const sizeMB = (apkAsset.size / (1024 * 1024)).toFixed(1);
+              setApkFileSize(`${sizeMB} MB`);
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not fetch latest GitHub release info, using default v1.5.4 fallback', err);
+      });
+  }, []);
 
   // Burnout transition effect state (Real fire screen video overlay)
   const [isBurningOut, setIsBurningOut] = useState(false);

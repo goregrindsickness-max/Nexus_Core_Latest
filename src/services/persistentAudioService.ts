@@ -146,10 +146,20 @@ class PersistentAudioService {
           this.callbacks.onNotification?.('🎧 Audio paused due to system event (call/unplugged)');
         }
       } else if (action === 'resume') {
-        if (this.wasPlayingBeforeInterruption) {
-          this.wasPlayingBeforeInterruption = false;
+        this.wasPlayingBeforeInterruption = false;
+        if (this.playbackState === 'paused' || this.playbackState === 'idle') {
           this.resume();
         }
+      } else if (action === 'next') {
+        if (this.callbacks.onNext) {
+          this.callbacks.onNext();
+        }
+      } else if (action === 'previous') {
+        if (this.callbacks.onPrevious) {
+          this.callbacks.onPrevious();
+        }
+      } else if (action === 'stop') {
+        this.stop();
       }
     }) as EventListener);
 

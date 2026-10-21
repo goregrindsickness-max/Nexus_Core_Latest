@@ -28,6 +28,8 @@ import { awardSonicPoints } from '../../services/sonicFootprintService';
 import { formatPostTimestamp } from '../../utils/socialFeedUtils';
 import { savePostReaction, mergePostWithReactions, normalizeReactionCounts } from '../social/utils/reactionStore';
 import { isValidStorageOrImageUrl } from '../../services/storageService';
+import { communityBandManager } from '../../lib/communityBands';
+import { DEFAULT_PERSONAL_AVATAR } from '../../utils/bandProfileUtils';
 
 export interface TimelinePost {
   id: string;
