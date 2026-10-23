@@ -14,12 +14,17 @@ import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.GeolocationPermissions;
+import android.webkit.WebChromeClient;
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     private boolean isAudioInterruptionReceiverRegistered = false;
     private static volatile boolean isAudioActive = false;
+    private static final int REQUEST_LOCATION_PERMISSIONS = 101;
+    private static final int REQUEST_NOTIFICATION_PERMISSIONS = 102;
 
     private final BroadcastReceiver audioInterruptionReceiver = new BroadcastReceiver() {
         @Override
@@ -63,6 +68,11 @@ public class MainActivity extends BridgeActivity {
     };
 
     public class NativeAudioBridge {
+        @JavascriptInterface
+        public void setAudioActive(boolean active) {
+            isAudioActive = active;
+        }
+
         @JavascriptInterface
         public void startForegroundAudio(String title, String artist, String genre) {
             try {
@@ -175,12 +185,21 @@ public class MainActivity extends BridgeActivity {
                     settings.setAllowFileAccess(true);
                     settings.setAllowContentAccess(true);
                     settings.setDatabaseEnabled(true);
+                    settings.setGeolocationEnabled(true);
                     // Crucial: allow media playback without requiring direct user gesture per track transition
                     settings.setMediaPlaybackRequiresUserGesture(false);
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
                     }
                 }
+
+                // Grant Geolocation permissions inside the WebView seamlessly
+                webView.setWebChromeClient(new WebChromeClient() {
+                    @Override
+                    public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                        callback.invoke(origin, true, false);
+                    }
+                });
 
                 // Register native audio bridge into JavaScript window.NexusNativeAudio
                 webView.addJavascriptInterface(new NativeAudioBridge(), "NexusNativeAudio");
@@ -189,12 +208,21 @@ public class MainActivity extends BridgeActivity {
             e.printStackTrace();
         }
 
-        // Request Notification Permission on Android 13+ (API 33+) for persistent foreground service notifications
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 101);
+        // Request Location permission first, followed sequentially by Notification permission
+        requestStartupPermissions();
+
+        // Support for Android 13+ (API 33+) Predictive Back / OnBackPressedDispatcher
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (isAudioActive) {
+                    moveTaskToBack(true);
+                } else {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                }
             }
-        }
+        });
 
         // Register interruption & control receivers for headset disconnect, audio focus & media notifications
         IntentFilter filter = new IntentFilter();
@@ -205,6 +233,37 @@ public class MainActivity extends BridgeActivity {
         filter.addAction("com.nexus.core.AUDIO_CONTROL_STOP");
         ContextCompat.registerReceiver(this, audioInterruptionReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
         isAudioInterruptionReceiverRegistered = true;
+    }
+
+    private void requestStartupPermissions() {
+        boolean fineLoc = checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        boolean coarseLoc = checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+
+        if (!fineLoc || !coarseLoc) {
+            requestPermissions(new String[]{
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION
+            }, REQUEST_LOCATION_PERMISSIONS);
+        } else {
+            checkAndRequestNotificationPermission();
+        }
+    }
+
+    private void checkAndRequestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATION_PERMISSIONS);
+            }
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_LOCATION_PERMISSIONS) {
+            // After location dialog concludes, immediately prompt for notifications on Android 13+
+            checkAndRequestNotificationPermission();
+        }
     }
 
     @Override
@@ -228,20 +287,26 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onPause() {
-        super.onPause();
-        // Ensure WebView continues executing JavaScript audio streaming when backgrounded or locked
-        if (this.bridge != null && this.bridge.getWebView() != null) {
-            this.bridge.getWebView().onResume();
+        if (isAudioActive) {
+            // Keep WebView timers and audio processing running in background
+            if (this.bridge != null && this.bridge.getWebView() != null) {
+                this.bridge.getWebView().resumeTimers();
+            }
+            return;
         }
+        super.onPause();
     }
 
     @Override
     public void onStop() {
-        super.onStop();
-        // Ensure WebView continues running in background/lockscreen
-        if (this.bridge != null && this.bridge.getWebView() != null) {
-            this.bridge.getWebView().onResume();
+        if (isAudioActive) {
+            // Prevent OS from halting active background audio playback
+            if (this.bridge != null && this.bridge.getWebView() != null) {
+                this.bridge.getWebView().resumeTimers();
+            }
+            return;
         }
+        super.onStop();
     }
 
     @Override

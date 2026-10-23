@@ -481,6 +481,12 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
               setSceneRadioPlaying(true);
               setRadioPlayerError(null);
             } else if (event.data === 2) { // Paused
+              // When the app is minimized / backgrounded or screen locked, YouTube iframe triggers auto-pause (data === 2)
+              // Only process as an intentional user pause if the document is actually active and visible
+              if (typeof document !== 'undefined' && document.hidden) {
+                console.log('[RADIO PLAYER] Document hidden: ignoring YouTube background auto-pause to keep audio active');
+                return;
+              }
               setSceneRadioPlaying(false);
             } else if (event.data === 0) { // Track Ended
               // Continuous Random Radio: if user hasn't locked onto a specific track, pick another random track!

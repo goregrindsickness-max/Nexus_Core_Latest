@@ -12,6 +12,7 @@ import { getComposerRoleTheme } from './CreatePostCard';
 import { mergePostWithReactions } from './utils/reactionStore';
 import { isMiguelNameOrProfile } from './utils/profileUtils';
 import { resolveCreativeLogo, resolvePromoterLogo, resolveBandLogo } from '../../utils/bandProfileUtils';
+import { generateValidUUID } from '../../services/postInteractionsService';
 
 export const FeedViewRouter: React.FC<any> = (props) => {
   const [feedStreamScope, setFeedStreamScope] = React.useState<'all' | 'workspace'>('all');
@@ -761,7 +762,7 @@ export const FeedViewRouter: React.FC<any> = (props) => {
               }}
               onAddComment={(postId, text, parentCommentId) => {
                 handleAddComment(postId, text, parentCommentId);
-                setLabelPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: [...(p.comments || []), { id: 'c_' + Date.now(), post_id: postId, parent_comment_id: parentCommentId || null, username: userProfile?.name || 'Fan', text, time: 'Just now' }] } : p));
+                setLabelPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: [...(p.comments || []), { id: generateValidUUID(), post_id: postId, parent_comment_id: parentCommentId || null, username: userProfile?.name || 'Fan', text, time: 'Just now' }] } : p));
               }}
               onTogglePin={(postId) => {
                 setFeed(prev => prev.map(p => p.id === postId ? { ...p, is_pinned: !(p as any).is_pinned } : p));

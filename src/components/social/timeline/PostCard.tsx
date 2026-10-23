@@ -21,9 +21,11 @@ import {
   Link,
   AlertCircle,
   Loader2,
+  Pencil,
 } from 'lucide-react';
 import { uploadBase64ToStorage } from '../../../supabase';
 import { isValidStorageOrImageUrl } from '../../../services/storageService';
+import { updateGlobalComment, deleteGlobalComment } from '../../../services/postInteractionsService';
 import {
   FeedPost,
   SongEmbedData,
@@ -131,6 +133,9 @@ interface PostCardProps {
   onOpenReactionMenu: () => void;
   onCloseReactionMenu: () => void;
   onOpenShareModal: () => void;
+  onOpenReactionsModal?: () => void;
+  onEditComment?: (commentId: string, newText: string) => void;
+  onDeleteComment?: (commentId: string) => void;
 }
 
 const KNOWN_USER_FULL_NAMES: Record<string, string> = {
@@ -226,10 +231,57 @@ export const PostCard: React.FC<PostCardProps> = ({
   onOpenReactionMenu,
   onCloseReactionMenu,
   onOpenShareModal,
+  onOpenReactionsModal,
+  onEditComment,
+  onDeleteComment,
 }) => {
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressRef = useRef<boolean>(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Comment inline editing states
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState<string>('');
+
+  const handleCommentEditStart = (commentId: string, currentText: string) => {
+    setEditingCommentId(commentId);
+    setEditingCommentText(currentText);
+  };
+
+  const handleCommentEditCancel = () => {
+    setEditingCommentId(null);
+    setEditingCommentText('');
+  };
+
+  const handleCommentEditSave = async (commentId: string) => {
+    const clean = editingCommentText.trim();
+    if (!clean) return;
+
+    if (onEditComment) {
+      onEditComment(commentId, clean);
+    }
+
+    setEditingCommentId(null);
+    setEditingCommentText('');
+
+    try {
+      await updateGlobalComment(post.id, commentId, clean);
+    } catch (err) {
+      console.warn('Failed to update comment in PostCard:', err);
+    }
+  };
+
+  const handleCommentDelete = async (commentId: string) => {
+    if (onDeleteComment) {
+      onDeleteComment(commentId);
+    }
+
+    try {
+      await deleteGlobalComment(post.id, commentId);
+    } catch (err) {
+      console.warn('Failed to delete comment in PostCard:', err);
+    }
+  };
 
   // Image editing & replacement states
   const editFileInputRef = useRef<HTMLInputElement>(null);
@@ -736,7 +788,7 @@ export const PostCard: React.FC<PostCardProps> = ({
     (nameMatch ? nameMatch[2].trim() : undefined);
 
   const fullNameDisplay = isCurrentUser
-    ? (currentProfileFullName || rawPostFullName)
+    ? ((isCreative || isArtistOrBand || isLabel || isPromoter) ? rawPostFullName : (currentProfileFullName || rawPostFullName))
     : (rawPostFullName || KNOWN_USER_FULL_NAMES[handleDisplay.toLowerCase()] || KNOWN_USER_FULL_NAMES[authorNameLower]);
 
   // Location fallback
@@ -1538,12 +1590,17 @@ export const PostCard: React.FC<PostCardProps> = ({
 
       {/* Reactions Summary Counter Row */}
       <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
-        <div className="bg-zinc-950/90 border border-zinc-900 px-3 py-1 rounded-full flex items-center gap-1.5 text-[11px] font-bold text-zinc-300 shadow-sm">
+        <button
+          type="button"
+          onClick={onOpenReactionsModal}
+          className="bg-zinc-950/90 border border-zinc-900 hover:border-zinc-700 hover:bg-zinc-900/90 px-3 py-1 rounded-full flex items-center gap-1.5 text-[11px] font-bold text-zinc-300 shadow-sm transition-all cursor-pointer active:scale-95 group"
+          title="Click to view all reactors"
+        >
           <span className="flex items-center gap-1">
-            <span className="text-sm">{activeReactionIcons.length > 0 ? activeReactionIcons.join('') : '❤️'}</span>
-            <span>{totalReactions} reactions</span>
+            <span className="text-sm group-hover:scale-110 transition-transform">{activeReactionIcons.length > 0 ? activeReactionIcons.join('') : '❤️'}</span>
+            <span className="group-hover:text-white transition-colors">{totalReactions} reactions</span>
           </span>
-        </div>
+        </button>
 
         <button
           onClick={onToggleComments}
@@ -1672,16 +1729,89 @@ export const PostCard: React.FC<PostCardProps> = ({
                 .filter(c => !c.parent_comment_id)
                 .map((comment, cIdx) => {
                   const replies = commentList.filter(r => r.parent_comment_id === comment.id);
+                  const postAuthor = (post as any).author?.name || post.authorName || '';
+                  const isCommentOwner = Boolean(
+                    comment.user_id === currentUserId ||
+                    (comment as any).userId === currentUserId ||
+                    (comment.username && currentUserName && comment.username.toLowerCase() === currentUserName.toLowerCase()) ||
+                    ((comment as any).author && currentUserName && (comment as any).author.toLowerCase() === currentUserName.toLowerCase()) ||
+                    currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+                    (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
+                    (postAuthor && currentUserName && postAuthor.toLowerCase() === currentUserName.toLowerCase())
+                  );
+
                   return (
-                    <div key={comment.id ? `comm-${comment.id}-${cIdx}` : `comm-${cIdx}`} className="space-y-1.5">
+                    <div key={comment.id ? `comm-${comment.id}-${cIdx}` : `comm-${cIdx}`} className="space-y-1.5 group/comm">
                       {/* Top Level Comment */}
-                      <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-2.5 text-xs space-y-1">
+                      <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-2.5 text-xs space-y-1.5">
                         <div className="flex items-center justify-between font-mono text-[10px]">
-                          <span className="font-bold text-rose-400">{comment.username}</span>
-                          <span className="text-zinc-600">{formatPostTimestamp((comment as any).created_at || comment.time, comment.time)}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-rose-400">{comment.username}</span>
+                            {(comment as any).edited && <span className="text-[9px] text-zinc-500 italic font-sans">(edited)</span>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-zinc-600">{formatPostTimestamp((comment as any).created_at || comment.time, comment.time)}</span>
+                            {isCommentOwner && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCommentEditStart(comment.id, comment.text || '')}
+                                  className="p-1 text-zinc-400 hover:text-cyan-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                                  title="Edit comment"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCommentDelete(comment.id)}
+                                  className="p-1 text-zinc-400 hover:text-red-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                                  title="Delete comment"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-zinc-300 font-sans leading-relaxed">{comment.text}</p>
-                        <div className="flex items-center justify-end pt-1">
+
+                        {/* Inline Edit or Comment Text */}
+                        {editingCommentId === comment.id ? (
+                          <div className="space-y-2 pt-0.5">
+                            <input
+                              type="text"
+                              value={editingCommentText}
+                              onChange={(e) => setEditingCommentText(e.target.value)}
+                              className="w-full bg-zinc-900 border border-rose-500/80 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleCommentEditSave(comment.id);
+                                if (e.key === 'Escape') handleCommentEditCancel();
+                              }}
+                            />
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={handleCommentEditCancel}
+                                className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCommentEditSave(comment.id)}
+                                disabled={!editingCommentText.trim()}
+                                className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
+                              >
+                                <Check className="w-2.5 h-2.5" />
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-zinc-300 font-sans leading-relaxed">{comment.text}</p>
+                        )}
+
+                        <div className="flex items-center justify-end pt-0.5">
                           <button
                             type="button"
                             onClick={() => onSetReplyingTo({ commentId: comment.id, username: comment.username })}
@@ -1695,15 +1825,89 @@ export const PostCard: React.FC<PostCardProps> = ({
                       {/* Threaded Replies */}
                       {replies.length > 0 && (
                         <div className="ml-4 pl-2.5 border-l-2 border-rose-900/40 space-y-1.5">
-                          {replies.map((reply, rIdx) => (
-                            <div key={reply.id ? `reply-${reply.id}-${rIdx}` : `reply-${cIdx}-${rIdx}`} className="bg-zinc-950/50 border border-zinc-800/50 rounded-lg p-2 text-xs space-y-1">
-                              <div className="flex items-center justify-between font-mono text-[10px]">
-                                <span className="font-bold text-rose-400/90">{reply.username}</span>
-                                <span className="text-zinc-600">{formatPostTimestamp((reply as any).created_at || reply.time, reply.time)}</span>
+                          {replies.map((reply, rIdx) => {
+                            const postAuthor = (post as any).author?.name || post.authorName || '';
+                            const isReplyOwner = Boolean(
+                              reply.user_id === currentUserId ||
+                              (reply as any).userId === currentUserId ||
+                              (reply.username && currentUserName && reply.username.toLowerCase() === currentUserName.toLowerCase()) ||
+                              ((reply as any).author && currentUserName && (reply as any).author.toLowerCase() === currentUserName.toLowerCase()) ||
+                              currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+                              (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
+                              (postAuthor && currentUserName && postAuthor.toLowerCase() === currentUserName.toLowerCase())
+                            );
+
+                            return (
+                              <div key={reply.id ? `reply-${reply.id}-${rIdx}` : `reply-${cIdx}-${rIdx}`} className="bg-zinc-950/50 border border-zinc-800/50 rounded-lg p-2 text-xs space-y-1 group/rep">
+                                <div className="flex items-center justify-between font-mono text-[10px]">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-rose-400/90">{reply.username}</span>
+                                    {(reply as any).edited && <span className="text-[9px] text-zinc-500 italic font-sans">(edited)</span>}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-zinc-600">{formatPostTimestamp((reply as any).created_at || reply.time, reply.time)}</span>
+                                    {isReplyOwner && (
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCommentEditStart(reply.id, reply.text || '')}
+                                          className="p-1 text-zinc-400 hover:text-cyan-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                                          title="Edit reply"
+                                        >
+                                          <Pencil className="w-2.5 h-2.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCommentDelete(reply.id)}
+                                          className="p-1 text-zinc-400 hover:text-red-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                                          title="Delete reply"
+                                        >
+                                          <Trash2 className="w-2.5 h-2.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Inline Edit or Reply Text */}
+                                {editingCommentId === reply.id ? (
+                                  <div className="space-y-1.5 pt-0.5">
+                                    <input
+                                      type="text"
+                                      value={editingCommentText}
+                                      onChange={(e) => setEditingCommentText(e.target.value)}
+                                      className="w-full bg-zinc-900 border border-cyan-500/80 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleCommentEditSave(reply.id);
+                                        if (e.key === 'Escape') handleCommentEditCancel();
+                                      }}
+                                    />
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={handleCommentEditCancel}
+                                        className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCommentEditSave(reply.id)}
+                                        disabled={!editingCommentText.trim()}
+                                        className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
+                                      >
+                                        <Check className="w-2.5 h-2.5" />
+                                        Save
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-zinc-300 font-sans leading-relaxed">{reply.text}</p>
+                                )}
                               </div>
-                              <p className="text-zinc-300 font-sans leading-relaxed">{reply.text}</p>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>

@@ -59,10 +59,7 @@ export function isBrokenOrDeletedPost(post: any): boolean {
   if (authorName.includes('kasper') && (content.includes('im here now') || content.includes('here now') || content.length < 30)) {
     return true;
   }
-  if (
-    authorName.includes('christopher wirstrom') || 
-    (authorName.includes('wirstrom') && content.includes('updated profile picture'))
-  ) {
+  if (authorName.includes('wirstrom') && (content.includes('updated profile picture') || content.includes('archived '))) {
     return true;
   }
   if (content === 'im here now' && (authorName === 'kasper' || authorName === '' || authorName === 'anonymous' || authorName.includes('fan'))) {

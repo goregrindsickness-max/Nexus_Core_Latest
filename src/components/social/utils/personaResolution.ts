@@ -363,3 +363,128 @@ export function resolveActivePersona(params: PersonaResolutionParams): PostingPe
 
   return personas[0];
 }
+
+export interface ReactionActor {
+  id: string;
+  name: string;
+  avatar: string;
+  role: string;
+  type: string;
+}
+
+/**
+ * Resolves the active user persona/profile when submitting a reaction to a post.
+ * Allows users to react distinctly as their personal profile (Industry Pro), band profile,
+ * venue promoter profile, creative pro profile, or record label.
+ */
+export function resolveReactionActor(params: {
+  portalRole?: string;
+  userProfile?: any;
+  activeBand?: any;
+  fallbackUserId?: string;
+}): ReactionActor {
+  const profile = params.userProfile || (typeof window !== 'undefined' ? (() => {
+    try {
+      const raw = localStorage.getItem('nexus_core_user_profile') || localStorage.getItem('nexus_user');
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) { return null; }
+  })() : null);
+
+  const baseUserId = profile?.id || params.fallbackUserId || (typeof window !== 'undefined' ? localStorage.getItem('nexus_active_profile_id') || localStorage.getItem('nexus_user_profile_id') : null) || '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+
+  const rawRole = (params.portalRole || profile?.active_workspace || 'industry_pro').toLowerCase();
+
+  // 1. BAND / ARTIST WORKSPACE
+  if (rawRole === 'band' || rawRole.includes('artist')) {
+    let bandName = profile?.band_name || profile?.bandName;
+    let bandLogo = profile?.band_logo || profile?.bandLogo;
+    let bandId = profile?.band_id;
+
+    try {
+      const rawActiveBand = localStorage.getItem('nexus_active_band');
+      if (rawActiveBand) {
+        const parsed = JSON.parse(rawActiveBand);
+        if (parsed.name) bandName = parsed.name;
+        if (parsed.logo_url || parsed.logo) bandLogo = parsed.logo_url || parsed.logo;
+        if (parsed.id) bandId = parsed.id;
+      }
+    } catch (_) {}
+
+    const savedBandId = typeof window !== 'undefined'
+      ? (localStorage.getItem('nexus_active_band_id') || localStorage.getItem('nexus_core_active_band_id'))
+      : null;
+    const finalBandId = bandId || savedBandId || 'cbddb810-259b-4230-9968-3d402dfdb872';
+
+    return {
+      id: `band:${finalBandId}`,
+      name: bandName || 'Virulent Excision',
+      avatar: bandLogo || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150',
+      role: 'Band / Artist',
+      type: 'band'
+    };
+  }
+
+  // 2. RECORD LABEL WORKSPACE
+  if (rawRole === 'label') {
+    const labelName = profile?.label_company_name || profile?.label_name || 'Record Label';
+    const labelLogo = profile?.label_logo || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=150';
+    return {
+      id: `label:${baseUserId}`,
+      name: labelName,
+      avatar: labelLogo,
+      role: 'Record Label',
+      type: 'label'
+    };
+  }
+
+  // 3. VENUE PROMOTER WORKSPACE
+  if (rawRole === 'promoter' || rawRole === 'venue') {
+    const promoterName = profile?.promoter_metadata?.brand_name || profile?.promoter_name || profile?.promoter_brand || 'Nexus Live Productions';
+    const promoterLogo = profile?.promoter_logo || profile?.promoter_metadata?.logo_url || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
+    return {
+      id: `promoter:${baseUserId}`,
+      name: promoterName,
+      avatar: promoterLogo,
+      role: 'Venue Promoter',
+      type: 'promoter'
+    };
+  }
+
+  // 4. CREATIVE PRO WORKSPACE
+  if (rawRole === 'creative') {
+    const creativeName = profile?.creative_metadata?.business_name || profile?.creative_business_name || profile?.creative_name || 'Vortex Graphics';
+    const creativeLogo = profile?.creative_avatar || profile?.creative_logo || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150';
+    return {
+      id: `creative:${baseUserId}`,
+      name: creativeName,
+      avatar: creativeLogo,
+      role: 'Creative Pro',
+      type: 'creative'
+    };
+  }
+
+  // 5. FAN ONLY WORKSPACE
+  if (rawRole === 'fan_only' || rawRole === 'fan') {
+    return {
+      id: `fan:${baseUserId}`,
+      name: profile?.console_handle || profile?.username || 'Fan Supporter',
+      avatar: profile?.avatar_url || profile?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+      role: 'Scene Fan',
+      type: 'fan'
+    };
+  }
+
+  // 6. PERSONAL PROFILE (INDUSTRY PRO DEFAULT)
+  const isMiguel = baseUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' || (profile?.full_name && profile.full_name.toLowerCase().includes('miguel'));
+  const fullName = profile?.full_name || profile?.name || (isMiguel ? 'Miguel "Goregrinder" Medina' : 'Scene Member');
+  const avatarUrl = profile?.avatar_url || profile?.avatar || (isMiguel ? 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80' : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150');
+
+  return {
+    id: baseUserId,
+    name: fullName,
+    avatar: avatarUrl,
+    role: 'Industry Pro',
+    type: 'industry_pro'
+  };
+}
+

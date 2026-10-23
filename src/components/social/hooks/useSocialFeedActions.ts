@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { FeedItem } from '../../../data/socialFeedMockData';
 import { getSupabase } from '../../../supabase';
 import { syncPostToSupabase } from '../utils/postSyncUtils';
+import { submitGlobalComment, generateValidUUID } from '../../../services/postInteractionsService';
 
 export function getYouTubeId(url: string): string {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -191,7 +192,7 @@ export function useSocialFeedActions({
     const text = (textOverride || commentInputs[postId] || '').trim();
     if (!text) return;
 
-    const commentId = `comment_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const commentId = generateValidUUID();
     const userId = userProfile?.id || userProfile?.email || userProfile?.name || 'anonymous';
     const authorName = userProfile?.name || userProfile?.console_handle || profileHandle || 'Fan';
 
@@ -224,6 +225,20 @@ export function useSocialFeedActions({
 
     setCommentInputs(prev => ({ ...prev, [postId]: '' }));
 
+    // Persist globally across all sessions and devices
+    try {
+      await submitGlobalComment(postId, {
+        id: commentId,
+        userId,
+        username: authorName,
+        text,
+        parentCommentId: parentCommentId || null
+      });
+    } catch (err) {
+      console.warn('Failed to submit global comment:', err);
+    }
+
+    // Best-effort client Supabase attempt (if credentials allow)
     const supabase = getSupabase();
     if (supabase) {
       try {
@@ -235,9 +250,7 @@ export function useSocialFeedActions({
           content: text,
           created_at: new Date().toISOString()
         }]);
-      } catch (err) {
-        console.warn('Failed to save comment to nexus_post_comments:', err);
-      }
+      } catch (_) {}
     }
 
     triggerNotification?.("Comment posted!");

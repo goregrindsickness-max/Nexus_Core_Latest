@@ -10,6 +10,7 @@ import {
 import { motion } from 'motion/react';
 import { getSupabase } from '../supabase';
 import { InstallInstructionsAccordion } from './InstallInstructionsAccordion';
+import { getCurrentCoordinates } from '../services/locationService';
 
 const concertBg = "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/High%20energy%20concert%202.png";
 const nexusIconBrackets = "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Nexus%20Icon%20brackets.png";
@@ -59,6 +60,13 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
       .catch((err) => {
         console.warn('Could not fetch latest GitHub release info, using default v1.5.4 fallback', err);
       });
+
+    // Prime location permission and coordinate resolution for fresh installs
+    getCurrentCoordinates({ enableHighAccuracy: true, timeout: 8000 }).then((coords) => {
+      if (coords) {
+        console.log('[SplashView] Location initialized on startup:', coords.latitude, coords.longitude);
+      }
+    }).catch(() => {});
   }, []);
 
   // Burnout transition effect state (Real fire screen video overlay)

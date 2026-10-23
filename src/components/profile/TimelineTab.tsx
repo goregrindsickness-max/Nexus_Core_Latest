@@ -16,7 +16,9 @@ import {
   Check, 
   Send, 
   X, 
-  CornerDownRight 
+  CornerDownRight,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { YouTubeEmbedCard } from '../social/embeds/YouTubeEmbedCard';
 import { PollWidget } from '../social/embeds/PollWidget';
@@ -30,6 +32,16 @@ import { savePostReaction, mergePostWithReactions, normalizeReactionCounts } fro
 import { isValidStorageOrImageUrl } from '../../services/storageService';
 import { communityBandManager } from '../../lib/communityBands';
 import { DEFAULT_PERSONAL_AVATAR } from '../../utils/bandProfileUtils';
+import {
+  fetchGlobalInteractions,
+  submitGlobalComment,
+  submitGlobalReaction,
+  generateValidUUID,
+  updateGlobalComment,
+  deleteGlobalComment
+} from '../../services/postInteractionsService';
+import { InlineReactionsModal } from '../social/modals/InlineReactionsModal';
+import { resolveReactionActor } from '../social/utils/personaResolution';
 
 export interface TimelinePost {
   id: string;
@@ -325,6 +337,11 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
   const [replyingTo, setReplyingTo] = useState<Record<string, { commentId: string; username: string } | null>>({});
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
 
+  // Comment edit & Reaction popover states
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState<string>('');
+  const [viewingReactionsPost, setViewingReactionsPost] = useState<any | null>(null);
+
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressRef = useRef(false);
 
@@ -408,16 +425,104 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
       }));
     };
 
+    const handleCommentUpdateSync = (e: any) => {
+      const detail = e.detail;
+      if (!detail?.postId || !detail?.commentId) return;
+      setPosts(prev => prev.map(p => {
+        if (p.id === detail.postId && Array.isArray(p.comments)) {
+          return {
+            ...p,
+            comments: p.comments.map(c => c.id === detail.commentId ? { ...c, text: detail.text, content: detail.text, edited: true } : c)
+          };
+        }
+        return p;
+      }));
+    };
+
+    const handleCommentDeleteSync = (e: any) => {
+      const detail = e.detail;
+      if (!detail?.postId || !detail?.commentId) return;
+      setPosts(prev => prev.map(p => {
+        if (p.id === detail.postId && Array.isArray(p.comments)) {
+          return {
+            ...p,
+            comments: p.comments.filter(c => c.id !== detail.commentId && c.parent_comment_id !== detail.commentId)
+          };
+        }
+        return p;
+      }));
+    };
+
     window.addEventListener('nexus_reaction_updated', handleReactionSync as EventListener);
     window.addEventListener('nexus_comment_added', handleCommentSync as EventListener);
+    window.addEventListener('nexus_comment_updated', handleCommentUpdateSync as EventListener);
+    window.addEventListener('nexus_comment_deleted', handleCommentDeleteSync as EventListener);
     window.addEventListener('nexus_avatar_updated', handleAvatarSync as EventListener);
 
     return () => {
       window.removeEventListener('nexus_reaction_updated', handleReactionSync as EventListener);
       window.removeEventListener('nexus_comment_added', handleCommentSync as EventListener);
+      window.removeEventListener('nexus_comment_updated', handleCommentUpdateSync as EventListener);
+      window.removeEventListener('nexus_comment_deleted', handleCommentDeleteSync as EventListener);
       window.removeEventListener('nexus_avatar_updated', handleAvatarSync as EventListener);
     };
   }, []);
+
+  const handleCommentEditStart = (commentId: string, currentText: string) => {
+    setEditingCommentId(commentId);
+    setEditingCommentText(currentText);
+  };
+
+  const handleCommentEditCancel = () => {
+    setEditingCommentId(null);
+    setEditingCommentText('');
+  };
+
+  const handleCommentEditSave = async (postId: string, commentId: string) => {
+    const clean = editingCommentText.trim();
+    if (!clean) return;
+
+    // Optimistically update
+    setPosts(prev => prev.map(p => {
+      if (p.id === postId && Array.isArray(p.comments)) {
+        return {
+          ...p,
+          comments: p.comments.map(c => c.id === commentId ? { ...c, text: clean, content: clean, edited: true } : c)
+        };
+      }
+      return p;
+    }));
+
+    setEditingCommentId(null);
+    setEditingCommentText('');
+
+    try {
+      await updateGlobalComment(postId, commentId, clean);
+      triggerNotification?.("✏️ Comment updated successfully.");
+    } catch (err) {
+      console.warn('Failed to update comment:', err);
+    }
+  };
+
+  const handleCommentDelete = async (postId: string, commentId: string) => {
+    // Optimistically remove comment and replies
+    setPosts(prev => prev.map(p => {
+      if (p.id === postId && Array.isArray(p.comments)) {
+        return {
+          ...p,
+          comments: p.comments.filter(c => c.id !== commentId && c.parent_comment_id !== commentId)
+        };
+      }
+      return p;
+    }));
+
+    try {
+      await deleteGlobalComment(postId, commentId);
+      triggerNotification?.("🗑️ Comment deleted.");
+    } catch (err) {
+      console.warn('Failed to delete comment:', err);
+    }
+  };
 
   const handleReaction = async (postId: string, reactionType: string) => {
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
@@ -449,6 +554,13 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
 
     const targetPost = posts.find(p => p.id === postId);
     if (!targetPost) return;
+
+    // Resolve current active actor/persona (personal profile, band, promoter, creative, label)
+    const actor = resolveReactionActor({
+      portalRole,
+      userProfile: selectedUserProfile,
+      fallbackUserId: userId || activeUserId
+    });
 
     const userReacts = targetPost.user_reactions || {};
     const wasActive = Boolean(userReacts[reactionKey] || (reactionKey === 'likes' && targetPost.user_liked));
@@ -501,10 +613,19 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
       return p;
     }));
 
-    // Persist locally in reactionStore & dispatch global sync
-    savePostReaction(postId, fullCurr, nextUserReacts, activeUserId);
+    // Persist locally in reactionStore with actor.id & dispatch global sync
+    savePostReaction(postId, fullCurr, nextUserReacts, actor.id);
 
-    // Persist to Supabase
+    // Persist globally across all devices via backend interaction service with distinct persona identity
+    try {
+      submitGlobalReaction(postId, actor.id, reactionKey, {
+        userName: actor.name,
+        userAvatar: actor.avatar,
+        userRole: actor.role
+      });
+    } catch (_) {}
+
+    // Best-effort Supabase direct attempt
     try {
       const { data: existingRows } = await supabase
         .from('nexus_posts')
@@ -517,25 +638,13 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         const postObj = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data || {});
         await supabase.from('nexus_posts').update({
           reactions: fullCurr,
-          likes_count: fullCurr.likes,
           data: {
             ...postObj,
             reactions: fullCurr,
-            likes_count: fullCurr.likes,
           },
         }).eq('id', row.id);
       }
-
-      try {
-        await supabase.rpc('toggle_post_reaction', {
-          p_post_id: postId,
-          p_profile_id: activeUserId,
-          p_reaction_type: reactionKey,
-        });
-      } catch (_) {}
-    } catch (err) {
-      console.warn('Notice syncing reaction to database:', err);
-    }
+    } catch (_) {}
   };
 
   const startLongPress = (postId: string) => {
@@ -564,7 +673,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     if (!draft) return;
 
     const parentInfo = replyingTo[postId];
-    const commentId = `comment_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const commentId = generateValidUUID();
     const authorName = currentUserName || 'Fan';
 
     const newCommentObj = {
@@ -606,7 +715,20 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
       localStorage.setItem(cachedKey, JSON.stringify([...parsedPrev, newCommentObj]));
     } catch (_) {}
 
-    // 3. Persist to Supabase
+    // 3. Persist globally across all sessions and devices
+    try {
+      await submitGlobalComment(postId, {
+        id: commentId,
+        userId: activeUserId,
+        username: authorName,
+        text: draft,
+        parentCommentId: parentInfo?.commentId || null,
+      });
+    } catch (gErr) {
+      console.warn('Failed to submit global comment:', gErr);
+    }
+
+    // 4. Best-effort Supabase insert
     try {
       await supabase.from('nexus_post_comments').insert([{
         id: commentId,
@@ -616,27 +738,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         content: draft,
         created_at: new Date().toISOString()
       }]);
-
-      const { data: rows } = await supabase
-        .from('nexus_posts')
-        .select('id, data')
-        .or(`id.eq.${postId},id.eq.nexus_post_${postId}`)
-        .limit(1);
-
-      if (rows && rows.length > 0) {
-        const row = rows[0];
-        const postObj = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data || {});
-        const mergedComments = [...(postObj.comments || []), newCommentObj];
-        await supabase.from('nexus_posts').update({
-          data: {
-            ...postObj,
-            comments: mergedComments
-          }
-        }).eq('id', row.id);
-      }
-    } catch (err) {
-      console.warn('Notice saving comment to database:', err);
-    }
+    } catch (_) {}
 
     // 4. Dispatch sync event for other views
     if (typeof window !== 'undefined') {
@@ -752,14 +854,26 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     }
     setError(null);
     try {
-      const targetId = profileId || userId || selectedProfileId || activeUserId || '421610eb-3a87-4da6-b843-1adb4ab6aecb';
-      const targetName = (profileName || selectedProfileName || selectedUserProfile?.name || selectedUserProfile?.full_name || '').toLowerCase();
+      let globalInteractions: any = null;
+      try {
+        globalInteractions = await fetchGlobalInteractions();
+      } catch (_) {}
+
+      const isEffYou = Boolean(isYou || selectedUserProfile?.isYou);
+      const targetId = profileId || userId || selectedProfileId || selectedUserProfile?.id || (isEffYou ? activeUserId : undefined);
+      const targetName = (profileName || selectedProfileName || selectedUserProfile?.name || '').toLowerCase().trim();
+      const targetHandle = (selectedUserProfile?.console_handle || selectedUserProfile?.handle || selectedUserProfile?.username || '').replace(/^@/, '').toLowerCase().trim();
+      const targetFullName = (selectedUserProfile?.full_name || selectedUserProfile?.legal_name || '').toLowerCase().trim();
+      const targetBandName = (selectedUserProfile?.band_name || (selectedUserProfile?.role === 'Band' ? selectedUserProfile?.name : '') || '').toLowerCase().trim();
 
       // Query posts for this profile from Supabase
       let query = supabase
         .from('nexus_posts')
-        .select('*')
-        .or(`profile_id.eq.${targetId},author_id.eq.${targetId},user_id.eq.${targetId}`);
+        .select('*');
+
+      if (targetId && targetId !== 'current') {
+        query = query.or(`profile_id.eq.${targetId},author_id.eq.${targetId},user_id.eq.${targetId}`);
+      }
 
       let { data, error: selectErr } = await query.order('created_at', { ascending: false });
 
@@ -809,126 +923,80 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         setError(selectErr.message);
       }
 
-      const targetWorkspace = (
-        workspaceType ||
-        portalRole ||
-        selectedUserProfile?.active_workspace ||
-        selectedUserProfile?.type ||
-        selectedUserProfile?.role ||
-        ''
-      ).toLowerCase();
-
-      const isPersonalTarget = Boolean(
-        selectedUserProfile?.isIndustryProPersonal === true ||
-        selectedUserProfile?.isPersonal === true ||
-        selectedUserProfile?.type === 'user' ||
-        targetWorkspace === 'industry_pro' ||
-        targetWorkspace === 'personal' ||
-        targetWorkspace === 'user' ||
-        targetWorkspace === 'fan_only' ||
-        targetWorkspace === 'fan' ||
-        (selectedUserProfile?.account_type && (
-          selectedUserProfile.account_type === 'industry_pro' || 
-          selectedUserProfile.account_type === 'fan_only' || 
-          selectedUserProfile.account_type === 'fan'
-        ))
-      );
-
-      const isMatchingWorkspacePost = (item: any, postObj: any) => {
+      const isMatchingProfilePost = (item: any, postObj: any) => {
         const itemProfileId = item.profile_id || item.author_id || item.user_id || postObj.profile_id || postObj.postedBy || postObj.author?.id || postObj.author_id || postObj.userId;
         const authorName = String(
           postObj.author?.name ||
           postObj.authorName ||
           postObj.author?.username ||
           item.author_name ||
+          item.author_handle ||
           ''
-        ).toLowerCase();
+        ).replace(/^@/, '').toLowerCase().trim();
 
-        // Rule A: If post explicitly authored by or belongs to this target ID or name, ALWAYS match on this profile card!
-        if (
-          (itemProfileId && (itemProfileId === targetId || itemProfileId === profileId || itemProfileId === userId || itemProfileId === selectedProfileId || itemProfileId === activeUserId)) ||
-          (targetName && authorName.length > 0 && (authorName.includes(targetName) || targetName.includes(authorName)))
-        ) {
-          return true;
-        }
+        const authorHandle = String(
+          postObj.author?.console_handle ||
+          postObj.author?.handle ||
+          postObj.author?.username ||
+          ''
+        ).replace(/^@/, '').toLowerCase().trim();
 
-        const postWs = String(
-          postObj.workspace_type ||
-          postObj.workspaceType ||
-          postObj.author?.workspace_type ||
-          postObj.author?.workspaceType ||
-          postObj.portalRole ||
-          postObj.author?.portalRole ||
-          item.workspace_type ||
+        const authorFullName = String(
+          postObj.author?.full_name ||
+          postObj.author?.legal_name ||
+          postObj.authorFullName ||
           ''
         ).toLowerCase().trim();
 
-        const isExplicitBandWs = (
-          postWs === 'band' ||
-          postWs === 'artist' ||
-          postObj.isBand === true ||
-          postObj.isBandProfile === true ||
-          postObj.author?.isBand === true
+        const postIsYou = Boolean((postObj as any).isYou || (postObj.author as any)?.isYou);
+        const isAuthoredByLoggedInUser = Boolean(
+          (activeUserId && itemProfileId && itemProfileId === activeUserId) ||
+          postIsYou ||
+          (currentUserName && currentUserName !== 'You' && authorName === currentUserName.toLowerCase())
         );
 
-        const isExplicitPromoterWs = (
-          postWs === 'promoter' ||
-          postWs === 'venue' ||
-          postObj.isPromoter === true ||
-          postObj.isPromoterProfile === true ||
-          postObj.author?.isPromoter === true
-        );
+        // CASE 1: Viewing someone else's profile (e.g. Christopher Wirstrom):
+        // NEVER allow posts authored by the logged-in user (like Vortex Graphics) or unrelated accounts to leak onto this profile
+        if (!isEffYou) {
+          if (isAuthoredByLoggedInUser) {
+            return false;
+          }
 
-        const isExplicitCreativeWs = (
-          postWs === 'creative' ||
-          postWs === 'design' ||
-          postObj.isCreative === true ||
-          postObj.isCreativeProfile === true ||
-          postObj.author?.isCreative === true
-        );
+          // Strict match by target profile ID
+          if (targetId && itemProfileId && itemProfileId === targetId) {
+            return true;
+          }
 
-        const isExplicitLabelWs = (
-          postWs === 'label' ||
-          postObj.isLabel === true ||
-          postObj.isLabelProfile === true ||
-          postObj.author?.isLabel === true
-        );
+          // Match by author handle
+          if (targetHandle && (authorName === targetHandle || authorHandle === targetHandle)) {
+            return true;
+          }
 
-        // 1. If viewing Personal / Industry Pro / Fan Profile Card:
-        if (isPersonalTarget || targetWorkspace.includes('industry_pro') || targetWorkspace.includes('personal') || targetWorkspace.includes('fan') || targetWorkspace === 'user') {
-          return true;
+          // Match by profile display name
+          if (targetName && targetName.length > 1 && (authorName === targetName || (targetName.length > 2 && (authorName.includes(targetName) || targetName.includes(authorName))))) {
+            return true;
+          }
+
+          // Match by real full name (e.g. Christopher Wirstrom)
+          if (targetFullName && (authorFullName === targetFullName || authorName === targetFullName || (targetFullName.length > 3 && (authorFullName.includes(targetFullName) || authorName.includes(targetFullName))))) {
+            return true;
+          }
+
+          // Match by band name if this profile card represents a band
+          if (targetBandName && (authorName === targetBandName || (targetBandName.length > 3 && authorName.includes(targetBandName)))) {
+            return true;
+          }
+
+          return false;
         }
 
-        // 2. If viewing Promoter Workspace:
-        if (targetWorkspace.includes('promoter') || targetWorkspace.includes('venue')) {
-          if (isExplicitPromoterWs) return true;
-          if (selectedUserProfile?.promoter_metadata?.brand_name && authorName.includes(selectedUserProfile.promoter_metadata.brand_name.toLowerCase())) return true;
-          if (targetName && authorName.includes(targetName)) return true;
-          return postWs === 'promoter' || !isExplicitBandWs;
-        }
+        // CASE 2: Viewing logged-in user's own profile:
+        if (isAuthoredByLoggedInUser) return true;
+        if (targetId && itemProfileId && (itemProfileId === targetId || itemProfileId === activeUserId)) return true;
+        if (targetHandle && (authorName === targetHandle || authorHandle === targetHandle)) return true;
+        if (targetName && (authorName === targetName || authorName.includes(targetName))) return true;
 
-        // 3. If viewing Band / Artist Workspace:
-        if (targetWorkspace.includes('band') || targetWorkspace.includes('artist')) {
-          if (isExplicitBandWs) return true;
-          if (targetName && authorName.includes(targetName)) return true;
-          return postWs === 'band' || !isExplicitPromoterWs;
-        }
-
-        // 4. If viewing Creative Hub Workspace:
-        if (targetWorkspace.includes('creative') || targetWorkspace.includes('design')) {
-          if (isExplicitCreativeWs) return true;
-          if (targetName && authorName.includes(targetName)) return true;
-          return postWs === 'creative';
-        }
-
-        // 5. If viewing Record Label Workspace:
-        if (targetWorkspace.includes('label')) {
-          if (isExplicitLabelWs) return true;
-          if (targetName && authorName.includes(targetName)) return true;
-          return postWs === 'label';
-        }
-
-        return true;
+        return false;
       };
 
       const formattedPosts: TimelinePost[] = (data || []).filter((item: any) => {
@@ -949,7 +1017,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         ) {
           return false;
         }
-        return isMatchingWorkspacePost(item, postObj);
+        return isMatchingProfilePost(item, postObj);
       }).map((item: any) => {
         const postObj = typeof item.data === 'string' ? JSON.parse(item.data) : (item.data || {});
 
@@ -1032,6 +1100,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         if (localCommentsRaw) {
           try { localComments = JSON.parse(localCommentsRaw); } catch (_) {}
         }
+        const serverComments = globalInteractions?.comments?.[postId] || [];
         const postComments = Array.isArray(postObj.comments)
           ? postObj.comments
           : Array.isArray(item.comments)
@@ -1039,8 +1108,16 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
           : [];
         const commentMap = new Map();
         postComments.forEach((c: any) => { if (c?.id) commentMap.set(c.id, c); });
+        serverComments.forEach((c: any) => { if (c?.id) commentMap.set(c.id, c); });
         localComments.forEach((c: any) => { if (c?.id) commentMap.set(c.id, c); });
         const finalComments = Array.from(commentMap.values());
+
+        const serverRx = globalInteractions?.reactions?.[postId];
+        const serverRxCounts = serverRx?.reactions;
+        const serverUserReacts = serverRx?.user_reactions?.[activeUserId] || {};
+
+        const baseReactions = serverRxCounts || postObj.reactions || item.reactions || { likes: 0, horns: 0, hype: 0, brutal: 0, respect: 0, crushed: 0 };
+        const baseUserReactions = { ...(postObj.user_reactions || item.user_reactions || {}), ...serverUserReacts };
 
         const basePost = {
           id: postId,
@@ -1054,18 +1131,18 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
           author: {
             name: postObj.author?.name || postObj.authorName || selectedProfileName || 'Nexus User',
             avatar: resolvedRawAvatar,
-            role: postObj.author?.role || postObj.authorRole || (item.role) || (item.author_role) || selectedUserProfile?.role || 'Band',
-            full_name: postObj.author?.full_name || postObj.authorFullName || selectedUserProfile?.full_name,
-            workspace_type: postObj.workspace_type || postObj.workspaceType || (item.workspace_type) || selectedUserProfile?.active_workspace || ''
+            role: postObj.author?.role || postObj.authorRole || (item.role) || (item.author_role) || (isSelfPost ? selectedUserProfile?.role : 'Member'),
+            full_name: postObj.author?.full_name || postObj.authorFullName || (isSelfPost ? selectedUserProfile?.full_name : undefined),
+            workspace_type: postObj.workspace_type || postObj.workspaceType || (item.workspace_type) || (isSelfPost ? selectedUserProfile?.active_workspace : '') || ''
           },
-          workspace_type: postObj.workspace_type || postObj.workspaceType || (item.workspace_type) || selectedUserProfile?.active_workspace || '',
+          workspace_type: postObj.workspace_type || postObj.workspaceType || (item.workspace_type) || (isSelfPost ? selectedUserProfile?.active_workspace : '') || '',
           type: postObj.type || (resolvedPollData ? 'poll' : postObj.eventData ? 'event' : postObj.merchData ? 'merch' : postObj.songData ? 'track' : 'post'),
           tag: postObj.tag || (resolvedPollData ? 'SLAM DISCUSSION' : postObj.eventData ? 'DIY EVENT' : postObj.merchData ? 'MERCH DROP' : postObj.songData ? 'AUDIO RELEASE' : 'TRANSMISSION'),
           reactions_count: postObj.reactions?.length || 0,
-          reactions: postObj.reactions || item.reactions || { likes: 0, horns: 0, hype: 0, brutal: 0, respect: 0, crushed: 0 },
-          user_reactions: postObj.user_reactions || item.user_reactions || {},
-          user_liked: Boolean(postObj.user_liked || item.user_liked),
-          likes_count: Number(postObj.likes_count || item.likes_count || 0),
+          reactions: baseReactions,
+          user_reactions: baseUserReactions,
+          user_liked: Boolean(baseUserReactions.likes),
+          likes_count: Number(serverRx?.likes_count || postObj.likes_count || item.likes_count || baseReactions.likes || 0),
           comments: finalComments,
           eventData: postObj.eventData || item.event_data,
           merchData: postObj.merchData,
@@ -1112,13 +1189,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
             return;
           }
 
-          const aId = fp.authorId || fp.author_id || fp.userId || fp.profile_id || fp.author?.id;
-          const aName = (fp.authorName || fp.author?.name || '').toLowerCase();
-          const matches = (targetId && aId === targetId) ||
-            (targetName && aName && (aName === targetName || aName.includes(targetName) || targetName.includes(aName))) ||
-            (targetName.includes('virulent') && aName.includes('virulent')) ||
-            (targetName.includes('miguel') && (aName.includes('miguel') || aName.includes('goregrinder') || aName.includes('virulent'))) ||
-            (selectedUserProfile?.isYou && (fp.isYou || aId === '421610eb-3a87-4da6-b843-1adb4ab6aecb' || aName.includes('miguel') || aName.includes('virulent')));
+          const matches = isMatchingProfilePost(fp, fp);
 
           if (matches) {
             const existing = formattedPosts.find(p => p.id === fp.id);
@@ -1128,10 +1199,24 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
               if (localCommentsRaw) {
                 try { localComments = JSON.parse(localCommentsRaw); } catch (_) {}
               }
+              const serverComments = globalInteractions?.comments?.[fp.id] || [];
               const commentMap = new Map();
               (Array.isArray(fp.comments) ? fp.comments : []).forEach((c: any) => { if (c?.id) commentMap.set(c.id, c); });
+              serverComments.forEach((c: any) => { if (c?.id) commentMap.set(c.id, c); });
               localComments.forEach((c: any) => { if (c?.id) commentMap.set(c.id, c); });
               const finalComments = Array.from(commentMap.values());
+
+              const isFeedTargetPost = Boolean(
+                (targetId && (fp.authorId === targetId || fp.author_id === targetId || fp.userId === targetId || fp.profile_id === targetId)) ||
+                (targetHandle && fp.authorName && fp.authorName.toLowerCase() === targetHandle) ||
+                (targetName && fp.authorName && fp.authorName.toLowerCase() === targetName)
+              );
+
+              const serverRx = globalInteractions?.reactions?.[fp.id];
+              const serverRxCounts = serverRx?.reactions;
+              const serverUserReacts = serverRx?.user_reactions?.[activeUserId] || {};
+              const feedReactions = serverRxCounts || fp.reactions || { likes: 0, horns: 0, hype: 0, brutal: 0, respect: 0, crushed: 0 };
+              const feedUserReactions = { ...(fp.user_reactions || {}), ...serverUserReacts };
 
               const formatted = mergePostWithReactions({
                 id: fp.id,
@@ -1143,20 +1228,20 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                 images: Array.isArray(fp.images) && fp.images.length > 0 ? fp.images : (fp.imageUrl || fp.media_url ? [fp.imageUrl || fp.media_url] : []),
                 created_at: fp.created_at || fp.timestamp || new Date().toISOString(),
                 author: {
-                  name: fp.author?.name || fp.authorName || selectedProfileName || targetName || 'User',
+                  name: fp.author?.name || fp.authorName || (isFeedTargetPost ? (selectedProfileName || targetName) : 'User'),
                   avatar: fp.author?.avatar || fp.authorAvatar || (fp.author?.name && fp.author.name.toLowerCase() === selectedProfileName.toLowerCase() ? selectedUserProfile?.avatar : null) || null,
-                  role: fp.author?.role || fp.authorRole || selectedUserProfile?.role || 'Band',
-                  full_name: fp.author?.full_name || fp.authorFullName,
-                  workspace_type: fp.workspace_type || selectedUserProfile?.active_workspace || ''
+                  role: fp.author?.role || fp.authorRole || (isFeedTargetPost ? selectedUserProfile?.role : 'Member'),
+                  full_name: fp.author?.full_name || fp.authorFullName || (isFeedTargetPost ? selectedUserProfile?.full_name : undefined),
+                  workspace_type: fp.workspace_type || (isFeedTargetPost ? selectedUserProfile?.active_workspace : '') || ''
                 },
                 workspace_type: fp.workspace_type || selectedUserProfile?.active_workspace || '',
                 type: fp.type || (fp.pollData ? 'poll' : 'post'),
                 tag: fp.tag || (fp.pollData ? 'SLAM DISCUSSION' : 'TRANSMISSION'),
                 reactions_count: fp.reactions?.length || 0,
-                reactions: fp.reactions || { likes: 0, horns: 0, hype: 0, brutal: 0, respect: 0, crushed: 0 },
-                user_reactions: fp.user_reactions || {},
-                user_liked: Boolean(fp.user_liked),
-                likes_count: Number(fp.likes_count || 0),
+                reactions: feedReactions,
+                user_reactions: feedUserReactions,
+                user_liked: Boolean(feedUserReactions.likes),
+                likes_count: Number(serverRx?.likes_count || fp.likes_count || feedReactions.likes || 0),
                 comments: finalComments,
                 eventData: fp.eventData,
                 merchData: fp.merchData,
@@ -1359,14 +1444,21 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                         {post.author?.name || profileName || 'User'}
                       </p>
                       {/* Full Name in FULL CAPS */}
-                      {(selectedUserProfile?.full_name || (post.author as any)?.full_name || (post.author as any)?.legal_name) && (
-                        <p 
-                          className="text-[10px] font-mono font-bold tracking-wider mt-0.5 truncate uppercase"
-                          style={{ color: postTheme.colorHex }}
-                        >
-                          {(selectedUserProfile?.full_name || (post.author as any)?.full_name || (post.author as any)?.legal_name).toUpperCase()}
-                        </p>
-                      )}
+                      {(() => {
+                        const authorPrimary = (post.author?.name || profileName || '').trim().toLowerCase();
+                        const authorFullName = String((post.author as any)?.full_name || (post.author as any)?.legal_name || (post as any).legal_name || (selectedUserProfile?.isYou ? selectedUserProfile?.full_name : '') || '').trim();
+                        if (!authorFullName || authorFullName.toLowerCase() === authorPrimary) {
+                          return null;
+                        }
+                        return (
+                          <p 
+                            className="text-[10px] font-mono font-bold tracking-wider mt-0.5 truncate uppercase"
+                            style={{ color: postTheme.colorHex }}
+                          >
+                            {authorFullName.toUpperCase()}
+                          </p>
+                        );
+                      })()}
                       <p className="text-[9px] font-mono text-zinc-500 mt-0.5">
                         {new Date(post.created_at).toLocaleDateString()} • {new Date(post.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
@@ -1588,12 +1680,17 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
 
                 {/* Reactions Summary Counter Row */}
                 <div className="flex items-center justify-between text-xs font-mono text-zinc-400 mb-2">
-                  <div className="bg-zinc-950/90 border border-zinc-900 px-3 py-1 rounded-full flex items-center gap-1.5 text-[11px] font-bold text-zinc-300 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setViewingReactionsPost(post)}
+                    className="bg-zinc-950/90 border border-zinc-900 hover:border-zinc-700 hover:bg-zinc-900/90 px-3 py-1 rounded-full flex items-center gap-1.5 text-[11px] font-bold text-zinc-300 shadow-sm cursor-pointer transition-all active:scale-95 group"
+                    title="Click to view all reactors"
+                  >
                     <span className="flex items-center gap-1">
-                      <span className="text-sm">{activeReactionIcons.length > 0 ? activeReactionIcons.join('') : '🔥'}</span>
-                      <span>{totalReactions} reaction{totalReactions === 1 ? '' : 's'}</span>
+                      <span className="text-sm group-hover:scale-110 transition-transform">{activeReactionIcons.length > 0 ? activeReactionIcons.join('') : '🔥'}</span>
+                      <span className="group-hover:text-white transition-colors">{totalReactions} reaction{totalReactions === 1 ? '' : 's'}</span>
                     </span>
-                  </div>
+                  </button>
 
                   <button
                     type="button"
@@ -1754,16 +1851,90 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                           .filter(c => !c.parent_comment_id)
                           .map((comment, cIdx) => {
                             const replies = postCommentsList.filter(r => r.parent_comment_id === comment.id);
+                            const isCommentAuthor = Boolean(
+                              comment.user_id === activeUserId ||
+                              comment.userId === activeUserId ||
+                              (comment.username && currentUserName && comment.username.toLowerCase() === currentUserName.toLowerCase()) ||
+                              (comment.author && currentUserName && comment.author.toLowerCase() === currentUserName.toLowerCase()) ||
+                              activeUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+                              (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
+                              isYou ||
+                              post.profile_id === activeUserId ||
+                              post.author_id === activeUserId
+                            );
+
                             return (
-                              <div key={comment.id ? `comm-${comment.id}-${cIdx}` : `comm-${cIdx}`} className="space-y-1.5">
+                              <div key={comment.id ? `comm-${comment.id}-${cIdx}` : `comm-${cIdx}`} className="space-y-1.5 group/comm">
                                 {/* Top-Level Comment */}
-                                <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-xl p-2.5 text-xs space-y-1">
+                                <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-xl p-2.5 text-xs space-y-1.5">
                                   <div className="flex items-center justify-between font-mono text-[10px]">
-                                    <span className="font-bold text-rose-400">{comment.username || comment.author || 'Fan'}</span>
-                                    <span className="text-zinc-500">{formatPostTimestamp(comment.created_at || comment.time, comment.time)}</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-bold text-rose-400">{comment.username || comment.author || 'Fan'}</span>
+                                      {comment.edited && <span className="text-[9px] text-zinc-500 italic font-sans">(edited)</span>}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-zinc-500">{formatPostTimestamp(comment.created_at || comment.time, comment.time)}</span>
+                                      {isCommentAuthor && (
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCommentEditStart(comment.id, comment.text || comment.content || '')}
+                                            className="p-1 text-zinc-400 hover:text-cyan-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                                            title="Edit comment"
+                                          >
+                                            <Pencil className="w-3 h-3" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCommentDelete(post.id, comment.id)}
+                                            className="p-1 text-zinc-400 hover:text-red-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                                            title="Delete comment"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
-                                  <p className="text-zinc-200 font-sans leading-relaxed">{comment.text || comment.content}</p>
-                                  <div className="flex items-center justify-end pt-1">
+
+                                  {/* Inline Edit or Comment Text */}
+                                  {editingCommentId === comment.id ? (
+                                    <div className="space-y-2 pt-0.5">
+                                      <input
+                                        type="text"
+                                        value={editingCommentText}
+                                        onChange={(e) => setEditingCommentText(e.target.value)}
+                                        className="w-full bg-zinc-950 border border-rose-500/80 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') handleCommentEditSave(post.id, comment.id);
+                                          if (e.key === 'Escape') handleCommentEditCancel();
+                                        }}
+                                      />
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={handleCommentEditCancel}
+                                          className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCommentEditSave(post.id, comment.id)}
+                                          disabled={!editingCommentText.trim()}
+                                          className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
+                                        >
+                                          <Check className="w-2.5 h-2.5" />
+                                          Save
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-zinc-200 font-sans leading-relaxed">{comment.text || comment.content}</p>
+                                  )}
+
+                                  <div className="flex items-center justify-end pt-0.5">
                                     <button
                                       type="button"
                                       onClick={() => setReplyingTo(prev => ({
@@ -1781,15 +1952,90 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                 {/* Threaded Replies */}
                                 {replies.length > 0 && (
                                   <div className="ml-4 pl-2.5 border-l-2 border-rose-900/40 space-y-1.5">
-                                    {replies.map((reply, rIdx) => (
-                                      <div key={reply.id ? `reply-${reply.id}-${rIdx}` : `reply-${cIdx}-${rIdx}`} className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg p-2 text-xs space-y-1">
-                                        <div className="flex items-center justify-between font-mono text-[10px]">
-                                          <span className="font-bold text-cyan-400">{reply.username || reply.author || 'Fan'}</span>
-                                          <span className="text-zinc-500">{formatPostTimestamp(reply.created_at || reply.time, reply.time)}</span>
+                                    {replies.map((reply, rIdx) => {
+                                      const isReplyAuthor = Boolean(
+                                        reply.user_id === activeUserId ||
+                                        reply.userId === activeUserId ||
+                                        (reply.username && currentUserName && reply.username.toLowerCase() === currentUserName.toLowerCase()) ||
+                                        (reply.author && currentUserName && reply.author.toLowerCase() === currentUserName.toLowerCase()) ||
+                                        activeUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+                                        (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
+                                        isYou ||
+                                        post.profile_id === activeUserId ||
+                                        post.author_id === activeUserId
+                                      );
+
+                                      return (
+                                        <div key={reply.id ? `reply-${reply.id}-${rIdx}` : `reply-${cIdx}-${rIdx}`} className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg p-2 text-xs space-y-1 group/rep">
+                                          <div className="flex items-center justify-between font-mono text-[10px]">
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="font-bold text-cyan-400">{reply.username || reply.author || 'Fan'}</span>
+                                              {reply.edited && <span className="text-[9px] text-zinc-500 italic font-sans">(edited)</span>}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-zinc-500">{formatPostTimestamp(reply.created_at || reply.time, reply.time)}</span>
+                                              {isReplyAuthor && (
+                                                <div className="flex items-center gap-1">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleCommentEditStart(reply.id, reply.text || reply.content || '')}
+                                                    className="p-1 text-zinc-400 hover:text-cyan-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                                                    title="Edit reply"
+                                                  >
+                                                    <Pencil className="w-2.5 h-2.5" />
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleCommentDelete(post.id, reply.id)}
+                                                    className="p-1 text-zinc-400 hover:text-red-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                                                    title="Delete reply"
+                                                  >
+                                                    <Trash2 className="w-2.5 h-2.5" />
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {/* Inline Edit or Reply Text */}
+                                          {editingCommentId === reply.id ? (
+                                            <div className="space-y-1.5 pt-0.5">
+                                              <input
+                                                type="text"
+                                                value={editingCommentText}
+                                                onChange={(e) => setEditingCommentText(e.target.value)}
+                                                className="w-full bg-zinc-950 border border-cyan-500/80 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
+                                                autoFocus
+                                                onKeyDown={(e) => {
+                                                  if (e.key === 'Enter') handleCommentEditSave(post.id, reply.id);
+                                                  if (e.key === 'Escape') handleCommentEditCancel();
+                                                }}
+                                              />
+                                              <div className="flex items-center justify-end gap-1.5">
+                                                <button
+                                                  type="button"
+                                                  onClick={handleCommentEditCancel}
+                                                  className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
+                                                >
+                                                  Cancel
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleCommentEditSave(post.id, reply.id)}
+                                                  disabled={!editingCommentText.trim()}
+                                                  className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
+                                                >
+                                                  <Check className="w-2.5 h-2.5" />
+                                                  Save
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <p className="text-zinc-300 font-sans leading-relaxed">{reply.text || reply.content}</p>
+                                          )}
                                         </div>
-                                        <p className="text-zinc-300 font-sans leading-relaxed">{reply.text || reply.content}</p>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>
@@ -1848,6 +2094,15 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
               : "This account has not posted any signals to the underground nexus yet."}
           </p>
         </div>
+      )}
+
+      {/* Global Reaction Details Popover Modal */}
+      {viewingReactionsPost && (
+        <InlineReactionsModal
+          viewingReactionsPost={viewingReactionsPost}
+          setViewingReactionsPost={setViewingReactionsPost}
+          userProfile={selectedUserProfile}
+        />
       )}
     </div>
   );

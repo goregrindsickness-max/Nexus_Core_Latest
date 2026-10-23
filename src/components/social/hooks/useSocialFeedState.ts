@@ -5,9 +5,10 @@ import { getSupabase, uploadBase64ToStorage, createShopMerchItem } from '../../.
 import { isAudioUrl, extractUUID, isBandcampUrl, resolveBandcampMetadata, formatBandcampEmbedDarkUrl } from '../../../utils/socialFeedUtils';
 import { registerCommunityEvent } from '../../../utils/communityEventUtils';
 import { syncPostToSupabase } from '../utils/postSyncUtils';
-import { resolveActivePersona } from '../utils/personaResolution';
+import { resolveActivePersona, resolveReactionActor } from '../utils/personaResolution';
 import { savePostReaction } from '../utils/reactionStore';
 import { getCurrentCoordinates } from '../../../services/locationService';
+import { submitGlobalReaction } from '../../../services/postInteractionsService';
 
 export function getYouTubeId(url: string): string {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -404,14 +405,29 @@ export function useSocialFeedState({
       })
     );
 
-    // 2. Persist locally to reactionStore (localStorage + IndexedDB) immediately
-    let activeUserId = userProfile?.id;
-    if (!activeUserId && typeof window !== 'undefined') {
-      activeUserId = localStorage.getItem('nexus_active_profile_id') || localStorage.getItem('nexus_user_profile_id') || 'guest';
-    }
-    savePostReaction(postId, fullCurr, nextUserReacts, activeUserId);
+    // 2. Resolve active persona actor for multi-profile support (personal Industry Pro, band, promoter, creative, label)
+    const actor = resolveReactionActor({
+      portalRole,
+      userProfile,
+      activeBand,
+      fallbackUserId: userProfile?.id
+    });
+    let activeUserId = actor.id;
 
-    // 3. Persist globally to Supabase
+    savePostReaction(postId, fullCurr, nextUserReacts, actor.id);
+
+    // 3. Persist globally across all sessions and devices via backend interaction service with distinct persona identity
+    try {
+      submitGlobalReaction(postId, actor.id, reactionKey, {
+        userName: actor.name,
+        userAvatar: actor.avatar,
+        userRole: actor.role
+      });
+    } catch (rxErr) {
+      console.warn('Failed to submit global reaction:', rxErr);
+    }
+
+    // 4. Best-effort Supabase update (if permitted by policies)
     const supabase = getSupabase();
     if (supabase) {
       try {

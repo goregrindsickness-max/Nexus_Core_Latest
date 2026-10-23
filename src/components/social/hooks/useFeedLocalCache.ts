@@ -5,6 +5,7 @@ import { getSupabase, subscribeToTable } from '../../../supabase';
 import { extractYouTubeId } from '../utils/postSyncUtils';
 import { mergePostWithReactions } from '../utils/reactionStore';
 import { isMiguelNameOrProfile } from '../utils/profileUtils';
+import { fetchGlobalInteractions } from '../../../services/postInteractionsService';
 
 interface UseFeedLocalCacheOptions {
   portalRole: string;
@@ -322,7 +323,38 @@ export function useFeedLocalCache({
                   finalFeed = remoteFeed.filter(p => !isBrokenOrDeletedPost(p)).map(p => mergePostWithReactions(p, userProfile?.id));
                 }
 
-                // Query comments
+                // Query global comments and reactions from persistent backend
+                try {
+                  const globalInteractions = await fetchGlobalInteractions();
+                  if (globalInteractions) {
+                    const activeUserId = userProfile?.id || (typeof window !== 'undefined' ? localStorage.getItem('nexus_active_profile_id') || localStorage.getItem('nexus_user_profile_id') : null);
+
+                    finalFeed = finalFeed.map(p => {
+                      const serverComments = globalInteractions.comments?.[p.id] || [];
+                      const existingComments = Array.isArray(p.comments) ? p.comments : [];
+                      const cMap = new Map();
+                      existingComments.forEach((c: any) => { if (c?.id) cMap.set(c.id, c); });
+                      serverComments.forEach((c: any) => { if (c?.id) cMap.set(c.id, c); });
+                      const mergedComments = Array.from(cMap.values());
+
+                      const serverRx = globalInteractions.reactions?.[p.id];
+                      const userReacts = (serverRx?.user_reactions && activeUserId ? serverRx.user_reactions[activeUserId] : null) || p.user_reactions || {};
+
+                      return {
+                        ...p,
+                        comments: mergedComments.length > 0 ? mergedComments : p.comments || [],
+                        reactions: serverRx?.reactions || p.reactions,
+                        likes_count: serverRx?.likes_count ?? p.likes_count,
+                        user_reactions: userReacts,
+                        user_liked: Boolean(userReacts?.likes)
+                      };
+                    });
+                  }
+                } catch (gErr) {
+                  console.warn("Notice querying global interactions in feed cache:", gErr);
+                }
+
+                // Best-effort query Supabase comments
                 try {
                   const { data: commentsRows } = await supabaseClient
                     .from('nexus_post_comments')
@@ -353,9 +385,7 @@ export function useFeedLocalCache({
                       comments: commentsByPost[p.id] || p.comments || []
                     }));
                   }
-                } catch (commErr) {
-                  console.warn("Notice querying nexus_post_comments:", commErr);
-                }
+                } catch (_) {}
 
                 // Query polls
                 try {

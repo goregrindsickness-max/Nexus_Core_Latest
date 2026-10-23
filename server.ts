@@ -5187,6 +5187,375 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     }
   });
 
+  // ==========================================
+  // GLOBAL POST INTERACTIONS (COMMENTS & REACTIONS)
+  // Ensures persistence across all devices, sessions, and platforms
+  // ==========================================
+  const primaryInteractionsFile = path.join(process.cwd(), 'data', 'post_interactions.json');
+  const uploadsInteractionsFile = path.join(uploadsDir, 'post_interactions.json');
+
+  async function loadCachedInteractions(): Promise<{
+    comments: Record<string, any[]>;
+    reactions: Record<string, any>;
+  }> {
+    let result = { comments: {} as Record<string, any[]>, reactions: {} as Record<string, any> };
+    try {
+      if (fs.existsSync(primaryInteractionsFile)) {
+        const content = await fs.promises.readFile(primaryInteractionsFile, 'utf8');
+        if (content && content.trim()) {
+          const parsed = JSON.parse(content);
+          result = {
+            comments: parsed.comments || {},
+            reactions: parsed.reactions || {}
+          };
+        }
+      } else if (fs.existsSync(uploadsInteractionsFile)) {
+        const content = await fs.promises.readFile(uploadsInteractionsFile, 'utf8');
+        if (content && content.trim()) {
+          const parsed = JSON.parse(content);
+          result = {
+            comments: parsed.comments || {},
+            reactions: parsed.reactions || {}
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('[POST INTERACTIONS CACHE] Read error:', err);
+    }
+
+    // Sanitize reactions: prune fake seed profiles & ensure Miguel's personal profile has Industry Pro role
+    if (result.reactions) {
+      Object.keys(result.reactions).forEach((pId) => {
+        const rx = result.reactions[pId];
+        if (rx && rx.users) {
+          delete rx.users['user_sarah_blast_venue'];
+          delete rx.users['user_metal_dan_creative'];
+          if (rx.user_reactions) {
+            delete rx.user_reactions['user_sarah_blast_venue'];
+            delete rx.user_reactions['user_metal_dan_creative'];
+          }
+          Object.keys(rx.users).forEach((uId) => {
+            if (uId.startsWith('user_sarah_') || uId.startsWith('user_metal_') || uId.startsWith('seed_')) {
+              delete rx.users[uId];
+              if (rx.user_reactions) delete rx.user_reactions[uId];
+            }
+          });
+
+          // Ensure Miguel's personal profile role is Industry Pro
+          if (rx.users['5403162d-1947-43aa-b5f6-38a1bd2a1b80']) {
+            rx.users['5403162d-1947-43aa-b5f6-38a1bd2a1b80'].userRole = 'Industry Pro';
+          }
+
+          // Recompute reaction counts
+          const cleanCounts: Record<string, number> = {
+            likes: 0,
+            horns: 0,
+            hype: 0,
+            brutal: 0,
+            respect: 0,
+            crushed: 0
+          };
+          Object.values(rx.users).forEach((u: any) => {
+            if (u && u.reactionType) {
+              cleanCounts[u.reactionType] = (cleanCounts[u.reactionType] || 0) + 1;
+            }
+          });
+          rx.reactions = cleanCounts;
+          rx.likes_count = rx.reactions.likes || 0;
+        }
+      });
+    }
+
+    return result;
+  }
+
+  async function saveCachedInteractions(data: { comments: Record<string, any[]>; reactions: Record<string, any> }) {
+    try {
+      const serialized = JSON.stringify(data, null, 2);
+      const dataDir = path.dirname(primaryInteractionsFile);
+      if (!fs.existsSync(dataDir)) await fs.promises.mkdir(dataDir, { recursive: true });
+      await fs.promises.writeFile(primaryInteractionsFile, serialized, 'utf8');
+      if (fs.existsSync(uploadsDir)) {
+        await fs.promises.writeFile(uploadsInteractionsFile, serialized, 'utf8');
+      }
+    } catch (err) {
+      console.warn('[POST INTERACTIONS CACHE] Write error:', err);
+    }
+  }
+
+  // GET /api/posts/interactions
+  app.get('/api/posts/interactions', async (req: express.Request, res: express.Response) => {
+    try {
+      const interactions = await loadCachedInteractions();
+      res.json({
+        success: true,
+        comments: interactions.comments,
+        reactions: interactions.reactions
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to get post interactions' });
+    }
+  });
+
+  // POST /api/posts/comments
+  app.post('/api/posts/comments', express.json(), async (req: express.Request, res: express.Response) => {
+    try {
+      const { postId, comment } = req.body || {};
+      if (!postId || !comment || (!comment.text && !comment.content)) {
+        return res.status(400).json({ error: 'Missing postId or comment content' });
+      }
+
+      const interactions = await loadCachedInteractions();
+      if (!interactions.comments[postId]) {
+        interactions.comments[postId] = [];
+      }
+
+      // Ensure valid UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const validId = (comment.id && uuidRegex.test(comment.id))
+        ? comment.id
+        : (typeof crypto !== 'undefined' && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `00000000-0000-4000-8000-${Date.now().toString(16).padStart(12, '0').slice(-12)}`);
+
+      const text = (comment.text || comment.content || '').trim();
+      const userId = comment.userId || comment.user_id || 'anonymous';
+      const author = comment.username || comment.author || 'Fan';
+      const nowIso = comment.created_at || new Date().toISOString();
+
+      const newCommentObj = {
+        id: validId,
+        post_id: postId,
+        user_id: userId,
+        username: author,
+        author: author,
+        text: text,
+        content: text,
+        parent_comment_id: comment.parent_comment_id || comment.parentCommentId || null,
+        created_at: nowIso,
+        time: comment.time || 'Just now',
+        timeAgo: comment.timeAgo || 'Just now',
+        timestamp: nowIso
+      };
+
+      // Add to array if not duplicate
+      const existingIdx = interactions.comments[postId].findIndex((c: any) => c.id === validId);
+      if (existingIdx >= 0) {
+        interactions.comments[postId][existingIdx] = newCommentObj;
+      } else {
+        interactions.comments[postId].push(newCommentObj);
+      }
+
+      await saveCachedInteractions(interactions);
+
+      res.json({
+        success: true,
+        comment: newCommentObj,
+        comments: interactions.comments[postId]
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to save comment' });
+    }
+  });
+
+  // PUT /api/posts/comments/:commentId (Edit comment)
+  app.put('/api/posts/comments/:commentId', express.json(), async (req: express.Request, res: express.Response) => {
+    try {
+      const { commentId } = req.params;
+      const { text, content } = req.body || {};
+      const newText = (text || content || '').trim();
+
+      if (!newText) {
+        return res.status(400).json({ error: 'Comment text cannot be empty' });
+      }
+
+      const interactions = await loadCachedInteractions();
+      let updatedComment: any = null;
+
+      Object.keys(interactions.comments).forEach((pId) => {
+        const comment = interactions.comments[pId].find((c: any) => c.id === commentId);
+        if (comment) {
+          comment.text = newText;
+          comment.content = newText;
+          comment.updated_at = new Date().toISOString();
+          comment.edited = true;
+          updatedComment = comment;
+        }
+      });
+
+      if (updatedComment) {
+        await saveCachedInteractions(interactions);
+        return res.json({ success: true, comment: updatedComment });
+      }
+
+      res.status(404).json({ error: 'Comment not found' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to update comment' });
+    }
+  });
+
+  // DELETE /api/posts/comments/:commentId
+  app.delete('/api/posts/comments/:commentId', async (req: express.Request, res: express.Response) => {
+    try {
+      const { commentId } = req.params;
+      const interactions = await loadCachedInteractions();
+      let modified = false;
+
+      Object.keys(interactions.comments).forEach((pId) => {
+        const prevLen = interactions.comments[pId].length;
+        // Delete comment and any replies referencing this comment as parent
+        interactions.comments[pId] = interactions.comments[pId].filter(
+          (c: any) => c.id !== commentId && c.parent_comment_id !== commentId
+        );
+        if (interactions.comments[pId].length !== prevLen) modified = true;
+      });
+
+      if (modified) {
+        await saveCachedInteractions(interactions);
+      }
+
+      res.json({ success: true, deleted: modified });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to delete comment' });
+    }
+  });
+
+  // POST /api/posts/reactions
+  app.post('/api/posts/reactions', express.json(), async (req: express.Request, res: express.Response) => {
+    try {
+      const {
+        postId,
+        userId = 'anonymous',
+        reactionType = 'likes',
+        userName,
+        userAvatar,
+        userRole
+      } = req.body || {};
+
+      if (!postId) {
+        return res.status(400).json({ error: 'Missing postId' });
+      }
+
+      const keyMap: Record<string, string> = {
+        like: 'likes',
+        likes: 'likes',
+        thumbs: 'likes',
+        heart: 'likes',
+        flame: 'hype',
+        hype: 'hype',
+        fire: 'hype',
+        heavy: 'brutal',
+        brutal: 'brutal',
+        skull: 'brutal',
+        horns: 'horns',
+        respect: 'respect',
+        crushed: 'crushed',
+        rocket: 'hype'
+      };
+      const reactionKey = keyMap[reactionType] || reactionType;
+
+      const interactions = await loadCachedInteractions();
+      if (!interactions.reactions[postId]) {
+        interactions.reactions[postId] = {
+          reactions: { likes: 0, horns: 0, hype: 0, brutal: 0, respect: 0, crushed: 0 },
+          likes_count: 0,
+          user_reactions: {},
+          users: {},
+          updatedAt: Date.now()
+        };
+      }
+
+      const postRx = interactions.reactions[postId];
+      if (!postRx.user_reactions) postRx.user_reactions = {};
+      if (!postRx.user_reactions[userId]) postRx.user_reactions[userId] = {};
+      if (!postRx.users) postRx.users = {};
+
+      // Prune legacy fake seed users if present
+      delete postRx.users['user_sarah_blast_venue'];
+      delete postRx.users['user_metal_dan_creative'];
+      delete postRx.user_reactions['user_sarah_blast_venue'];
+      delete postRx.user_reactions['user_metal_dan_creative'];
+      Object.keys(postRx.users).forEach((uId) => {
+        if (uId.startsWith('user_sarah_') || uId.startsWith('user_metal_') || uId.startsWith('seed_')) {
+          delete postRx.users[uId];
+          delete postRx.user_reactions[uId];
+        }
+      });
+
+      const userMap = postRx.user_reactions[userId];
+      const wasActive = Boolean(userMap[reactionKey]);
+
+      if (!wasActive) {
+        // Clear conflicting reactions and activate new one
+        Object.keys(userMap).forEach((k) => {
+          if (k !== reactionKey && userMap[k]) {
+            userMap[k] = false;
+          }
+        });
+        userMap[reactionKey] = true;
+
+        // Resolve persona / profile role
+        const isMiguel = userId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' || (userName && userName.toLowerCase().includes('miguel'));
+        let resolvedRole = userRole;
+        if (!resolvedRole) {
+          if (userId.startsWith('band:')) {
+            resolvedRole = 'Band / Artist';
+          } else if (userId.startsWith('promoter:')) {
+            resolvedRole = 'Venue Promoter';
+          } else if (userId.startsWith('creative:')) {
+            resolvedRole = 'Creative Pro';
+          } else if (userId.startsWith('label:')) {
+            resolvedRole = 'Record Label';
+          } else if (isMiguel) {
+            resolvedRole = 'Industry Pro';
+          } else {
+            resolvedRole = 'Scene Fan';
+          }
+        }
+
+        postRx.users[userId] = {
+          userId,
+          userName: userName || (isMiguel ? 'Miguel Goregrinder Medina' : 'Scene Member'),
+          userAvatar: userAvatar || (isMiguel ? 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150' : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'),
+          userRole: resolvedRole,
+          reactionType: reactionKey,
+          reactedAt: new Date().toISOString()
+        };
+      } else {
+        userMap[reactionKey] = false;
+        delete postRx.users[userId];
+      }
+
+      // Recompute reaction counts directly from active users to guarantee 100% accuracy
+      const freshCounts: Record<string, number> = {
+        likes: 0,
+        horns: 0,
+        hype: 0,
+        brutal: 0,
+        respect: 0,
+        crushed: 0
+      };
+      Object.values(postRx.users).forEach((u: any) => {
+        if (u && u.reactionType) {
+          freshCounts[u.reactionType] = (freshCounts[u.reactionType] || 0) + 1;
+        }
+      });
+      postRx.reactions = freshCounts;
+      postRx.likes_count = postRx.reactions.likes || 0;
+      postRx.updatedAt = Date.now();
+
+      await saveCachedInteractions(interactions);
+
+      res.json({
+        success: true,
+        reactions: postRx.reactions,
+        likes_count: postRx.likes_count,
+        user_reactions: userMap,
+        users: postRx.users
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to save reaction' });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");

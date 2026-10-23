@@ -34,6 +34,7 @@ import {
   DiscoveryZone,
   PeopleYouMayKnow,
 } from './timeline';
+import { InlineReactionsModal } from './modals/InlineReactionsModal';
 import { ForumHighlightCard } from './ForumHighlightCard';
 import {
   getCuratedForumHighlights,
@@ -93,6 +94,7 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
   const [expandedTourDates, setExpandedTourDates] = useState<Record<string, boolean>>({});
+  const [viewingReactionsPost, setViewingReactionsPost] = useState<any | null>(null);
 
   // Curated Forum Highlights in Feed (prioritizing user's real forum posts)
   const [forumHighlights, setForumHighlights] = useState<ForumHighlightThread[]>(() =>
@@ -563,6 +565,7 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
                     onOpenReactionMenu={() => setReactionMenuPostId(post.id)}
                     onCloseReactionMenu={() => setReactionMenuPostId(null)}
                     onOpenShareModal={() => setActiveSharePost(post)}
+                    onOpenReactionsModal={() => setViewingReactionsPost(post)}
                   />
                   {showSuggestionsAfterThis && (
                     <DiscoveryZone
@@ -724,6 +727,16 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
           price={checkoutModal.price}
           isNegotiated={checkoutModal.isNegotiated}
           onClose={() => setCheckoutModal(null)}
+        />
+      )}
+
+      {/* Global Reaction Details Popover Modal */}
+      {viewingReactionsPost && (
+        <InlineReactionsModal
+          viewingReactionsPost={viewingReactionsPost}
+          setViewingReactionsPost={setViewingReactionsPost}
+          allProfiles={discoverProfiles}
+          userProfile={userProfile}
         />
       )}
     </div>
