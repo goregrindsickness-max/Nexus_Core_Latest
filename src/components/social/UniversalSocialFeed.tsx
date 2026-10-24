@@ -5348,6 +5348,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         containerRef={containerRef}
         dataTheme={dataTheme}
         gridStyle={gridStyle}
+        activeTab={activeTab}
       >
 
       <div className="transition-all duration-300 opacity-100">

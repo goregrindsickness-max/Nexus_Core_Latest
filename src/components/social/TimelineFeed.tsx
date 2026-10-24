@@ -315,12 +315,12 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
     });
   };
 
-  const handleCommentSubmit = (postId: string, e: React.FormEvent) => {
+  const handleCommentSubmit = (postId: string, e: React.FormEvent, mediaUrl?: string) => {
     e.preventDefault();
     const draft = commentDrafts[postId];
-    if (draft && draft.trim()) {
+    if ((draft && draft.trim()) || mediaUrl) {
       const parentInfo = replyingToCommentId[postId];
-      onAddComment(postId, draft.trim(), parentInfo?.commentId);
+      onAddComment(postId, (draft || '').trim(), parentInfo?.commentId, mediaUrl);
       setCommentDrafts((prev) => ({ ...prev, [postId]: '' }));
       setReplyingToCommentId((prev) => ({ ...prev, [postId]: null }));
     }
@@ -559,7 +559,7 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
                     setCartNotice={setCartNotice}
                     onToggleComments={() => toggleComments(post.id)}
                     onCommentDraftChange={(txt) => setCommentDrafts(prev => ({ ...prev, [post.id]: txt }))}
-                    onCommentSubmit={(e) => handleCommentSubmit(post.id, e)}
+                    onCommentSubmit={(e: any, mediaUrl?: string) => handleCommentSubmit(post.id, e, mediaUrl)}
                     onSetReplyingTo={(info) => setReplyingToCommentId(prev => ({ ...prev, [post.id]: info }))}
                     onTriggerEmojiReact={(type) => triggerEmojiReact(post.id, type)}
                     onOpenReactionMenu={() => setReactionMenuPostId(post.id)}

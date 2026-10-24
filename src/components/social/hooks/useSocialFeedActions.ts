@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import type { FeedItem } from '../../../data/socialFeedMockData';
 import { getSupabase } from '../../../supabase';
 import { syncPostToSupabase } from '../utils/postSyncUtils';
@@ -188,13 +188,14 @@ export function useSocialFeedActions({
   }, [feed, userProfile?.id]);
 
   // Add comment
-  const handleAddComment = useCallback(async (postId: string, textOverride?: string, parentCommentId?: string | null) => {
+  const handleAddComment = useCallback(async (postId: string, textOverride?: string, parentCommentId?: string | null, mediaUrl?: string | null) => {
     const text = (textOverride || commentInputs[postId] || '').trim();
-    if (!text) return;
+    if (!text && !mediaUrl) return;
 
     const commentId = generateValidUUID();
     const userId = userProfile?.id || userProfile?.email || userProfile?.name || 'anonymous';
     const authorName = userProfile?.name || userProfile?.console_handle || profileHandle || 'Fan';
+    const activeAvatar = profileAvatarUrl || userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
 
     const newCommentObj = {
       id: commentId,
@@ -203,8 +204,12 @@ export function useSocialFeedActions({
       parent_comment_id: parentCommentId || null,
       username: authorName,
       author: authorName,
+      avatar: activeAvatar,
+      userAvatar: activeAvatar,
       text: text,
       content: text,
+      mediaUrl: mediaUrl || null,
+      media_url: mediaUrl || null,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       timeAgo: 'Just now',
       timestamp: new Date().toISOString(),
@@ -231,7 +236,9 @@ export function useSocialFeedActions({
         id: commentId,
         userId,
         username: authorName,
+        avatar: activeAvatar,
         text,
+        mediaUrl: mediaUrl || null,
         parentCommentId: parentCommentId || null
       });
     } catch (err) {
@@ -754,6 +761,30 @@ export function useSocialFeedActions({
     }
     triggerNotification?.(`Attached song: ${song.title || song.name || 'Track'}`);
   }, [triggerNotification]);
+
+  // Sync global comment edits across active feed items
+  useEffect(() => {
+    const handleCommentUpdateSync = (e: any) => {
+      const detail = e.detail;
+      if (!detail?.postId || !detail?.commentId || !detail?.text) return;
+      setFeed(prev => prev.map(p => {
+        if (p.id === detail.postId && Array.isArray(p.comments)) {
+          return {
+            ...p,
+            comments: p.comments.map(c => c.id === detail.commentId ? { ...c, text: detail.text, content: detail.text, edited: true, updated_at: new Date().toISOString() } : c)
+          };
+        }
+        return p;
+      }));
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('nexus_comment_updated', handleCommentUpdateSync as EventListener);
+      return () => {
+        window.removeEventListener('nexus_comment_updated', handleCommentUpdateSync as EventListener);
+      };
+    }
+  }, [setFeed]);
 
   return {
     handleLikePost,

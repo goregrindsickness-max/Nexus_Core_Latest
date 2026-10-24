@@ -116,16 +116,20 @@ const InboxConversationRow: React.FC<{
             )}
           </div>
           <div className="flex items-center justify-between gap-2">
-            <div className={`text-[11px] truncate max-w-[220px] font-sans ${isUnread ? 'text-zinc-100 font-semibold' : 'text-zinc-400'}`}>
+            <div className={`text-[11px] truncate max-w-[200px] sm:max-w-[260px] font-sans ${isUnread ? 'text-zinc-100 font-semibold' : 'text-zinc-400'}`}>
               {isBlocked ? '[Signal Blocked]' : chat.lastMessage}
             </div>
-            <span className="text-[9px] font-mono text-zinc-500 shrink-0">
-              {isOnline ? (
-                <span className="text-emerald-400 font-bold">Active now</span>
-              ) : (
-                formatted.shortText
-              )}
-            </span>
+            <div className="flex items-center gap-1 shrink-0">
+              <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                isOnline
+                  ? 'text-emerald-400 bg-emerald-950/60 border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.25)]'
+                  : formatted.isRecentlyActive
+                  ? 'text-amber-400 bg-amber-950/50 border-amber-500/30'
+                  : 'text-zinc-400 bg-zinc-950/80 border-zinc-800'
+              }`}>
+                {isOnline ? 'Active now' : formatted.text}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -138,6 +142,77 @@ const InboxConversationRow: React.FC<{
           <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444] animate-pulse" />
         )}
       </div>
+    </div>
+  );
+};
+
+const RecipientItemRow: React.FC<{
+  contact: any;
+  onSelect: () => void;
+}> = ({ contact, onSelect }) => {
+  const presence = presenceManager.getPresence(contact);
+  const formatted = formatPresenceStatus(presence);
+
+  return (
+    <div
+      onClick={onSelect}
+      className="p-2.5 rounded-xl hover:bg-zinc-900/90 transition-all flex items-center justify-between gap-3 cursor-pointer group"
+    >
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="relative shrink-0">
+          <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden group-hover:border-rose-500/80 transition-colors">
+            {contact.avatar ? (
+              <img
+                src={contact.avatar}
+                alt={contact.name}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span className="text-xs font-mono font-bold text-rose-400">
+                {contact.name.substring(0, 2).toUpperCase()}
+              </span>
+            )}
+          </div>
+          <span
+            className={`w-2.5 h-2.5 rounded-full border-2 border-zinc-950 absolute -bottom-0.5 -right-0.5 shadow-sm transition-colors ${formatted.dotClass}`}
+            title={formatted.text}
+          />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-bold text-white group-hover:text-rose-400 transition-colors truncate">
+              {contact.name}
+            </span>
+            {contact.role && (
+              <span className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 uppercase tracking-wider border border-zinc-700/60">
+                {contact.role}
+              </span>
+            )}
+          </div>
+          {contact.handle && (
+            <p className="text-[11px] font-mono text-zinc-400 truncate">
+              {contact.handle} • <span className={presence.isOnline ? 'text-emerald-400 font-bold' : 'text-zinc-500'}>{formatted.text}</span>
+            </p>
+          )}
+          {contact.subtext && (
+            <p className="text-[10px] text-zinc-500 truncate mt-0.5 font-sans">
+              {contact.subtext}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+        }}
+        className="px-3 py-1.5 rounded-lg bg-zinc-800 group-hover:bg-rose-600 text-zinc-300 group-hover:text-white text-[10px] font-mono font-bold uppercase tracking-wider transition-all shrink-0 cursor-pointer shadow-sm"
+      >
+        Chat
+      </button>
     </div>
   );
 };
@@ -197,6 +272,19 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
   const [globalActiveStatus, setGlobalActiveStatus] = useState(true);
   const [whoCanReachMe, setWhoCanReachMe] = useState<'everyone' | 'artists_bands' | 'mutuals'>('everyone');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Message Reactions State
+  const [messageReactions, setMessageReactions] = useState<Record<string, string[]>>({});
+
+  const handleToggleMessageReaction = (msgId: string, emoji: string) => {
+    setMessageReactions(prev => {
+      const existing = prev[msgId] || [];
+      const updated = existing.includes(emoji)
+        ? existing.filter(e => e !== emoji)
+        : [...existing, emoji];
+      return { ...prev, [msgId]: updated };
+    });
+  };
 
   const [myNote, setMyNote] = useState<string | null>(() => {
     if (initialUserProfile?.update_ticker) return initialUserProfile.update_ticker;
@@ -1373,95 +1461,192 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
           </div>
         </div>
 
-        {/* Notes / Stories Horizontal Scroll */}
-        <div className="w-full flex items-center gap-3.5 overflow-x-auto no-scrollbar pt-7 pb-2.5 px-4 border-b border-rose-900/40 bg-black/50 shrink-0">
-          {/* User Note Create */}
-          <div 
-            className="flex flex-col items-center gap-1 shrink-0 relative cursor-pointer group" 
-            onClick={() => {
-              if (myNote) {
-                setExpandedThought({
-                  id: currentUserId || undefined,
-                  name: userProfile?.name || userProfile?.full_name || userProfile?.console_handle || 'You',
-                  handle: userProfile?.console_handle ? `@${userProfile.console_handle}` : undefined,
-                  avatar: userProfile?.avatar || userProfile?.avatar_url || '',
-                  note: myNote,
-                  roleBadge: userProfile?.account_type || userProfile?.role || 'USER',
-                  isMine: true
-                });
-              } else {
-                setIsAddingNote(true);
-              }
-            }}
-          >
-            {myNote && (
-              <div 
-                className="absolute -top-5 left-1/2 -translate-x-1/2 bg-zinc-900 text-rose-300 text-[8px] font-bold px-2 py-0.5 rounded-full max-w-[68px] truncate z-10 shadow-md border border-rose-900/60 group-hover:scale-105 transition-transform text-center font-sans"
-                title={myNote}
-              >
-                {myNote.length > 9 ? myNote.substring(0, 8) + '…' : myNote}
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[3px] border-t-zinc-900" />
-              </div>
-            )}
-            <div className="relative">
-              <div className="w-12 h-12 rounded-full bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center overflow-hidden">
-                {userProfile?.avatar || userProfile?.avatar_url ? (
-                  <img src={userProfile?.avatar || userProfile?.avatar_url} alt="You" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  <span className="text-xs font-bold text-zinc-400 font-mono">{userProfile?.name?.substring(0, 2).toUpperCase() || 'YOU'}</span>
-                )}
-              </div>
-              {!myNote && (
-                <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-rose-600 border-2 border-black rounded-full flex items-center justify-center text-white group-hover:bg-rose-500 transition-colors shadow">
-                  <Plus className="w-2.5 h-2.5" />
-                </div>
-              )}
+        {/* SINGLE UNIFIED SIGNAL RADAR & STORIES SECTION */}
+        <div className="w-full relative border-b border-rose-900/40 bg-gradient-to-r from-black via-zinc-950 to-black shrink-0 overflow-hidden pt-5 pb-2.5 px-4">
+          {/* Thin Animated Purple Laser Line moving horizontally across the top */}
+          <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden pointer-events-none z-20">
+            <div 
+              className="absolute top-0 h-[2px] w-1/2 bg-gradient-to-r from-transparent via-purple-500 to-transparent"
+              style={{
+                animation: 'laserScan 3.5s linear infinite'
+              }}
+            />
+          </div>
+          <style>{`
+            @keyframes laserScan {
+              0% { left: -50%; }
+              100% { left: 100%; }
+            }
+          `}</style>
+
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse shadow-[0_0_8px_#a855f7]" />
+              <span className="text-[10px] font-mono font-black uppercase tracking-widest text-purple-400">
+                LIVE SIGNAL FREQUENCY
+              </span>
             </div>
-            <span className="text-[9px] text-zinc-400 mt-0.5 font-mono">{myNote ? 'Your thought' : 'Add thought'}</span>
+            <span className="text-[9px] font-mono text-zinc-500">
+              {availableRecipientProfiles.length} ACTIVE
+            </span>
           </div>
 
-          {/* Real Profiles Notes / Stories Carousel */}
-          {realStories.map((story, sIdx) => (
+          <div className="flex items-center gap-3.5 overflow-x-auto no-scrollbar pt-4 pb-1">
+            {/* 1. User's Own Thought/Story Item */}
             <div 
-              key={`story-${sIdx}-${story.id || ''}-${story.band_id || ''}-${story.raw_id || ''}-${story.handle || ''}-${story.profileName || ''}`} 
+              className="flex flex-col items-center gap-1 shrink-0 relative cursor-pointer group" 
               onClick={() => {
-                setExpandedThought({
-                  id: story.id,
-                  name: story.profileName,
-                  handle: story.handle,
-                  avatar: story.avatarUrl,
-                  note: story.note,
-                  song: story.song,
-                  roleBadge: story.accountType,
-                  rawProfile: story.rawProfile,
-                  isMine: false
-                });
+                if (myNote) {
+                  setExpandedThought({
+                    id: currentUserId || undefined,
+                    name: userProfile?.name || userProfile?.full_name || userProfile?.console_handle || 'You',
+                    handle: userProfile?.console_handle ? `@${userProfile.console_handle}` : undefined,
+                    avatar: userProfile?.avatar || userProfile?.avatar_url || '',
+                    note: myNote,
+                    roleBadge: userProfile?.account_type || userProfile?.role || 'USER',
+                    isMine: true
+                  });
+                } else {
+                  setIsAddingNote(true);
+                }
               }}
-              className="flex flex-col items-center gap-1 shrink-0 relative cursor-pointer group hover:-translate-y-0.5 transition-transform"
             >
-              {story.note && (
+              {myNote && (
                 <div 
-                  className="absolute -top-5 left-1/2 -translate-x-1/2 bg-zinc-900/95 text-zinc-200 text-[8px] font-bold px-2 py-0.5 rounded-full max-w-[68px] truncate z-10 shadow-md border border-purple-500/40 group-hover:scale-105 group-hover:border-purple-400 transition-all text-center font-sans"
-                  title={story.note}
+                  className="absolute -top-5 left-1/2 -translate-x-1/2 bg-zinc-900 text-purple-300 text-[8px] font-bold px-2 py-0.5 rounded-full max-w-[68px] truncate z-10 shadow-md border border-purple-500/60 group-hover:scale-105 transition-transform text-center font-sans"
+                  title={myNote}
                 >
-                  {story.note.length > 9 ? story.note.substring(0, 8) + '…' : story.note}
+                  {myNote.length > 9 ? myNote.substring(0, 8) + '…' : myNote}
                   <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[3px] border-t-zinc-900" />
                 </div>
               )}
-              <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden border-2 border-purple-600/90 p-[2px] shadow-sm group-hover:border-purple-400 transition-colors">
-                <div className="w-full h-full rounded-full overflow-hidden bg-zinc-900 flex items-center justify-center">
-                  {story.avatarUrl ? (
-                    <img src={story.avatarUrl} alt={story.profileName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              <div className="relative">
+                <div className="w-12 h-12 rounded-full bg-zinc-800 border-2 border-purple-500/80 flex items-center justify-center overflow-hidden shadow-[0_0_10px_rgba(168,85,247,0.3)]">
+                  {userProfile?.avatar || userProfile?.avatar_url ? (
+                    <img src={userProfile?.avatar || userProfile?.avatar_url} alt="You" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   ) : (
-                    <span className="text-xs font-bold text-rose-400 font-mono">
-                      {story.profileName.substring(0, 2).toUpperCase()}
-                    </span>
+                    <span className="text-xs font-bold text-zinc-400 font-mono">{userProfile?.name?.substring(0, 2).toUpperCase() || 'YOU'}</span>
                   )}
                 </div>
+                {!myNote && (
+                  <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-purple-600 border-2 border-black rounded-full flex items-center justify-center text-white group-hover:bg-purple-500 transition-colors shadow">
+                    <Plus className="w-2.5 h-2.5" />
+                  </div>
+                )}
               </div>
-              <span className="text-[9px] text-zinc-300 mt-0.5 truncate max-w-[55px] font-mono">{story.profileName}</span>
+              <span className="text-[9px] text-zinc-400 mt-0.5 font-mono">{myNote ? 'Your thought' : 'Add thought'}</span>
             </div>
-          ))}
+
+            {/* 2. Merged Roster Stories / Active Signals */}
+            {(() => {
+              const storyMap = new Map();
+              realStories.forEach(s => {
+                if (s.profileName || s.handle) {
+                  storyMap.set((s.profileName || s.handle).toLowerCase(), s);
+                }
+              });
+
+              const mergedList: any[] = [...realStories];
+
+              availableRecipientProfiles.forEach(p => {
+                const key = (p.name || p.handle || '').toLowerCase();
+                if (key && !storyMap.has(key)) {
+                  mergedList.push({
+                    id: p.id,
+                    profileName: p.name,
+                    handle: p.handle,
+                    avatarUrl: p.avatar,
+                    note: p.subtext || null,
+                    song: null,
+                    accountType: p.role,
+                    rawProfile: p.raw
+                  });
+                }
+              });
+
+              return mergedList.map((story, sIdx) => {
+                const hasSong = Boolean(story.song);
+                return (
+                  <div 
+                    key={`signal-${sIdx}-${story.id || ''}-${story.profileName || ''}`} 
+                    onClick={() => {
+                      if (story.note || story.song) {
+                        setExpandedThought({
+                          id: story.id,
+                          name: story.profileName,
+                          handle: story.handle,
+                          avatar: story.avatarUrl,
+                          note: story.note || 'Active on signal channel.',
+                          song: story.song,
+                          roleBadge: story.accountType,
+                          rawProfile: story.rawProfile,
+                          isMine: false
+                        });
+                      } else {
+                        const existing = conversations.find(c => c.contactId === story.id);
+                        if (existing) {
+                          setSelectedContact(existing);
+                        } else {
+                          const newConv: InboxConversation = {
+                            contactId: story.id || `conv_${Date.now()}_${sIdx}`,
+                            profileName: story.profileName,
+                            avatarUrl: story.avatarUrl,
+                            lastMessage: 'Signal initialized...',
+                            timestamp: new Date().toISOString(),
+                            isRead: true,
+                            roleBadge: story.accountType
+                          };
+                          setConversations(prev => [newConv, ...prev]);
+                          setSelectedContact(newConv);
+                        }
+                      }
+                    }}
+                    className="flex flex-col items-center gap-1 shrink-0 relative cursor-pointer group hover:-translate-y-0.5 transition-transform"
+                  >
+                    {/* Note / Thought Bubble above avatar */}
+                    {story.note && (
+                      <div 
+                        className="absolute -top-5 left-1/2 -translate-x-1/2 bg-zinc-900/95 text-zinc-200 text-[8px] font-bold px-2 py-0.5 rounded-full max-w-[68px] truncate z-10 shadow-md border border-purple-500/40 group-hover:scale-105 group-hover:border-purple-400 transition-all text-center font-sans"
+                        title={story.note}
+                      >
+                        {story.note.length > 9 ? story.note.substring(0, 8) + '…' : story.note}
+                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[3px] border-t-zinc-900" />
+                      </div>
+                    )}
+
+                    <div className="relative">
+                      <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden border-2 border-purple-600/90 p-[2px] shadow-[0_0_10px_rgba(168,85,247,0.25)] group-hover:border-purple-400 transition-colors">
+                        <div className="w-full h-full rounded-full overflow-hidden bg-zinc-900 flex items-center justify-center">
+                          {story.avatarUrl ? (
+                            <img src={story.avatarUrl} alt={story.profileName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            <span className="text-xs font-bold text-purple-400 font-mono">
+                              {story.profileName?.substring(0, 2).toUpperCase() || 'NC'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Equalizer / Music Badge ONLY IF AN ACTUAL SONG IS LINKED */}
+                      {hasSong && (
+                        <div className="absolute -bottom-0.5 -right-0.5 bg-black/90 border border-[#00ffcc]/80 rounded-full px-1 py-0.5 flex items-center gap-0.5 shadow-md" title={`Song track linked: ${story.song}`}>
+                          <Music className="w-2.5 h-2.5 text-[#00ffcc]" />
+                          <div className="flex items-end gap-0.5 h-2">
+                            <span className="w-0.5 bg-[#00ffcc] animate-[bounce_0.6s_infinite_100ms] h-1.5 rounded-full" />
+                            <span className="w-0.5 bg-[#00ffcc] animate-[bounce_0.6s_infinite_300ms] h-2 rounded-full" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <span className="text-[9px] text-zinc-300 mt-0.5 truncate max-w-[58px] font-mono group-hover:text-purple-300 transition-colors">
+                      {story.profileName?.split(' ')[0] || 'Member'}
+                    </span>
+                  </div>
+                );
+              });
+            })()}
+          </div>
         </div>
 
         {/* Conversations Scroll Area */}
@@ -1556,13 +1741,11 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                         ? 'text-emerald-400'
                         : selectedPresence.formatted.isRecentlyActive
                         ? 'text-amber-400'
-                        : 'text-zinc-500'
+                        : 'text-zinc-300'
                     }`}>
                       {selectedPresence.formatted.text}
                     </span>
-                    {!selectedPresence.formatted.isOnline && (
-                      <span className="text-[9px] font-mono text-zinc-600">• ENCRYPTED</span>
-                    )}
+                    <span className="text-[9px] font-mono text-zinc-500">• {selectedPresence.formatted.subtext}</span>
                   </div>
                 </div>
               </div>
@@ -1610,34 +1793,78 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                   const isSentByMe = String(msg.sender_id).toLowerCase() === String(currentUserId).toLowerCase();
                   const timeStr = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                   const mediaUrl = msg.media_url || msg.attachment_url || msg.image;
+                  const msgKey = msg.id || `msg-${idx}`;
+                  const reactions = messageReactions[msgKey] || [];
+                  const textContent = String(msg.message || msg.content || '');
+
+                  const isOffer = textContent.includes('📋 TOUR BOOKING OFFER');
+                  const isDemo = textContent.includes('🎵 DEMO TRACK ATTACHMENT');
+                  const isSetTime = textContent.includes('🎸 SET TIME CONFIRMATION');
 
                   return (
                     <div
                       key={msg.id ? `msg-${msg.id}-${idx}` : `msg-${idx}`}
-                      className={`flex flex-col ${isSentByMe ? 'items-end' : 'items-start'}`}
+                      className={`flex flex-col group/msg relative ${isSentByMe ? 'items-end' : 'items-start'}`}
                     >
+                      {/* Hover Emoji Reaction Popover */}
+                      <div className={`absolute -top-3 ${isSentByMe ? 'right-2' : 'left-2'} opacity-0 group-hover/msg:opacity-100 transition-opacity bg-zinc-900/95 border border-zinc-700/80 rounded-full px-2 py-0.5 flex items-center gap-1.5 shadow-lg z-20`}>
+                        {['🤘', '🔥', '💀', '⚡', '🖤'].map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => handleToggleMessageReaction(msgKey, emoji)}
+                            className="text-xs hover:scale-125 transition-transform cursor-pointer p-0.5"
+                            title={`React with ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+
                       <div
-                        className={`p-3 text-xs leading-relaxed max-w-[80%] shadow-md font-sans ${
+                        className={`p-3.5 text-xs leading-relaxed max-w-[85%] sm:max-w-[75%] shadow-md font-sans transition-all ${
                           isSentByMe
-                            ? 'bg-rose-950/70 border border-rose-800/60 text-white rounded-2xl rounded-tr-xs ml-auto'
-                            : 'bg-zinc-900/90 border border-zinc-800 text-zinc-200 rounded-2xl rounded-tl-xs mr-auto'
+                            ? 'bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-rose-950/80 border border-[#00ffcc]/40 text-white shadow-[0_0_15px_rgba(0,255,204,0.12)] rounded-2xl rounded-tr-xs ml-auto'
+                            : 'bg-zinc-900/95 border border-zinc-800 text-zinc-100 rounded-2xl rounded-tl-xs mr-auto'
                         }`}
                       >
-                        <p className="whitespace-pre-wrap break-words">{msg.message || msg.content}</p>
+                        {/* Specialized High-Contrast Card Enclosure for Rich Quick Signals */}
+                        {(isOffer || isDemo || isSetTime) ? (
+                          <div className="mb-2 p-2.5 rounded-xl bg-black/70 border border-[#00ffcc]/30 flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-[#00ffcc] uppercase tracking-wider">
+                              <Sparkles className="w-3 h-3 text-[#00ffcc]" />
+                              <span>{isOffer ? 'Official Tour Offer Signal' : isDemo ? 'Unreleased Master Track' : 'Confirmed Set Schedule'}</span>
+                            </div>
+                            <p className="whitespace-pre-wrap break-words font-semibold text-zinc-200 mt-1">{textContent}</p>
+                          </div>
+                        ) : (
+                          <p className="whitespace-pre-wrap break-words">{textContent}</p>
+                        )}
                         
                         {mediaUrl && (
-                          <div className="mt-2 rounded-lg overflow-hidden border border-zinc-800/80 bg-black">
+                          <div className="mt-2 rounded-xl overflow-hidden border border-zinc-800/80 bg-black shadow-inner">
                             <img src={mediaUrl} alt="Attachment" className="max-h-60 w-auto object-contain" />
                           </div>
                         )}
 
-                        <div className={`flex items-center gap-1 mt-1 text-[9px] font-mono ${isSentByMe ? 'text-rose-300/70 justify-end' : 'text-zinc-500 justify-start'}`}>
+                        {/* Reaction Badges */}
+                        {reactions.length > 0 && (
+                          <div className="flex items-center gap-1 mt-2 flex-wrap">
+                            {reactions.map((emoji, eIdx) => (
+                              <span key={eIdx} className="text-[10px] bg-black/60 border border-zinc-700/80 rounded-full px-2 py-0.5 shadow-sm text-zinc-200">
+                                {emoji}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className={`flex items-center gap-1 mt-1.5 text-[9px] font-mono ${isSentByMe ? 'text-[#00ffcc]/80 justify-end' : 'text-zinc-500 justify-start'}`}>
                           <span>{timeStr}</span>
                           {isSentByMe && (
                             msg.is_read ? (
-                              <CheckCheck className="w-3 h-3 text-rose-400" />
+                              <CheckCheck className="w-3.5 h-3.5 text-[#00ffcc] drop-shadow-[0_0_6px_#00ffcc]" />
                             ) : (
-                              <Check className="w-3 h-3 text-rose-400/60" />
+                              <Check className="w-3.5 h-3.5 text-zinc-400" />
                             )
                           )}
                         </div>
@@ -1646,6 +1873,19 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                   );
                 })
               )}
+
+              {/* Transmitting Signal Status Indicator */}
+              {isSending && (
+                <div className="flex items-center gap-2 p-2 px-3 rounded-xl bg-zinc-900/90 border border-[#00ffcc]/30 text-xs font-mono text-[#00ffcc] w-fit shadow-[0_0_12px_rgba(0,255,204,0.2)]">
+                  <div className="flex items-end gap-0.5 h-3">
+                    <span className="w-0.5 bg-[#00ffcc] animate-[bounce_0.6s_infinite_100ms] h-2.5 rounded-full" />
+                    <span className="w-0.5 bg-[#00ffcc] animate-[bounce_0.6s_infinite_300ms] h-3.5 rounded-full" />
+                    <span className="w-0.5 bg-[#00ffcc] animate-[bounce_0.6s_infinite_200ms] h-2 rounded-full" />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest">TRANSMITTING SIGNAL...</span>
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </div>
 
@@ -1693,6 +1933,44 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                   className="p-1 text-zinc-400 hover:text-white"
                 >
                   <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* QUICK SCENE ACTION CHIPS */}
+            {!blockedContacts[selectedContact.contactId] && (
+              <div className="px-3 pt-2.5 pb-1 bg-black/90 border-t border-rose-900/30 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+                <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest shrink-0 mr-1 flex items-center gap-1">
+                  <Sparkles className="w-2.5 h-2.5 text-[#00ffcc]" />
+                  <span>Quick Signal:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMessageText('📋 TOUR BOOKING OFFER: Requesting slot for upcoming routing date. Let us know available guarantee & backline.')}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-900/90 hover:bg-[#00ffcc]/15 border border-zinc-800 hover:border-[#00ffcc]/50 text-[10px] font-mono font-bold text-zinc-300 hover:text-[#00ffcc] transition-all whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1"
+                >
+                  <span>📋 Tour Offer</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMessageText('🎵 DEMO TRACK ATTACHMENT: Check out our unreleased master track.')}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-900/90 hover:bg-[#00ffcc]/15 border border-zinc-800 hover:border-[#00ffcc]/50 text-[10px] font-mono font-bold text-zinc-300 hover:text-[#00ffcc] transition-all whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1"
+                >
+                  <span>🎵 Song Demo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMessageText('🎸 SET TIME CONFIRMATION: Confirming 8:30 PM load-in and 9:30 PM set time.')}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-900/90 hover:bg-[#00ffcc]/15 border border-zinc-800 hover:border-[#00ffcc]/50 text-[10px] font-mono font-bold text-zinc-300 hover:text-[#00ffcc] transition-all whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1"
+                >
+                  <span>🎸 Set Time</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMessageText('🤘 Heavy horns! Shredding set as always!')}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-900/90 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-800/60 text-[10px] font-mono font-bold text-rose-400 transition-all whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1"
+                >
+                  <span>🤘 Heavy Horns</span>
                 </button>
               </div>
             )}
@@ -1814,14 +2092,23 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                       ? 'text-emerald-400'
                       : selectedPresence.formatted.isRecentlyActive
                       ? 'text-amber-400'
-                      : 'text-zinc-500'
+                      : 'text-zinc-300'
                   }`}>
                     {selectedPresence.formatted.text}
                   </span>
                 </div>
               </div>
 
-              <div className="mt-3 text-[10px] font-mono text-zinc-500 bg-zinc-900/80 px-3 py-1 rounded-full border border-zinc-800">
+              <div className="w-full mt-3 p-2.5 rounded-xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between">
+                <span className="text-[10px] font-mono text-zinc-400 font-bold uppercase tracking-wider">
+                  Last Online / Active:
+                </span>
+                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${selectedPresence.formatted.badgeClass}`}>
+                  {selectedPresence.formatted.subtext}
+                </span>
+              </div>
+
+              <div className="mt-2 text-[10px] font-mono text-zinc-500 bg-zinc-900/80 px-3 py-1 rounded-full border border-zinc-800">
                 Node ID: {selectedContact.contactId.substring(0, 18)}...
               </div>
 
@@ -2266,60 +2553,11 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                 </div>
               ) : (
                 availableRecipientProfiles.map((contact, cIdx) => (
-                  <div
+                  <RecipientItemRow
                     key={contact.id ? `recip-${contact.id}-${cIdx}` : `recip-${cIdx}`}
-                    onClick={() => handleStartNewMessageWithContact(contact)}
-                    className="p-2.5 rounded-xl hover:bg-zinc-900/90 transition-all flex items-center justify-between gap-3 cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden shrink-0 group-hover:border-rose-500/80 transition-colors">
-                        {contact.avatar ? (
-                          <img
-                            src={contact.avatar}
-                            alt={contact.name}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <span className="text-xs font-mono font-bold text-rose-400">
-                            {contact.name.substring(0, 2).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-bold text-white group-hover:text-rose-400 transition-colors truncate">
-                            {contact.name}
-                          </span>
-                          {contact.role && (
-                            <span className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 uppercase tracking-wider border border-zinc-700/60">
-                              {contact.role}
-                            </span>
-                          )}
-                        </div>
-                        {contact.handle && (
-                          <p className="text-[11px] font-mono text-zinc-400 truncate">
-                            {contact.handle}
-                          </p>
-                        )}
-                        {contact.subtext && (
-                          <p className="text-[10px] text-zinc-400 truncate mt-0.5 font-sans">
-                            {contact.subtext}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleStartNewMessageWithContact(contact);
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-zinc-800 group-hover:bg-rose-600 text-zinc-300 group-hover:text-white text-[10px] font-mono font-bold uppercase tracking-wider transition-all shrink-0 cursor-pointer shadow-sm"
-                    >
-                      Chat
-                    </button>
-                  </div>
+                    contact={contact}
+                    onSelect={() => handleStartNewMessageWithContact(contact)}
+                  />
                 ))
               )}
             </div>

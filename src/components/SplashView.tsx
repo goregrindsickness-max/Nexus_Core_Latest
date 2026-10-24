@@ -72,20 +72,40 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
   // Burnout transition effect state (Real fire screen video overlay)
   const [isBurningOut, setIsBurningOut] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const pendingActionRef = useRef<(() => void) | null>(null);
+
+  const executePendingAction = () => {
+    if (pendingActionRef.current) {
+      const action = pendingActionRef.current;
+      pendingActionRef.current = null;
+      action();
+    }
+  };
 
   const handleTriggerBurnout = (targetAction: () => void) => {
     if (isBurningOut) return;
     setIsBurningOut(true);
+    pendingActionRef.current = targetAction;
 
-    if (videoRef.current) {
-      try {
-        videoRef.current.currentTime = 0;
-        videoRef.current.playbackRate = 2.2; // Play 7.9s video across 3.5s transition
-        videoRef.current.play().catch((err) => {
-          console.warn('Fire transition video play error:', err);
-        });
-      } catch (_) {}
-    }
+    setTimeout(() => {
+      if (videoRef.current) {
+        try {
+          videoRef.current.currentTime = 0;
+          videoRef.current.playbackRate = 1.0; // Play at natural speed so animation completes fully
+          const playPromise = videoRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              console.warn('Fire transition video play notice:', err);
+              setTimeout(executePendingAction, 3000);
+            });
+          }
+        } catch (_) {
+          setTimeout(executePendingAction, 3000);
+        }
+      } else {
+        setTimeout(executePendingAction, 3000);
+      }
+    }, 20);
 
     try {
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -93,9 +113,14 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
       }
     } catch (_) {}
 
+    // Fallback timer ensures transition happens if video onEnded does not fire
     setTimeout(() => {
-      targetAction();
-    }, 3500);
+      executePendingAction();
+    }, 7500);
+  };
+
+  const handleVideoEnded = () => {
+    executePendingAction();
   };
 
   // Live crowd flashes simulation
@@ -152,21 +177,28 @@ export default function SplashView({ onGoToDashboard, onCreateAccount }: SplashV
 
   return (
     <>
-      {/* Real Fire Screen Video Effect Overlay (Flames only, black keyed out via mix-blend-screen) */}
-      <video
-        ref={videoRef}
-        src="/assets/fire-screen.mp4"
-        preload="auto"
-        muted
-        playsInline
-        className={`fixed inset-0 w-full h-full object-cover z-[999999] pointer-events-none transition-opacity duration-300 ${
-          isBurningOut ? 'opacity-100' : 'opacity-0'
+      {/* Real Fire Screen Video Effect Overlay (Flames keyed out via mix-blend-screen so underlying UI is visible) */}
+      <div 
+        className={`fixed inset-0 w-screen h-screen z-[999999] pointer-events-none overflow-hidden transition-opacity duration-300 mix-blend-screen ${
+          isBurningOut ? 'opacity-85' : 'opacity-0 hidden'
         }`}
-        style={{
-          mixBlendMode: 'screen',
-          filter: 'contrast(1.25) brightness(1.15)',
-        }}
-      />
+        style={{ mixBlendMode: 'screen' }}
+      >
+        <video
+          ref={videoRef}
+          src="/assets/fire-screen.mp4"
+          preload="auto"
+          muted
+          playsInline
+          onEnded={handleVideoEnded}
+          className="absolute top-1/2 left-1/2 min-w-[125vh] min-h-[125vw] w-[125vh] h-[125vw] max-w-none object-cover pointer-events-none"
+          style={{
+            mixBlendMode: 'screen',
+            filter: 'contrast(1.2) brightness(1.1)',
+            transform: 'translate(-50%, -50%) rotate(-90deg)',
+          }}
+        />
+      </div>
 
       <div 
         className={`bg-[#07080a] flex-1 w-full flex flex-col items-center justify-start gap-6 sm:gap-8 p-4 sm:p-8 text-white font-sans select-none relative isolate overflow-x-hidden overflow-y-auto min-h-screen ${

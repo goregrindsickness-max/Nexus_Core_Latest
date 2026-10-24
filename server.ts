@@ -5360,7 +5360,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   app.put('/api/posts/comments/:commentId', express.json(), async (req: express.Request, res: express.Response) => {
     try {
       const { commentId } = req.params;
-      const { text, content } = req.body || {};
+      const { text, content, postId, author, username, avatar, user_id, userId } = req.body || {};
       const newText = (text || content || '').trim();
 
       if (!newText) {
@@ -5380,6 +5380,32 @@ Return a valid JSON object matching the requested schema. If any field is not fo
           updatedComment = comment;
         }
       });
+
+      if (!updatedComment && postId) {
+        if (!interactions.comments[postId]) {
+          interactions.comments[postId] = [];
+        }
+        const authorName = username || author || 'Fan';
+        const nowIso = new Date().toISOString();
+        updatedComment = {
+          id: commentId,
+          post_id: postId,
+          user_id: userId || user_id || 'anonymous',
+          username: authorName,
+          author: authorName,
+          avatar: avatar || '',
+          userAvatar: avatar || '',
+          text: newText,
+          content: newText,
+          edited: true,
+          created_at: nowIso,
+          updated_at: nowIso,
+          time: 'Just now',
+          timeAgo: 'Edited just now',
+          timestamp: nowIso
+        };
+        interactions.comments[postId].push(updatedComment);
+      }
 
       if (updatedComment) {
         await saveCachedInteractions(interactions);

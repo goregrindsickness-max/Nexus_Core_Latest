@@ -4,6 +4,7 @@ import { X, MessageSquare, Send, Clock, Sparkles, Image as ImageIcon, ZoomIn, Zo
 import { OPEN_AVATAR_POPUP_EVENT, OpenAvatarPopupPayload } from '../../utils/avatarPopupEvents';
 import { getSupabase } from '../../supabase';
 import { usePinchZoom } from '../../hooks/usePinchZoom';
+import { resolveCommentAvatar, DEFAULT_PERSONAL_AVATAR } from '../../utils/bandProfileUtils';
 
 interface Reaction {
   userId: string;
@@ -488,16 +489,15 @@ export const AvatarPopupOverlay: React.FC = () => {
                       <div key={`${comment.id}-${idx}`} className="flex gap-2.5 text-xs">
                         {/* Commenter Avatar */}
                         <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800 shrink-0 flex items-center justify-center overflow-hidden font-bold text-[10px] text-purple-400">
-                          {comment.avatarUrl ? (
-                            <img
-                              src={comment.avatarUrl}
-                              alt={comment.username}
-                              referrerPolicy="no-referrer"
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            (comment.username || 'U').substring(0, 2).toUpperCase()
-                          )}
+                          <img
+                            src={resolveCommentAvatar({ ...comment, avatar: comment.avatarUrl })}
+                            alt={comment.username}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
+                            }}
+                          />
                         </div>
 
                         {/* Comment Content */}

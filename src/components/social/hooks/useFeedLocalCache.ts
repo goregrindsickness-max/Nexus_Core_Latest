@@ -334,7 +334,22 @@ export function useFeedLocalCache({
                       const existingComments = Array.isArray(p.comments) ? p.comments : [];
                       const cMap = new Map();
                       existingComments.forEach((c: any) => { if (c?.id) cMap.set(c.id, c); });
-                      serverComments.forEach((c: any) => { if (c?.id) cMap.set(c.id, c); });
+                      serverComments.forEach((c: any) => {
+                        if (c?.id) {
+                          const prev = cMap.get(c.id);
+                          if (!prev) {
+                            cMap.set(c.id, c);
+                          } else {
+                            if (prev.edited && !c.edited) {
+                              cMap.set(c.id, { ...c, ...prev, edited: true });
+                            } else if (!prev.edited && c.edited) {
+                              cMap.set(c.id, { ...prev, ...c });
+                            } else {
+                              cMap.set(c.id, { ...prev, ...c });
+                            }
+                          }
+                        }
+                      });
                       const mergedComments = Array.from(cMap.values());
 
                       const serverRx = globalInteractions.reactions?.[p.id];
@@ -380,10 +395,28 @@ export function useFeedLocalCache({
                       });
                     });
 
-                    finalFeed = finalFeed.map(p => ({
-                      ...p,
-                      comments: commentsByPost[p.id] || p.comments || []
-                    }));
+                    finalFeed = finalFeed.map(p => {
+                      const sbComms = commentsByPost[p.id] || [];
+                      if (sbComms.length === 0) return p;
+                      const currentComms = Array.isArray(p.comments) ? p.comments : [];
+                      const cMap = new Map();
+                      currentComms.forEach((c: any) => { if (c?.id) cMap.set(c.id, c); });
+                      sbComms.forEach((sbC: any) => {
+                        if (sbC?.id) {
+                          const existing = cMap.get(sbC.id);
+                          if (!existing) {
+                            cMap.set(sbC.id, sbC);
+                          } else {
+                            if (existing.edited) {
+                              cMap.set(sbC.id, { ...sbC, ...existing, text: existing.text || existing.content, content: existing.text || existing.content });
+                            } else {
+                              cMap.set(sbC.id, { ...existing, ...sbC, text: sbC.text || existing.text, content: sbC.content || existing.content });
+                            }
+                          }
+                        }
+                      });
+                      return { ...p, comments: Array.from(cMap.values()) };
+                    });
                   }
                 } catch (_) {}
 

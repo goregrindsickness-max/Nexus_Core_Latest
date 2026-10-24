@@ -605,3 +605,85 @@ export const resolveEffectiveCover = (portalRole: string, activeBand: any, userP
 
   return userProfile?.banner_url || userProfile?.cover_url || null;
 };
+
+export const KNOWN_USER_AVATARS: Record<string, string> = {
+  'miguel goregrinder medina': DEFAULT_PERSONAL_AVATAR,
+  'miguel medina': DEFAULT_PERSONAL_AVATAR,
+  'tyler slamson': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+  'goregrindslayer': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+  'zachary blaster': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
+  'blastfiend999': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
+  'marcus cassette': 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=400&q=80',
+  'tapetrader99': 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=400&q=80',
+  'derek riff': 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=400&q=80',
+  'slamnation': 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=400&q=80',
+  'dustin shutter': 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80',
+  'scene photographer': 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80',
+  'shutterbug_live': 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80',
+  'alex mercer': 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=400&q=80',
+  'deathmetalfan99': 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=400&q=80',
+  'leo lens': 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=400&q=80',
+  'chris diver': 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80',
+  'stagediver_99': 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80',
+  'eric circle': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+  'circlepitking': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+  'travis gore': 'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=400&q=80',
+  'texasgore': 'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=400&q=80',
+  'dave shredder': 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=400&q=80',
+  'riffmaster': 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=400&q=80',
+  'goth_girl99': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+  'nexus promoters': 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601',
+  'devourment': 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=400&q=80',
+  'origin': 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=400&q=80',
+  'pathology': 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=400&q=80'
+};
+
+export const resolveCommentAvatar = (
+  comment: any,
+  userProfile?: any,
+  currentUserId?: string,
+  currentUserName?: string
+): string => {
+  if (!comment) return DEFAULT_PERSONAL_AVATAR;
+
+  const explicitAvatar = comment.avatar || comment.userAvatar || comment.user_avatar || comment.authorAvatar;
+  if (
+    explicitAvatar &&
+    typeof explicitAvatar === 'string' &&
+    explicitAvatar.trim() &&
+    !explicitAvatar.includes('undefined') &&
+    !explicitAvatar.includes('null') &&
+    (explicitAvatar.startsWith('http') || explicitAvatar.startsWith('data:') || explicitAvatar.startsWith('/'))
+  ) {
+    return explicitAvatar.trim();
+  }
+
+  const commentUsername = String(comment.username || comment.author || comment.user_name || '').trim().toLowerCase();
+  const commentUserId = String(comment.user_id || comment.userId || '').trim();
+
+  const isMiguel = isMiguelNameOrProfile(commentUsername) || isMiguelNameOrProfile(commentUserId);
+  const isCurrentUser = Boolean(
+    (currentUserId && commentUserId && commentUserId === currentUserId) ||
+    (currentUserName && commentUsername && commentUsername === currentUserName.toLowerCase())
+  );
+
+  if (isMiguel || isCurrentUser) {
+    const liveAvatar =
+      userProfile?.avatar_url ||
+      userProfile?.avatar ||
+      userProfile?.profile_avatar ||
+      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null);
+
+    if (liveAvatar && typeof liveAvatar === 'string' && liveAvatar.trim() && liveAvatar !== '👤') {
+      return liveAvatar.trim();
+    }
+    return DEFAULT_PERSONAL_AVATAR;
+  }
+
+  if (commentUsername && KNOWN_USER_AVATARS[commentUsername]) {
+    return KNOWN_USER_AVATARS[commentUsername];
+  }
+
+  return DEFAULT_PERSONAL_AVATAR;
+};
+

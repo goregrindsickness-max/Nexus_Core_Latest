@@ -31,7 +31,7 @@ import { formatPostTimestamp } from '../../utils/socialFeedUtils';
 import { savePostReaction, mergePostWithReactions, normalizeReactionCounts } from '../social/utils/reactionStore';
 import { isValidStorageOrImageUrl } from '../../services/storageService';
 import { communityBandManager } from '../../lib/communityBands';
-import { DEFAULT_PERSONAL_AVATAR } from '../../utils/bandProfileUtils';
+import { DEFAULT_PERSONAL_AVATAR, resolveCommentAvatar } from '../../utils/bandProfileUtils';
 import {
   fetchGlobalInteractions,
   submitGlobalComment,
@@ -42,6 +42,7 @@ import {
 } from '../../services/postInteractionsService';
 import { InlineReactionsModal } from '../social/modals/InlineReactionsModal';
 import { resolveReactionActor } from '../social/utils/personaResolution';
+import { CommentMediaPicker } from '../social/timeline/CommentMediaPicker';
 
 export interface TimelinePost {
   id: string;
@@ -283,6 +284,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
   profileName = '',
   isYou = false,
   selectedUserProfile,
+  targetProfile,
   workspaceType,
   currentActiveWorkspace,
   portalRole,
@@ -334,6 +336,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
   const [hypeAnimations, setHypeAnimations] = useState<Record<string, boolean>>({});
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [attachedCommentMedia, setAttachedCommentMedia] = useState<Record<string, { url: string; type: 'image' | 'gif' } | null>>({});
   const [replyingTo, setReplyingTo] = useState<Record<string, { commentId: string; username: string } | null>>({});
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
 
@@ -348,6 +351,9 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
   const activeUserId = typeof window !== 'undefined'
     ? localStorage.getItem('nexus_active_profile_id') || localStorage.getItem('nexus_user_profile_id') || userId || 'current'
     : (userId || 'current');
+
+  const activeUserProfile = selectedUserProfile || targetProfile;
+  const profileAvatarUrl = activeUserProfile?.avatar_url || activeUserProfile?.avatar || activeUserProfile?.profile_avatar || null;
 
   const currentUserName = typeof window !== 'undefined'
     ? (() => {
@@ -670,11 +676,13 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
   const handleCommentSubmit = async (postId: string, e: React.FormEvent) => {
     e.preventDefault();
     const draft = (commentDrafts[postId] || '').trim();
-    if (!draft) return;
+    const mediaObj = attachedCommentMedia[postId];
+    if (!draft && !mediaObj?.url) return;
 
     const parentInfo = replyingTo[postId];
     const commentId = generateValidUUID();
     const authorName = currentUserName || 'Fan';
+    const activeAvatarUrl = profileAvatarUrl || activeUserProfile?.avatar_url || activeUserProfile?.avatar || activeUserProfile?.profile_avatar || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || DEFAULT_PERSONAL_AVATAR;
 
     const newCommentObj = {
       id: commentId,
@@ -683,8 +691,12 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
       parent_comment_id: parentInfo?.commentId || null,
       username: authorName,
       author: authorName,
+      avatar: activeAvatarUrl,
+      userAvatar: activeAvatarUrl,
       text: draft,
       content: draft,
+      mediaUrl: mediaObj?.url || null,
+      media_url: mediaObj?.url || null,
       time: 'Just now',
       timeAgo: 'Just now',
       timestamp: new Date().toISOString(),
@@ -705,6 +717,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
 
     // Reset input draft
     setCommentDrafts(prev => ({ ...prev, [postId]: '' }));
+    setAttachedCommentMedia(prev => ({ ...prev, [postId]: null }));
     setReplyingTo(prev => ({ ...prev, [postId]: null }));
 
     // 2. Persist in localStorage
@@ -721,7 +734,9 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         id: commentId,
         userId: activeUserId,
         username: authorName,
+        avatar: activeAvatarUrl,
         text: draft,
+        mediaUrl: mediaObj?.url || null,
         parentCommentId: parentInfo?.commentId || null,
       });
     } catch (gErr) {
@@ -1862,182 +1877,262 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                               post.profile_id === activeUserId ||
                               post.author_id === activeUserId
                             );
+                            const topCommentAvatar = resolveCommentAvatar(comment, activeUserProfile, activeUserId, currentUserName);
 
                             return (
                               <div key={comment.id ? `comm-${comment.id}-${cIdx}` : `comm-${cIdx}`} className="space-y-1.5 group/comm">
-                                {/* Top-Level Comment */}
-                                <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-xl p-2.5 text-xs space-y-1.5">
-                                  <div className="flex items-center justify-between font-mono text-[10px]">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="font-bold text-rose-400">{comment.username || comment.author || 'Fan'}</span>
-                                      {comment.edited && <span className="text-[9px] text-zinc-500 italic font-sans">(edited)</span>}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-zinc-500">{formatPostTimestamp(comment.created_at || comment.time, comment.time)}</span>
-                                      {isCommentAuthor && (
-                                        <div className="flex items-center gap-1">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleCommentEditStart(comment.id, comment.text || comment.content || '')}
-                                            className="p-1 text-zinc-400 hover:text-cyan-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
-                                            title="Edit comment"
-                                          >
-                                            <Pencil className="w-3 h-3" />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleCommentDelete(post.id, comment.id)}
-                                            className="p-1 text-zinc-400 hover:text-red-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
-                                            title="Delete comment"
-                                          >
-                                            <Trash2 className="w-3 h-3" />
-                                          </button>
+                                {/* Top-Level Comment Row */}
+                                <div className="flex items-start gap-2.5">
+                                  {/* Avatar */}
+                                  <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-xs text-white overflow-hidden shrink-0 border border-zinc-700/80 mt-0.5 shadow-sm">
+                                    <img
+                                      src={topCommentAvatar}
+                                      className="w-full h-full object-cover"
+                                      alt={comment.username || 'User'}
+                                      onError={(e) => {
+                                        (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Right Column: Facebook Bubble + Action Bar */}
+                                  <div className="flex-1 min-w-0">
+                                    {/* Facebook Comment Bubble */}
+                                    <div className="bg-[#1c1e24] border border-zinc-800/80 rounded-2xl px-3.5 py-2 shadow-sm inline-block max-w-full">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-bold text-xs text-white hover:underline cursor-pointer">
+                                          {comment.username || comment.author || 'Scene Member'}
+                                        </span>
+                                        {comment.edited && <span className="text-[9px] text-zinc-500 italic font-mono">(edited)</span>}
+                                      </div>
+
+                                      {/* Inline Edit or Comment Text */}
+                                      {editingCommentId === comment.id ? (
+                                        <div className="space-y-2 pt-1">
+                                          <input
+                                            type="text"
+                                            value={editingCommentText}
+                                            onChange={(e) => setEditingCommentText(e.target.value)}
+                                            className="w-full bg-zinc-950 border border-rose-500/80 rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
+                                            autoFocus
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') handleCommentEditSave(post.id, comment.id);
+                                              if (e.key === 'Escape') handleCommentEditCancel();
+                                            }}
+                                          />
+                                          <div className="flex items-center justify-end gap-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={handleCommentEditCancel}
+                                              className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
+                                            >
+                                              Cancel
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleCommentEditSave(post.id, comment.id)}
+                                              disabled={!editingCommentText.trim()}
+                                              className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
+                                            >
+                                              <Check className="w-2.5 h-2.5" />
+                                              Save
+                                            </button>
+                                          </div>
                                         </div>
+                                      ) : (
+                                      <>
+                                        {Boolean(comment.text || comment.content) && (
+                                          <p className="text-xs text-zinc-200 font-sans leading-relaxed mt-0.5 break-words whitespace-pre-wrap">
+                                            {comment.text || comment.content}
+                                          </p>
+                                        )}
+                                        {Boolean(comment.mediaUrl || comment.media_url || comment.image || comment.gif) && (
+                                          <div className="mt-2 rounded-xl overflow-hidden border border-zinc-700/60 max-h-56 bg-black/40">
+                                            <img
+                                              src={comment.mediaUrl || comment.media_url || comment.image || comment.gif}
+                                              alt="Comment attachment"
+                                              className="w-full max-h-56 object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                                            />
+                                          </div>
+                                        )}
+                                      </>
                                       )}
                                     </div>
-                                  </div>
 
-                                  {/* Inline Edit or Comment Text */}
-                                  {editingCommentId === comment.id ? (
-                                    <div className="space-y-2 pt-0.5">
-                                      <input
-                                        type="text"
-                                        value={editingCommentText}
-                                        onChange={(e) => setEditingCommentText(e.target.value)}
-                                        className="w-full bg-zinc-950 border border-rose-500/80 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
-                                        autoFocus
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') handleCommentEditSave(post.id, comment.id);
-                                          if (e.key === 'Escape') handleCommentEditCancel();
-                                        }}
-                                      />
-                                      <div className="flex items-center justify-end gap-1.5">
+                                    {/* Facebook Action Bar Underneath Bubble */}
+                                    <div className="flex items-center gap-3 text-[11px] font-mono font-bold text-zinc-400 pl-2.5 mt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => setReplyingTo(prev => ({
+                                          ...prev,
+                                          [post.id]: { commentId: comment.id, username: comment.username || comment.author || 'Fan' }
+                                        }))}
+                                        className="hover:text-white hover:underline cursor-pointer flex items-center gap-1"
+                                      >
+                                        <span>Reply</span>
+                                      </button>
+
+                                      {isCommentAuthor && (
                                         <button
                                           type="button"
-                                          onClick={handleCommentEditCancel}
-                                          className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
+                                          onClick={() => handleCommentEditStart(comment.id, comment.text || comment.content || '')}
+                                          className="text-zinc-500 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-0.5"
+                                          title="Edit comment"
                                         >
-                                          Cancel
+                                          <Pencil className="w-3 h-3" />
+                                          <span className="text-[10px]">Edit</span>
                                         </button>
+                                      )}
+
+                                      {isCommentAuthor && (
                                         <button
                                           type="button"
-                                          onClick={() => handleCommentEditSave(post.id, comment.id)}
-                                          disabled={!editingCommentText.trim()}
-                                          className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
+                                          onClick={() => handleCommentDelete(post.id, comment.id)}
+                                          className="text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer flex items-center gap-0.5"
+                                          title="Delete comment"
                                         >
-                                          <Check className="w-2.5 h-2.5" />
-                                          Save
+                                          <Trash2 className="w-3 h-3" />
+                                          <span className="text-[10px]">Delete</span>
                                         </button>
-                                      </div>
+                                      )}
+
+                                      <span className="text-[10px] text-zinc-500 font-normal">
+                                        {formatPostTimestamp(comment.created_at || comment.time, comment.time)}
+                                      </span>
                                     </div>
-                                  ) : (
-                                    <p className="text-zinc-200 font-sans leading-relaxed">{comment.text || comment.content}</p>
-                                  )}
 
-                                  <div className="flex items-center justify-end pt-0.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => setReplyingTo(prev => ({
-                                        ...prev,
-                                        [post.id]: { commentId: comment.id, username: comment.username || comment.author || 'Fan' }
-                                      }))}
-                                      className="text-[10px] font-mono text-rose-400/80 hover:text-rose-300 hover:underline cursor-pointer flex items-center gap-1"
-                                    >
-                                      <CornerDownRight className="w-2.5 h-2.5" />
-                                      <span>Reply</span>
-                                    </button>
-                                  </div>
-                                </div>
+                                    {/* Threaded Replies */}
+                                    {replies.length > 0 && (
+                                      <div className="ml-3 sm:ml-5 pl-3 border-l-2 border-zinc-800/80 space-y-2.5 mt-2.5 relative">
+                                        {replies.map((reply, rIdx) => {
+                                          const isReplyAuthor = Boolean(
+                                            reply.user_id === activeUserId ||
+                                            reply.userId === activeUserId ||
+                                            (reply.username && currentUserName && reply.username.toLowerCase() === currentUserName.toLowerCase()) ||
+                                            (reply.author && currentUserName && reply.author.toLowerCase() === currentUserName.toLowerCase()) ||
+                                            activeUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+                                            (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
+                                            isYou ||
+                                            post.profile_id === activeUserId ||
+                                            post.author_id === activeUserId
+                                          );
+                                          const replyAvatarUrl = resolveCommentAvatar(reply, activeUserProfile, activeUserId, currentUserName);
 
-                                {/* Threaded Replies */}
-                                {replies.length > 0 && (
-                                  <div className="ml-4 pl-2.5 border-l-2 border-rose-900/40 space-y-1.5">
-                                    {replies.map((reply, rIdx) => {
-                                      const isReplyAuthor = Boolean(
-                                        reply.user_id === activeUserId ||
-                                        reply.userId === activeUserId ||
-                                        (reply.username && currentUserName && reply.username.toLowerCase() === currentUserName.toLowerCase()) ||
-                                        (reply.author && currentUserName && reply.author.toLowerCase() === currentUserName.toLowerCase()) ||
-                                        activeUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-                                        (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
-                                        isYou ||
-                                        post.profile_id === activeUserId ||
-                                        post.author_id === activeUserId
-                                      );
+                                          return (
+                                            <div key={reply.id ? `reply-${reply.id}-${rIdx}` : `reply-${cIdx}-${rIdx}`} className="flex items-start gap-2 group/rep">
+                                              {/* Reply Avatar */}
+                                              <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-[10px] text-white overflow-hidden shrink-0 border border-zinc-700/80 mt-0.5 shadow-sm">
+                                                <img
+                                                  src={replyAvatarUrl}
+                                                  className="w-full h-full object-cover"
+                                                  alt={reply.username || 'User'}
+                                                  onError={(e) => {
+                                                    (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
+                                                  }}
+                                                />
+                                              </div>
 
-                                      return (
-                                        <div key={reply.id ? `reply-${reply.id}-${rIdx}` : `reply-${cIdx}-${rIdx}`} className="bg-zinc-900/50 border border-zinc-800/50 rounded-lg p-2 text-xs space-y-1 group/rep">
-                                          <div className="flex items-center justify-between font-mono text-[10px]">
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="font-bold text-cyan-400">{reply.username || reply.author || 'Fan'}</span>
-                                              {reply.edited && <span className="text-[9px] text-zinc-500 italic font-sans">(edited)</span>}
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-zinc-500">{formatPostTimestamp(reply.created_at || reply.time, reply.time)}</span>
-                                              {isReplyAuthor && (
-                                                <div className="flex items-center gap-1">
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => handleCommentEditStart(reply.id, reply.text || reply.content || '')}
-                                                    className="p-1 text-zinc-400 hover:text-cyan-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
-                                                    title="Edit reply"
-                                                  >
-                                                    <Pencil className="w-2.5 h-2.5" />
-                                                  </button>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => handleCommentDelete(post.id, reply.id)}
-                                                    className="p-1 text-zinc-400 hover:text-red-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
-                                                    title="Delete reply"
-                                                  >
-                                                    <Trash2 className="w-2.5 h-2.5" />
-                                                  </button>
+                                              {/* Reply Bubble & Action Bar */}
+                                              <div className="flex-1 min-w-0">
+                                                <div className="bg-[#181a20] border border-zinc-800/70 rounded-2xl px-3 py-1.5 shadow-sm inline-block max-w-full">
+                                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <span className="font-bold text-xs text-rose-300 hover:underline cursor-pointer">
+                                                      {reply.username || reply.author || 'Scene Member'}
+                                                    </span>
+                                                    {reply.edited && <span className="text-[9px] text-zinc-500 italic font-mono">(edited)</span>}
+                                                  </div>
+
+                                                  {/* Inline Edit or Reply Content */}
+                                                  {editingCommentId === reply.id ? (
+                                                    <div className="space-y-1.5 pt-1">
+                                                      <input
+                                                        type="text"
+                                                        value={editingCommentText}
+                                                        onChange={(e) => setEditingCommentText(e.target.value)}
+                                                        className="w-full bg-zinc-950 border border-rose-500/80 rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
+                                                        autoFocus
+                                                        onKeyDown={(e) => {
+                                                          if (e.key === 'Enter') handleCommentEditSave(post.id, reply.id);
+                                                          if (e.key === 'Escape') handleCommentEditCancel();
+                                                        }}
+                                                      />
+                                                      <div className="flex items-center justify-end gap-1.5">
+                                                        <button
+                                                          type="button"
+                                                          onClick={handleCommentEditCancel}
+                                                          className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
+                                                        >
+                                                          Cancel
+                                                        </button>
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => handleCommentEditSave(post.id, reply.id)}
+                                                          disabled={!editingCommentText.trim()}
+                                                          className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
+                                                        >
+                                                          <Check className="w-2.5 h-2.5" />
+                                                          Save
+                                                        </button>
+                                                      </div>
+                                                    </div>
+                                                  ) : (
+                                                    <>
+                                                      {Boolean(reply.text || reply.content) && (
+                                                        <p className="text-xs text-zinc-200 font-sans leading-relaxed mt-0.5 break-words whitespace-pre-wrap">
+                                                          {reply.text || reply.content}
+                                                        </p>
+                                                      )}
+                                                      {Boolean(reply.mediaUrl || reply.media_url || reply.image || reply.gif) && (
+                                                        <div className="mt-2 rounded-xl overflow-hidden border border-zinc-700/60 max-h-52 bg-black/40">
+                                                          <img
+                                                            src={reply.mediaUrl || reply.media_url || reply.image || reply.gif}
+                                                            alt="Reply attachment"
+                                                            className="w-full max-h-52 object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                                                          />
+                                                        </div>
+                                                      )}
+                                                    </>
+                                                  )}
                                                 </div>
-                                              )}
-                                            </div>
-                                          </div>
 
-                                          {/* Inline Edit or Reply Text */}
-                                          {editingCommentId === reply.id ? (
-                                            <div className="space-y-1.5 pt-0.5">
-                                              <input
-                                                type="text"
-                                                value={editingCommentText}
-                                                onChange={(e) => setEditingCommentText(e.target.value)}
-                                                className="w-full bg-zinc-950 border border-cyan-500/80 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
-                                                autoFocus
-                                                onKeyDown={(e) => {
-                                                  if (e.key === 'Enter') handleCommentEditSave(post.id, reply.id);
-                                                  if (e.key === 'Escape') handleCommentEditCancel();
-                                                }}
-                                              />
-                                              <div className="flex items-center justify-end gap-1.5">
-                                                <button
-                                                  type="button"
-                                                  onClick={handleCommentEditCancel}
-                                                  className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
-                                                >
-                                                  Cancel
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => handleCommentEditSave(post.id, reply.id)}
-                                                  disabled={!editingCommentText.trim()}
-                                                  className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
-                                                >
-                                                  <Check className="w-2.5 h-2.5" />
-                                                  Save
-                                                </button>
+                                                {/* Reply Action Bar */}
+                                                <div className="flex items-center gap-3 text-[10px] font-mono font-bold text-zinc-400 pl-2 mt-1">
+                                                  {isReplyAuthor && (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleCommentEditStart(reply.id, reply.text || reply.content || '')}
+                                                      className="text-zinc-500 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-0.5"
+                                                      title="Edit reply"
+                                                    >
+                                                      <Pencil className="w-2.5 h-2.5" />
+                                                      <span>Edit</span>
+                                                    </button>
+                                                  )}
+
+                                                  {isReplyAuthor && (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleCommentDelete(post.id, reply.id)}
+                                                      className="text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer flex items-center gap-0.5"
+                                                      title="Delete reply"
+                                                    >
+                                                      <Trash2 className="w-2.5 h-2.5" />
+                                                      <span>Delete</span>
+                                                    </button>
+                                                  )}
+
+                                                  <span className="text-[10px] text-zinc-500 font-normal">
+                                                    {formatPostTimestamp(reply.created_at || reply.time, reply.time)}
+                                                  </span>
+                                                </div>
                                               </div>
                                             </div>
-                                          ) : (
-                                            <p className="text-zinc-300 font-sans leading-relaxed">{reply.text || reply.content}</p>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
+                                          );
+                                        })}
+                                      </div>
+                                    )}
                                   </div>
-                                )}
+                                </div>
                               </div>
                             );
                           })
@@ -2058,19 +2153,48 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                       </div>
                     )}
 
+                    {/* Attached Media Preview */}
+                    {attachedCommentMedia[post.id] && (
+                      <div className="relative inline-block my-1.5 p-1 bg-[#1c1e24] border border-zinc-700/80 rounded-xl">
+                        <img
+                          src={attachedCommentMedia[post.id]!.url}
+                          alt="Attachment Preview"
+                          className="h-20 max-w-xs object-cover rounded-lg"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setAttachedCommentMedia(prev => ({ ...prev, [post.id]: null }))}
+                          className="absolute -top-2 -right-2 bg-rose-600 hover:bg-rose-500 text-white p-1 rounded-full shadow-md cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+
                     {/* Add Comment Input Form */}
-                    <form onSubmit={(e) => handleCommentSubmit(post.id, e)} className="flex gap-2 pt-1">
-                      <input
-                        type="text"
-                        placeholder={replyingTo[post.id] ? `Reply to @${replyingTo[post.id]?.username}...` : "Write a comment..."}
-                        value={commentDrafts[post.id] || ''}
-                        onChange={(e) => setCommentDrafts(prev => ({ ...prev, [post.id]: e.target.value }))}
-                        className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-rose-500/60 font-sans"
-                      />
+                    <form onSubmit={(e) => handleCommentSubmit(post.id, e)} className="flex items-center gap-2 pt-1">
+                      <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded-xl px-2 py-1 focus-within:border-rose-500/60 transition-colors">
+                        <input
+                          type="text"
+                          placeholder={replyingTo[post.id] ? `Reply to @${replyingTo[post.id]?.username}...` : "Write a comment..."}
+                          value={commentDrafts[post.id] || ''}
+                          onChange={(e) => setCommentDrafts(prev => ({ ...prev, [post.id]: e.target.value }))}
+                          className="flex-1 bg-transparent text-xs text-white placeholder:text-zinc-600 focus:outline-none font-sans px-1"
+                        />
+
+                        {/* Media Picker: Image, Emoji, GIF */}
+                        <CommentMediaPicker
+                          attachedMedia={attachedCommentMedia[post.id] || null}
+                          onSelectMedia={(url, type) => setAttachedCommentMedia(prev => ({ ...prev, [post.id]: { url, type } }))}
+                          onClearMedia={() => setAttachedCommentMedia(prev => ({ ...prev, [post.id]: null }))}
+                          onInsertEmoji={(emoji) => setCommentDrafts(prev => ({ ...prev, [post.id]: (prev[post.id] || '') + emoji }))}
+                        />
+                      </div>
+
                       <button
                         type="submit"
-                        disabled={!(commentDrafts[post.id] || '').trim()}
-                        className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                        disabled={!(commentDrafts[post.id] || '').trim() && !attachedCommentMedia[post.id]?.url}
+                        className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center shrink-0"
                         title="Send comment"
                       >
                         <Send className="w-3.5 h-3.5" />

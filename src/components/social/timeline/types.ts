@@ -9,6 +9,11 @@ export interface FeedComment {
   text: string;
   time: string;
   created_at?: string;
+  mediaUrl?: string | null;
+  media_url?: string | null;
+  mediaType?: string;
+  avatar?: string;
+  userAvatar?: string;
 }
 
 export interface SongEmbedData {
@@ -188,7 +193,7 @@ export interface TimelineFeedProps {
   portalRole?: string;
   onToggleLike: (postId: string) => void;
   onEmojiReact: (postId: string, reactionType: string) => void;
-  onAddComment: (postId: string, commentText: string, parentCommentId?: string) => void;
+  onAddComment: (postId: string, commentText: string, parentCommentId?: string | null, mediaUrl?: string | null) => void;
   onTogglePin?: (postId: string) => void;
   onEditPost?: (postId: string, newText: string, newImages?: string[]) => void;
   onDeletePost?: (postId: string) => void;
