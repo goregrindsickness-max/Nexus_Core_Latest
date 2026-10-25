@@ -16,12 +16,14 @@ export const SocialThemeShell: React.FC<SocialThemeShellProps> = ({
   gridStyle,
   activeTab
 }) => {
-  const isMessagesTab = activeTab === 'messages' || activeTab === 'inbox';
+  const isMessagesTab = activeTab === 'messages';
   return (
       <div 
         ref={containerRef}
         data-theme={dataTheme}
-        className={`min-h-screen w-full bg-[#030303] text-zinc-200 font-sans overflow-x-clip pl-0 ${isMessagesTab ? 'pb-14 sm:pb-16' : 'pb-6 sm:pb-8'}`}
+        className={`w-full bg-[#030303] text-zinc-200 font-sans overflow-x-clip pl-0 ${
+          isMessagesTab ? 'h-screen max-h-screen flex flex-col overflow-hidden pb-14 sm:pb-16' : 'min-h-screen pb-6 sm:pb-8'
+        }`}
         style={gridStyle}
       >
       <style>{`

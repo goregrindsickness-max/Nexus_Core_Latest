@@ -5361,7 +5361,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         activeTab={activeTab}
       >
 
-      <div className="transition-all duration-300 opacity-100">
+      <div className={`transition-all duration-300 opacity-100 ${activeTab === 'messages' ? 'shrink-0' : ''}`}>
       {/* Standalone Navigation Header */}
       <FeedTopHeader
         isEmbedded={isEmbedded}

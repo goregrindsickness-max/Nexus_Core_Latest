@@ -725,8 +725,17 @@ export const MainTabRouter: React.FC<MainTabRouterProps> = (props) => {
       );
 
     case 'social':
+    case 'feed':
+    case 'messages':
+    case 'inbox':
+    case 'shop':
+    case 'forum':
+    case 'photopit':
+    case 'gallery':
+    case 'reels':
+    case 'clips':
       return (
-        <div className="fixed inset-0 z-50 bg-[#030303] overflow-y-auto w-full h-full flex flex-col">
+        <div className="fixed inset-0 z-50 bg-[#030303] overflow-hidden w-full h-full flex flex-col">
           <UniversalSocialFeed
             userProfile={userProfile}
             setUserProfile={setUserProfile}

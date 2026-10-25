@@ -919,7 +919,7 @@ export const FeedViewRouter: React.FC<any> = (props) => {
 
       {/* MESSENGER INBOX VIEW */}
       {activeTab === 'messages' && (
-        <div className="w-full h-[calc(100dvh-162px)] sm:h-[calc(100dvh-170px)] animate-in fade-in duration-300 flex flex-col">
+        <div className="w-full flex-1 min-h-0 animate-in fade-in duration-300 flex flex-col overflow-hidden">
           <InboxTerminal
             onBack={() => setActiveTab('feed')}
             userProfile={userProfile}

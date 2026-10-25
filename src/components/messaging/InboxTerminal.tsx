@@ -72,21 +72,29 @@ const InboxConversationRow: React.FC<{
   const isOlderThan3Days = !isNaN(msgTime) && (Date.now() - msgTime) > (3 * 24 * 60 * 60 * 1000);
 
   // Splash gradient logic starting on the left under avatar and fading out into the name area
-  let splashGradient = '';
-  let cardBorderClass = '';
+  let splashStyle: React.CSSProperties = {};
+  let cardBorderClass = 'border-zinc-800/80 bg-zinc-950/90 hover:bg-zinc-900/90';
 
-  if (isOlderThan3Days) {
-    // Red splash for messages older than 3 days
-    splashGradient = 'bg-[radial-gradient(ellipse_at_left,_var(--tw-gradient-stops))] from-red-600/35 via-red-950/15 to-transparent';
-    cardBorderClass = 'border-red-900/60 hover:border-red-600/80 bg-zinc-950/90 hover:bg-zinc-900/90';
-  } else if (isUnread) {
-    // Yellow splash for unread messages (<= 3 days)
-    splashGradient = 'bg-[radial-gradient(ellipse_at_left,_var(--tw-gradient-stops))] from-yellow-500/35 via-yellow-950/15 to-transparent';
-    cardBorderClass = 'border-yellow-500/60 shadow-[0_0_15px_rgba(234,179,8,0.2)] bg-yellow-950/20 hover:bg-yellow-900/30';
+  if (isUnread) {
+    if (isOlderThan3Days) {
+      // Red splash for UNREAD messages older than 3 days
+      splashStyle = {
+        background: 'linear-gradient(90deg, rgba(239, 68, 68, 0.32) 0%, rgba(239, 68, 68, 0.15) 35%, rgba(239, 68, 68, 0.02) 65%, transparent 100%)'
+      };
+      cardBorderClass = 'border-red-900/40 bg-zinc-950/90 hover:bg-zinc-900/90';
+    } else {
+      // Yellow splash for UNREAD messages (<= 3 days)
+      splashStyle = {
+        background: 'linear-gradient(90deg, rgba(234, 179, 8, 0.32) 0%, rgba(234, 179, 8, 0.15) 35%, rgba(234, 179, 8, 0.02) 65%, transparent 100%)'
+      };
+      cardBorderClass = 'border-yellow-500/40 bg-zinc-950/90 hover:bg-zinc-900/90';
+    }
   } else {
-    // Semi-transparent light gray splash for read messages (<= 3 days)
-    splashGradient = 'bg-[radial-gradient(ellipse_at_left,_var(--tw-gradient-stops))] from-zinc-400/22 via-zinc-600/08 to-transparent';
-    cardBorderClass = 'border-zinc-800/80 bg-zinc-900/70 hover:bg-zinc-800/80';
+    // Semi-transparent light gray splash for all READ messages
+    splashStyle = {
+      background: 'linear-gradient(90deg, rgba(161, 161, 170, 0.22) 0%, rgba(161, 161, 170, 0.08) 35%, rgba(161, 161, 170, 0.01) 65%, transparent 100%)'
+    };
+    cardBorderClass = 'border-zinc-800/80 bg-zinc-950/90 hover:bg-zinc-900/90';
   }
 
   // Format timestamp (e.g. 12:08 PM or Sep 22, 12:08 PM)
@@ -113,19 +121,16 @@ const InboxConversationRow: React.FC<{
       className={`relative overflow-hidden p-3 rounded-2xl cursor-pointer flex items-center justify-between transition-all group shadow-md ${cardBorderClass}`}
     >
       {/* Left Splash Gradient (starts under avatar on the left, extends slightly into the name, then fades out) */}
-      <div className={`absolute inset-y-0 left-0 w-3/4 pointer-events-none transition-opacity ${splashGradient}`} />
+      <div 
+        className="absolute inset-y-0 left-0 w-3/4 pointer-events-none transition-all z-0"
+        style={splashStyle}
+      />
 
       {/* Main Content Area: Avatar + Name + Message Preview & Timestamp */}
       <div className="flex items-center gap-3 min-w-0 flex-1 pr-2 z-10">
         {/* Avatar */}
         <div className="relative shrink-0">
-          <div className={`w-11 h-11 rounded-full bg-zinc-800 border flex items-center justify-center font-black text-xs text-rose-400 overflow-hidden shadow-md ${
-            isOlderThan3Days
-              ? 'border-red-500 ring-2 ring-red-500/30'
-              : isUnread
-              ? 'border-yellow-400 ring-2 ring-yellow-400/30'
-              : 'border-zinc-700'
-          }`}>
+          <div className="w-11 h-11 rounded-full bg-zinc-800 border border-zinc-700/80 flex items-center justify-center font-black text-xs text-rose-400 overflow-hidden shadow-md">
             {chat.avatarUrl ? (
               <img src={chat.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
             ) : (
@@ -142,23 +147,13 @@ const InboxConversationRow: React.FC<{
 
         {/* Text Info Column */}
         <div className="min-w-0 flex-1">
-          {/* Top Line: Name + Badges / Pins */}
+          {/* Top Line: Name + Pins */}
           <div className="flex items-center gap-2 mb-0.5">
             <span className={`text-xs font-black truncate transition-colors ${
               isUnread ? 'text-white font-extrabold' : 'text-zinc-200 group-hover:text-rose-300'
             }`}>
               {displayName}
             </span>
-            {isUnread && (
-              <span className="text-[8px] font-mono font-black uppercase px-1.5 py-0.2 rounded bg-yellow-500 text-black shadow-sm shrink-0">
-                UNREAD
-              </span>
-            )}
-            {isOlderThan3Days && (
-              <span className="text-[8px] font-mono font-black uppercase px-1.5 py-0.2 rounded bg-red-600 text-white shadow-sm shrink-0">
-                &gt;3D
-              </span>
-            )}
             {isPinned && (
               <Pin className="w-3 h-3 text-rose-400 shrink-0 fill-rose-400/20" />
             )}
@@ -176,7 +171,7 @@ const InboxConversationRow: React.FC<{
             </span>
             {timeFormatted && (
               <span className={`text-[9px] font-mono shrink-0 font-medium px-1.5 py-0.2 rounded bg-black/40 border ${
-                isOlderThan3Days
+                isUnread && isOlderThan3Days
                   ? 'text-red-400 border-red-900/50'
                   : isUnread
                   ? 'text-yellow-400 border-yellow-800/50 font-bold'
@@ -198,16 +193,12 @@ const InboxConversationRow: React.FC<{
           </span>
         )}
 
-        {/* Active Status Badge on Bottom Right */}
-        <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border transition-colors shrink-0 ${
-          isOnline
-            ? 'text-emerald-400 bg-emerald-950/70 border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
-            : formatted.isRecentlyActive
-            ? 'text-amber-400 bg-amber-950/60 border-amber-500/40'
-            : 'text-zinc-400 bg-zinc-950/90 border-zinc-800'
-        }`}>
-          {isOnline ? 'Active now' : formatted.text}
-        </span>
+        {/* Active Status Badge on Bottom Right - Only rendered when currently online to eliminate redundant timestamp badges */}
+        {isOnline && (
+          <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded border text-emerald-400 bg-emerald-950/70 border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.3)] shrink-0">
+            Active now
+          </span>
+        )}
       </div>
     </div>
   );
@@ -1457,7 +1448,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
     });
 
   return (
-    <div className="w-full h-full min-h-0 bg-zinc-950 text-white flex flex-col rounded-xl border border-rose-900/40 overflow-hidden shadow-2xl relative font-sans">
+    <div className="w-full flex-1 min-h-0 bg-black text-white flex flex-col rounded-none sm:rounded-xl border-x-0 sm:border-x border-t border-b-0 border-rose-900/40 overflow-hidden shadow-2xl relative font-sans">
       
       {/* Toast Notification Banner */}
       {toastMessage && (
@@ -1763,12 +1754,12 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             
             {/* PINNED CONVERSATION HEADER */}
-            <div className="p-3.5 border-b border-rose-900/30 bg-black/90 flex items-center justify-between shrink-0 z-10 shadow-md">
-              <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2 sm:p-3 border-b border-rose-900/30 bg-black/90 flex items-center justify-between shrink-0 z-10 shadow-md gap-2">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                 {/* Back Button to return to contact list on ALL viewports */}
                 <button
                   onClick={() => setSelectedContact(null)}
-                  className="p-2 rounded-xl bg-zinc-900 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-800/60 text-zinc-300 hover:text-rose-400 transition-all flex items-center gap-1 cursor-pointer font-mono text-xs font-bold shrink-0"
+                  className="p-1.5 sm:p-2 rounded-xl bg-zinc-900 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-800/60 text-zinc-300 hover:text-rose-400 transition-all flex items-center gap-1 cursor-pointer font-mono text-xs font-bold shrink-0"
                   title="Back to Conversations"
                 >
                   <ChevronLeft className="w-4 h-4 text-rose-400" />
@@ -1776,7 +1767,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                 </button>
 
                 <div className="relative shrink-0">
-                  <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center font-black text-xs text-rose-400 overflow-hidden shadow">
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center font-black text-xs text-rose-400 overflow-hidden shadow">
                     {selectedContact.avatarUrl ? (
                       <img src={selectedContact.avatarUrl} alt={selectedContact.profileName} className="w-full h-full object-cover" />
                     ) : (
@@ -1784,26 +1775,26 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                     )}
                   </div>
                   <span
-                    className={`w-2.5 h-2.5 rounded-full border-2 border-zinc-950 absolute -bottom-0.5 -right-0.5 shadow-sm transition-colors ${
+                    className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full border-2 border-zinc-950 absolute -bottom-0.5 -right-0.5 shadow-sm transition-colors ${
                       blockedContacts[selectedContact.contactId] ? 'bg-rose-500' : selectedPresence.formatted.dotClass
                     }`}
                   />
                 </div>
 
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     <h3 className="text-xs font-black text-white font-mono uppercase tracking-wider truncate">
                       {threadNicknames[selectedContact.contactId] || selectedContact.profileName}
                     </h3>
                     {selectedContact.roleBadge && (
-                      <span className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-950/80 border border-rose-800/60 text-rose-400 shrink-0">
+                      <span className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-950/80 border border-rose-800/60 text-rose-400 shrink-0 max-w-[80px] sm:max-w-none truncate">
                         {selectedContact.roleBadge}
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className={`w-1.5 h-1.5 rounded-full ${selectedPresence.formatted.dotClass}`} />
-                    <span className={`text-[10px] font-mono font-bold tracking-wider uppercase ${
+                  <div className="flex items-center gap-1 mt-0.5 min-w-0 truncate">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${selectedPresence.formatted.dotClass}`} />
+                    <span className={`text-[10px] font-mono font-bold tracking-wider uppercase truncate ${
                       selectedPresence.formatted.isOnline
                         ? 'text-emerald-400'
                         : selectedPresence.formatted.isRecentlyActive
@@ -1812,17 +1803,16 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                     }`}>
                       {selectedPresence.formatted.text}
                     </span>
-                    <span className="text-[9px] font-mono text-zinc-500">• {selectedPresence.formatted.subtext}</span>
                   </div>
                 </div>
               </div>
 
               {/* Thread Action Controls */}
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                 <button
                   onClick={() => fetchThreadMessages(selectedContact.contactId)}
                   disabled={threadLoading}
-                  className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-all cursor-pointer"
+                  className="p-1.5 sm:p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-all cursor-pointer"
                   title="Refresh Thread"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${threadLoading ? 'animate-spin text-rose-400' : ''}`} />
@@ -1831,7 +1821,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                 {/* THREAD SETTINGS BUTTON (Facebook-style connection details & options) */}
                 <button
                   onClick={() => setShowThreadSettings(true)}
-                  className="p-2 rounded-xl bg-zinc-900 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-800/60 text-zinc-300 hover:text-rose-400 transition-all flex items-center gap-1.5 cursor-pointer font-mono text-xs font-bold"
+                  className="p-1.5 sm:p-2 rounded-xl bg-zinc-900 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-800/60 text-zinc-300 hover:text-rose-400 transition-all flex items-center gap-1.5 cursor-pointer font-mono text-xs font-bold"
                   title="Thread Settings & Connection Details"
                 >
                   <Info className="w-4 h-4 text-rose-400" />
@@ -1841,7 +1831,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
             </div>
 
             {/* SCROLLABLE THREAD MESSAGES CONTAINER */}
-            <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-3 no-scrollbar bg-gradient-to-b from-black/40 via-zinc-950 to-black/60">
+            <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-3 no-scrollbar bg-black">
               {threadLoading && threadMessages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-zinc-500 gap-2">
                   <RefreshCw className="w-5 h-5 animate-spin text-rose-500" />
@@ -2006,7 +1996,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
 
             {/* QUICK SCENE ACTION CHIPS */}
             {!blockedContacts[selectedContact.contactId] && (
-              <div className="px-3 pt-2.5 pb-1 bg-black/90 border-t border-rose-900/30 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+              <div className="px-3 pt-2 pb-1.5 bg-black border-t border-rose-900/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
                 <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest shrink-0 mr-1 flex items-center gap-1">
                   <Sparkles className="w-2.5 h-2.5 text-[#00ffcc]" />
                   <span>Quick Signal:</span>
@@ -2043,7 +2033,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
             )}
 
             {/* PINNED DIRECT MESSAGE INPUT BAR */}
-            <div className="p-3 border-t border-rose-900/40 bg-black/90 flex items-center gap-2 shrink-0 z-10 shadow-lg">
+            <div className="p-2.5 sm:p-3 border-t border-rose-900/40 bg-black flex items-center gap-2 shrink-0 z-10 shadow-lg">
               <input
                 type="file"
                 ref={fileInputRef}
