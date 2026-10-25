@@ -962,29 +962,31 @@ export async function uploadClipVideoFile(
       contentType = 'video/mp4';
     }
 
-    // Primary Strategy: Direct binary upload to Supabase 'clips' storage bucket (instant, no Base64 conversion overhead)
+    // Primary Strategy: Try public storage buckets ('clips', 'posts', 'photo-pit-media')
     const flatPath = `${cleanToken}_${cleanAuthId}_${timestamp}_${safeFileName}`;
-    try {
-      const { data: uploadData, error: uploadError } = await client.storage
-        .from('clips')
-        .upload(flatPath, uploadPayload, {
-          upsert: true,
-          cacheControl: '3600',
-          contentType,
-        });
+    const candidateBuckets = ['clips', 'posts', 'photo-pit-media'];
 
-      if (!uploadError && uploadData) {
-        const finalPath = uploadData.path || flatPath;
-        const { data: publicUrlData } = client.storage.from('clips').getPublicUrl(finalPath);
-        if (publicUrlData?.publicUrl) {
-          console.log(`[STORAGE UPLOAD DIRECT SUCCESS] Stored clip in bucket "clips":`, publicUrlData.publicUrl);
-          return publicUrlData.publicUrl;
+    for (const bName of candidateBuckets) {
+      try {
+        const { data: uploadData, error: uploadError } = await client.storage
+          .from(bName)
+          .upload(flatPath, uploadPayload, {
+            upsert: true,
+            cacheControl: '3600',
+            contentType,
+          });
+
+        if (!uploadError && uploadData) {
+          const finalPath = uploadData.path || flatPath;
+          const { data: publicUrlData } = client.storage.from(bName).getPublicUrl(finalPath);
+          if (publicUrlData?.publicUrl) {
+            console.log(`[STORAGE UPLOAD DIRECT SUCCESS] Stored clip in bucket "${bName}":`, publicUrlData.publicUrl);
+            return publicUrlData.publicUrl;
+          }
         }
-      } else if (uploadError) {
-        console.warn(`[STORAGE UPLOAD DIRECT WARNING] Direct upload to clips bucket failed, trying secondary fallback:`, uploadError.message);
+      } catch (bErr) {
+        console.warn(`[STORAGE UPLOAD DIRECT EXCEPTION] Bucket "${bName}" failed:`, bErr);
       }
-    } catch (directErr: any) {
-      console.warn(`[STORAGE UPLOAD DIRECT EXCEPTION] Direct clips bucket exception:`, directErr?.message || directErr);
     }
 
     // Secondary Strategy: For small files (< 8MB) or data URLs, try /api/upload endpoint

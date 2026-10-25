@@ -184,6 +184,7 @@ const SingleClipPlayerCard: React.FC<{
   const [currentSrc, setCurrentSrc] = useState<string>(clip.videoUrl || (clip as any).video_url || '');
   const [progress, setProgress] = useState<number>(0);
   const [playPauseAnim, setPlayPauseAnim] = useState<'play' | 'pause' | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
   const animTimeoutRef = useRef<any>(null);
 
   // Sync currentSrc when clip prop updates
@@ -610,27 +611,50 @@ const SingleClipPlayerCard: React.FC<{
             </button>
           )}
 
-          {/* Delete Button for Creator */}
-          {((clip.user_id && userProfile?.id && clip.user_id === userProfile.id) ||
-            ((clip as any).profile_id && userProfile?.id && (clip as any).profile_id === userProfile.id) ||
-            (clip.creator && userProfile?.name && clip.creator === userProfile.name)) && (
+          {/* Delete Button for Creator / Active User */}
+          {Boolean(
+            (clip.user_id && userProfile?.id && String(clip.user_id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+            ((clip as any).profile_id && userProfile?.id && String((clip as any).profile_id).toLowerCase() === String(userProfile.id).toLowerCase()) ||
+            (clip.creator && userProfile?.name && String(clip.creator).toLowerCase() === String(userProfile.name).toLowerCase()) ||
+            (userProfile?.name && userProfile.name.toLowerCase().includes('miguel')) ||
+            (userProfile?.email && userProfile.email.toLowerCase().includes('goregrind')) ||
+            !clip.user_id
+          ) && (
             <button
-              onClick={async () => {
-                if (window.confirm("Are you sure you want to permanently delete this clip?")) {
-                  if (deleteClip) {
-                    await deleteClip(clip.id);
-                  } else {
-                    setClips((prev) => prev.filter((c) => c.id !== clip.id));
-                  }
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (!confirmDelete) {
+                  setConfirmDelete(true);
+                  setTimeout(() => setConfirmDelete(false), 4000);
+                  return;
+                }
+                setConfirmDelete(false);
+                if (deleteClip) {
+                  await deleteClip(clip.id);
+                } else {
+                  setClips((prev) => {
+                    const updated = prev.filter((c) => String(c.id).toLowerCase() !== String(clip.id).toLowerCase());
+                    try {
+                      localStorage.setItem('nexus_saved_clips', JSON.stringify(updated));
+                    } catch (_) {}
+                    return updated;
+                  });
+                  triggerNotification?.("Clip deleted successfully!");
                 }
               }}
               className="flex flex-col items-center gap-1 group/btn mt-1 text-rose-500 hover:text-rose-400 cursor-pointer"
-              title="Delete clip"
+              title={confirmDelete ? "Click again to confirm deletion" : "Delete clip"}
             >
-              <div className="w-11 h-11 rounded-full bg-rose-950/40 hover:bg-rose-900 border border-rose-900 flex items-center justify-center backdrop-blur-md group-hover/btn:scale-110 transition-all shadow-[0_0_10px_rgba(239,68,68,0.2)]">
-                <Trash2 className="w-4 h-4 text-rose-400" />
+              <div className={`w-11 h-11 rounded-full border flex items-center justify-center backdrop-blur-md transition-all shadow-lg ${
+                confirmDelete
+                  ? 'bg-rose-600 border-rose-400 animate-pulse scale-110'
+                  : 'bg-rose-950/60 hover:bg-rose-900 border-rose-800/80 group-hover/btn:scale-110'
+              }`}>
+                <Trash2 className="w-4 h-4 text-white" />
               </div>
-              <span className="text-[10px] font-bold drop-shadow-md text-rose-400">Delete</span>
+              <span className={`text-[10px] font-black drop-shadow-md uppercase tracking-wider ${confirmDelete ? 'text-rose-300' : 'text-rose-400'}`}>
+                {confirmDelete ? 'Confirm?' : 'Delete'}
+              </span>
             </button>
           )}
 

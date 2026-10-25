@@ -55,7 +55,7 @@ export interface InboxConversation {
   nickname?: string;
 }
 
-// Dedicated row with real-time live presence tracking
+// Dedicated row with real-time live presence tracking and splash color gradients
 const InboxConversationRow: React.FC<{
   chat: InboxConversation;
   displayName: string;
@@ -67,18 +67,65 @@ const InboxConversationRow: React.FC<{
 }> = ({ chat, displayName, isMuted, isPinned, isBlocked, isUnread, onSelect }) => {
   const { formatted, isOnline } = useUserPresence(chat);
 
+  // Age calculation (older than 3 days -> red splash)
+  const msgTime = new Date(chat.timestamp).getTime();
+  const isOlderThan3Days = !isNaN(msgTime) && (Date.now() - msgTime) > (3 * 24 * 60 * 60 * 1000);
+
+  // Splash gradient logic starting on the left under avatar and fading out into the name area
+  let splashGradient = '';
+  let cardBorderClass = '';
+
+  if (isOlderThan3Days) {
+    // Red splash for messages older than 3 days
+    splashGradient = 'bg-[radial-gradient(ellipse_at_left,_var(--tw-gradient-stops))] from-red-600/35 via-red-950/15 to-transparent';
+    cardBorderClass = 'border-red-900/60 hover:border-red-600/80 bg-zinc-950/90 hover:bg-zinc-900/90';
+  } else if (isUnread) {
+    // Yellow splash for unread messages (<= 3 days)
+    splashGradient = 'bg-[radial-gradient(ellipse_at_left,_var(--tw-gradient-stops))] from-yellow-500/35 via-yellow-950/15 to-transparent';
+    cardBorderClass = 'border-yellow-500/60 shadow-[0_0_15px_rgba(234,179,8,0.2)] bg-yellow-950/20 hover:bg-yellow-900/30';
+  } else {
+    // Semi-transparent light gray splash for read messages (<= 3 days)
+    splashGradient = 'bg-[radial-gradient(ellipse_at_left,_var(--tw-gradient-stops))] from-zinc-400/22 via-zinc-600/08 to-transparent';
+    cardBorderClass = 'border-zinc-800/80 bg-zinc-900/70 hover:bg-zinc-800/80';
+  }
+
+  // Format timestamp (e.g. 12:08 PM or Sep 22, 12:08 PM)
+  const formatTime = (ts: string) => {
+    try {
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return '';
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      if (isToday) {
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (_) {
+      return '';
+    }
+  };
+
+  const timeFormatted = formatTime(chat.timestamp);
+
   return (
     <div
       onClick={onSelect}
-      className={`p-3 rounded-xl cursor-pointer flex items-center justify-between transition-all group shadow-sm ${
-        isUnread
-          ? 'border-2 border-red-500 shadow-[0_0_14px_rgba(239,68,68,0.45)] bg-rose-950/45 hover:bg-rose-900/60'
-          : 'border border-zinc-800/80 bg-zinc-900/60 hover:bg-rose-950/20 hover:border-rose-900/40'
-      }`}
+      className={`relative overflow-hidden p-3 rounded-2xl cursor-pointer flex items-center justify-between transition-all group shadow-md ${cardBorderClass}`}
     >
-      <div className="flex items-center gap-3 min-w-0 pr-2">
+      {/* Left Splash Gradient (starts under avatar on the left, extends slightly into the name, then fades out) */}
+      <div className={`absolute inset-y-0 left-0 w-3/4 pointer-events-none transition-opacity ${splashGradient}`} />
+
+      {/* Main Content Area: Avatar + Name + Message Preview & Timestamp */}
+      <div className="flex items-center gap-3 min-w-0 flex-1 pr-2 z-10">
+        {/* Avatar */}
         <div className="relative shrink-0">
-          <div className={`w-10 h-10 rounded-full bg-zinc-800 border flex items-center justify-center font-black text-xs text-rose-400 overflow-hidden shadow-md ${isUnread ? 'border-red-500 ring-2 ring-red-500/30' : 'border-zinc-700'}`}>
+          <div className={`w-11 h-11 rounded-full bg-zinc-800 border flex items-center justify-center font-black text-xs text-rose-400 overflow-hidden shadow-md ${
+            isOlderThan3Days
+              ? 'border-red-500 ring-2 ring-red-500/30'
+              : isUnread
+              ? 'border-yellow-400 ring-2 ring-yellow-400/30'
+              : 'border-zinc-700'
+          }`}>
             {chat.avatarUrl ? (
               <img src={chat.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
             ) : (
@@ -93,14 +140,23 @@ const InboxConversationRow: React.FC<{
           />
         </div>
 
+        {/* Text Info Column */}
         <div className="min-w-0 flex-1">
+          {/* Top Line: Name + Badges / Pins */}
           <div className="flex items-center gap-2 mb-0.5">
-            <span className={`text-xs font-black truncate transition-colors ${isUnread ? 'text-white font-extrabold' : 'text-zinc-200 group-hover:text-rose-300'}`}>
+            <span className={`text-xs font-black truncate transition-colors ${
+              isUnread ? 'text-white font-extrabold' : 'text-zinc-200 group-hover:text-rose-300'
+            }`}>
               {displayName}
             </span>
             {isUnread && (
-              <span className="text-[8px] font-mono font-black uppercase px-1.5 py-0.2 rounded bg-red-600 text-white shadow-sm animate-pulse shrink-0">
+              <span className="text-[8px] font-mono font-black uppercase px-1.5 py-0.2 rounded bg-yellow-500 text-black shadow-sm shrink-0">
                 UNREAD
+              </span>
+            )}
+            {isOlderThan3Days && (
+              <span className="text-[8px] font-mono font-black uppercase px-1.5 py-0.2 rounded bg-red-600 text-white shadow-sm shrink-0">
+                &gt;3D
               </span>
             )}
             {isPinned && (
@@ -109,38 +165,49 @@ const InboxConversationRow: React.FC<{
             {isMuted && (
               <VolumeX className="w-3 h-3 text-zinc-500 shrink-0" />
             )}
-            {chat.roleBadge && (
-              <span className="text-[8px] font-mono font-bold px-1.5 py-0.2 rounded bg-zinc-800/90 border border-zinc-700 text-zinc-400">
-                {chat.roleBadge}
+          </div>
+
+          {/* Bottom Line: Message Preview + Timestamp Right Next to Preview */}
+          <div className="flex items-center gap-2 text-[11px] font-sans">
+            <span className={`truncate max-w-[170px] sm:max-w-[220px] ${
+              isUnread ? 'text-zinc-100 font-semibold' : 'text-zinc-400'
+            }`}>
+              {isBlocked ? '[Signal Blocked]' : chat.lastMessage}
+            </span>
+            {timeFormatted && (
+              <span className={`text-[9px] font-mono shrink-0 font-medium px-1.5 py-0.2 rounded bg-black/40 border ${
+                isOlderThan3Days
+                  ? 'text-red-400 border-red-900/50'
+                  : isUnread
+                  ? 'text-yellow-400 border-yellow-800/50 font-bold'
+                  : 'text-zinc-400 border-zinc-800'
+              }`}>
+                {timeFormatted}
               </span>
             )}
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <div className={`text-[11px] truncate max-w-[200px] sm:max-w-[260px] font-sans ${isUnread ? 'text-zinc-100 font-semibold' : 'text-zinc-400'}`}>
-              {isBlocked ? '[Signal Blocked]' : chat.lastMessage}
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border transition-colors ${
-                isOnline
-                  ? 'text-emerald-400 bg-emerald-950/60 border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.25)]'
-                  : formatted.isRecentlyActive
-                  ? 'text-amber-400 bg-amber-950/50 border-amber-500/30'
-                  : 'text-zinc-400 bg-zinc-950/80 border-zinc-800'
-              }`}>
-                {isOnline ? 'Active now' : formatted.text}
-              </span>
-            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col items-end shrink-0 gap-1 pl-1">
-        <span className={`text-[9px] font-mono ${isUnread ? 'text-red-400 font-bold' : 'text-zinc-500'}`}>
-          {new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
-        {isUnread && (
-          <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444] animate-pulse" />
+      {/* Far Right Column: INDUSTRY PRO / Role Badge & Active Status Badge */}
+      <div className="flex flex-col items-end shrink-0 gap-1 pl-1 z-10">
+        {/* Industry Pro / Role Badge on Top Right */}
+        {chat.roleBadge && (
+          <span className="text-[8px] font-mono font-black uppercase px-2 py-0.5 rounded bg-zinc-800/90 border border-zinc-700 text-zinc-300 shadow-sm shrink-0">
+            {chat.roleBadge}
+          </span>
         )}
+
+        {/* Active Status Badge on Bottom Right */}
+        <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border transition-colors shrink-0 ${
+          isOnline
+            ? 'text-emerald-400 bg-emerald-950/70 border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+            : formatted.isRecentlyActive
+            ? 'text-amber-400 bg-amber-950/60 border-amber-500/40'
+            : 'text-zinc-400 bg-zinc-950/90 border-zinc-800'
+        }`}>
+          {isOnline ? 'Active now' : formatted.text}
+        </span>
       </div>
     </div>
   );
@@ -1491,7 +1558,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-3.5 overflow-x-auto no-scrollbar pt-4 pb-1">
+          <div className="flex items-center gap-3.5 overflow-x-auto no-scrollbar pt-7 pb-1.5">
             {/* 1. User's Own Thought/Story Item */}
             <div 
               className="flex flex-col items-center gap-1 shrink-0 relative cursor-pointer group" 
