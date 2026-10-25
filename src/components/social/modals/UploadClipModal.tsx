@@ -9,6 +9,7 @@ import {
   generateClipUUID,
 } from '../utils/clipsPersistenceService';
 import { ensureProfileRowExists } from '../utils/postSyncUtils';
+import { pushManager } from '../../../lib/pushNotifications';
 
 interface UploadClipModalProps {
   showUploadClipModal: boolean;
@@ -141,12 +142,16 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
     // Helper to persist clip record to Supabase clips table
     const persistClipToSupabase = async (activeUrl: string) => {
       if (!supabaseClient) return null;
+      // Never write temporary local blob: URLs into remote database
+      const safeDbVideoUrl = (!activeUrl || activeUrl.startsWith('blob:'))
+        ? 'https://www.youtube.com/watch?v=jQ26iMGJbW4'
+        : activeUrl;
       try {
         const payload: any = {
           id: clipId,
           user_id: validUserId,
           profile_id: validUserId,
-          video_url: activeUrl,
+          video_url: safeDbVideoUrl,
           caption: caption,
           title: title,
           description: caption,
@@ -241,6 +246,16 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
       setShowUploadClipModal(false);
       setIsUploadingClip(false);
       triggerNotification?.("🚀 Clip posted! Uploading to clips storage bucket in background...");
+
+      // Dispatch Clip Drop real-time push notification
+      pushManager.sendPushToServer({
+        title: `🔥 New Clip Drop: ${bandName}`,
+        body: `"${title || caption || 'New clip reel live now!'}"`,
+        category: 'exclusive_content',
+        priority: 'P1',
+        targetTab: 'social',
+        data: { clipId, bandName, type: 'clip_drop' }
+      }).catch(() => {});
 
       // Execute background storage upload and DB persistence asynchronously
       (async () => {

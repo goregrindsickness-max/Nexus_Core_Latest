@@ -22,6 +22,7 @@ import {
   Info
 } from 'lucide-react';
 import { getSupabase, generateUUID } from '../../../supabase';
+import { pushManager } from '../../../lib/pushNotifications';
 
 export interface SubmitBandToPromoterModalProps {
   isOpen: boolean;
@@ -217,6 +218,18 @@ export const SubmitBandToPromoterModal: React.FC<SubmitBandToPromoterModalProps>
     setIsSubmitting(false);
     setIsSubmitted(true);
     triggerNotification?.(`🎸 Submission delivered to ${promoterName}!`);
+
+    // Dispatch Inbound Booking Guarantee Offer real-time push notification
+    pushManager.sendPushToServer({
+      userId: promoterProfile?.id || promoterProfile?.user_id,
+      title: '⚡ Inbound Booking Guarantee Offer & EPK Pitch',
+      body: `${formData.bandName} submitted a gig application for ${formData.preferredDates || 'upcoming show schedule'}!`,
+      category: 'booking_deals',
+      priority: 'P0',
+      targetTab: 'booking',
+      data: { bandName: formData.bandName, promoterName, type: 'booking_offer' }
+    }).catch(() => {});
+
     if (onSuccess) onSuccess(submissionPayload);
   };
 

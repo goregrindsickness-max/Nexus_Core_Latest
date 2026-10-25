@@ -3,6 +3,7 @@ import type { FeedItem } from '../../../data/socialFeedMockData';
 import { getSupabase } from '../../../supabase';
 import { syncPostToSupabase } from '../utils/postSyncUtils';
 import { submitGlobalComment, generateValidUUID } from '../../../services/postInteractionsService';
+import { pushManager } from '../../../lib/pushNotifications';
 
 export function getYouTubeId(url: string): string {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -260,8 +261,22 @@ export function useSocialFeedActions({
       } catch (_) {}
     }
 
+    // Send push notification to post author
+    const targetPost = feed.find(p => p.id === postId) as any;
+    const postAuthorId = targetPost?.author_id || targetPost?.user_id || targetPost?.author?.id || targetPost?.profile_id;
+    if (postAuthorId && postAuthorId !== userId) {
+      pushManager.sendPushToServer({
+        userId: postAuthorId,
+        title: 'New Comment on Your Post 💬',
+        body: `${authorName}: "${text.slice(0, 80)}"`,
+        category: 'artist_interactions',
+        targetTab: 'social',
+        data: { postId, commentId, type: 'comment' }
+      }).catch(() => {});
+    }
+
     triggerNotification?.("Comment posted!");
-  }, [commentInputs, userProfile, profileHandle, setFeed, setCommentInputs, triggerNotification]);
+  }, [commentInputs, feed, userProfile, profileHandle, setFeed, setCommentInputs, triggerNotification]);
 
   // Vote comment
   const handleVoteComment = useCallback((postId: string, commentId: string, type: 'up' | 'down') => {

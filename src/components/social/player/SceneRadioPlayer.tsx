@@ -38,7 +38,7 @@ import {
   markSceneRadioUserActive,
   isSceneRadioImmune
 } from '../utils/mediaPlaybackCoordinator';
-import { persistentAudioService } from '../../../services/persistentAudioService';
+import { persistentAudioService, getSilentAudioCarrier } from '../../../services/persistentAudioService';
 
 export interface SceneRadioPlayerProps {
   showSceneRadio?: boolean;
@@ -484,7 +484,16 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
               // When the app is minimized / backgrounded or screen locked, YouTube iframe triggers auto-pause (data === 2)
               // Only process as an intentional user pause if the document is actually active and visible
               if (typeof document !== 'undefined' && document.hidden) {
-                console.log('[RADIO PLAYER] Document hidden: ignoring YouTube background auto-pause to keep audio active');
+                console.log('[RADIO PLAYER] Document hidden: YouTube auto-paused by OS. Resuming background playback...');
+                if (sceneRadioPlayingRef.current && ytPlayerRef.current && typeof ytPlayerRef.current.playVideo === 'function') {
+                  setTimeout(() => {
+                    if (sceneRadioPlayingRef.current && ytPlayerRef.current && typeof ytPlayerRef.current.playVideo === 'function') {
+                      try {
+                        ytPlayerRef.current.playVideo();
+                      } catch (_) {}
+                    }
+                  }, 150);
+                }
                 return;
               }
               setSceneRadioPlaying(false);
@@ -709,8 +718,17 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
         album: `Nexus Scene Radio • ${genreName}`,
         genre: genreName,
         artworkUrl: artwork,
-        audioUrl: curTrack?.audioUrl || 'https://actions.google.com/sounds/v1/ambiences/metal_scraping.ogg',
+        audioUrl: curTrack?.audioUrl || getSilentAudioCarrier(),
         isLiveStream: true
+      }, {
+        onNext: () => handleNextSong(),
+        onPrevious: () => handlePrevSong(),
+        onPlay: () => {
+          if (!sceneRadioPlayingRef.current) togglePlayPause();
+        },
+        onPause: () => {
+          if (sceneRadioPlayingRef.current) togglePlayPause();
+        }
       });
     } else {
       persistentAudioService.pause();
@@ -783,6 +801,29 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
       }
     };
   }, [triggerNotification]);
+
+  // Keep audio playback seamless across document visibility transitions
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
+      if (!document.hidden && sceneRadioPlayingRef.current) {
+        if (ytPlayerRef.current && typeof ytPlayerRef.current.getPlayerState === 'function') {
+          const state = ytPlayerRef.current.getPlayerState();
+          // If video was paused (2) or cued (5) while user intended playback, resume
+          if (state !== 1 && typeof ytPlayerRef.current.playVideo === 'function') {
+            try {
+              ytPlayerRef.current.playVideo();
+            } catch (_) {}
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
 
   // Select a specific track from the playlist queue

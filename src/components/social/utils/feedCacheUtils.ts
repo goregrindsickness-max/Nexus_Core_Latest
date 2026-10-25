@@ -55,17 +55,15 @@ export function isBrokenOrDeletedPost(post: any): boolean {
   
   const content = String(post.content || post.text || post.message || '').toLowerCase().trim();
   
-  // Specific broken profile avatar uploads / orphaned records requested for removal
+  // Specific broken test / orphaned records requested for removal
   if (authorName.includes('kasper') && (content.includes('im here now') || content.includes('here now') || content.length < 30)) {
-    return true;
-  }
-  if (authorName.includes('wirstrom') && (content.includes('updated profile picture') || content.includes('archived '))) {
     return true;
   }
   if (content === 'im here now' && (authorName === 'kasper' || authorName === '' || authorName === 'anonymous' || authorName.includes('fan'))) {
     return true;
   }
-  if (content.includes('updated profile picture! check out the new look.') && (authorName.includes('christopher') || authorName.includes('wirstrom') || authorName === 'anonymous' || authorName === '')) {
+  // Exclude raw internal archived asset entries from the public social feed
+  if (content === 'archived profile photo' || content === 'archived cover photo' || content.startsWith('archived ')) {
     return true;
   }
   

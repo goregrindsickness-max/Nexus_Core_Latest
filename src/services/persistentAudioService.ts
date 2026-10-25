@@ -25,9 +25,18 @@ export interface AudioServiceCallbacks {
   onStateChange?: (state: PlaybackState) => void;
   onTrackChange?: (track: PersistentTrackInfo | null) => void;
   onProgress?: (currentTime: number, duration: number) => void;
+  onPlay?: () => void;
+  onPause?: () => void;
   onNext?: () => void;
   onPrevious?: () => void;
   onNotification?: (message: string) => void;
+}
+
+// 60-byte PCM 44.1kHz mono silent WAV audio carrier (prevents OS sleep and keeps Android MediaSession/Foreground active)
+export const SILENT_AUDIO_CARRIER = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAA';
+
+export function getSilentAudioCarrier(): string {
+  return SILENT_AUDIO_CARRIER;
 }
 
 class PersistentAudioService {
@@ -44,6 +53,7 @@ class PersistentAudioService {
   private timeUpdateInterval: any = null;
   private wasPlayingBeforeInterruption: boolean = false;
   private isInitialized: boolean = false;
+  private isCarrierAudio: boolean = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -58,10 +68,13 @@ class PersistentAudioService {
     if (this.isInitialized || typeof window === 'undefined') return;
     this.isInitialized = true;
 
-    // 1. Create a persistent, non-garbage-collected HTMLAudioElement
+    // 1. Create a persistent, non-garbage-collected HTMLAudioElement marked as Scene Radio
     this.audioElement = new Audio();
+    this.audioElement.id = 'scene-radio-carrier';
+    this.audioElement.setAttribute('data-scene-radio', 'true');
     this.audioElement.preload = 'auto';
     this.audioElement.crossOrigin = 'anonymous';
+    this.audioElement.loop = true;
     this.audioElement.volume = this.volume;
 
     // Attach core media event listeners
@@ -78,7 +91,7 @@ class PersistentAudioService {
     });
 
     this.audioElement.addEventListener('pause', () => {
-      // Don't update state to paused if we are just loading a new track
+      // Don't update state to paused if we are just loading a new track or using carrier
       if (this.playbackState !== 'loading') {
         this.setPlaybackState('paused');
         this.updateMediaSessionState('paused');
@@ -88,6 +101,13 @@ class PersistentAudioService {
     });
 
     this.audioElement.addEventListener('ended', () => {
+      // Carrier audio should loop continuously and never stop the native service
+      if (this.isCarrierAudio) {
+        if (this.playbackState === 'playing') {
+          this.audioElement?.play().catch(() => {});
+        }
+        return;
+      }
       this.setPlaybackState('idle');
       this.updateMediaSessionState('none');
       this.releaseWakeLock();
@@ -104,13 +124,15 @@ class PersistentAudioService {
     });
 
     this.audioElement.addEventListener('error', (e) => {
-      console.warn('[PersistentAudioService] Audio playback error encountered:', e);
-      this.handleStreamError();
+      if (!this.isCarrierAudio) {
+        console.warn('[PersistentAudioService] Audio playback error encountered:', e);
+        this.handleStreamError();
+      }
     });
 
     // Progress updates
     this.audioElement.addEventListener('timeupdate', () => {
-      if (this.audioElement && this.callbacks.onProgress) {
+      if (this.audioElement && this.callbacks.onProgress && !this.isCarrierAudio) {
         const cur = this.audioElement.currentTime || 0;
         const dur = this.audioElement.duration || (this.currentTrack?.duration || 0);
         this.callbacks.onProgress(cur, dur);
@@ -224,12 +246,24 @@ class PersistentAudioService {
       const genre = this.currentTrack?.genre || 'Brutal Death';
 
       if (action === 'start') {
+        if (typeof nativeBridge.setAudioActive === 'function') {
+          nativeBridge.setAudioActive(true);
+        }
         nativeBridge.startForegroundAudio(title, artist, genre);
       } else if (action === 'update') {
+        if (typeof nativeBridge.setAudioActive === 'function') {
+          nativeBridge.setAudioActive(true);
+        }
         nativeBridge.updateMetadata(title, artist);
       } else if (action === 'pause') {
+        if (typeof nativeBridge.setAudioActive === 'function') {
+          nativeBridge.setAudioActive(false);
+        }
         nativeBridge.pauseForegroundAudio();
       } else if (action === 'stop') {
+        if (typeof nativeBridge.setAudioActive === 'function') {
+          nativeBridge.setAudioActive(false);
+        }
         nativeBridge.stopForegroundAudio();
       }
     } catch (e) {
@@ -301,9 +335,26 @@ class PersistentAudioService {
     if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
 
     const actionHandlers: Array<[MediaSessionAction, MediaSessionActionHandler | null]> = [
-      ['play', () => this.resume()],
-      ['pause', () => this.pause()],
-      ['stop', () => this.stop()],
+      ['play', () => {
+        if (this.callbacks.onPlay) {
+          this.callbacks.onPlay();
+        } else {
+          this.resume();
+        }
+      }],
+      ['pause', () => {
+        if (this.callbacks.onPause) {
+          this.callbacks.onPause();
+        } else {
+          this.pause();
+        }
+      }],
+      ['stop', () => {
+        if (this.callbacks.onPause) {
+          this.callbacks.onPause();
+        }
+        this.stop();
+      }],
       ['previoustrack', () => {
         if (this.callbacks.onPrevious) {
           this.callbacks.onPrevious();
@@ -419,9 +470,12 @@ class PersistentAudioService {
     this.updateMediaSessionMetadata(track);
     this.notifyNativeBridge('update');
 
-    const streamUrl = track.audioUrl?.trim();
-    if (!streamUrl || !this.audioElement) {
-      console.warn('[PersistentAudioService] No audioUrl provided for track:', track.title);
+    const rawUrl = track.audioUrl?.trim();
+    const streamUrl = rawUrl || SILENT_AUDIO_CARRIER;
+    this.isCarrierAudio = !rawUrl || rawUrl.startsWith('data:audio');
+
+    if (!this.audioElement) {
+      console.warn('[PersistentAudioService] Audio element not initialized');
       return;
     }
 
@@ -429,6 +483,16 @@ class PersistentAudioService {
       this.setPlaybackState('loading');
       clearTimeout(this.reconnectTimer);
       this.reconnectAttempts = 0;
+
+      this.audioElement.setAttribute('data-scene-radio', 'true');
+      this.audioElement.loop = this.isCarrierAudio;
+
+      if (this.isCarrierAudio) {
+        // Subtle carrier level keeping OS audio session and wake pipeline alive
+        this.audioElement.volume = 0.05;
+      } else {
+        this.audioElement.volume = this.volume;
+      }
 
       // Only set new source if it differs
       if (this.audioElement.src !== streamUrl) {
@@ -443,8 +507,15 @@ class PersistentAudioService {
       this.notifyNativeBridge('start');
     } catch (err: any) {
       console.warn('[PersistentAudioService] Audio play error:', err?.message || err);
-      // Auto-reconnect or notify
-      this.handleStreamError();
+      if (!this.isCarrierAudio) {
+        // Auto-reconnect or notify for actual remote stream URLs
+        this.handleStreamError();
+      } else {
+        // For carrier audio, keep state active for native bridge
+        this.setPlaybackState('playing');
+        this.updateMediaSessionState('playing');
+        this.notifyNativeBridge('start');
+      }
     }
   }
 

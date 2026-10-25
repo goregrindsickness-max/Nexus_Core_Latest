@@ -3520,17 +3520,27 @@ const getProfileForUser = (userParam: any) => {
   const cleanRealLower = cleanRealName.toLowerCase().trim();
   const cleanHandleLower = cleanHandle.toLowerCase().trim();
 
-  const dbProfile = (allProfiles || []).find((p: any) => 
+  let dbProfile = (allProfiles || []).find((p: any) => 
     (targetId && p.id && String(p.id) === String(targetId)) ||
-    (targetEmail && p.email && p.email.toLowerCase().trim() === targetEmail) ||
-    (!targetId && targetNameLower && p?.name && p.name.toLowerCase().trim() === targetNameLower) || 
-    (!targetId && targetNameLower && p?.full_name && p.full_name.toLowerCase().trim() === targetNameLower) || 
-    (!targetId && targetNameLower && p?.console_handle && p.console_handle.toLowerCase().trim() === targetNameLower) || 
-    (!targetId && cleanHandleLower && cleanHandleLower !== 'user' && p?.console_handle && p.console_handle.toLowerCase().trim() === cleanHandleLower) || 
-    (!targetId && targetNameLower && p?.label_company_name && p.label_company_name.toLowerCase().trim() === targetNameLower) || 
-    (!targetId && targetNameLower && p?.promoter_name && p.promoter_name.toLowerCase().trim() === targetNameLower) || 
-    (!targetId && targetNameLower && p?.creative_name && p.creative_name.toLowerCase().trim() === targetNameLower)
+    (targetEmail && p.email && p.email.toLowerCase().trim() === targetEmail)
   );
+
+  if (!dbProfile) {
+    dbProfile = (allProfiles || []).find((p: any) => {
+      const pName = (p?.name || '').toLowerCase().trim();
+      const pFullName = (p?.full_name || '').toLowerCase().trim();
+      const pHandle = (p?.console_handle || p?.handle || '').replace(/^@/, '').toLowerCase().trim();
+      const pLabel = (p?.label_company_name || '').toLowerCase().trim();
+      const pPromoter = (p?.promoter_name || '').toLowerCase().trim();
+      const pCreative = (p?.creative_name || '').toLowerCase().trim();
+
+      if (cleanHandleLower && cleanHandleLower !== 'user' && pHandle && pHandle === cleanHandleLower) return true;
+      if (targetNameLower && (pName === targetNameLower || pFullName === targetNameLower || pHandle === targetNameLower)) return true;
+      if (cleanRealLower && (pFullName === cleanRealLower || pName === cleanRealLower)) return true;
+      if (targetNameLower && (pLabel === targetNameLower || pPromoter === targetNameLower || pCreative === targetNameLower)) return true;
+      return false;
+    });
+  }
 
   const myNameLower = (userProfile?.name || '').toLowerCase().trim();
   const myFullNameLower = (userProfile?.full_name || profileFullLegalName || '').toLowerCase().trim();

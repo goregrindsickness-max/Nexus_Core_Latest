@@ -151,10 +151,10 @@ export async function fetchGlobalInteractions(forceRefresh = false): Promise<Pos
         if (!existingC) {
           existing.set(sbC.id, sbC);
         } else {
-          // If existing comment has edited: true, preserve its edited content!
-          if (existingC.edited && !sbC.edited) {
-            existing.set(sbC.id, { ...sbC, ...existingC });
-          } else if (!existingC.edited && sbC.edited) {
+          // Compare edit/update timestamps so newest edit always prevails
+          const timeA = new Date(existingC.updated_at || existingC.timestamp || existingC.created_at || 0).getTime();
+          const timeB = new Date(sbC.updated_at || sbC.timestamp || sbC.created_at || 0).getTime();
+          if (timeB >= timeA) {
             existing.set(sbC.id, { ...existingC, ...sbC });
           } else {
             existing.set(sbC.id, { ...sbC, ...existingC });
@@ -222,12 +222,17 @@ async function syncCommentToSupabase(postId: string, commentObj: GlobalComment) 
   const supabase = getSupabase?.();
   if (!supabase) return;
 
+  const cleanPostId = postId.replace(/^nexus_post_/, '');
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanPostId);
+
   try {
-    const { data: rows } = await supabase
-      .from('nexus_posts')
-      .select('id, data')
-      .or(`id.eq.${postId},id.eq.nexus_post_${postId}`)
-      .limit(1);
+    let query = supabase.from('nexus_posts').select('id, data');
+    if (isUUID) {
+      query = query.eq('id', cleanPostId);
+    } else {
+      query = query.eq('id', postId);
+    }
+    const { data: rows } = await query.limit(1);
 
     if (rows && rows.length > 0) {
       const row = rows[0];
@@ -243,18 +248,19 @@ async function syncCommentToSupabase(postId: string, commentObj: GlobalComment) 
       }).eq('id', row.id);
     }
 
-    // Best-effort write to nexus_post_comments table
-    try {
-      await supabase.from('nexus_post_comments').insert({
-        id: commentObj.id,
-        post_id: postId,
-        user_id: commentObj.user_id || commentObj.userId,
-        author_name: commentObj.username || commentObj.author,
-        content: commentObj.text || commentObj.content,
-        parent_comment_id: commentObj.parent_comment_id || null,
-        created_at: commentObj.created_at || new Date().toISOString()
-      });
-    } catch (_) {}
+    if (isUUID) {
+      try {
+        await supabase.from('nexus_post_comments').upsert({
+          id: commentObj.id,
+          post_id: cleanPostId,
+          user_id: commentObj.user_id || commentObj.userId,
+          author_name: commentObj.username || commentObj.author,
+          content: commentObj.text || commentObj.content,
+          parent_comment_id: commentObj.parent_comment_id || null,
+          created_at: commentObj.created_at || new Date().toISOString()
+        }, { onConflict: 'id' });
+      } catch (_) {}
+    }
   } catch (err) {
     console.warn('[postInteractionsService] Supabase comment sync notice:', err);
   }
@@ -462,33 +468,62 @@ export async function updateGlobalComment(
   const supabase = getSupabase?.();
   if (supabase) {
     try {
-      const { data: rows } = await supabase
-        .from('nexus_posts')
-        .select('id, data')
-        .or(`id.eq.${postId},id.eq.nexus_post_${postId}`)
-        .limit(1);
+      const cleanPostId = postId.replace(/^nexus_post_/, '');
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanPostId);
+
+      let query = supabase.from('nexus_posts').select('id, data');
+      if (isUUID) {
+        query = query.eq('id', cleanPostId);
+      } else {
+        query = query.eq('id', postId);
+      }
+      const { data: rows } = await query.limit(1);
 
       if (rows && rows.length > 0) {
         const row = rows[0];
         const postObj = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data || {});
-        if (Array.isArray(postObj.comments)) {
-          const updatedComments = postObj.comments.map((c: any) => {
-            if (c.id === commentId) {
-              return { ...c, text: cleanText, content: cleanText, edited: true, updated_at: new Date().toISOString() };
-            }
-            return c;
-          });
-          await supabase.from('nexus_posts').update({ data: { ...postObj, comments: updatedComments } }).eq('id', row.id);
+        const existingComments: any[] = Array.isArray(postObj.comments) ? postObj.comments : [];
+        let foundInPost = false;
+        const updatedComments = existingComments.map((c: any) => {
+          if (c.id === commentId) {
+            foundInPost = true;
+            return {
+              ...c,
+              text: cleanText,
+              content: cleanText,
+              edited: true,
+              updated_at: new Date().toISOString()
+            };
+          }
+          return c;
+        });
+
+        if (!foundInPost && targetComment) {
+          updatedComments.push(targetComment);
         }
+
+        await supabase.from('nexus_posts').update({
+          data: {
+            ...postObj,
+            comments: updatedComments
+          }
+        }).eq('id', row.id);
       }
 
       try {
         await supabase
           .from('nexus_post_comments')
-          .update({ content: cleanText })
-          .eq('id', commentId);
+          .upsert({
+            id: commentId,
+            post_id: isUUID ? cleanPostId : postId,
+            content: cleanText,
+            edited: true,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
       } catch (_) {}
-    } catch (_) {}
+    } catch (sbErr) {
+      console.warn('[postInteractionsService] Supabase comment edit notice:', sbErr);
+    }
   }
 
   try {
@@ -545,11 +580,16 @@ export async function deleteGlobalComment(
   const supabase = getSupabase?.();
   if (supabase) {
     try {
-      const { data: rows } = await supabase
-        .from('nexus_posts')
-        .select('id, data')
-        .or(`id.eq.${postId},id.eq.nexus_post_${postId}`)
-        .limit(1);
+      const cleanPostId = postId.replace(/^nexus_post_/, '');
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanPostId);
+
+      let query = supabase.from('nexus_posts').select('id, data');
+      if (isUUID) {
+        query = query.eq('id', cleanPostId);
+      } else {
+        query = query.eq('id', postId);
+      }
+      const { data: rows } = await query.limit(1);
 
       if (rows && rows.length > 0) {
         const row = rows[0];

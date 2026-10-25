@@ -5346,6 +5346,76 @@ Return a valid JSON object matching the requested schema. If any field is not fo
 
       await saveCachedInteractions(interactions);
 
+      // Push notification dispatch to post author & dual-write to Supabase
+      try {
+        const cleanPostId = String(postId).replace(/^nexus_post_/, '');
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanPostId);
+        let postAuthorId: string | null = null;
+        let postAuthorEmail: string | null = null;
+
+        const sb = getSupabaseService();
+        if (sb && isUUID) {
+          const { data: pData } = await sb.from('nexus_posts').select('profile_id, data').eq('id', cleanPostId).limit(1);
+          if (pData && pData.length > 0) {
+            postAuthorId = pData[0].profile_id;
+            const pObj = typeof pData[0].data === 'string' ? JSON.parse(pData[0].data) : (pData[0].data || {});
+            postAuthorEmail = pObj.author?.email || pObj.email || null;
+            if (!postAuthorId) postAuthorId = pObj.author?.id || pObj.author_id || null;
+
+            // Also ensure comment is synced into nexus_posts in Supabase from backend
+            const existingComments: any[] = Array.isArray(pObj.comments) ? pObj.comments : [];
+            const updatedComments = [...existingComments.filter((c: any) => c.id !== validId), newCommentObj];
+            await sb.from('nexus_posts').update({ data: { ...pObj, comments: updatedComments } }).eq('id', pData[0].id);
+          }
+
+          try {
+            await sb.from('nexus_post_comments').upsert({
+              id: validId,
+              post_id: cleanPostId,
+              user_id: userId,
+              author_name: author,
+              content: text,
+              parent_comment_id: comment.parent_comment_id || comment.parentCommentId || null,
+              created_at: nowIso
+            }, { onConflict: 'id' });
+          } catch (_) {}
+        }
+
+        // Only send push if the commenter is not the author of the post
+        if (postAuthorId && postAuthorId !== userId) {
+          const allSubs = readPushSubscriptions();
+          const targetSubs = allSubs.filter(s => {
+            if (s.userId && s.userId === postAuthorId) return true;
+            if (postAuthorEmail && s.userEmail && s.userEmail.toLowerCase() === postAuthorEmail.toLowerCase()) return true;
+            return false;
+          });
+
+          if (targetSubs.length > 0) {
+            const pushPayload = JSON.stringify({
+              title: `💬 ${author} commented on your transmission`,
+              body: `"${text.slice(0, 100)}${text.length > 100 ? '...' : ''}"`,
+              icon: "/icon-192.png",
+              badge: "/icon-192.png",
+              targetTab: "social",
+              category: "artist_interactions",
+              priority: "P1",
+              data: { postId: cleanPostId, commentId: validId, type: "comment", commenterId: userId },
+              timestamp: Date.now()
+            });
+
+            targetSubs.forEach(async (entry) => {
+              try {
+                if (entry.subscription && !entry.subscription.endpoint?.startsWith('native://')) {
+                  await webpush.sendNotification(entry.subscription, pushPayload);
+                }
+              } catch (_) {}
+            });
+          }
+        }
+      } catch (pushErr) {
+        console.warn('[PUSH COMMENT DISPATCH NOTICE]', pushErr);
+      }
+
       res.json({
         success: true,
         comment: newCommentObj,
@@ -5409,6 +5479,44 @@ Return a valid JSON object matching the requested schema. If any field is not fo
 
       if (updatedComment) {
         await saveCachedInteractions(interactions);
+
+        // Also push the update to Supabase directly from backend
+        const sb = getSupabaseService();
+        if (sb && postId) {
+          try {
+            const cleanPostId = String(postId).replace(/^nexus_post_/, '');
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanPostId);
+            if (isUUID) {
+              const { data: rows } = await sb.from('nexus_posts').select('id, data').eq('id', cleanPostId).limit(1);
+              if (rows && rows.length > 0) {
+                const postObj = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : (rows[0].data || {});
+                const existing = Array.isArray(postObj.comments) ? postObj.comments : [];
+                let foundInSb = false;
+                const nextComms = existing.map((c: any) => {
+                  if (c.id === commentId) {
+                    foundInSb = true;
+                    return { ...c, text: newText, content: newText, edited: true, updated_at: updatedComment.updated_at };
+                  }
+                  return c;
+                });
+                if (!foundInSb) {
+                  nextComms.push(updatedComment);
+                }
+                await sb.from('nexus_posts').update({ data: { ...postObj, comments: nextComms } }).eq('id', rows[0].id);
+              }
+              await sb.from('nexus_post_comments').upsert({
+                id: commentId,
+                post_id: cleanPostId,
+                content: newText,
+                edited: true,
+                updated_at: updatedComment.updated_at
+              }, { onConflict: 'id' });
+            }
+          } catch (sbPutErr) {
+            console.warn('[SERVER COMMENT EDIT SUPABASE SYNC NOTICE]', sbPutErr);
+          }
+        }
+
         return res.json({ success: true, comment: updatedComment });
       }
 

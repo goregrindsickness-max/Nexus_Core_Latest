@@ -90,19 +90,15 @@ export async function getClipMediaBlob(clipId: string | number): Promise<Blob | 
   }
 }
 
-/**
- * Generates an active, playable URL for a clip.
- * If the URL is a dead/expired blob URL, attempts to revive it from IndexedDB.
- */
 export async function resolveClipVideoPlaybackUrl(clipId: string | number, currentUrl: string): Promise<string> {
   const idStr = String(clipId || '').trim();
 
-  // If this is the Virulent Excision live clip with corrupted base64 or missing video URL
-  if (idStr === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' && (!currentUrl || currentUrl.startsWith('/9j/') || currentUrl.startsWith('data:image'))) {
+  // If this is the Virulent Excision live clip or corrupted base64 or missing video URL
+  if ((idStr === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' || idStr === 'f64469f8-0340-4b31-acb5-f8b4a9d7e487') && (!currentUrl || currentUrl.startsWith('/9j/') || currentUrl.startsWith('data:image') || currentUrl.startsWith('blob:'))) {
     return 'https://www.youtube.com/watch?v=jQ26iMGJbW4';
   }
 
-  // If it's a valid remote http/https URL or server relative /uploads/ path that is not a blob, keep it
+  // If it's a valid remote http/https URL or server relative /uploads/ path that is NOT a blob: URL, keep it
   if (currentUrl && (currentUrl.startsWith('http://') || currentUrl.startsWith('https://') || currentUrl.startsWith('/uploads/')) && !currentUrl.startsWith('blob:')) {
     return currentUrl;
   }
@@ -119,12 +115,17 @@ export async function resolveClipVideoPlaybackUrl(clipId: string | number, curre
     console.warn(`[ClipsPersistence] Could not revive blob for clip "${clipId}":`, e);
   }
 
-  // If currentUrl was already http(s), preserve it
-  if (currentUrl && (currentUrl.startsWith('http://') || currentUrl.startsWith('https://'))) {
-    return currentUrl;
+  // If it was a blob: URL and IndexedDB did NOT have the blob (dead blob URL from previous browser session),
+  // NEVER return the dead blob URL as it will crash the player! Provide a valid fallback stream.
+  if (!currentUrl || currentUrl.startsWith('blob:') || currentUrl.startsWith('data:image')) {
+    // Pick a deterministic fallback based on clipId hash
+    const charCodeSum = idStr.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+    const fallback = SCENE_PERFORMANCE_VIDEOS[charCodeSum % SCENE_PERFORMANCE_VIDEOS.length] || 'https://www.youtube.com/watch?v=jQ26iMGJbW4';
+    console.log(`[ClipsPersistence] Replaced dead blob/missing URL for clip "${clipId}" with stream fallback -> ${fallback}`);
+    return fallback;
   }
 
-  return currentUrl || '';
+  return currentUrl;
 }
 
 /**
@@ -178,19 +179,18 @@ export function generateVideoThumbnail(file: File | Blob): Promise<string> {
   });
 }
 
-/**
- * Revives an entire array of clips, restoring any expired blob URLs from IndexedDB or resilient streams.
- */
 export async function reviveClipsArray(clips: PersistedClip[]): Promise<PersistedClip[]> {
   if (!Array.isArray(clips) || clips.length === 0) return [];
 
   const revived = await Promise.all(
     clips.map(async (clip) => {
-      if (!clip.videoUrl || clip.videoUrl.startsWith('blob:') || clip.videoUrl.startsWith('idb:')) {
-        const resolvedUrl = await resolveClipVideoPlaybackUrl(clip.id, clip.videoUrl);
+      const rawUrl = clip.videoUrl || clip.video_url || '';
+      if (!rawUrl || rawUrl.startsWith('blob:') || rawUrl.startsWith('idb:') || rawUrl.startsWith('data:image')) {
+        const resolvedUrl = await resolveClipVideoPlaybackUrl(clip.id, rawUrl);
         return {
           ...clip,
           videoUrl: resolvedUrl,
+          video_url: resolvedUrl,
         };
       }
       return clip;

@@ -18,8 +18,15 @@ import {
   X, 
   CornerDownRight,
   Pencil,
-  Trash2
+  Trash2,
+  MessageSquarePlus,
+  Upload,
+  Link,
+  ChevronDown,
+  Globe,
+  Tag
 } from 'lucide-react';
+import { uploadFeedMedia } from '../../lib/storage';
 import { YouTubeEmbedCard } from '../social/embeds/YouTubeEmbedCard';
 import { PollWidget } from '../social/embeds/PollWidget';
 import { TapeEmbedCard } from '../social/embeds/TapeEmbedCard';
@@ -43,6 +50,7 @@ import {
 import { InlineReactionsModal } from '../social/modals/InlineReactionsModal';
 import { resolveReactionActor } from '../social/utils/personaResolution';
 import { CommentMediaPicker } from '../social/timeline/CommentMediaPicker';
+import { pushManager } from '../../lib/pushNotifications';
 
 export interface TimelinePost {
   id: string;
@@ -61,6 +69,16 @@ export interface TimelinePost {
     workspace_type?: string;
     [key: string]: any;
   };
+  recipient?: {
+    id?: string;
+    name?: string;
+    handle?: string;
+    role?: string;
+    [key: string]: any;
+  } | null;
+  target_profile_id?: string;
+  target_profile_name?: string;
+  is_timeline_post?: boolean;
   type?: string;
   tag?: string;
   reactions_count?: number;
@@ -348,25 +366,118 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressRef = useRef(false);
 
-  const activeUserId = typeof window !== 'undefined'
-    ? localStorage.getItem('nexus_active_profile_id') || localStorage.getItem('nexus_user_profile_id') || userId || 'current'
-    : (userId || 'current');
+  const loggedInUserInfo = typeof window !== 'undefined'
+    ? (() => {
+        try {
+          const raw = localStorage.getItem('nexus_core_user_profile') || localStorage.getItem('nexus_user');
+          if (raw) {
+            const p = JSON.parse(raw);
+            return {
+              id: p.id || p.userId || p.profile_id || '',
+              name: p.name || p.full_name || '',
+              fullName: p.full_name || p.legal_name || p.name || '',
+              handle: (p.console_handle || p.handle || p.username || '').replace(/^@/, ''),
+              avatar: p.avatar_url || p.avatar || null,
+              role: p.role || p.portalRole || 'Member',
+              workspace_type: p.workspace_type || p.active_workspace || ''
+            };
+          }
+        } catch (_) {}
+        const rawId = localStorage.getItem('nexus_active_profile_id') || localStorage.getItem('nexus_user_profile_id') || localStorage.getItem('nexus_active_user_uuid') || '';
+        return { id: rawId, name: '', fullName: '', handle: '', avatar: null, role: 'Member', workspace_type: '' };
+      })()
+    : { id: '', name: '', fullName: '', handle: '', avatar: null, role: 'Member', workspace_type: '' };
+
+  const activeUserId = loggedInUserInfo.id || 'current';
+
+  // Timeline Direct Composer state
+  const [newPostText, setNewPostText] = useState('');
+  const [newPostImageUrl, setNewPostImageUrl] = useState('');
+  const [selectedPostCategory, setSelectedPostCategory] = useState('');
+  const [broadcastToFeed, setBroadcastToFeed] = useState(true);
+  const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [showImageUrlInput, setShowImageUrlInput] = useState(false);
+  const [customImageUrlDraft, setCustomImageUrlDraft] = useState('');
+  const [posterPersonaId, setPosterPersonaId] = useState<string>('default');
+  const timelineFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Available identities to post as (personal vs active band / creative)
+  const availableIdentities = React.useMemo(() => {
+    const list: Array<{ id: string; name: string; avatar: string | null; role: string; handle: string; type: string }> = [];
+    
+    // 1. Current logged-in user profile
+    const pId = loggedInUserInfo.id || 'personal';
+    const pName = loggedInUserInfo.name || 'You';
+    const pAvatar = loggedInUserInfo.avatar || (typeof window !== 'undefined' ? localStorage.getItem('nexus_avatar') : null);
+    const pRole = loggedInUserInfo.role || 'Member';
+    const pHandle = loggedInUserInfo.handle || '';
+
+    list.push({
+      id: pId,
+      name: pName,
+      avatar: pAvatar,
+      role: pRole,
+      handle: pHandle,
+      type: 'personal'
+    });
+
+    // 2. Active Band Override from localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const bandRaw = localStorage.getItem('band_profile_override') || localStorage.getItem('nexus_active_band');
+        if (bandRaw) {
+          const b = JSON.parse(bandRaw);
+          const bName = b.name || b.band_name;
+          if (bName && !list.some(item => item.name.toLowerCase() === bName.toLowerCase())) {
+            list.push({
+              id: b.id || b.band_id || `band_${bName}`,
+              name: bName,
+              avatar: b.avatar_url || b.logo_url || b.avatar || null,
+              role: 'Band / Artist',
+              handle: (b.handle || b.username || bName).toLowerCase().replace(/[^a-z0-9_]/g, ''),
+              type: 'band'
+            });
+          }
+        }
+      } catch (_) {}
+
+      // 3. Creative / Promoter active workspace
+      try {
+        const creativeRaw = localStorage.getItem('nexus_creative_profile');
+        if (creativeRaw) {
+          const c = JSON.parse(creativeRaw);
+          if (c?.name && !list.some(item => item.name.toLowerCase() === c.name.toLowerCase())) {
+            list.push({
+              id: c.id || `creative_${c.name}`,
+              name: c.name,
+              avatar: c.avatar_url || c.avatar || null,
+              role: 'Creative Pro',
+              handle: (c.handle || c.name).toLowerCase().replace(/[^a-z0-9_]/g, ''),
+              type: 'creative'
+            });
+          }
+        }
+      } catch (_) {}
+    }
+
+    return list;
+  }, [loggedInUserInfo]);
+
+  const activePersona = availableIdentities.find(i => i.id === posterPersonaId) || availableIdentities[0] || {
+    id: loggedInUserInfo.id || 'personal',
+    name: loggedInUserInfo.name || 'You',
+    avatar: loggedInUserInfo.avatar || null,
+    role: loggedInUserInfo.role || 'Member',
+    handle: loggedInUserInfo.handle || '',
+    type: 'personal'
+  };
 
   const activeUserProfile = selectedUserProfile || targetProfile;
   const profileAvatarUrl = activeUserProfile?.avatar_url || activeUserProfile?.avatar || activeUserProfile?.profile_avatar || null;
 
-  const currentUserName = typeof window !== 'undefined'
-    ? (() => {
-        try {
-          const raw = localStorage.getItem('nexus_user') || localStorage.getItem('nexus_core_user_profile');
-          if (raw) {
-            const p = JSON.parse(raw);
-            return p.name || p.console_handle || p.username || 'You';
-          }
-        } catch (_) {}
-        return 'You';
-      })()
-    : 'You';
+  const currentUserName = loggedInUserInfo.name || loggedInUserInfo.handle || 'You';
 
   // Live synchronizer for reactions and comments between the profile card and global feed
   useEffect(() => {
@@ -765,6 +876,24 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     // 5. Award Sonic Footprint points!
     awardSonicPoints('signal_contributor', 2, `Commented on scene transmission: "${draft.substring(0, 30)}${draft.length > 30 ? '...' : ''}"`);
 
+    // 6. Push notification to the author of the post (if someone else comments on their post)
+    try {
+      const targetPost = posts.find(p => p.id === postId);
+      const postAuthorId = targetPost?.user_id || targetPost?.author_id || targetPost?.profile_id || (targetPost?.author as any)?.id;
+      const isSelfPost = Boolean(postAuthorId && activeUserId && postAuthorId === activeUserId);
+      if (!isSelfPost && postAuthorId) {
+        pushManager.sendPushToServer({
+          userId: postAuthorId,
+          title: `💬 ${authorName} commented on your transmission`,
+          body: `"${draft.slice(0, 100)}${draft.length > 100 ? '...' : ''}"`,
+          category: 'artist_interactions',
+          targetTab: 'social',
+          priority: 'P1',
+          data: { postId, commentId, commenterId: activeUserId, type: 'comment' }
+        });
+      }
+    } catch (_) {}
+
     triggerNotification?.("💬 Comment published to transmission thread.");
   };
 
@@ -812,6 +941,228 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
 
   const selectedProfileId = selectedUserProfile?.id;
   const selectedProfileName = selectedUserProfile?.name;
+  const isEffYou = Boolean(isYou || selectedUserProfile?.isYou);
+  const targetId = profileId || userId || selectedProfileId || selectedUserProfile?.id || (isEffYou ? activeUserId : undefined);
+  const targetDisplayName = profileName || selectedProfileName || selectedUserProfile?.name || 'User';
+  const targetName = targetDisplayName.toLowerCase().trim();
+  const targetHandle = (selectedUserProfile?.console_handle || selectedUserProfile?.handle || selectedUserProfile?.username || '').replace(/^@/, '').toLowerCase().trim();
+  const targetFullName = (selectedUserProfile?.full_name || selectedUserProfile?.legal_name || '').toLowerCase().trim();
+  const targetBandName = (selectedUserProfile?.band_name || (selectedUserProfile?.role === 'Band' ? selectedUserProfile?.name : '') || '').toLowerCase().trim();
+
+  const getSuggestedCategories = useCallback(() => {
+    if (isEffYou) {
+      return ['TRANSMISSION', 'STUDIO UPDATE', 'TOUR / GIG ALERT', 'RELEASE SIGNAL', 'GENERAL'];
+    }
+    const r = (selectedUserProfile?.role || portalRole || '').toLowerCase();
+    if (r.includes('creative') || r.includes('design') || r.includes('photo')) {
+      return ['WALL TRANSMISSION', 'COMMISSION INQUIRY', 'PORTFOLIO REVIEW', 'COMMENDATION', 'COLLABORATION'];
+    }
+    if (r.includes('promoter') || r.includes('venue') || r.includes('booking')) {
+      return ['WALL TRANSMISSION', 'BOOKING INQUIRY', 'SHOW SHOUTOUT', 'VENUE FEEDBACK', 'COMMENDATION'];
+    }
+    if (r.includes('label')) {
+      return ['WALL TRANSMISSION', 'DEMO SUBMISSION', 'ROSTER SHOUT', 'COLLABORATION', 'COMMENDATION'];
+    }
+    if (r.includes('band') || r.includes('artist')) {
+      return ['WALL TRANSMISSION', 'COMMENDATION / REVIEW', 'SHOW / TOUR SHOUT', 'COLLABORATION', 'TRACK REACTION'];
+    }
+    return ['WALL TRANSMISSION', 'COMMENDATION', 'SHOW SHOUTOUT', 'COLLAB INQUIRY', 'GREETING'];
+  }, [isEffYou, selectedUserProfile, portalRole]);
+
+  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingMedia(true);
+    try {
+      const publicUrl = await uploadFeedMedia(file);
+      if (publicUrl) {
+        setNewPostImageUrl(publicUrl);
+        triggerNotification?.("📷 Image attached successfully!");
+      } else {
+        const reader = new FileReader();
+        reader.onload = (uploadEvt) => {
+          const res = uploadEvt.target?.result as string;
+          if (res) {
+            setNewPostImageUrl(res);
+            triggerNotification?.("📷 Image attached!");
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch (err: any) {
+      console.warn('Image upload notice:', err);
+      const reader = new FileReader();
+      reader.onload = (uploadEvt) => {
+        const res = uploadEvt.target?.result as string;
+        if (res) setNewPostImageUrl(res);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingMedia(false);
+      if (timelineFileInputRef.current) {
+        timelineFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleTimelinePostSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPostText.trim() && !newPostImageUrl.trim()) return;
+
+    setIsSubmittingPost(true);
+    try {
+      const isDirectedPost = !isEffYou;
+      const resolvedTargetId = targetId || profileId || userId || selectedProfileId || selectedUserProfile?.id || (isEffYou ? activeUserId : 'unknown_target');
+      const resolvedTargetName = targetDisplayName;
+      const resolvedTargetHandle = targetHandle;
+
+      const authorId = activePersona.id || activeUserId;
+      const authorName = activePersona.name || currentUserName;
+      const authorAvatar = activePersona.avatar || null;
+      const authorRole = activePersona.role || 'Member';
+      const authorHandle = activePersona.handle || '';
+
+      const newPostId = `post_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const nowIso = new Date().toISOString();
+
+      const defaultCategory = isDirectedPost ? 'WALL TRANSMISSION' : 'TRANSMISSION';
+      const tagToUse = selectedPostCategory || defaultCategory;
+
+      const postDataPayload: any = {
+        id: newPostId,
+        content: newPostText.trim(),
+        media_url: newPostImageUrl.trim() || null,
+        images: newPostImageUrl.trim() ? [newPostImageUrl.trim()] : [],
+        created_at: nowIso,
+        timestamp: nowIso,
+        tag: tagToUse,
+        type: 'post',
+        author_id: authorId,
+        profile_id: resolvedTargetId,
+        user_id: authorId,
+        author: {
+          id: authorId,
+          name: authorName,
+          avatar: authorAvatar,
+          role: authorRole,
+          console_handle: authorHandle ? `@${authorHandle}` : '',
+          handle: authorHandle,
+          full_name: authorName,
+          workspace_type: activePersona.type || ''
+        },
+        recipient: isDirectedPost ? {
+          id: resolvedTargetId,
+          name: resolvedTargetName,
+          handle: resolvedTargetHandle,
+          role: selectedUserProfile?.role || 'Member'
+        } : null,
+        is_timeline_post: true,
+        target_profile_id: resolvedTargetId,
+        target_profile_name: resolvedTargetName,
+        post_to_feed: broadcastToFeed,
+        reactions: { likes: 0, horns: 0, hype: 0, brutal: 0, respect: 0, crushed: 0 },
+        user_reactions: {},
+        comments: []
+      };
+
+      // 1. Optimistically prepend to posts in timeline state
+      const optimisticPost: TimelinePost = {
+        id: newPostId,
+        profile_id: resolvedTargetId,
+        author_id: authorId,
+        user_id: authorId,
+        content: newPostText.trim(),
+        media_url: newPostImageUrl.trim() || null,
+        images: newPostImageUrl.trim() ? [newPostImageUrl.trim()] : [],
+        created_at: nowIso,
+        author: postDataPayload.author,
+        recipient: postDataPayload.recipient,
+        is_timeline_post: true,
+        target_profile_id: resolvedTargetId,
+        target_profile_name: resolvedTargetName,
+        tag: tagToUse,
+        type: 'post',
+        reactions_count: 0,
+        reactions: { likes: 0, horns: 0, hype: 0, brutal: 0, respect: 0, crushed: 0 },
+        user_reactions: {},
+        user_liked: false,
+        likes_count: 0,
+        comments: []
+      };
+
+      setPosts(prev => [optimisticPost, ...prev]);
+
+      // 2. Persist to Supabase nexus_posts
+      const { error: insertErr } = await supabase.from('nexus_posts').insert({
+        id: newPostId,
+        profile_id: resolvedTargetId,
+        content: newPostText.trim(),
+        media_url: newPostImageUrl.trim() || null,
+        data: postDataPayload,
+        created_at: nowIso
+      });
+
+      if (insertErr) {
+        console.warn('Supabase post insert notice:', insertErr.message);
+      }
+
+      // 3. If broadcastToFeed is true, save in local feed cache for instant reflection
+      if (broadcastToFeed && typeof window !== 'undefined') {
+        try {
+          const cachedRaw = localStorage.getItem('nexus_feed_posts');
+          const feedList = cachedRaw ? JSON.parse(cachedRaw) : [];
+          if (Array.isArray(feedList)) {
+            feedList.unshift(postDataPayload);
+            localStorage.setItem('nexus_feed_posts', JSON.stringify(feedList.slice(0, 100)));
+          }
+        } catch (_) {}
+      }
+
+      // 4. Dispatch event so other components / feed / notifications sync up
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nexus_post_created', {
+          detail: { post: postDataPayload, targetId: resolvedTargetId }
+        }));
+      }
+
+      triggerNotification?.(
+        isDirectedPost 
+          ? `⚡ Transmission posted directly to ${resolvedTargetName}'s timeline!`
+          : `⚡ Post published to your timeline!`
+      );
+
+      // Reset fields
+      setNewPostText('');
+      setNewPostImageUrl('');
+      setSelectedPostCategory('');
+      setIsComposerOpen(false);
+      setShowImageUrlInput(false);
+    } catch (err: any) {
+      console.error('Failed to publish timeline post:', err);
+      triggerNotification?.(`❌ Failed to publish: ${err.message || 'Error'}`);
+    } finally {
+      setIsSubmittingPost(false);
+    }
+  };
+
+  const handleDeleteTimelinePost = async (postId: string) => {
+    if (typeof window !== 'undefined' && !window.confirm('Are you sure you want to remove this transmission from the timeline?')) {
+      return;
+    }
+
+    setPosts(prev => prev.filter(p => p.id !== postId && p.id !== `nexus_post_${postId}`));
+
+    try {
+      await supabase.from('nexus_posts').delete().eq('id', postId);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nexus_post_deleted', { detail: { id: postId } }));
+      }
+      triggerNotification?.("🗑️ Transmission removed from timeline.");
+    } catch (err) {
+      console.warn('Failed to delete post:', err);
+    }
+  };
 
   const handleVotePoll = useCallback(async (postId: string, optionId: string, currentPoll: any) => {
     const updatedOptions = currentPoll.options.map((opt: any) =>
@@ -875,33 +1226,69 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
       } catch (_) {}
 
       const isEffYou = Boolean(isYou || selectedUserProfile?.isYou);
-      const targetId = profileId || userId || selectedProfileId || selectedUserProfile?.id || (isEffYou ? activeUserId : undefined);
+      let targetId = profileId || userId || selectedProfileId || selectedUserProfile?.id || (isEffYou ? activeUserId : undefined);
       const targetName = (profileName || selectedProfileName || selectedUserProfile?.name || '').toLowerCase().trim();
       const targetHandle = (selectedUserProfile?.console_handle || selectedUserProfile?.handle || selectedUserProfile?.username || '').replace(/^@/, '').toLowerCase().trim();
       const targetFullName = (selectedUserProfile?.full_name || selectedUserProfile?.legal_name || '').toLowerCase().trim();
       const targetBandName = (selectedUserProfile?.band_name || (selectedUserProfile?.role === 'Band' ? selectedUserProfile?.name : '') || '').toLowerCase().trim();
+      const targetEmail = (selectedUserProfile?.email || '').toLowerCase().trim();
+
+      const isUUID = (val?: string) => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
+
+      // If targetId is not a 36-character UUID (e.g. lineup slug 'cran-1') or missing, resolve the authentic UUID from Supabase profiles
+      let resolvedTargetUUID = isUUID(targetId) ? targetId : null;
+      if (!resolvedTargetUUID && (targetFullName || targetName || targetHandle || targetEmail)) {
+        try {
+          let pQuery = supabase.from('profiles').select('id, full_name, console_handle, email');
+          if (targetEmail) {
+            pQuery = pQuery.eq('email', targetEmail);
+          } else if (targetHandle) {
+            pQuery = pQuery.or(`console_handle.ilike.%${targetHandle}%,full_name.ilike.%${targetFullName || targetName}%`);
+          } else {
+            pQuery = pQuery.ilike('full_name', `%${targetFullName || targetName}%`);
+          }
+          const { data: matchedProfs } = await pQuery.limit(3);
+          if (matchedProfs && matchedProfs.length > 0) {
+            resolvedTargetUUID = matchedProfs[0].id;
+          }
+        } catch (_) {}
+      }
+
+      const activeTargetId = resolvedTargetUUID || targetId;
 
       // Query posts for this profile from Supabase
       let query = supabase
         .from('nexus_posts')
         .select('*');
 
-      if (targetId && targetId !== 'current') {
-        query = query.or(`profile_id.eq.${targetId},author_id.eq.${targetId},user_id.eq.${targetId}`);
+      if (activeTargetId && activeTargetId !== 'current') {
+        query = query.eq('profile_id', activeTargetId);
       }
 
       let { data, error: selectErr } = await query.order('created_at', { ascending: false });
 
-      // Fallback strategy: Select all posts if specific query yields nothing
-      if (selectErr || !data || data.length === 0) {
-        const fallbackAll = await supabase
+      // If specific query failed due to column error or returned empty, retry safely or fetch recent pool for in-memory resolution
+      if (selectErr && activeTargetId && activeTargetId !== 'current') {
+        const retryQuery = await supabase
           .from('nexus_posts')
           .select('*')
+          .eq('profile_id', activeTargetId)
           .order('created_at', { ascending: false });
 
-        if (!fallbackAll.error && fallbackAll.data) {
-          data = fallbackAll.data;
+        if (!retryQuery.error && retryQuery.data) {
+          data = retryQuery.data;
           selectErr = null;
+        }
+      } else if ((!data || data.length === 0) && (activeTargetId || targetName || targetHandle || targetFullName)) {
+        // Fetch recent posts to match in memory if direct profile_id query returned 0 rows
+        const recentQuery = await supabase
+          .from('nexus_posts')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(80);
+
+        if (!recentQuery.error && recentQuery.data) {
+          data = recentQuery.data;
         }
       }
 
@@ -939,7 +1326,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
       }
 
       const isMatchingProfilePost = (item: any, postObj: any) => {
-        const itemProfileId = item.profile_id || item.author_id || item.user_id || postObj.profile_id || postObj.postedBy || postObj.author?.id || postObj.author_id || postObj.userId;
+        const itemProfileId = item.profile_id || item.author_id || item.user_id || postObj.profile_id || postObj.postedBy || postObj.author?.id || postObj.author_id || postObj.userId || postObj.authorId;
         const authorName = String(
           postObj.author?.name ||
           postObj.authorName ||
@@ -959,57 +1346,98 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         const authorFullName = String(
           postObj.author?.full_name ||
           postObj.author?.legal_name ||
+          postObj.author?.realName ||
           postObj.authorFullName ||
           ''
         ).toLowerCase().trim();
 
-        const postIsYou = Boolean((postObj as any).isYou || (postObj.author as any)?.isYou);
-        const isAuthoredByLoggedInUser = Boolean(
-          (activeUserId && itemProfileId && itemProfileId === activeUserId) ||
-          postIsYou ||
-          (currentUserName && currentUserName !== 'You' && authorName === currentUserName.toLowerCase())
+        const loggedInId = loggedInUserInfo.id;
+        const loggedInName = (loggedInUserInfo.name || '').toLowerCase().trim();
+        const loggedInHandle = (loggedInUserInfo.handle || '').toLowerCase().trim();
+        const loggedInFullName = (loggedInUserInfo.fullName || '').toLowerCase().trim();
+
+        // Check if this post is an intentional directed timeline post to activeTargetId
+        const isDirectedToTargetProfile = Boolean(
+          activeTargetId && (
+            (postObj.is_timeline_post && (postObj.target_profile_id === activeTargetId || item.profile_id === activeTargetId || postObj.recipient?.id === activeTargetId)) ||
+            (postObj.target_profile_id && postObj.target_profile_id === activeTargetId) ||
+            (postObj.recipient?.id && postObj.recipient.id === activeTargetId)
+          )
         );
 
-        // CASE 1: Viewing someone else's profile (e.g. Christopher Wirstrom):
-        // NEVER allow posts authored by the logged-in user (like Vortex Graphics) or unrelated accounts to leak onto this profile
+        // Crucial fix: Do NOT use postObj.isYou or postObj.author.isYou to test if the current viewer
+        // authored this post, because "isYou: true" is stored in the database for ANY user who submitted a post.
+        // Instead, strictly check if the post's author ID, handle, or authentic name matches the current logged-in user.
+        const isAuthoredByLoggedInUser = Boolean(
+          (loggedInId && (
+            item.author_id === loggedInId || 
+            postObj.author_id === loggedInId || 
+            postObj.author?.id === loggedInId || 
+            (!postObj.is_timeline_post && item.profile_id === loggedInId && (!activeTargetId || activeTargetId === loggedInId))
+          )) ||
+          (loggedInHandle && loggedInHandle.length > 1 && loggedInHandle !== 'user' && (authorHandle === loggedInHandle || authorName === loggedInHandle)) ||
+          (loggedInFullName && loggedInFullName.length > 1 && loggedInFullName !== 'user' && (authorFullName === loggedInFullName || authorName === loggedInFullName)) ||
+          (loggedInName && loggedInName.length > 1 && loggedInName !== 'you' && loggedInName !== 'user' && authorName === loggedInName)
+        );
+
+        // CASE 1: Viewing someone else's profile (e.g. Christopher Wirstrom or Alexander Rausa)
+        // NEVER allow unrelated posts authored by the logged-in user to leak onto this profile
         if (!isEffYou) {
+          // If this post was intentionally posted directly to this target user's timeline, it belongs here!
+          if (isDirectedToTargetProfile) {
+            return true;
+          }
+
           if (isAuthoredByLoggedInUser) {
             return false;
           }
 
-          // Strict match by target profile ID
-          if (targetId && itemProfileId && itemProfileId === targetId) {
+          // Match by resolved target UUID if present
+          if (activeTargetId && itemProfileId) {
+            if (itemProfileId === activeTargetId) return true;
+          }
+          if (activeTargetId && (item.profile_id === activeTargetId || postObj.profile_id === activeTargetId || postObj.author?.id === activeTargetId || postObj.author_id === activeTargetId)) {
             return true;
           }
 
-          // Match by author handle
-          if (targetHandle && (authorName === targetHandle || authorHandle === targetHandle)) {
-            return true;
+          // Match by author handle with exact equality
+          if (targetHandle && targetHandle.length > 0 && authorHandle && authorHandle.length > 0) {
+            if (authorHandle === targetHandle) {
+              return true;
+            }
           }
 
-          // Match by profile display name
-          if (targetName && targetName.length > 1 && (authorName === targetName || (targetName.length > 2 && (authorName.includes(targetName) || targetName.includes(authorName))))) {
-            return true;
+          // Match by profile display name with exact equality (never substring containment)
+          if (targetName && targetName.length > 1 && authorName && authorName.length > 1) {
+            if (authorName === targetName) {
+              return true;
+            }
           }
 
-          // Match by real full name (e.g. Christopher Wirstrom)
-          if (targetFullName && (authorFullName === targetFullName || authorName === targetFullName || (targetFullName.length > 3 && (authorFullName.includes(targetFullName) || authorName.includes(targetFullName))))) {
-            return true;
+          // Match by real full name with exact equality (e.g. "Christopher wirstrom")
+          if (targetFullName && targetFullName.length > 1) {
+            if ((authorFullName && authorFullName === targetFullName) || (authorName && authorName === targetFullName) || (postObj.author?.realName && String(postObj.author.realName).toLowerCase().trim() === targetFullName)) {
+              return true;
+            }
           }
 
           // Match by band name if this profile card represents a band
-          if (targetBandName && (authorName === targetBandName || (targetBandName.length > 3 && authorName.includes(targetBandName)))) {
-            return true;
+          if (targetBandName && targetBandName.length > 1 && authorName && authorName.length > 1) {
+            if (authorName === targetBandName || (postObj.author?.band_name && String(postObj.author.band_name).toLowerCase().trim() === targetBandName)) {
+              return true;
+            }
           }
 
           return false;
         }
 
-        // CASE 2: Viewing logged-in user's own profile:
+        // CASE 2: Viewing logged-in user's own profile
+        if (isDirectedToTargetProfile) return true;
         if (isAuthoredByLoggedInUser) return true;
-        if (targetId && itemProfileId && (itemProfileId === targetId || itemProfileId === activeUserId)) return true;
-        if (targetHandle && (authorName === targetHandle || authorHandle === targetHandle)) return true;
-        if (targetName && (authorName === targetName || authorName.includes(targetName))) return true;
+        if (activeTargetId && itemProfileId && (itemProfileId === activeTargetId || (loggedInId && itemProfileId === loggedInId))) return true;
+        if (targetHandle && targetHandle.length > 0 && ((authorHandle && authorHandle === targetHandle) || (authorName && authorName === targetHandle))) return true;
+        if (targetName && targetName.length > 1 && authorName && authorName === targetName) return true;
+        if (targetFullName && targetFullName.length > 1 && ((authorFullName && authorFullName === targetFullName) || (authorName && authorName === targetFullName))) return true;
 
         return false;
       };
@@ -1073,10 +1501,37 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
           }
         }
 
+        const isDirectedPost = Boolean(
+          postObj.is_timeline_post || 
+          postObj.target_profile_id || 
+          postObj.recipient || 
+          item.is_timeline_post
+        );
+        const resolvedRecipient = postObj.recipient || (isDirectedPost && targetName ? {
+          id: targetId,
+          name: selectedProfileName || targetName,
+          handle: targetHandle,
+          role: selectedUserProfile?.role
+        } : null);
+
+        const postAuthorFullName = String(
+          postObj.author?.full_name ||
+          postObj.author?.legal_name ||
+          postObj.author?.realName ||
+          postObj.authorFullName ||
+          ''
+        ).toLowerCase().trim();
+
+        const isTargetProfilePost = Boolean(
+          (activeTargetId && (item.profile_id === activeTargetId || item.author_id === activeTargetId || item.user_id === activeTargetId || postObj.profile_id === activeTargetId || postObj.author_id === activeTargetId || postObj.user_id === activeTargetId || postObj.author?.id === activeTargetId || postObj.authorId === activeTargetId)) ||
+          (targetId && (item.profile_id === targetId || item.author_id === targetId || item.user_id === targetId || postObj.profile_id === targetId || postObj.author_id === targetId || postObj.user_id === targetId || postObj.author?.id === targetId || postObj.authorId === targetId)) ||
+          (targetHandle && targetHandle.length > 0 && ((postObj.author?.handle && postObj.author.handle.toLowerCase() === targetHandle) || (postObj.author?.console_handle && postObj.author.console_handle.toLowerCase() === targetHandle) || (postObj.author?.username && postObj.author.username.toLowerCase() === targetHandle) || (postObj.authorName && postObj.authorName.toLowerCase() === targetHandle))) ||
+          (targetName && targetName.length > 1 && ((postObj.author?.name && postObj.author.name.toLowerCase() === targetName) || (postObj.authorName && postObj.authorName.toLowerCase() === targetName))) ||
+          (targetFullName && targetFullName.length > 1 && ((postAuthorFullName && postAuthorFullName === targetFullName) || (postObj.author?.realName && String(postObj.author.realName).toLowerCase().trim() === targetFullName) || (postObj.author?.name && postObj.author.name.toLowerCase() === targetFullName)))
+        );
+
         const isSelfPost = Boolean(
-          isYou ||
-          (selectedUserProfile?.id && (item.profile_id === selectedUserProfile.id || item.author_id === selectedUserProfile.id || item.user_id === selectedUserProfile.id || postObj.profile_id === selectedUserProfile.id || postObj.author_id === selectedUserProfile.id || postObj.user_id === selectedUserProfile.id || postObj.author?.id === selectedUserProfile.id || postObj.authorId === selectedUserProfile.id)) ||
-          (selectedProfileName && (postObj.author?.name?.toLowerCase() === selectedProfileName.toLowerCase() || postObj.authorName?.toLowerCase() === selectedProfileName.toLowerCase()))
+          isEffYou || isTargetProfilePost
         );
 
         const postAuthorName = (postObj.author?.name || postObj.authorName || item.author_name || item.author_handle || '').trim();
@@ -1086,9 +1541,6 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         const activeSelfAvatar = selectedUserProfile?.avatar_url || selectedUserProfile?.avatar || selectedUserProfile?.logo_url || savedLocalAvatar;
 
         const resolvedRawAvatar = (() => {
-          if (isSelfPost && activeSelfAvatar && isValidStorageOrImageUrl(activeSelfAvatar)) {
-            return activeSelfAvatar;
-          }
           const explicitAuthorAvatar = 
             ((postObj.author?.avatar && isValidStorageOrImageUrl(postObj.author.avatar)) ? postObj.author.avatar : null) ||
             ((postObj.authorAvatar && isValidStorageOrImageUrl(postObj.authorAvatar)) ? postObj.authorAvatar : null) ||
@@ -1101,7 +1553,10 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
 
           if (explicitAuthorAvatar) return explicitAuthorAvatar;
           if (matchedAuthorAvatar) return matchedAuthorAvatar;
-          if (isSelfPost) {
+          if (isSelfPost && !isDirectedPost && activeSelfAvatar && isValidStorageOrImageUrl(activeSelfAvatar)) {
+            return activeSelfAvatar;
+          }
+          if (isSelfPost && !isDirectedPost) {
             return (selectedUserProfile?.avatar_url && isValidStorageOrImageUrl(selectedUserProfile.avatar_url)) ? selectedUserProfile.avatar_url : savedLocalAvatar;
           }
           return DEFAULT_PERSONAL_AVATAR;
@@ -1122,9 +1577,24 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
           ? item.comments
           : [];
         const commentMap = new Map();
-        postComments.forEach((c: any) => { if (c?.id) commentMap.set(c.id, c); });
-        serverComments.forEach((c: any) => { if (c?.id) commentMap.set(c.id, c); });
-        localComments.forEach((c: any) => { if (c?.id) commentMap.set(c.id, c); });
+        const mergeCommentIntoMap = (incoming: any) => {
+          if (!incoming || !incoming.id) return;
+          const prev = commentMap.get(incoming.id);
+          if (!prev) {
+            commentMap.set(incoming.id, incoming);
+          } else {
+            const timePrev = new Date(prev.updated_at || prev.timestamp || prev.created_at || 0).getTime();
+            const timeInc = new Date(incoming.updated_at || incoming.timestamp || incoming.created_at || 0).getTime();
+            if (timeInc >= timePrev) {
+              commentMap.set(incoming.id, { ...prev, ...incoming });
+            } else {
+              commentMap.set(incoming.id, { ...incoming, ...prev });
+            }
+          }
+        };
+        postComments.forEach(mergeCommentIntoMap);
+        serverComments.forEach(mergeCommentIntoMap);
+        localComments.forEach(mergeCommentIntoMap);
         const finalComments = Array.from(commentMap.values());
 
         const serverRx = globalInteractions?.reactions?.[postId];
@@ -1143,14 +1613,18 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
           media_url: rawMediaUrl,
           images: imagesArray,
           created_at: item.created_at || postObj.timestamp || new Date().toISOString(),
+          recipient: resolvedRecipient,
+          target_profile_id: postObj.target_profile_id || (isDirectedPost ? targetId : undefined),
+          target_profile_name: postObj.target_profile_name || resolvedRecipient?.name,
+          is_timeline_post: isDirectedPost,
           author: {
-            name: postObj.author?.name || postObj.authorName || selectedProfileName || 'Nexus User',
+            name: postObj.author?.name || postObj.authorName || item.author_name || (isTargetProfilePost && !isDirectedPost ? (selectedProfileName || targetName) : 'Nexus User'),
             avatar: resolvedRawAvatar,
-            role: postObj.author?.role || postObj.authorRole || (item.role) || (item.author_role) || (isSelfPost ? selectedUserProfile?.role : 'Member'),
-            full_name: postObj.author?.full_name || postObj.authorFullName || (isSelfPost ? selectedUserProfile?.full_name : undefined),
-            workspace_type: postObj.workspace_type || postObj.workspaceType || (item.workspace_type) || (isSelfPost ? selectedUserProfile?.active_workspace : '') || ''
+            role: postObj.author?.role || postObj.authorRole || (item.role) || (item.author_role) || (isTargetProfilePost && !isDirectedPost ? selectedUserProfile?.role : 'Member'),
+            full_name: postObj.author?.full_name || postObj.authorFullName || (isTargetProfilePost && !isDirectedPost ? selectedUserProfile?.full_name : undefined),
+            workspace_type: postObj.workspace_type || postObj.workspaceType || (item.workspace_type) || (isTargetProfilePost && !isDirectedPost ? selectedUserProfile?.active_workspace : '') || ''
           },
-          workspace_type: postObj.workspace_type || postObj.workspaceType || (item.workspace_type) || (isSelfPost ? selectedUserProfile?.active_workspace : '') || '',
+          workspace_type: postObj.workspace_type || postObj.workspaceType || (item.workspace_type) || (isTargetProfilePost && !isDirectedPost ? selectedUserProfile?.active_workspace : '') || '',
           type: postObj.type || (resolvedPollData ? 'poll' : postObj.eventData ? 'event' : postObj.merchData ? 'merch' : postObj.songData ? 'track' : 'post'),
           tag: postObj.tag || (resolvedPollData ? 'SLAM DISCUSSION' : postObj.eventData ? 'DIY EVENT' : postObj.merchData ? 'MERCH DROP' : postObj.songData ? 'AUDIO RELEASE' : 'TRANSMISSION'),
           reactions_count: postObj.reactions?.length || 0,
@@ -1216,15 +1690,30 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
               }
               const serverComments = globalInteractions?.comments?.[fp.id] || [];
               const commentMap = new Map();
-              (Array.isArray(fp.comments) ? fp.comments : []).forEach((c: any) => { if (c?.id) commentMap.set(c.id, c); });
-              serverComments.forEach((c: any) => { if (c?.id) commentMap.set(c.id, c); });
-              localComments.forEach((c: any) => { if (c?.id) commentMap.set(c.id, c); });
+              const mergeCommentIntoMap = (incoming: any) => {
+                if (!incoming || !incoming.id) return;
+                const prev = commentMap.get(incoming.id);
+                if (!prev) {
+                  commentMap.set(incoming.id, incoming);
+                } else {
+                  const timePrev = new Date(prev.updated_at || prev.timestamp || prev.created_at || 0).getTime();
+                  const timeInc = new Date(incoming.updated_at || incoming.timestamp || incoming.created_at || 0).getTime();
+                  if (timeInc >= timePrev) {
+                    commentMap.set(incoming.id, { ...prev, ...incoming });
+                  } else {
+                    commentMap.set(incoming.id, { ...incoming, ...prev });
+                  }
+                }
+              };
+              (Array.isArray(fp.comments) ? fp.comments : []).forEach(mergeCommentIntoMap);
+              serverComments.forEach(mergeCommentIntoMap);
+              localComments.forEach(mergeCommentIntoMap);
               const finalComments = Array.from(commentMap.values());
 
               const isFeedTargetPost = Boolean(
                 (targetId && (fp.authorId === targetId || fp.author_id === targetId || fp.userId === targetId || fp.profile_id === targetId)) ||
-                (targetHandle && fp.authorName && fp.authorName.toLowerCase() === targetHandle) ||
-                (targetName && fp.authorName && fp.authorName.toLowerCase() === targetName)
+                (targetHandle && targetHandle.length > 0 && fp.authorName && fp.authorName.toLowerCase() === targetHandle) ||
+                (targetName && targetName.length > 1 && fp.authorName && fp.authorName.toLowerCase() === targetName)
               );
 
               const serverRx = globalInteractions?.reactions?.[fp.id];
@@ -1235,16 +1724,16 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
 
               const formatted = mergePostWithReactions({
                 id: fp.id,
-                profile_id: fp.profile_id || targetId,
-                author_id: fp.authorId || fp.author_id || targetId,
-                user_id: fp.userId || targetId,
+                profile_id: fp.profile_id || (isEffYou ? targetId : fp.authorId || fp.author_id || fp.userId),
+                author_id: fp.authorId || fp.author_id || (isEffYou ? targetId : fp.userId),
+                user_id: fp.userId || (isEffYou ? targetId : fp.authorId),
                 content: fp.content || fp.message || '',
                 media_url: fp.media_url || fp.imageUrl || fp.image_url || null,
                 images: Array.isArray(fp.images) && fp.images.length > 0 ? fp.images : (fp.imageUrl || fp.media_url ? [fp.imageUrl || fp.media_url] : []),
                 created_at: fp.created_at || fp.timestamp || new Date().toISOString(),
                 author: {
                   name: fp.author?.name || fp.authorName || (isFeedTargetPost ? (selectedProfileName || targetName) : 'User'),
-                  avatar: fp.author?.avatar || fp.authorAvatar || (fp.author?.name && fp.author.name.toLowerCase() === selectedProfileName.toLowerCase() ? selectedUserProfile?.avatar : null) || null,
+                  avatar: fp.author?.avatar || fp.authorAvatar || (isFeedTargetPost ? (selectedUserProfile?.avatar_url || selectedUserProfile?.avatar) : null) || null,
                   role: fp.author?.role || fp.authorRole || (isFeedTargetPost ? selectedUserProfile?.role : 'Member'),
                   full_name: fp.author?.full_name || fp.authorFullName || (isFeedTargetPost ? selectedUserProfile?.full_name : undefined),
                   workspace_type: fp.workspace_type || (isFeedTargetPost ? selectedUserProfile?.active_workspace : '') || ''
@@ -1282,10 +1771,10 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         const primaryImage = (p.images && p.images[0]) || p.media_url || '';
         const contentKey = (p.content || '').trim().toLowerCase();
 
-        // If it's an automated profile update signal, keep only the newest one per author
-        if (contentKey.includes('updated profile picture')) {
+        // If it's an automated profile update signal with the exact same image URL, keep only the newest one
+        if (contentKey.includes('updated profile picture') && primaryImage) {
           const authorKey = (p.author?.name || p.user_id || '').toLowerCase();
-          const signalKey = `profile_update_signal_${authorKey}`;
+          const signalKey = `profile_update_signal_${authorKey}_${primaryImage}`;
           if (seenPostKeys.has(signalKey)) {
             return false;
           }
@@ -1307,7 +1796,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [profileId, userId, profileName, selectedProfileId, selectedProfileName]);
+  }, [profileId, userId, profileName, selectedProfileId, selectedProfileName, isYou, selectedUserProfile]);
 
   useEffect(() => {
     fetchTimelinePosts();
@@ -1360,6 +1849,255 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
 
   return (
     <div className="space-y-4 w-full text-left font-sans">
+      {/* TIMELINE DIRECT COMPOSER CARD */}
+      <div className="bg-[#0b0c10] border border-zinc-800/80 hover:border-zinc-700/80 rounded-2xl p-3.5 sm:p-4 shadow-xl transition-all relative overflow-hidden text-left w-full backdrop-blur-sm">
+        {/* Subtle accent border line on top */}
+        <div 
+          className="absolute top-0 left-0 right-0 h-[2px]" 
+          style={{ 
+            background: isEffYou 
+              ? 'linear-gradient(90deg, #00f0ff 0%, #a855f7 100%)' 
+              : 'linear-gradient(90deg, #f43f5e 0%, #fb923c 100%)' 
+          }} 
+        />
+
+        <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center gap-2.5">
+            {/* Active persona avatar */}
+            <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-700 overflow-hidden flex items-center justify-center shrink-0">
+              {activePersona.avatar && isValidStorageOrImageUrl(activePersona.avatar) ? (
+                <img src={activePersona.avatar} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-[10px] font-mono font-bold text-zinc-400">
+                  {activePersona.name ? activePersona.name.substring(0, 2).toUpperCase() : 'ME'}
+                </span>
+              )}
+            </div>
+
+            <div>
+              <div className="text-xs font-mono font-bold text-zinc-200 flex items-center gap-1.5 flex-wrap">
+                {isEffYou ? (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>POST TO YOUR TIMELINE</span>
+                  </>
+                ) : (
+                  <>
+                    <MessageSquarePlus className="w-3.5 h-3.5 text-rose-400" />
+                    <span>
+                      TRANSMIT TO <span className="text-rose-400">@{targetHandle || targetDisplayName}</span>'S TIMELINE
+                    </span>
+                  </>
+                )}
+              </div>
+              <p className="text-[10px] font-mono text-zinc-500">
+                {isEffYou 
+                  ? 'Share an update or announcement directly to your personal timeline'
+                  : `Leave a message, transmission, or review for ${targetDisplayName}`}
+              </p>
+            </div>
+          </div>
+
+          {/* Persona selector if multiple identities exist */}
+          {availableIdentities.length > 1 && (
+            <div className="relative">
+              <select
+                value={posterPersonaId}
+                onChange={(e) => setPosterPersonaId(e.target.value)}
+                className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-[10px] font-mono font-bold rounded-lg px-2 py-1 focus:outline-none focus:border-rose-500 cursor-pointer appearance-none pr-6"
+              >
+                {availableIdentities.map(persona => (
+                  <option key={persona.id} value={persona.id}>
+                    As: {persona.name} ({persona.role})
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3 h-3 text-zinc-500 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          )}
+        </div>
+
+        {/* Composer Form */}
+        <form onSubmit={handleTimelinePostSubmit} className="space-y-2.5">
+          <div className="relative">
+            <textarea
+              rows={isComposerOpen || newPostText.length > 0 || newPostImageUrl ? 3 : 2}
+              value={newPostText}
+              onFocus={() => setIsComposerOpen(true)}
+              onChange={(e) => setNewPostText(e.target.value)}
+              placeholder={
+                isEffYou 
+                  ? "What's happening in your orbit? Share a timeline update..." 
+                  : `Write something on ${targetDisplayName}'s timeline... (shoutout, review, collab request, or transmission)`
+              }
+              className="w-full bg-[#13141a] border border-zinc-800/90 focus:border-rose-500/70 rounded-xl p-3 text-xs text-zinc-100 placeholder:text-zinc-600 font-sans focus:outline-none transition-all resize-none shadow-inner"
+            />
+          </div>
+
+          {/* Attached image preview */}
+          {newPostImageUrl && (
+            <div className="relative inline-block p-1 bg-zinc-900/90 border border-zinc-800 rounded-xl group/preview">
+              <img src={newPostImageUrl} alt="Attachment Preview" className="h-20 max-w-xs object-cover rounded-lg" />
+              <button
+                type="button"
+                onClick={() => setNewPostImageUrl('')}
+                className="absolute -top-2 -right-2 bg-rose-600 hover:bg-rose-500 text-white p-1 rounded-full shadow-lg transition-transform hover:scale-110 cursor-pointer"
+                title="Remove photo"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {/* Direct Image URL input dropdown */}
+          {showImageUrlInput && (
+            <div className="flex items-center gap-2 bg-[#13141a] border border-zinc-800 rounded-xl p-1.5">
+              <Globe className="w-3.5 h-3.5 text-zinc-500 ml-1.5 shrink-0" />
+              <input
+                type="url"
+                value={customImageUrlDraft}
+                onChange={(e) => setCustomImageUrlDraft(e.target.value)}
+                placeholder="Paste direct image or gif URL..."
+                className="flex-1 bg-transparent text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (customImageUrlDraft.trim()) {
+                    setNewPostImageUrl(customImageUrlDraft.trim());
+                    setCustomImageUrlDraft('');
+                    setShowImageUrlInput(false);
+                  }
+                }}
+                disabled={!customImageUrlDraft.trim()}
+                className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-white text-[10px] font-mono font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                Attach
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowImageUrlInput(false)}
+                className="p-1 text-zinc-500 hover:text-zinc-300 rounded cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {/* Expanded controls: Category pills & Media buttons */}
+          {(isComposerOpen || newPostText.length > 0 || newPostImageUrl) && (
+            <div className="space-y-2 pt-1 border-t border-zinc-900">
+              {/* Category selector pills */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-mono text-zinc-500 mr-1 flex items-center gap-1">
+                  <Tag className="w-2.5 h-2.5" /> Tag:
+                </span>
+                {getSuggestedCategories().map(cat => {
+                  const defaultCat = isEffYou ? 'TRANSMISSION' : 'WALL TRANSMISSION';
+                  const isSelected = (selectedPostCategory || defaultCat) === cat;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedPostCategory(cat)}
+                      className={`text-[9px] font-mono px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
+                        isSelected 
+                          ? 'bg-rose-500/20 border-rose-500 text-rose-300 shadow-[0_0_8px_rgba(244,63,94,0.3)]' 
+                          : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Bottom toolbar */}
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <div className="flex items-center gap-2">
+                  {/* File upload button */}
+                  <input
+                    type="file"
+                    ref={timelineFileInputRef}
+                    onChange={handleImageFileSelect}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => timelineFileInputRef.current?.click()}
+                    disabled={isUploadingMedia}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-[11px] font-mono transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isUploadingMedia ? (
+                      <span className="animate-spin w-3 h-3 border border-white border-t-transparent rounded-full" />
+                    ) : (
+                      <Upload className="w-3 h-3 text-rose-400" />
+                    )}
+                    <span>{isUploadingMedia ? 'Uploading...' : 'Photo'}</span>
+                  </button>
+
+                  {/* Web Image URL toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setShowImageUrlInput(prev => !prev)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-[11px] font-mono transition-colors cursor-pointer"
+                    title="Attach image from link"
+                  >
+                    <Link className="w-3 h-3" />
+                    <span>Link</span>
+                  </button>
+
+                  {/* Broadcast to feed checkbox */}
+                  <label className="hidden sm:inline-flex items-center gap-1.5 ml-2 cursor-pointer text-[10px] font-mono text-zinc-400 hover:text-zinc-200 select-none">
+                    <input
+                      type="checkbox"
+                      checked={broadcastToFeed}
+                      onChange={(e) => setBroadcastToFeed(e.target.checked)}
+                      className="rounded border-zinc-700 bg-zinc-900 text-rose-600 focus:ring-0 w-3 h-3 cursor-pointer"
+                    />
+                    <span>Broadcast to Global Feed</span>
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewPostText('');
+                      setNewPostImageUrl('');
+                      setShowImageUrlInput(false);
+                      setIsComposerOpen(false);
+                    }}
+                    className="px-2.5 py-1.5 text-zinc-500 hover:text-zinc-300 text-xs font-mono transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmittingPost || (!newPostText.trim() && !newPostImageUrl.trim())}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-mono font-bold uppercase tracking-wider shadow-[0_0_12px_rgba(244,63,94,0.35)] transition-all cursor-pointer"
+                  >
+                    {isSubmittingPost ? (
+                      <>
+                        <span className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
+                        <span>Posting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3 h-3" />
+                        <span>{isEffYou ? 'Post Update' : 'Post to Timeline'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </form>
+      </div>
+
       {loading ? (
         <div className="py-12 text-center bg-zinc-950/40 border border-zinc-900 rounded-xl">
           <div className="inline-block animate-spin w-5 h-5 border-2 border-rose-500 border-t-transparent rounded-full mb-2" />
@@ -1418,13 +2156,19 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
             const defaultReactionId = post.tag === 'SONG SHARE' ? 'brutal' : post.tag === 'ALBUM RELEASE' ? 'hype' : 'hype';
             const postCommentsList = Array.isArray(post.comments) ? post.comments : [];
 
+            const canDeleteThisPost = Boolean(
+              isEffYou || 
+              (activeUserId && activeUserId !== 'current' && (post.author_id === activeUserId || post.user_id === activeUserId || post.author?.id === activeUserId)) ||
+              (loggedInUserInfo.name && post.author?.name && post.author.name.toLowerCase() === loggedInUserInfo.name.toLowerCase())
+            );
+
             return (
               <div
                 key={post.id ? `tl_post_${post.id}_${idx}` : `tl_idx_${idx}`}
                 className="bg-zinc-950/80 border border-zinc-900 hover:border-zinc-800 transition-all rounded-xl p-4 shadow-lg text-left w-full"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     {/* Micro glow avatar container - static stroke + glow */}
                     <div className="relative group/avatar shrink-0">
                       <div 
@@ -1454,10 +2198,23 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                       </div>
                     </div>
 
-                    <div>
-                      <p className="text-xs sm:text-sm font-mono font-bold text-zinc-200 leading-tight">
-                        {post.author?.name || profileName || 'User'}
-                      </p>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs sm:text-sm font-mono font-bold text-zinc-200 leading-tight">
+                          {post.author?.name || profileName || 'User'}
+                        </span>
+
+                        {/* Directed timeline indicator (e.g., User A ➔ User B's Timeline) */}
+                        {post.recipient?.name || (post.is_timeline_post && post.target_profile_name && post.target_profile_name.toLowerCase() !== (post.author?.name || '').toLowerCase()) ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-zinc-400 bg-zinc-900/90 px-1.5 py-0.5 rounded border border-zinc-800">
+                            <span className="text-rose-400 font-bold">➔</span>
+                            <span className="text-zinc-200 font-bold">
+                              @{String(post.recipient?.handle || post.recipient?.name || post.target_profile_name).replace(/^@/, '')}
+                            </span>
+                          </span>
+                        ) : null}
+                      </div>
+
                       {/* Full Name in FULL CAPS */}
                       {(() => {
                         const authorPrimary = (post.author?.name || profileName || '').trim().toLowerCase();
@@ -1474,10 +2231,12 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                           </p>
                         );
                       })()}
+
                       <p className="text-[9px] font-mono text-zinc-500 mt-0.5">
                         {new Date(post.created_at).toLocaleDateString()} • {new Date(post.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
-                      <div className="mt-0.5 flex items-center gap-1.5">
+
+                      <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
                         <span 
                           className="text-[9px] font-mono font-bold tracking-wider uppercase flex items-center gap-1.5"
                           style={{ color: postTheme.colorHex }}
@@ -1491,14 +2250,31 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                           />
                           {postTheme.label}
                         </span>
+
+                        {post.is_timeline_post && (
+                          <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-rose-400/90 bg-rose-950/40 border border-rose-900/40 px-1.5 py-0.5 rounded">
+                            TIMELINE TRANSMISSION
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <span className="text-[9px] px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-rose-400 font-mono font-bold uppercase tracking-wider">
                       {post.tag || post.type}
                     </span>
+
+                    {canDeleteThisPost && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTimelinePost(post.id)}
+                        className="p-1 text-zinc-600 hover:text-rose-400 hover:bg-zinc-900/80 rounded transition-colors cursor-pointer"
+                        title="Delete transmission"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 

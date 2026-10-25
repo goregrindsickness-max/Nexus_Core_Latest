@@ -9,6 +9,7 @@ import { resolveActivePersona, resolveReactionActor } from '../utils/personaReso
 import { savePostReaction } from '../utils/reactionStore';
 import { getCurrentCoordinates } from '../../../services/locationService';
 import { submitGlobalReaction } from '../../../services/postInteractionsService';
+import { pushManager } from '../../../lib/pushNotifications';
 
 export function getYouTubeId(url: string): string {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -1084,6 +1085,36 @@ export function useSocialFeedState({
 
       await syncPostToSupabase(newPost, activeAuthorId);
       setFeed((prev) => [newPost, ...prev]);
+
+      // Dispatch real-time push notification based on content category
+      if (eventDataValue) {
+        pushManager.sendPushToServer({
+          title: `🤘 Band En Route: ${authorName}`,
+          body: `${authorName} published show date in ${eventDataValue.city || eventDataValue.locationName || 'your area'}: "${eventDataValue.title}"!`,
+          category: 'tour_proximity',
+          priority: 'P0',
+          targetTab: 'social',
+          data: { bandName: authorName, city: eventDataValue.city || eventDataValue.locationName, type: 'tour_proximity' }
+        }).catch(() => {});
+      } else if (tapeDataValue) {
+        pushManager.sendPushToServer({
+          title: `🔥 Soundboard Tape Premiere: ${authorName}`,
+          body: `New live tape dropped: "${tapeDataValue.title}"!`,
+          category: 'exclusive_content',
+          priority: 'P1',
+          targetTab: 'social',
+          data: { bandName: authorName, tapeTitle: tapeDataValue.title, type: 'tape_premiere' }
+        }).catch(() => {});
+      } else if (merchDataValue) {
+        pushManager.sendPushToServer({
+          title: `⚡ Merch Drop Launch: ${merchDataValue.name}`,
+          body: `Limited merch drop by ${authorName} is live now!`,
+          category: 'scarcity_merch_drop',
+          priority: 'P0',
+          targetTab: 'merch',
+          data: { bandName: authorName, merchName: merchDataValue.name, type: 'merch_drop' }
+        }).catch(() => {});
+      }
 
       setNewPostText('');
       setNewPostTag('');

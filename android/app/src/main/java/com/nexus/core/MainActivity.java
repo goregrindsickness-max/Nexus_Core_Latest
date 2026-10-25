@@ -286,6 +286,14 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        if (this.bridge != null && this.bridge.getWebView() != null) {
+            this.bridge.getWebView().resumeTimers();
+        }
+    }
+
+    @Override
     public void onPause() {
         if (isAudioActive) {
             // Keep WebView timers and audio processing running in background
