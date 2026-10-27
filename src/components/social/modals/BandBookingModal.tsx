@@ -240,13 +240,17 @@ export const BandBookingModal: React.FC<BandBookingModalProps> = ({
           await supabase.from('nexus_notifications').insert([{
             id: generateUUID(),
             user_id: targetProfile?.id || 'band_inbox',
-            sender_id: userProfile?.id || null,
-            sender_name: formData.promoterName || 'Promoter / Booker',
+            actor_id: userProfile?.id || null,
             title: `📅 Booking Offer: ${formData.eventName}`,
             message: `${formData.promoterName} sent a formal offer for ${formData.venueName} in ${formData.city} on ${formData.performanceDate} (${formData.guaranteeAmount} ${formData.currency}).`,
             type: 'booking_offer',
             category: 'GIGS',
-            data: bookingRecord,
+            data: {
+              ...bookingRecord,
+              sender_id: userProfile?.id || null,
+              sender_name: formData.promoterName || 'Promoter / Booker',
+              actor_email: userProfile?.email || null,
+            },
             is_read: false,
             created_at: timestamp
           }]).select();

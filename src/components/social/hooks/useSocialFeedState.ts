@@ -4,6 +4,7 @@ import { mockFeed } from '../../../data/socialFeedMockData';
 import { getSupabase, uploadBase64ToStorage, createShopMerchItem } from '../../../supabase';
 import { isAudioUrl, extractUUID, isBandcampUrl, resolveBandcampMetadata, formatBandcampEmbedDarkUrl } from '../../../utils/socialFeedUtils';
 import { registerCommunityEvent } from '../../../utils/communityEventUtils';
+import { generateDeterministicUUID } from '../follows/followService';
 import { syncPostToSupabase } from '../utils/postSyncUtils';
 import { resolveActivePersona, resolveReactionActor } from '../utils/personaResolution';
 import { savePostReaction } from '../utils/reactionStore';
@@ -442,11 +443,19 @@ export function useSocialFeedState({
         }
 
         // Direct update into nexus_posts
-        const { data: existingRows } = await supabase
-          .from('nexus_posts')
-          .select('id, data, reactions, likes_count')
-          .or(`id.eq.${postId},id.eq.nexus_post_${postId}`)
-          .limit(1);
+        const cleanPostId = postId.replace(/^nexus_post_/, '');
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanPostId);
+        const targetUUID = extractUUID(cleanPostId) || (isUUID ? cleanPostId : null);
+
+        let existingRows: any[] | null = null;
+        if (targetUUID) {
+          const { data } = await supabase
+            .from('nexus_posts')
+            .select('id, data, reactions, likes_count')
+            .eq('id', targetUUID)
+            .limit(1);
+          existingRows = data;
+        }
 
         if (existingRows && existingRows.length > 0) {
           const row = existingRows[0];
@@ -478,14 +487,7 @@ export function useSocialFeedState({
           }], { onConflict: 'id' });
         }
 
-        // Best effort call to toggle_post_reaction RPC
-        try {
-          await supabase.rpc('toggle_post_reaction', {
-            p_post_id: postId,
-            p_profile_id: activeUserId,
-            p_reaction_type: reactionKey,
-          });
-        } catch (_) {}
+
 
         // 4. Notifications:
         // When reacting to someone else's content, ONLY send notification to the author.
@@ -497,65 +499,73 @@ export function useSocialFeedState({
               .map(x => String(x).toLowerCase().trim())
           );
 
-          const targetAuthorRaw = (targetPost as any).authorId || (targetPost as any).profile_id || (targetPost as any).user_id || (targetPost.author as any)?.id || (targetPost.author as any)?.email;
+          const targetAuthorRaw = (targetPost as any).authorId || (targetPost as any).profile_id || (targetPost as any).user_id || (targetPost.author as any)?.id || (targetPost.author as any)?.email || (targetPost.author as any)?.name || 'author';
           const targetAuthorEmail = (targetPost.author as any)?.email;
           const targetAuthorName = (targetPost.author as any)?.name || (targetPost as any).authorName;
 
-          const isTargetMyself = 
-            (targetAuthorRaw && myIds.has(String(targetAuthorRaw).toLowerCase().trim())) ||
-            (targetAuthorEmail && myIds.has(String(targetAuthorEmail).toLowerCase().trim())) ||
-            (targetAuthorName && myIds.has(String(targetAuthorName).toLowerCase().trim()));
+          const rawUUIDMatch = extractUUID(targetAuthorRaw);
+          const validReceiverUUID = rawUUIDMatch || (typeof targetAuthorRaw === 'string' && targetAuthorRaw.trim() ? generateDeterministicUUID(targetAuthorRaw.trim()) : '00000000-0000-0000-0000-000000000000');
 
-          const validReceiverUUID = (targetAuthorRaw && extractUUID(targetAuthorRaw)) || null;
-          const isReactingToSomeoneElse = !isTargetMyself && Boolean(validReceiverUUID && !myIds.has(validReceiverUUID.toLowerCase().trim()));
+          const actorName = userProfile?.name || userProfile?.console_handle || profileHandle || 'A user';
+          const postSnippet = (targetPost.content || (targetPost as any).message || (targetPost as any).text || 'transmission').substring(0, 50);
+          const notifId = generateDeterministicUUID(`notif_rx_${postId}_${activeUserId}_${reactionKey}`);
+          
+          const rawActorUUID = extractUUID(activeUserId) || extractUUID(userProfile?.id);
+          const currentActorId = rawActorUUID || (activeUserId ? generateDeterministicUUID(String(activeUserId)) : null);
+          const currentActorEmail = userProfile?.email || null;
 
-          if (isReactingToSomeoneElse && validReceiverUUID) {
-            const actorName = userProfile?.name || userProfile?.console_handle || profileHandle || 'A user';
-            const postSnippet = (targetPost.content || (targetPost as any).message || (targetPost as any).text || 'transmission').substring(0, 50);
-            const notifId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : (extractUUID(postId) || '00000000-0000-0000-0000-000000000000');
-            const currentActorId = activeUserId || userProfile?.id || null;
-            const currentActorEmail = userProfile?.email || null;
+          const notifItem = {
+            id: notifId,
+            user_id: validReceiverUUID,
+            actor_id: currentActorId,
+            actor_email: currentActorEmail,
+            title: `🔥 NEW REACTION`,
+            message: `${actorName} reacted (${reactionKey.toUpperCase()}) to transmission: "${postSnippet}"`,
+            content: `${actorName} reacted (${reactionKey.toUpperCase()}) to transmission: "${postSnippet}"`,
+            category: 'REACTION',
+            highlight: 'New Reaction',
+            timeAgo: 'Just now',
+            timestamp: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            read: false,
+            is_read: false,
+            type: 'post_reaction',
+            postId: postId,
+            linkTab: 'feed',
+          };
 
-            const notifItem = {
-              id: notifId,
+          // 1. Dispatch custom event so local UI right notifications drawer updates instantly
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('nexus_in_app_notice', { detail: notifItem }));
+          }
+
+          // 2. Persist locally to localStorage notifications cache
+          try {
+            const rawLocal = localStorage.getItem('nexus_local_notifications_v1');
+            const localNotifs = rawLocal ? JSON.parse(rawLocal) : [];
+            const updatedNotifs = [notifItem, ...localNotifs.filter((n: any) => n.id !== notifItem.id)].slice(0, 100);
+            localStorage.setItem('nexus_local_notifications_v1', JSON.stringify(updatedNotifs));
+          } catch (_) {}
+
+          // 3. Persist to Supabase database
+          await supabase.from('nexus_notifications').upsert([
+            {
+              id: notifItem.id,
               user_id: validReceiverUUID,
               actor_id: currentActorId,
-              actor_email: currentActorEmail,
-              title: `🔥 NEW REACTION`,
-              message: `${actorName} reacted (${reactionKey.toUpperCase()}) to your transmission: "${postSnippet}"`,
-              content: `${actorName} reacted (${reactionKey.toUpperCase()}) to your transmission: "${postSnippet}"`,
+              title: notifItem.title,
+              message: notifItem.message,
               category: 'REACTION',
-              highlight: 'New Reaction',
-              timeAgo: 'Just now',
-              timestamp: new Date().toISOString(),
-              created_at: new Date().toISOString(),
-              read: false,
-              is_read: false,
               type: 'post_reaction',
-              postId: postId,
-              linkTab: 'feed',
-            };
-
-            await supabase.from('nexus_notifications').insert([
-              {
-                id: notifItem.id,
-                user_id: validReceiverUUID,
+              is_read: false,
+              data: {
+                ...notifItem,
                 actor_id: currentActorId,
                 actor_email: currentActorEmail,
-                title: notifItem.title,
-                message: notifItem.message,
-                category: 'REACTION',
-                type: 'post_reaction',
-                is_read: false,
-                data: {
-                  ...notifItem,
-                  actor_id: currentActorId,
-                  actor_email: currentActorEmail,
-                },
-                created_at: new Date().toISOString(),
               },
-            ]);
-          }
+              created_at: new Date().toISOString(),
+            },
+          ], { onConflict: 'id' });
         }
       } catch (e) {
         console.warn('Notice: Syncing reaction note:', e);
@@ -598,11 +608,19 @@ export function useSocialFeedState({
     const supabase = getSupabase();
     if (supabase) {
       try {
-        const { data: existing } = await supabase
-          .from('nexus_posts')
-          .select('*')
-          .or(`id.eq.${postId},id.eq.nexus_post_${postId}`)
-          .limit(1);
+        const cleanPostId = postId.replace(/^nexus_post_/, '');
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanPostId);
+        const targetUUID = extractUUID(cleanPostId) || (isUUID ? cleanPostId : null);
+
+        let existing: any[] | null = null;
+        if (targetUUID) {
+          const { data } = await supabase
+            .from('nexus_posts')
+            .select('*')
+            .eq('id', targetUUID)
+            .limit(1);
+          existing = data;
+        }
 
         const existingRow = existing && existing[0];
         const postObj = existingRow

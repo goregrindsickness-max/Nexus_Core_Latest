@@ -744,11 +744,19 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
 
     // Best-effort Supabase direct attempt
     try {
-      const { data: existingRows } = await supabase
-        .from('nexus_posts')
-        .select('id, data')
-        .or(`id.eq.${postId},id.eq.nexus_post_${postId}`)
-        .limit(1);
+      const cleanPostId = postId.replace(/^nexus_post_/, '');
+      const uuidMatch = cleanPostId.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      const targetUUID = uuidMatch ? uuidMatch[0] : (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanPostId) ? cleanPostId : null);
+
+      let existingRows: any[] | null = null;
+      if (targetUUID) {
+        const { data } = await supabase
+          .from('nexus_posts')
+          .select('id, data')
+          .eq('id', targetUUID)
+          .limit(1);
+        existingRows = data;
+      }
 
       if (existingRows && existingRows.length > 0) {
         const row = existingRows[0];

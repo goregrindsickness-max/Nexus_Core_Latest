@@ -628,11 +628,18 @@ async function syncReactionToSupabase(
   if (!supabase) return;
 
   try {
-    const { data: rows } = await supabase
-      .from('nexus_posts')
-      .select('id, data, reactions')
-      .or(`id.eq.${postId},id.eq.nexus_post_${postId}`)
-      .limit(1);
+    const cleanPostId = postId.replace(/^nexus_post_/, '');
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanPostId);
+
+    let rows: any[] | null = null;
+    if (isUUID) {
+      const { data } = await supabase
+        .from('nexus_posts')
+        .select('id, data, reactions')
+        .eq('id', cleanPostId)
+        .limit(1);
+      rows = data;
+    }
 
     if (rows && rows.length > 0) {
       const row = rows[0];

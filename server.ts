@@ -2335,6 +2335,39 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     }
   });
 
+  // API ROUTE: Lightweight server-side oEmbed proxy to prevent client 401/403 network errors
+  app.get("/api/oembed", async (req, res) => {
+    const videoId = String(req.query.videoId || req.query.v || "").trim();
+    if (!videoId || !/^[a-zA-Z0-9_-]{5,25}$/.test(videoId)) {
+      return res.json({
+        title: "Scene Track",
+        author: "Scene Artist",
+        thumbnailUrl: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : ""
+      });
+    }
+
+    try {
+      const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+      const resp = await fetch(oembedUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        return res.json({
+          title: data.title || "Scene Track",
+          author: data.author_name || "Scene Artist",
+          thumbnailUrl: data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+        });
+      }
+    } catch (_) {}
+
+    return res.json({
+      title: "Scene Track",
+      author: "Scene Artist",
+      thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+    });
+  });
+
   // API ROUTE: Stripe Connect OAuth URL
   app.get('/api/auth/stripe/url', (req, res) => {
     const host = req.get('host') || 'localhost:3000';

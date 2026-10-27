@@ -646,6 +646,30 @@ export const resolveCommentAvatar = (
 ): string => {
   if (!comment) return DEFAULT_PERSONAL_AVATAR;
 
+  const commentUsername = String(comment.username || comment.author || comment.user_name || '').trim().toLowerCase();
+  const commentUserId = String(comment.user_id || comment.userId || '').trim();
+
+  const isMiguel = isMiguelNameOrProfile(commentUsername) || isMiguelNameOrProfile(commentUserId);
+  const isCurrentUser = Boolean(
+    (currentUserId && commentUserId && commentUserId === currentUserId) ||
+    (currentUserName && commentUsername && (commentUsername.includes(currentUserName.toLowerCase()) || currentUserName.toLowerCase().includes(commentUsername))) ||
+    (commentUsername && (commentUsername.includes('miguel') || commentUsername.includes('goregrinder')))
+  );
+
+  // 1. If comment was written by current user or Miguel, always prioritize current live profile avatar
+  if (isMiguel || isCurrentUser) {
+    const liveAvatar =
+      userProfile?.avatar_url ||
+      userProfile?.avatar ||
+      userProfile?.profile_avatar ||
+      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null);
+
+    if (liveAvatar && typeof liveAvatar === 'string' && liveAvatar.trim() && liveAvatar !== '👤' && !liveAvatar.includes('ui-avatars.com')) {
+      return liveAvatar.trim();
+    }
+  }
+
+  // 2. Explicit comment avatar if present
   const explicitAvatar = comment.avatar || comment.userAvatar || comment.user_avatar || comment.authorAvatar;
   if (
     explicitAvatar &&
@@ -658,32 +682,76 @@ export const resolveCommentAvatar = (
     return explicitAvatar.trim();
   }
 
-  const commentUsername = String(comment.username || comment.author || comment.user_name || '').trim().toLowerCase();
-  const commentUserId = String(comment.user_id || comment.userId || '').trim();
-
-  const isMiguel = isMiguelNameOrProfile(commentUsername) || isMiguelNameOrProfile(commentUserId);
-  const isCurrentUser = Boolean(
-    (currentUserId && commentUserId && commentUserId === currentUserId) ||
-    (currentUserName && commentUsername && commentUsername === currentUserName.toLowerCase())
-  );
-
-  if (isMiguel || isCurrentUser) {
-    const liveAvatar =
-      userProfile?.avatar_url ||
-      userProfile?.avatar ||
-      userProfile?.profile_avatar ||
-      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null);
-
-    if (liveAvatar && typeof liveAvatar === 'string' && liveAvatar.trim() && liveAvatar !== '👤') {
-      return liveAvatar.trim();
-    }
-    return DEFAULT_PERSONAL_AVATAR;
-  }
-
+  // 3. Check known user avatar registry
   if (commentUsername && KNOWN_USER_AVATARS[commentUsername]) {
     return KNOWN_USER_AVATARS[commentUsername];
   }
 
   return DEFAULT_PERSONAL_AVATAR;
 };
+
+export const isUuidString = (str?: string | null): boolean => {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+};
+
+export const resolveCommentAuthorName = (
+  comment: any,
+  userProfile?: any,
+  currentUserId?: string,
+  currentUserName?: string
+): string => {
+  if (!comment) return 'Scene Member';
+
+  const rawUserId = String(comment.user_id || comment.userId || '').trim();
+  const rawUsername = String(comment.username || comment.author || comment.author_name || comment.user_name || comment.full_name || comment.name || '').trim();
+
+  // 1. Is it current user or Miguel?
+  const isMiguelId =
+    rawUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+    (currentUserId && rawUserId === currentUserId) ||
+    rawUsername === '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+
+  const isMiguelName =
+    isMiguelNameOrProfile(rawUsername) ||
+    isMiguelNameOrProfile(rawUserId) ||
+    (currentUserName && rawUsername.toLowerCase().includes(currentUserName.toLowerCase())) ||
+    (currentUserName && currentUserName.toLowerCase().includes('miguel'));
+
+  if (isMiguelId || isMiguelName) {
+    const liveName =
+      userProfile?.full_name ||
+      userProfile?.name ||
+      userProfile?.username ||
+      userProfile?.band_name ||
+      currentUserName;
+
+    if (liveName && typeof liveName === 'string' && liveName.trim() && !isUuidString(liveName)) {
+      return liveName.trim();
+    }
+    return 'Miguel Goregrinder Medina';
+  }
+
+  // 2. If rawUsername exists and is NOT a UUID, return it
+  if (rawUsername && !isUuidString(rawUsername)) {
+    return rawUsername;
+  }
+
+  // 3. Check author fields
+  if (comment.author && typeof comment.author === 'string' && !isUuidString(comment.author)) {
+    return comment.author.trim();
+  }
+  if (comment.author_name && typeof comment.author_name === 'string' && !isUuidString(comment.author_name)) {
+    return comment.author_name.trim();
+  }
+  if (comment.full_name && typeof comment.full_name === 'string' && !isUuidString(comment.full_name)) {
+    return comment.full_name.trim();
+  }
+  if (comment.name && typeof comment.name === 'string' && !isUuidString(comment.name)) {
+    return comment.name.trim();
+  }
+
+  return 'Scene Member';
+};
+
 

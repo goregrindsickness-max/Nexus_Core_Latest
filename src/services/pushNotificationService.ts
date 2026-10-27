@@ -167,7 +167,7 @@ export async function registerNotificationsOnStartup(): Promise<void> {
         });
 
         PushNotifications.addListener('registrationError', (error) => {
-          console.error('[NativePush] Error on push registration:', JSON.stringify(error));
+          console.warn('[NativePush] Push registration notice (FCM unconfigured or pending key):', typeof error === 'object' ? JSON.stringify(error) : error);
         });
 
         // When a remote push arrives while the app is active in foreground:

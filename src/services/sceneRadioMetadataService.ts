@@ -82,11 +82,30 @@ export async function fetchDirectVideoOEmbed(videoId: string): Promise<RadioTrac
     return cached;
   }
 
-  // 1. Try YouTube official oEmbed
+  // 1. Try server proxy route /api/oembed (avoids browser 401/403/CORS network errors)
   try {
-    const url = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+    const res = await fetch(`/api/oembed?videoId=${encodeURIComponent(videoId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.title && !data.title.startsWith('Track ') && data.title !== 'Scene Track') {
+        const { title, author } = parseArtistAndTitle(data.title, data.author || 'Scene Artist');
+        const track: RadioTrackMeta = {
+          videoId,
+          title: title || data.title,
+          author: author || data.author || 'Scene Artist',
+          thumbnailUrl: data.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+        };
+        MEMORY_CACHE.set(videoId, track);
+        return track;
+      }
+    }
+  } catch (_) {}
+
+  // 2. Try noembed.com fallback
+  try {
+    const url = `https://noembed.com/embed?url=https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
+    const timeout = setTimeout(() => controller.abort(), 3000);
 
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
@@ -105,38 +124,14 @@ export async function fetchDirectVideoOEmbed(videoId: string): Promise<RadioTrac
         return track;
       }
     }
-  } catch {
-    // try fallback
-  }
+  } catch (_) {}
 
-  // 2. Try noembed.com fallback (CORS enabled proxy)
-  try {
-    const url = `https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
-
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.title) {
-        const { title, author } = parseArtistAndTitle(data.title, data.author_name || 'Scene Artist');
-        const track: RadioTrackMeta = {
-          videoId,
-          title: title || data.title,
-          author: author || data.author_name || 'Scene Artist',
-          thumbnailUrl: data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
-        };
-        MEMORY_CACHE.set(videoId, track);
-        return track;
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  return null;
+  return {
+    videoId,
+    title: 'Scene Track',
+    author: 'Scene Artist',
+    thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+  };
 }
 
 // Fetch entire playlist tracks using multi-tier fallback

@@ -99,22 +99,42 @@ export function getStoredGlobalReactions(): Record<string, StoredPostReactionDat
  * Reads all stored user reactions for a given user profile ID
  */
 export function getStoredUserReactions(userId?: string): Record<string, UserReactionsState> {
-  const userKey = userId || 'current';
-  if (userReactionsCache[userKey]) return userReactionsCache[userKey];
+  const mergedMap: Record<string, UserReactionsState> = {};
+  if (typeof window === 'undefined') return mergedMap;
+
   try {
-    if (typeof window !== 'undefined') {
-      const storageKey = `${USER_REACTIONS_STORAGE_PREFIX}${userKey}`;
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        userReactionsCache[userKey] = JSON.parse(raw);
-        return userReactionsCache[userKey] || {};
+    // 1. Scan all user reaction storage keys in localStorage to collect user reaction state across all personas/IDs
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(USER_REACTIONS_STORAGE_PREFIX)) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+              Object.entries(parsed).forEach(([pId, state]: [string, any]) => {
+                if (state && (state.user_liked || (state.user_reactions && Object.values(state.user_reactions).some(Boolean)))) {
+                  if (!mergedMap[pId] || (state.updatedAt || 0) >= (mergedMap[pId].updatedAt || 0)) {
+                    mergedMap[pId] = state;
+                  }
+                }
+              });
+            }
+          } catch (_) {}
+        }
       }
     }
   } catch (e) {
-    console.warn(`[reactionStore] Error reading user reactions for ${userKey}:`, e);
+    console.warn(`[reactionStore] Error scanning user reactions:`, e);
   }
-  userReactionsCache[userKey] = {};
-  return userReactionsCache[userKey];
+
+  // Also check direct cache or specific userId key if specified
+  const userKey = userId || 'current';
+  if (userReactionsCache[userKey]) {
+    Object.assign(mergedMap, userReactionsCache[userKey]);
+  }
+
+  return mergedMap;
 }
 
 /**
@@ -148,23 +168,30 @@ export async function savePostReaction(
     console.warn('[reactionStore] Error persisting global reaction data:', e);
   }
 
-  // 2. Update User-Specific Store
-  const userKey = userId || 'current';
-  const userMap = getStoredUserReactions(userKey);
-  userMap[postId] = {
-    user_reactions: { ...userReacts },
-    user_liked: isLiked,
-    updatedAt: now,
-  };
-  userReactionsCache[userKey] = userMap;
+  // 2. Update User-Specific Store (write to both specific userId and general 'current' key)
+  const keysToUpdate = new Set<string>();
+  if (userId) keysToUpdate.add(userId);
+  keysToUpdate.add('current');
+  const activeProfileId = typeof window !== 'undefined' ? (localStorage.getItem('nexus_active_profile_id') || localStorage.getItem('nexus_user_profile_id')) : null;
+  if (activeProfileId) keysToUpdate.add(activeProfileId);
 
-  try {
-    const storageKey = `${USER_REACTIONS_STORAGE_PREFIX}${userKey}`;
-    localStorage.setItem(storageKey, JSON.stringify(userMap));
-    socialFeedStore.setItem(storageKey, userMap).catch(() => {});
-  } catch (e) {
-    console.warn(`[reactionStore] Error persisting user reaction data for ${userKey}:`, e);
-  }
+  keysToUpdate.forEach(key => {
+    const userMap = getStoredUserReactions(key);
+    userMap[postId] = {
+      user_reactions: { ...userReacts },
+      user_liked: isLiked,
+      updatedAt: now,
+    };
+    userReactionsCache[key] = userMap;
+
+    try {
+      const storageKey = `${USER_REACTIONS_STORAGE_PREFIX}${key}`;
+      localStorage.setItem(storageKey, JSON.stringify(userMap));
+      socialFeedStore.setItem(storageKey, userMap).catch(() => {});
+    } catch (e) {
+      console.warn(`[reactionStore] Error persisting user reaction data for ${key}:`, e);
+    }
+  });
 
   // 3. Dispatch window event for live synchronization across components
   if (typeof window !== 'undefined') {
@@ -176,7 +203,7 @@ export async function savePostReaction(
           likes_count: totalLikes,
           user_reactions: userReacts,
           user_liked: isLiked,
-          userId: userKey,
+          userId: userId || 'current',
         },
       })
     );

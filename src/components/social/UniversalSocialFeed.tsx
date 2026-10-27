@@ -2657,7 +2657,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
             const { data: bMatch } = await supabase
               .from('bands')
               .select('id')
-              .or(`band_name.ilike.${targetName},name.ilike.${targetName}`)
+              .or(`band_name.ilike.${targetName}`)
               .limit(1);
             if (bMatch?.[0]?.id && isValidUUID(bMatch[0].id)) {
               targetId = bMatch[0].id;
@@ -2665,7 +2665,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
               const { data: pMatch } = await supabase
                 .from('profiles')
                 .select('id')
-                .or(`full_name.ilike.${targetName},name.ilike.${targetName},console_handle.ilike.${targetName}`)
+                .or(`full_name.ilike.${targetName},console_handle.ilike.${targetName}`)
                 .limit(1);
               if (pMatch?.[0]?.id && isValidUUID(pMatch[0].id)) {
                 targetId = pMatch[0].id;
@@ -3027,7 +3027,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
               const { data: bMatch } = await supabase
                 .from('bands')
                 .select('id')
-                .or(`band_name.ilike.${bandSearchName},name.ilike.${bandSearchName}`)
+                .or(`band_name.ilike.${bandSearchName}`)
                 .limit(1);
               if (bMatch?.[0]?.id && isValidUUID(bMatch[0].id)) {
                 activeId = bMatch[0].id;
@@ -3069,7 +3069,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
               const { data: bMatch } = await supabase
                 .from('bands')
                 .select('id')
-                .or(`band_name.ilike.${targetName},name.ilike.${targetName}`)
+                .or(`band_name.ilike.${targetName}`)
                 .limit(1);
               if (bMatch?.[0]?.id && isValidUUID(bMatch[0].id)) {
                 activeId = bMatch[0].id;
@@ -3078,7 +3078,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
               const { data: cMatch } = await supabase
                 .from('creatives')
                 .select('id, creator_id, user_id')
-                .or(`business_name.ilike.%${targetName}%,creative_name.ilike.%${targetName}%,name.ilike.%${targetName}%`)
+                .or(`business_name.ilike.%${targetName}%,creative_name.ilike.%${targetName}%`)
                 .limit(1);
               if (cMatch?.[0]?.id && isValidUUID(cMatch[0].id)) {
                 activeId = cMatch[0].id;
@@ -3086,7 +3086,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
                 const { data: pMatch } = await supabase
                   .from('profiles')
                   .select('id')
-                  .or(`full_name.ilike.${targetName},name.ilike.${targetName},console_handle.ilike.${targetName}`)
+                  .or(`full_name.ilike.${targetName},console_handle.ilike.${targetName}`)
                   .limit(1);
                 if (pMatch?.[0]?.id && isValidUUID(pMatch[0].id)) {
                   activeId = pMatch[0].id;
@@ -4921,18 +4921,18 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
       try {
         const queryTerm = `%${q}%`;
 
-        // 1. Query profiles table across all name, handle, role, and workspace fields
+        // 1. Query profiles table across valid schema columns
         const { data: profData } = await supabaseClient
           .from('profiles')
           .select('*')
-          .or(`full_name.ilike.${queryTerm},username.ilike.${queryTerm},band_name.ilike.${queryTerm},console_handle.ilike.${queryTerm},business_name.ilike.${queryTerm},agency_name.ilike.${queryTerm},label_name.ilike.${queryTerm},role.ilike.${queryTerm}`)
+          .or(`full_name.ilike.${queryTerm},console_handle.ilike.${queryTerm},email.ilike.${queryTerm}`)
           .limit(20);
 
-        // 2. Query registered bands table
+        // 2. Query registered bands table across valid schema columns
         const { data: bandsData } = await supabaseClient
           .from('bands')
           .select('*')
-          .or(`band_name.ilike.${queryTerm},name.ilike.${queryTerm},city.ilike.${queryTerm},state_province.ilike.${queryTerm},country.ilike.${queryTerm}`)
+          .or(`band_name.ilike.${queryTerm},city.ilike.${queryTerm},state_province.ilike.${queryTerm},country.ilike.${queryTerm}`)
           .limit(20);
 
         const mappedProfiles = (profData || []).map(p => ({

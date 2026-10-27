@@ -32,6 +32,88 @@ export function useSocialFeedSync({
 }: UseSocialFeedSyncParams = {}) {
   const isIncomingNotifSync = useRef(false);
 
+  // Load initial notifications from Supabase & localStorage on mount / profile change
+  useEffect(() => {
+    if (!setNotifications) return;
+    let active = true;
+
+    async function loadNotifications() {
+      let localNotifs: any[] = [];
+      try {
+        const rawLocal = localStorage.getItem('nexus_local_notifications_v1');
+        if (rawLocal) {
+          localNotifs = JSON.parse(rawLocal);
+        }
+      } catch (_) {}
+
+      let remoteNotifs: any[] = [];
+      const supabase = (await import('../../../supabase')).getSupabase();
+      if (supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('nexus_notifications')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+          if (!error && data && Array.isArray(data)) {
+            remoteNotifs = data.map((row: any) => ({
+              ...(row.data || {}),
+              id: row.id,
+              user_id: row.user_id,
+              actor_id: row.actor_id,
+              title: row.title || row.data?.title || 'Notification',
+              message: row.message || row.data?.message || '',
+              category: row.category || row.type || 'SYSTEM',
+              read: row.is_read ?? row.data?.read ?? false,
+              is_read: row.is_read ?? row.data?.is_read ?? false,
+              created_at: row.created_at || new Date().toISOString()
+            }));
+          }
+        } catch (e) {
+          console.warn('[useSocialFeedSync] Error fetching Supabase notifications:', e);
+        }
+      }
+
+      if (!active) return;
+
+      const combinedMap = new Map<string, any>();
+      [...remoteNotifs, ...localNotifs].forEach((n) => {
+        if (n && n.id && !combinedMap.has(n.id)) {
+          combinedMap.set(n.id, n);
+        }
+      });
+
+      const finalNotifs = Array.from(combinedMap.values()).sort((a, b) => {
+        const timeA = new Date(a.created_at || a.timestamp || 0).getTime();
+        const timeB = new Date(b.created_at || b.timestamp || 0).getTime();
+        return timeB - timeA;
+      });
+
+      if (finalNotifs.length > 0) {
+        setNotifications(prev => {
+          const prevMap = new Map((prev || []).map(p => [p.id, p]));
+          finalNotifs.forEach(fn => {
+            if (!prevMap.has(fn.id)) {
+              prevMap.set(fn.id, fn);
+            }
+          });
+          return Array.from(prevMap.values()).sort((a, b) => {
+            const timeA = new Date(a.created_at || a.timestamp || 0).getTime();
+            const timeB = new Date(b.created_at || b.timestamp || 0).getTime();
+            return timeB - timeA;
+          });
+        });
+      }
+    }
+
+    loadNotifications();
+
+    return () => {
+      active = false;
+    };
+  }, [userProfile?.id, userProfile?.email, setNotifications]);
+
   // Real-time Supabase subscriptions for chats and notifications
   useEffect(() => {
     if (!userProfile?.email && !setChats && !setNotifications) return;

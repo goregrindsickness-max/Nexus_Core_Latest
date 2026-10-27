@@ -938,10 +938,10 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
         try {
           let profQuery = supabase
             .from('profiles')
-            .select('id, full_name, console_handle, avatar_url, banner_url, account_type, active_workspace, role_badge, bio, email, band_name, promoter_name, creative_name, promoter_logo, label_name')
+            .select('id, full_name, console_handle, avatar_url, account_type, active_workspace, bio, email')
             .limit(20);
           if (q) {
-            profQuery = profQuery.or(`console_handle.ilike.%${q}%,full_name.ilike.%${q}%,email.ilike.%${q}%,band_name.ilike.%${q}%,account_type.ilike.%${q}%`);
+            profQuery = profQuery.or(`console_handle.ilike.%${q}%,full_name.ilike.%${q}%,email.ilike.%${q}%`);
           }
           const { data, error } = await profQuery;
           if (!error && data) {

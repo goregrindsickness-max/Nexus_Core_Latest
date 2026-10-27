@@ -51,7 +51,7 @@ import {
 } from '../embeds';
 import { GigProximityPill } from './GigProximityPill';
 import { isMiguelNameOrProfile } from '../utils/profileUtils';
-import { resolveCreativeLogo, resolveBandLogo, resolvePromoterLogo, DEFAULT_PERSONAL_AVATAR, resolveCommentAvatar } from '../../../utils/bandProfileUtils';
+import { resolveCreativeLogo, resolveBandLogo, resolvePromoterLogo, DEFAULT_PERSONAL_AVATAR, resolveCommentAvatar, resolveCommentAuthorName } from '../../../utils/bandProfileUtils';
 import { getResilientFallback } from '../../../utils/imageFallbacks';
 import { CommentMediaPicker } from './CommentMediaPicker';
 
@@ -244,6 +244,37 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState<string>('');
   const [attachedCommentMedia, setAttachedCommentMedia] = useState<{ url: string; type: 'image' | 'gif' } | null>(null);
+
+  // Comment & Reply reactions state
+  const [commentReactionsState, setCommentReactionsState] = useState<Record<string, { counts: Record<string, number>; user: Record<string, boolean> }>>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = localStorage.getItem('nexus_comment_reactions_v2');
+        if (raw) return JSON.parse(raw);
+      }
+    } catch (_) {}
+    return {};
+  });
+
+  const handleToggleCommentReaction = (commentId: string, type: 'flame' | 'horns' | 'like') => {
+    if (!commentId) return;
+    setCommentReactionsState(prev => {
+      const current = prev[commentId] || { counts: { flame: 0, horns: 0, like: 0 }, user: { flame: false, horns: false, like: false } };
+      const wasActive = Boolean(current.user[type]);
+      const nextUser = { ...current.user, [type]: !wasActive };
+      const nextCounts = {
+        ...current.counts,
+        [type]: Math.max(0, (current.counts[type] || 0) + (wasActive ? -1 : 1))
+      };
+      const updated = { ...prev, [commentId]: { counts: nextCounts, user: nextUser } };
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('nexus_comment_reactions_v2', JSON.stringify(updated));
+        }
+      } catch (_) {}
+      return updated;
+    });
+  };
 
   const handleCommentEditStart = (commentId: string, currentText: string) => {
     setEditingCommentId(commentId);
@@ -1701,305 +1732,404 @@ export const PostCard: React.FC<PostCardProps> = ({
         </button>
       </div>
 
-      {/* Bottom Comment Preview Bar (When Collapsed) */}
-      {!isCommentsOpen && commentList.length > 0 && (
-        <div 
-          onClick={onToggleComments}
-          className="bg-[#08090b] border border-red-950/40 hover:border-red-900/70 rounded-xl p-3 px-3.5 text-xs transition-all cursor-pointer group mt-2.5 shadow-sm space-y-1.5"
-        >
-          <div className="min-w-0">
-            <span className="font-mono font-bold text-rose-400 mr-2">{commentList[0].username}:</span>
-            <span className="text-zinc-200 font-sans leading-relaxed break-words">{commentList[0].text}</span>
-          </div>
-          <div className="flex items-center justify-between pt-1.5 border-t border-zinc-900/80 text-[10px] font-mono">
-            <span className="text-zinc-500 group-hover:text-red-400 transition-colors uppercase font-bold tracking-wider">
-              Click to view all ({commentList.length} comment{commentList.length > 1 ? 's' : ''})
-            </span>
-            <span className="text-zinc-600">{formatPostTimestamp((commentList[0] as any).created_at || commentList[0].time, commentList[0].time)}</span>
-          </div>
-        </div>
-      )}
+      {/* Render Single Comment Helper */}
+      {(() => {
+        const renderSingleComment = (comment: any, cIdx: number, showReplies = true) => {
+          const replies = commentList.filter(r => r.parent_comment_id === comment.id);
+          const postAuthor = (post as any).author?.name || post.authorName || '';
+          const isCommentOwner = Boolean(
+            comment.user_id === currentUserId ||
+            (comment as any).userId === currentUserId ||
+            (comment.username && currentUserName && comment.username.toLowerCase() === currentUserName.toLowerCase()) ||
+            ((comment as any).author && currentUserName && (comment as any).author.toLowerCase() === currentUserName.toLowerCase()) ||
+            currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+            (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
+            (postAuthor && currentUserName && postAuthor.toLowerCase() === currentUserName.toLowerCase())
+          );
 
-      {/* Expanded Comments Section */}
-      {isCommentsOpen && (
-        <div className="mt-3 space-y-3">
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {commentList.length === 0 ? (
-              <p className="text-[11px] font-mono text-zinc-500 italic">No comments yet. Start the signal.</p>
-            ) : (
-              commentList
-                .filter(c => !c.parent_comment_id)
-                .map((comment, cIdx) => {
-                  const replies = commentList.filter(r => r.parent_comment_id === comment.id);
-                  const postAuthor = (post as any).author?.name || post.authorName || '';
-                  const isCommentOwner = Boolean(
-                    comment.user_id === currentUserId ||
-                    (comment as any).userId === currentUserId ||
-                    (comment.username && currentUserName && comment.username.toLowerCase() === currentUserName.toLowerCase()) ||
-                    ((comment as any).author && currentUserName && (comment as any).author.toLowerCase() === currentUserName.toLowerCase()) ||
-                    currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-                    (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
-                    (postAuthor && currentUserName && postAuthor.toLowerCase() === currentUserName.toLowerCase())
-                  );
+          const topCommentAvatar = resolveCommentAvatar(comment, userProfile, currentUserId, currentUserName);
+          const topCommentAuthor = resolveCommentAuthorName(comment, userProfile, currentUserId, currentUserName);
+          const commentRx = commentReactionsState[comment.id] || { counts: { flame: 0, horns: 0, like: 0 }, user: { flame: false, horns: false, like: false } };
 
-                  const topCommentAvatar = resolveCommentAvatar(comment, userProfile, currentUserId, currentUserName);
+          return (
+            <div key={comment.id ? `comm-${comment.id}-${cIdx}` : `comm-${cIdx}`} className="space-y-1.5 group/comm">
+              {/* Top Level Comment Row */}
+              <div className="flex items-start gap-2.5">
+                {/* Avatar */}
+                <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-xs text-white overflow-hidden shrink-0 border border-zinc-700/80 mt-0.5 shadow-sm">
+                  <img
+                    src={topCommentAvatar}
+                    className="w-full h-full object-cover"
+                    alt={topCommentAuthor}
+                    onError={(e) => {
+                      (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
+                    }}
+                  />
+                </div>
 
-                  return (
-                    <div key={comment.id ? `comm-${comment.id}-${cIdx}` : `comm-${cIdx}`} className="space-y-1.5 group/comm">
-                      {/* Top Level Comment Row */}
-                      <div className="flex items-start gap-2.5">
-                        {/* Avatar */}
-                        <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-xs text-white overflow-hidden shrink-0 border border-zinc-700/80 mt-0.5 shadow-sm">
-                          <img
-                            src={topCommentAvatar}
-                            className="w-full h-full object-cover"
-                            alt={comment.username || 'User'}
-                            onError={(e) => {
-                              (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
-                            }}
-                          />
-                        </div>
+                {/* Right Column: Bubble + Action Bar */}
+                <div className="flex-1 min-w-0">
+                  {/* Comment Bubble */}
+                  <div className="bg-[#1c1e24] border border-zinc-800/80 rounded-2xl px-3.5 py-2 shadow-sm inline-block max-w-full">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-xs text-white hover:underline cursor-pointer">
+                        {topCommentAuthor}
+                      </span>
+                      {(comment as any).edited && <span className="text-[9px] text-zinc-500 italic font-mono">(edited)</span>}
+                    </div>
 
-                        {/* Right Column: Facebook Bubble + Action Bar */}
-                        <div className="flex-1 min-w-0">
-                          {/* Facebook Comment Bubble */}
-                          <div className="bg-[#1c1e24] border border-zinc-800/80 rounded-2xl px-3.5 py-2 shadow-sm inline-block max-w-full">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-xs text-white hover:underline cursor-pointer">
-                                {comment.username || 'Scene Member'}
-                              </span>
-                              {(comment as any).edited && <span className="text-[9px] text-zinc-500 italic font-mono">(edited)</span>}
-                            </div>
-
-                            {/* Inline Edit or Comment Text */}
-                            {editingCommentId === comment.id ? (
-                              <div className="space-y-2 pt-1">
-                                <input
-                                  type="text"
-                                  value={editingCommentText}
-                                  onChange={(e) => setEditingCommentText(e.target.value)}
-                                  className="w-full bg-zinc-950 border border-rose-500/80 rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleCommentEditSave(comment.id);
-                                    if (e.key === 'Escape') handleCommentEditCancel();
-                                  }}
-                                />
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={handleCommentEditCancel}
-                                    className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCommentEditSave(comment.id)}
-                                    disabled={!editingCommentText.trim()}
-                                    className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
-                                  >
-                                    <Check className="w-2.5 h-2.5" />
-                                    Save
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                {Boolean(comment.text || (comment as any).content) && (
-                                  <p className="text-xs text-zinc-200 font-sans leading-relaxed mt-0.5 break-words whitespace-pre-wrap">
-                                    {comment.text || (comment as any).content}
-                                  </p>
-                                )}
-                                {Boolean((comment as any).mediaUrl || (comment as any).media_url || (comment as any).image || (comment as any).gif) && (
-                                  <div className="mt-2 rounded-xl overflow-hidden border border-zinc-700/60 max-h-56 bg-black/40">
-                                    <img
-                                      src={(comment as any).mediaUrl || (comment as any).media_url || (comment as any).image || (comment as any).gif}
-                                      alt="Comment attachment"
-                                      className="w-full max-h-56 object-cover cursor-pointer hover:opacity-95 transition-opacity"
-                                      onClick={() => onOpenLightbox?.([(comment as any).mediaUrl || (comment as any).media_url || (comment as any).image || (comment as any).gif], 0)}
-                                    />
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-
-                          {/* Facebook Action Bar Underneath Bubble */}
-                          <div className="flex items-center gap-3 text-[11px] font-mono font-bold text-zinc-400 pl-2.5 mt-1">
-                            <button
-                              type="button"
-                              onClick={() => onSetReplyingTo({ commentId: comment.id, username: comment.username })}
-                              className="hover:text-white hover:underline cursor-pointer flex items-center gap-1"
-                            >
-                              <span>Reply</span>
-                            </button>
-
-                            {isCommentOwner && (
-                              <button
-                                type="button"
-                                onClick={() => handleCommentEditStart(comment.id, comment.text || '')}
-                                className="text-zinc-500 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-0.5"
-                                title="Edit comment"
-                              >
-                                <Pencil className="w-3 h-3" />
-                                <span className="text-[10px]">Edit</span>
-                              </button>
-                            )}
-
-                            {isCommentOwner && (
-                              <button
-                                type="button"
-                                onClick={() => handleCommentDelete(comment.id)}
-                                className="text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer flex items-center gap-0.5"
-                                title="Delete comment"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                <span className="text-[10px]">Delete</span>
-                              </button>
-                            )}
-
-                            <span className="text-[10px] text-zinc-500 font-normal">
-                              {formatPostTimestamp((comment as any).created_at || comment.time, comment.time)}
-                            </span>
-                          </div>
-
-                          {/* Threaded Replies */}
-                          {replies.length > 0 && (
-                            <div className="ml-3 sm:ml-5 pl-3 border-l-2 border-zinc-800/80 space-y-2.5 mt-2.5 relative">
-                              {replies.map((reply, rIdx) => {
-                                const isReplyOwner = Boolean(
-                                  reply.user_id === currentUserId ||
-                                  (reply as any).userId === currentUserId ||
-                                  (reply.username && currentUserName && reply.username.toLowerCase() === currentUserName.toLowerCase()) ||
-                                  ((reply as any).author && currentUserName && (reply as any).author.toLowerCase() === currentUserName.toLowerCase()) ||
-                                  currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-                                  (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
-                                  (postAuthor && currentUserName && postAuthor.toLowerCase() === currentUserName.toLowerCase())
-                                );
-                                const replyAvatarUrl = resolveCommentAvatar(reply, userProfile, currentUserId, currentUserName);
-
-                                return (
-                                  <div key={reply.id ? `reply-${reply.id}-${rIdx}` : `reply-${cIdx}-${rIdx}`} className="flex items-start gap-2 group/rep">
-                                    {/* Reply Avatar */}
-                                    <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-[10px] text-white overflow-hidden shrink-0 border border-zinc-700/80 mt-0.5 shadow-sm">
-                                      <img
-                                        src={replyAvatarUrl}
-                                        className="w-full h-full object-cover"
-                                        alt={reply.username || 'User'}
-                                        onError={(e) => {
-                                          (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
-                                        }}
-                                      />
-                                    </div>
-
-                                    {/* Reply Bubble & Action Bar */}
-                                    <div className="flex-1 min-w-0">
-                                      <div className="bg-[#181a20] border border-zinc-800/70 rounded-2xl px-3 py-1.5 shadow-sm inline-block max-w-full">
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                          <span className="font-bold text-xs text-rose-300 hover:underline cursor-pointer">
-                                            {reply.username || 'Scene Member'}
-                                          </span>
-                                          {(reply as any).edited && <span className="text-[9px] text-zinc-500 italic font-mono">(edited)</span>}
-                                        </div>
-
-                                        {/* Inline Edit or Reply Content */}
-                                        {editingCommentId === reply.id ? (
-                                          <div className="space-y-1.5 pt-1">
-                                            <input
-                                              type="text"
-                                              value={editingCommentText}
-                                              onChange={(e) => setEditingCommentText(e.target.value)}
-                                              className="w-full bg-zinc-950 border border-rose-500/80 rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
-                                              autoFocus
-                                              onKeyDown={(e) => {
-                                                if (e.key === 'Enter') handleCommentEditSave(reply.id);
-                                                if (e.key === 'Escape') handleCommentEditCancel();
-                                              }}
-                                            />
-                                            <div className="flex items-center justify-end gap-1.5">
-                                              <button
-                                                type="button"
-                                                onClick={handleCommentEditCancel}
-                                                className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
-                                              >
-                                                Cancel
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={() => handleCommentEditSave(reply.id)}
-                                                disabled={!editingCommentText.trim()}
-                                                className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
-                                              >
-                                                <Check className="w-2.5 h-2.5" />
-                                                Save
-                                              </button>
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <>
-                                            {Boolean(reply.text || (reply as any).content) && (
-                                              <p className="text-xs text-zinc-200 font-sans leading-relaxed mt-0.5 break-words whitespace-pre-wrap">
-                                                {reply.text || (reply as any).content}
-                                              </p>
-                                            )}
-                                            {Boolean((reply as any).mediaUrl || (reply as any).media_url || (reply as any).image || (reply as any).gif) && (
-                                              <div className="mt-2 rounded-xl overflow-hidden border border-zinc-700/60 max-h-52 bg-black/40">
-                                                <img
-                                                  src={(reply as any).mediaUrl || (reply as any).media_url || (reply as any).image || (reply as any).gif}
-                                                  alt="Reply attachment"
-                                                  className="w-full max-h-52 object-cover cursor-pointer hover:opacity-95 transition-opacity"
-                                                  onClick={() => onOpenLightbox?.([(reply as any).mediaUrl || (reply as any).media_url || (reply as any).image || (reply as any).gif], 0)}
-                                                />
-                                              </div>
-                                            )}
-                                          </>
-                                        )}
-                                      </div>
-
-                                      {/* Reply Action Bar */}
-                                      <div className="flex items-center gap-3 text-[10px] font-mono font-bold text-zinc-400 pl-2 mt-1">
-                                        {isReplyOwner && (
-                                          <button
-                                            type="button"
-                                            onClick={() => handleCommentEditStart(reply.id, reply.text || (reply as any).content || '')}
-                                            className="text-zinc-500 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-0.5"
-                                            title="Edit reply"
-                                          >
-                                            <Pencil className="w-2.5 h-2.5" />
-                                            <span>Edit</span>
-                                          </button>
-                                        )}
-
-                                        {isReplyOwner && (
-                                          <button
-                                            type="button"
-                                            onClick={() => handleCommentDelete(reply.id)}
-                                            className="text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer flex items-center gap-0.5"
-                                            title="Delete reply"
-                                          >
-                                            <Trash2 className="w-2.5 h-2.5" />
-                                            <span>Delete</span>
-                                          </button>
-                                        )}
-
-                                        <span className="text-[10px] text-zinc-500 font-normal">
-                                          {formatPostTimestamp((reply as any).created_at || reply.time, reply.time)}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
+                    {/* Inline Edit or Comment Text */}
+                    {editingCommentId === comment.id ? (
+                      <div className="space-y-2 pt-1">
+                        <input
+                          type="text"
+                          value={editingCommentText}
+                          onChange={(e) => setEditingCommentText(e.target.value)}
+                          className="w-full bg-zinc-950 border border-rose-500/80 rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleCommentEditSave(comment.id);
+                            if (e.key === 'Escape') handleCommentEditCancel();
+                          }}
+                        />
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleCommentEditCancel}
+                            className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCommentEditSave(comment.id)}
+                            disabled={!editingCommentText.trim()}
+                            className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <Check className="w-2.5 h-2.5" />
+                            Save
+                          </button>
                         </div>
                       </div>
+                    ) : (
+                      <>
+                        {Boolean(comment.text || (comment as any).content) && (
+                          <p className="text-xs text-zinc-200 font-sans leading-relaxed mt-0.5 break-words whitespace-pre-wrap">
+                            {comment.text || (comment as any).content}
+                          </p>
+                        )}
+                        {Boolean((comment as any).mediaUrl || (comment as any).media_url || (comment as any).image || (comment as any).gif) && (
+                          <div className="mt-2 rounded-xl overflow-hidden border border-zinc-700/60 max-h-56 bg-black/40">
+                            <img
+                              src={(comment as any).mediaUrl || (comment as any).media_url || (comment as any).image || (comment as any).gif}
+                              alt="Comment attachment"
+                              className="w-full max-h-56 object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                              onClick={() => onOpenLightbox?.([(comment as any).mediaUrl || (comment as any).media_url || (comment as any).image || (comment as any).gif], 0)}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Action Bar Underneath Bubble */}
+                  <div className="flex items-center gap-2.5 text-[11px] font-mono font-bold text-zinc-400 pl-2.5 mt-1 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => onSetReplyingTo({ commentId: comment.id, username: comment.username })}
+                      className="hover:text-white hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <span>Reply</span>
+                    </button>
+
+                    {/* Basic Reactions */}
+                    <div className="flex items-center gap-1 border-l border-zinc-800 pl-2 my-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCommentReaction(comment.id, 'flame')}
+                        className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                          commentRx.user.flame ? 'bg-amber-950/80 border border-amber-500/80 text-amber-300 font-bold' : 'text-zinc-500 hover:text-amber-400'
+                        }`}
+                        title="Flame reaction"
+                      >
+                        <span className="text-[10px]">🔥</span>
+                        {commentRx.counts.flame > 0 && <span className="text-[9px] font-mono">{commentRx.counts.flame}</span>}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCommentReaction(comment.id, 'horns')}
+                        className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                          commentRx.user.horns ? 'bg-rose-950/80 border border-rose-500/80 text-rose-300 font-bold' : 'text-zinc-500 hover:text-rose-400'
+                        }`}
+                        title="Horns reaction"
+                      >
+                        <span className="text-[10px]">🤘</span>
+                        {commentRx.counts.horns > 0 && <span className="text-[9px] font-mono">{commentRx.counts.horns}</span>}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCommentReaction(comment.id, 'like')}
+                        className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                          commentRx.user.like ? 'bg-blue-950/80 border border-blue-500/80 text-blue-300 font-bold' : 'text-zinc-500 hover:text-blue-400'
+                        }`}
+                        title="Like reaction"
+                      >
+                        <span className="text-[10px]">👍</span>
+                        {commentRx.counts.like > 0 && <span className="text-[9px] font-mono">{commentRx.counts.like}</span>}
+                      </button>
                     </div>
-                  );
-                })
+
+                    {isCommentOwner && (
+                      <button
+                        type="button"
+                        onClick={() => handleCommentEditStart(comment.id, comment.text || '')}
+                        className="text-zinc-500 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-0.5"
+                        title="Edit comment"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        <span className="text-[10px]">Edit</span>
+                      </button>
+                    )}
+
+                    {isCommentOwner && (
+                      <button
+                        type="button"
+                        onClick={() => handleCommentDelete(comment.id)}
+                        className="text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer flex items-center gap-0.5"
+                        title="Delete comment"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span className="text-[10px]">Delete</span>
+                      </button>
+                    )}
+
+                    <span className="text-[10px] text-zinc-500 font-normal">
+                      {formatPostTimestamp((comment as any).created_at || comment.time, comment.time)}
+                    </span>
+                  </div>
+
+                  {/* Threaded Replies */}
+                  {showReplies && replies.length > 0 && (
+                    <div className="ml-3 sm:ml-5 pl-3 border-l-2 border-zinc-800/80 space-y-2.5 mt-2.5 relative">
+                      {replies.map((reply, rIdx) => {
+                        const isReplyOwner = Boolean(
+                          reply.user_id === currentUserId ||
+                          (reply as any).userId === currentUserId ||
+                          (reply.username && currentUserName && reply.username.toLowerCase() === currentUserName.toLowerCase()) ||
+                          ((reply as any).author && currentUserName && (reply as any).author.toLowerCase() === currentUserName.toLowerCase()) ||
+                          currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+                          (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
+                          (postAuthor && currentUserName && postAuthor.toLowerCase() === currentUserName.toLowerCase())
+                        );
+                        const replyAvatarUrl = resolveCommentAvatar(reply, userProfile, currentUserId, currentUserName);
+                        const replyAuthorName = resolveCommentAuthorName(reply, userProfile, currentUserId, currentUserName);
+                        const replyRx = commentReactionsState[reply.id] || { counts: { flame: 0, horns: 0, like: 0 }, user: { flame: false, horns: false, like: false } };
+
+                        return (
+                          <div key={reply.id ? `reply-${reply.id}-${rIdx}` : `reply-${cIdx}-${rIdx}`} className="flex items-start gap-2 group/rep">
+                            {/* Reply Avatar */}
+                            <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-[10px] text-white overflow-hidden shrink-0 border border-zinc-700/80 mt-0.5 shadow-sm">
+                              <img
+                                src={replyAvatarUrl}
+                                className="w-full h-full object-cover"
+                                alt={replyAuthorName}
+                                onError={(e) => {
+                                  (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
+                                }}
+                              />
+                            </div>
+
+                            {/* Reply Bubble & Action Bar */}
+                            <div className="flex-1 min-w-0">
+                              <div className="bg-[#181a20] border border-zinc-800/70 rounded-2xl px-3 py-1.5 shadow-sm inline-block max-w-full">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-xs text-rose-300 hover:underline cursor-pointer">
+                                    {replyAuthorName}
+                                  </span>
+                                  {(reply as any).edited && <span className="text-[9px] text-zinc-500 italic font-mono">(edited)</span>}
+                                </div>
+
+                                {/* Inline Edit or Reply Content */}
+                                {editingCommentId === reply.id ? (
+                                  <div className="space-y-1.5 pt-1">
+                                    <input
+                                      type="text"
+                                      value={editingCommentText}
+                                      onChange={(e) => setEditingCommentText(e.target.value)}
+                                      className="w-full bg-zinc-950 border border-rose-500/80 rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleCommentEditSave(reply.id);
+                                        if (e.key === 'Escape') handleCommentEditCancel();
+                                      }}
+                                    />
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={handleCommentEditCancel}
+                                        className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCommentEditSave(reply.id)}
+                                        disabled={!editingCommentText.trim()}
+                                        className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
+                                      >
+                                        <Check className="w-2.5 h-2.5" />
+                                        Save
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    {Boolean(reply.text || (reply as any).content) && (
+                                      <p className="text-xs text-zinc-200 font-sans leading-relaxed mt-0.5 break-words whitespace-pre-wrap">
+                                        {reply.text || (reply as any).content}
+                                      </p>
+                                    )}
+                                    {Boolean((reply as any).mediaUrl || (reply as any).media_url || (reply as any).image || (reply as any).gif) && (
+                                      <div className="mt-2 rounded-xl overflow-hidden border border-zinc-700/60 max-h-52 bg-black/40">
+                                        <img
+                                          src={(reply as any).mediaUrl || (reply as any).media_url || (reply as any).image || (reply as any).gif}
+                                          alt="Reply attachment"
+                                          className="w-full max-h-52 object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                                          onClick={() => onOpenLightbox?.([(reply as any).mediaUrl || (reply as any).media_url || (reply as any).image || (reply as any).gif], 0)}
+                                        />
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+
+                              {/* Reply Action Bar */}
+                              <div className="flex items-center gap-2.5 text-[10px] font-mono font-bold text-zinc-400 pl-2 mt-1 flex-wrap">
+                                {/* Basic Reactions */}
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleCommentReaction(reply.id, 'flame')}
+                                    className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                                      replyRx.user.flame ? 'bg-amber-950/80 border border-amber-500/80 text-amber-300 font-bold' : 'text-zinc-500 hover:text-amber-400'
+                                    }`}
+                                    title="Flame reaction"
+                                  >
+                                    <span className="text-[10px]">🔥</span>
+                                    {replyRx.counts.flame > 0 && <span className="text-[9px] font-mono">{replyRx.counts.flame}</span>}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleCommentReaction(reply.id, 'horns')}
+                                    className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                                      replyRx.user.horns ? 'bg-rose-950/80 border border-rose-500/80 text-rose-300 font-bold' : 'text-zinc-500 hover:text-rose-400'
+                                    }`}
+                                    title="Horns reaction"
+                                  >
+                                    <span className="text-[10px]">🤘</span>
+                                    {replyRx.counts.horns > 0 && <span className="text-[9px] font-mono">{replyRx.counts.horns}</span>}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleCommentReaction(reply.id, 'like')}
+                                    className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                                      replyRx.user.like ? 'bg-blue-950/80 border border-blue-500/80 text-blue-300 font-bold' : 'text-zinc-500 hover:text-blue-400'
+                                    }`}
+                                    title="Like reaction"
+                                  >
+                                    <span className="text-[10px]">👍</span>
+                                    {replyRx.counts.like > 0 && <span className="text-[9px] font-mono">{replyRx.counts.like}</span>}
+                                  </button>
+                                </div>
+
+                                {isReplyOwner && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCommentEditStart(reply.id, reply.text || (reply as any).content || '')}
+                                    className="text-zinc-500 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-0.5"
+                                    title="Edit reply"
+                                  >
+                                    <Pencil className="w-2.5 h-2.5" />
+                                    <span>Edit</span>
+                                  </button>
+                                )}
+
+                                {isReplyOwner && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCommentDelete(reply.id)}
+                                    className="text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer flex items-center gap-0.5"
+                                    title="Delete reply"
+                                  >
+                                    <Trash2 className="w-2.5 h-2.5" />
+                                    <span>Delete</span>
+                                  </button>
+                                )}
+
+                                <span className="text-[10px] text-zinc-500 font-normal">
+                                  {formatPostTimestamp((reply as any).created_at || reply.time, reply.time)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        return (
+          <>
+            {/* Collapsed Comment Display (Image 2 Style): Renders top comment directly with simple text link to open all comments */}
+            {!isCommentsOpen && commentList.length > 0 && (() => {
+              const topComments = commentList.filter(c => !c.parent_comment_id);
+              const firstComment = topComments[0] || commentList[0];
+              return (
+                <div className="mt-3 space-y-2">
+                  {renderSingleComment(firstComment, 0, true)}
+                  {commentList.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={onToggleComments}
+                      className="text-xs font-mono font-bold text-rose-400/90 hover:text-rose-300 transition-colors cursor-pointer pl-1 mt-1 flex items-center gap-1.5"
+                    >
+                      <span>View all {commentList.length} comments</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Expanded Comments Section */}
+            {isCommentsOpen && (
+              <div className="mt-3 space-y-3">
+                {commentList.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={onToggleComments}
+                    className="text-xs font-mono text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer pl-1 mb-1"
+                  >
+                    <span>Hide comments</span>
+                  </button>
+                )}
+                <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                  {commentList.length === 0 ? (
+                    <p className="text-[11px] font-mono text-zinc-500 italic">No comments yet. Start the signal.</p>
+                  ) : (
+                    commentList
+                      .filter(c => !c.parent_comment_id)
+                      .map((comment, cIdx) => renderSingleComment(comment, cIdx, true))
+                  )}
+                </div>
+              </div>
             )}
-          </div>
+          </>
+        );
+      })()}
 
           {/* Active Reply Banner */}
           {replyingTo && (
@@ -2071,8 +2201,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               <Send className="w-3.5 h-3.5" />
             </button>
           </form>
-        </div>
-      )}
     </div>
   );
 };
+

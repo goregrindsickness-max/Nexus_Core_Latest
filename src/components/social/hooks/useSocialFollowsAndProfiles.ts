@@ -746,7 +746,7 @@ export function useSocialFollowsAndProfiles({
             const { data: matchedCreatives } = await supabaseClient
               .from('creatives')
               .select('id, creator_id, user_id')
-              .or(`business_name.ilike.%${cleanSearch}%,creative_name.ilike.%${cleanSearch}%,name.ilike.%${cleanSearch}%`)
+              .or(`business_name.ilike.%${cleanSearch}%,creative_name.ilike.%${cleanSearch}%`)
               .limit(1);
             if (matchedCreatives && matchedCreatives.length > 0 && isValidUUID(matchedCreatives[0].id)) {
               targetUserId = matchedCreatives[0].id;

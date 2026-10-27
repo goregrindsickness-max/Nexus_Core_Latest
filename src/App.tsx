@@ -35,6 +35,8 @@ import { inventoryStore, posSalesStore, itinerariesStore, socialFeedStore, revie
 import { wipeAllLocalData } from './utils/resetApp';
 import { registerNotificationsOnStartup } from './services/pushNotificationService';
 import { initializeSonicActivityListeners } from './services/sonicFootprintService';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { formatTimeAgo, extractUUID } from './utils/socialFeedUtils';
 import { 
   Menu, 
@@ -533,7 +535,22 @@ export default function App() {
   const [tempLockupTime, setTempLockupTime] = useState<string>("23:45");
   const [isOfflineSimActive, setIsOfflineSimActive] = useState<boolean>(false);
   const [isSyncBadgeExpanded, setIsSyncBadgeExpanded] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'home' | 'home-v2' | 'inventory' | 'reports' | 'shows' | 'settings' | 'new-sale' | 'notes' | 'setlists' | 'guestlist' | 'add-item' | 'promo-hub' | 'plans' | 'terms' | 'black-book' | 'flights' | 'merchandise-printers' | 'help-desk' | 'pay-portal' | 'creatives-hub' | 'checklist' | 'landing' | 'on-route-essentials' | 'distro-deck' | 'distro-deck-v2' | 'social' | 'studio' | 'creative' | 'promoter' | 'label'>('social');
+  const [activeTab, setActiveTab] = useState<any>(() => {
+    try {
+      const savedTab = localStorage.getItem('nexus_core_active_tab');
+      if (savedTab && savedTab !== 'landing') return savedTab;
+    } catch (_) {}
+    return 'social';
+  });
+
+  // Sync activeTab to localStorage so session view state is remembered across minimizes/reloads
+  useEffect(() => {
+    if (activeTab && activeTab !== 'landing') {
+      try {
+        localStorage.setItem('nexus_core_active_tab', activeTab);
+      } catch (_) {}
+    }
+  }, [activeTab]);
   const [distroDeckSubTab, setDistroDeckSubTab] = useState<'feed' | 'merch' | 'fans' | 'customizer' | 'alliances' | 'music'>('music');
   const [settingsExpandedSection, setSettingsExpandedSection] = useState<string>('');
   const [promoHubSubTab, setPromoHubSubTab] = useState<'distro' | 'stories' | 'loyalty'>('distro');
@@ -703,7 +720,6 @@ export default function App() {
               id: notifItem.id,
               user_id: validReceiverUUID,
               actor_id: userProfile?.id || null,
-              actor_email: userProfile?.email || null,
               title: notifItem.title,
               message: notifItem.message,
               category: 'REACTION',
@@ -772,9 +788,51 @@ export default function App() {
       return true;
     }
   });
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(() => {
+    try {
+      const saved = localStorage.getItem('nexus_core_user_profile');
+      return !saved || saved === 'null';
+    } catch (_) {
+      return true;
+    }
+  });
   const [loginInitialTab, setLoginInitialTab] = useState<'unlock' | 'signup'>('unlock');
   const [isUpgradeMode, setIsUpgradeMode] = useState<boolean>(false);
+
+  // Handle Capacitor App lifecycle events (app minimized / backgrounded & resumed on Android/iOS)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !Capacitor.isNativePlatform()) return;
+
+    let appListener: any;
+    try {
+      appListener = CapacitorApp.addListener('appStateChange', (state) => {
+        if (state.isActive) {
+          console.log('[AppLifecycle] App resumed to foreground from background.');
+          const savedProfileStr = localStorage.getItem('nexus_core_user_profile');
+          if (savedProfileStr && savedProfileStr !== 'null') {
+            try {
+              const savedProfile = JSON.parse(savedProfileStr);
+              setUserProfile((prev: any) => prev || savedProfile);
+              setIsLoggedOut(false);
+              setShowSplash(false);
+            } catch (_) {}
+          }
+          const client = getSupabase();
+          if (client) {
+            ensureValidSupabaseAuthSession(client).catch(() => {});
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('[AppLifecycle] App state listener notice:', e);
+    }
+
+    return () => {
+      if (appListener && typeof appListener.remove === 'function') {
+        appListener.remove();
+      }
+    };
+  }, []);
 
 
   // Seamless sign-up on page load for team invitations

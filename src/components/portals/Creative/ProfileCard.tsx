@@ -636,7 +636,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
             if (data) creativeRecord = data;
           }
           if (!creativeRecord && targetName) {
-            const { data } = await supabase.from('creatives').select('*').or(`business_name.ilike.%${targetName.trim()}%,creative_name.ilike.%${targetName.trim()}%,name.ilike.%${targetName.trim()}%`).maybeSingle();
+            const { data } = await supabase.from('creatives').select('*').or(`business_name.ilike.%${targetName.trim()}%,creative_name.ilike.%${targetName.trim()}%`).maybeSingle();
             if (data) creativeRecord = data;
           }
 
