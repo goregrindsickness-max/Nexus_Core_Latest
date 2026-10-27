@@ -333,23 +333,23 @@ export const PostCard: React.FC<PostCardProps> = ({
     return single ? [single] : [];
   }, [post.images, post.image_url, post.image, post.mediaUrl, post.media_url]);
 
+  const initializedEditIdRef = useRef<string | null>(null);
+
   const [localEditImages, setLocalEditImages] = useState<string[]>(() => {
     return (editingImages && editingImages.length > 0) ? editingImages : getPostAttachedImages();
   });
 
   React.useEffect(() => {
     if (isEditing) {
-      if (editingImages && editingImages.length > 0) {
-        setLocalEditImages(editingImages);
-      } else {
-        const initial = getPostAttachedImages();
+      if (initializedEditIdRef.current !== post.id) {
+        initializedEditIdRef.current = post.id;
+        const initial = (editingImages && editingImages.length > 0) ? editingImages : getPostAttachedImages();
         setLocalEditImages(initial);
-        if (onSetEditingImages) {
-          onSetEditingImages(initial);
-        }
       }
+    } else {
+      initializedEditIdRef.current = null;
     }
-  }, [isEditing, editingImages, getPostAttachedImages, onSetEditingImages]);
+  }, [isEditing, post.id, editingImages, getPostAttachedImages]);
 
   const currentEditImages: string[] = localEditImages;
 
