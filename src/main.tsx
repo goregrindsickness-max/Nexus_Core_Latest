@@ -47,27 +47,41 @@ try {
 } catch (e) {}
 
 try {
-  const _ls = window.localStorage;
-  const safeLocalStorage = {
-    getItem: function(key) { try { return _ls.getItem(key); } catch(e) { return null; } },
-    setItem: function(key, val) { try { _ls.setItem(key, val); } catch(e) {} },
-    removeItem: function(key) { try { _ls.removeItem(key); } catch(e) {} },
-    clear: function() { try { _ls.clear(); } catch(e) {} },
-    get length() { try { return _ls.length; } catch(e) { return 0; } },
-    key: function(i) { try { return _ls.key(i); } catch(e) { return null; } }
-  };
-  Object.defineProperty(window, 'localStorage', { 
-    value: safeLocalStorage,
-    configurable: true,
-    enumerable: true,
-    writable: true 
-  });
+  // Test if window.localStorage is accessible
+  window.localStorage.getItem('__nexus_storage_test__');
 } catch (e) {
-  console.warn("Could not patch localStorage", e);
+  console.warn("Storage access restricted, installing in-memory fallback");
+  try {
+    const memStorage: Record<string, string> = {};
+    const safeMemStorage = {
+      getItem: (key: string) => memStorage[key] ?? null,
+      setItem: (key: string, val: string) => { memStorage[key] = String(val); },
+      removeItem: (key: string) => { delete memStorage[key]; },
+      clear: () => { Object.keys(memStorage).forEach(k => delete memStorage[k]); },
+      get length() { return Object.keys(memStorage).length; },
+      key: (i: number) => Object.keys(memStorage)[i] ?? null
+    };
+    Object.defineProperty(window, 'localStorage', { 
+      value: safeMemStorage,
+      configurable: true,
+      writable: true 
+    });
+  } catch (err) {}
 }
 
-
-try { for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i); if (key) { const val = localStorage.getItem(key); if (val === "undefined" || val === "null") { localStorage.removeItem(key); } } } } catch(e) {}
+try { 
+  const invalidKeys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) { 
+    const key = localStorage.key(i); 
+    if (key) { 
+      const val = localStorage.getItem(key); 
+      if (val === "undefined" || val === "null") { 
+        invalidKeys.push(key); 
+      } 
+    } 
+  }
+  invalidKeys.forEach(k => localStorage.removeItem(k));
+} catch(e) {}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

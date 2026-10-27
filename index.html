@@ -10,9 +10,66 @@
     <meta name="description" content="Comprehensive portal, social feed, merch store, event manager, and music hub for heavy metal bands, promoters, creatives, and labels." />
     <meta property="og:title" content="Heavy Metal Scene Platform" />
     <meta property="og:description" content="Comprehensive portal, social feed, merch store, event manager, and music hub for heavy metal bands, promoters, creatives, and labels." />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0c0e12;
+        color: #e4e4e7;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      #nexus-boot-loader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background-color: #0c0e12;
+        color: #00ffcc;
+        text-align: center;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      .nexus-spinner {
+        width: 44px;
+        height: 44px;
+        border: 3px solid rgba(0, 255, 204, 0.2);
+        border-top-color: #00ffcc;
+        border-radius: 50%;
+        animation: nexus-spin 0.8s linear infinite;
+        margin-bottom: 20px;
+      }
+      @keyframes nexus-spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+    <script>
+      window.addEventListener('error', function(e) {
+        console.error('Fatal Script Execution Error:', e);
+        showBootError(e.message || 'Script initialization failed');
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        console.error('Fatal Promise Rejection:', e.reason);
+      });
+      function showBootError(msg) {
+        var root = document.getElementById('root');
+        if (root && (!root.children.length || document.getElementById('nexus-boot-loader'))) {
+          root.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#0c0e12;color:#ff3366;padding:24px;text-align:center;">' +
+            '<h2 style="font-size:20px;margin-bottom:8px;">// NEXUS CORE BOOT NOTICE</h2>' +
+            '<p style="color:#a1a1aa;max-width:400px;font-size:13px;margin-bottom:20px;">' + (msg || 'Unable to start application interface.') + '</p>' +
+            '<button onclick="localStorage.clear();sessionStorage.clear();location.reload();" style="background:#00ffcc;color:#000;border:none;padding:12px 24px;font-weight:bold;border-radius:8px;cursor:pointer;">Clear Cache & Reload</button>' +
+            '</div>';
+        }
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="nexus-boot-loader">
+        <div class="nexus-spinner"></div>
+        <div style="font-family: monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase;">Initializing Nexus Core...</div>
+      </div>
+    </div>
     
     <!-- Core App Initialization Script -->
     <script type="module" src="/src/main.tsx"></script>
