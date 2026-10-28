@@ -1,4 +1,4 @@
-import { getSupabase } from '../supabase';
+import { getSupabase } from './clientService';
 
 export type SonicMetricId = 'show_attendance' | 'crate_digger' | 'physical_collector' | 'signal_contributor';
 

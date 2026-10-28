@@ -1,4 +1,5 @@
-import { getSupabase, uploadBase64ToStorage } from '../supabase';
+import { getSupabase } from './clientService';
+import { uploadBase64ToStorage } from './storageService';
 
 export interface ShopMerchItem {
   id: string;

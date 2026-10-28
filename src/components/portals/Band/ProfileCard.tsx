@@ -33,7 +33,7 @@ import { VORTEX_GRAPHICS_SVG_AVATAR, PROMOTER_SVG_AVATAR } from '../../../utils/
 export type { ListenerMetric };
 export { calculateListenerMetrics };
 
-import { PublicProfileModalProps } from '../../social/modals/PublicProfileModal';
+import type { PublicProfileModalProps } from '../../social/modals/PublicProfileModal';
 
 export const getReleaseCoverUrl = (release: any): string | null => {
   if (!release) return null;

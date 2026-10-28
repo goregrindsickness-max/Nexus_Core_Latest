@@ -1,6 +1,6 @@
 import React from 'react';
 import { Copy, FileText } from 'lucide-react';
-import { TourPackageStop } from '../TourManagerPackageModule';
+import type { TourPackageStop } from '../TourManagerPackageModule';
 
 interface DaySheetsTabProps {
   stops: TourPackageStop[];

@@ -3,6 +3,7 @@ import { UserProfile, BILLING_TIER_LIMITS, SubscriptionTier } from '../types';
 import { PROMOTER_BILLING_MATRIX } from '../config/promoterBilling';
 import { ArrowLeft, ChevronLeft, Check, Lock, RefreshCw, Sparkles, Building, Landmark, Settings } from 'lucide-react';
 import { motion } from 'motion/react';
+import { safeSetLocalStorageItem } from '../utils/safeStorage';
 
 interface BillingSettingsViewProps {
   userProfile: UserProfile;
@@ -108,7 +109,7 @@ export default function BillingSettingsView({
         const parsed = JSON.parse(stored);
         parsed.subscription_status = 'canceled';
         parsed.sub_tier = 'free_for_life';
-        localStorage.setItem('nexus_core_user_profile', JSON.stringify(parsed));
+        safeSetLocalStorageItem('nexus_core_user_profile', parsed);
         
         window.dispatchEvent(new CustomEvent('nexus_core_user_profile_updated', { detail: parsed }));
       }

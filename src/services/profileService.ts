@@ -1,5 +1,5 @@
 import { normalizeRegisteredWorkspaces } from '../types';
-import { executeWithSchemaResilience } from './schemaResilienceService';
+import { executeWithSchemaResilience, registerSchemaSanitizers } from './schemaResilienceService';
 import { isMiguelNameOrProfile } from '../components/social/utils/profileUtils';
 import { isCommunityBandRecord } from '../lib/seedBandsData';
 import { isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER } from '../utils/bandProfileUtils';
@@ -673,6 +673,8 @@ export function extractGlobalProfilePayload(rawPayload: any, userId?: string): R
 
   return sanitizeProfileUpsertPayload(payload);
 }
+
+registerSchemaSanitizers({ sanitizeProfilePayload });
 
 /**
  * Sanitizes a profile upsert payload (object or array of objects) by filtering keys against

@@ -1,20 +1,12 @@
 // Nexus Band Community & Verification Management
 // Manages community archives, name collision checks, verification status, and artist handover forks
 
-import {
-  getSupabase,
-  uploadBase64ToStorage,
-  uploadCommunityBandMedia,
-  executeWithSchemaResilience,
-  sanitizeBandPayload,
-  sanitizeMicroGenres,
-  ensureUUID,
-  generateUUID,
-  upsertReleasesBatchToDatabase,
-  fetchReleasesFromDatabase,
-  upsertBandToDatabase,
-  processOfflineQueue
-} from '../supabase';
+import { getSupabase } from '../services/clientService';
+import { uploadBase64ToStorage, uploadCommunityBandMedia } from '../services/storageService';
+import { executeWithSchemaResilience, ensureUUID, generateUUID } from '../services/schemaResilienceService';
+import { sanitizeBandPayload, sanitizeMicroGenres, upsertBandToDatabase } from '../services/bandService';
+import { upsertReleasesBatchToDatabase, fetchReleasesFromDatabase } from '../services/releasesService';
+import { processOfflineQueue } from '../services/offlineSyncService';
 import { syncBandDiscographyToPhysicalAndDigital } from '../services/discographySyncService';
 
 export type BandVerificationStatus = 'community_archive' | 'claim_pending' | 'verified_official';

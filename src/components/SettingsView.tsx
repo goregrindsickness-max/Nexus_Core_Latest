@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { safeSetLocalStorageItem } from '../utils/safeStorage';
 import { 
   User, 
   Mail, 
@@ -1588,8 +1589,8 @@ Powered by NEXUS CORE
 
         setUserProfile(nextProfile);
         try {
-          localStorage.setItem('nexus_core_user_profile', JSON.stringify(nextProfile));
-          localStorage.setItem('nexus_user', JSON.stringify(nextProfile));
+          safeSetLocalStorageItem('nexus_core_user_profile', nextProfile);
+          safeSetLocalStorageItem('nexus_user', nextProfile);
         } catch (_) {}
         
         triggerNotification(`${portalType.toUpperCase()} Workspace Deactivated.`);
@@ -1722,8 +1723,8 @@ Powered by NEXUS CORE
 
         setUserProfile(nextProfile);
         try {
-          localStorage.setItem('nexus_core_user_profile', JSON.stringify(nextProfile));
-          localStorage.setItem('nexus_user', JSON.stringify(nextProfile));
+          safeSetLocalStorageItem('nexus_core_user_profile', nextProfile);
+          safeSetLocalStorageItem('nexus_user', nextProfile);
         } catch (_) {}
       } else {
         localStorage.removeItem('nexus_core_user_profile');

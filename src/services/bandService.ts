@@ -1,5 +1,5 @@
 import { getSupabase } from './clientService';
-import { ensureUUID, generateUUID, executeWithSchemaResilience } from './schemaResilienceService';
+import { ensureUUID, generateUUID, executeWithSchemaResilience, registerSchemaSanitizers } from './schemaResilienceService';
 import { isCommunityBandRecord } from '../lib/seedBandsData';
 
 export const PRIMARY_GENRE_KEYWORDS = new Set([
@@ -604,6 +604,8 @@ export function sanitizeBandPayload(rawPayload: any): Record<string, any> {
 
   return clean;
 }
+
+registerSchemaSanitizers({ sanitizeBandPayload });
 
 /**
  * Robustly saves a band row to Supabase 'bands' table with multi-tier schema resilience,

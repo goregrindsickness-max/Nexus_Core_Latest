@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { UserReview } from '../types';
 import { BAND_PORTAL_BILLING } from '../config/billingMatrix';
+import { safeSetLocalStorageItem } from '../utils/safeStorage';
 
 interface PlansViewProps {
   onBack: () => void;
@@ -191,7 +192,7 @@ export default function PlansView({
         const parsed = JSON.parse(stored);
         parsed.subscription_status = 'canceled';
         parsed.sub_tier = 'free_for_life';
-        localStorage.setItem('nexus_core_user_profile', JSON.stringify(parsed));
+        safeSetLocalStorageItem('nexus_core_user_profile', parsed);
         
         window.dispatchEvent(new CustomEvent('nexus_core_user_profile_updated', { detail: parsed }));
       }

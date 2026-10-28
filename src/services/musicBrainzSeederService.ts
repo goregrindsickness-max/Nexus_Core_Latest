@@ -1,4 +1,4 @@
-import { getSupabase } from '../supabase';
+import { getSupabase } from './clientService';
 import { Venue } from '../types';
 
 export type PlaceCategory = 'venue' | 'studio' | 'rehearsal' | 'other';

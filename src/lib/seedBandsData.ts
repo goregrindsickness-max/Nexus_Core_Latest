@@ -1,4 +1,4 @@
-import { CommunityBandRecord } from './communityBands';
+import type { CommunityBandRecord } from './communityBands';
 
 export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
   {

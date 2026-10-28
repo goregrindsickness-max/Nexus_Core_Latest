@@ -1,5 +1,5 @@
 import { initialForumThreads } from '../data/forumMockData';
-import { getSupabase } from '../supabase';
+import { getSupabase } from './clientService';
 
 export interface ForumComment {
   id: string;

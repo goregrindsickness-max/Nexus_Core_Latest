@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronDown, Plus, Trash2, Calendar, MapPin, Truck, Settings, Share2, Send, Activity, UserPlus, Clock, Sparkles, Users, Fuel, AlertTriangle, FileText, Check, Copy, TrendingUp, RefreshCw, Sun, CloudSun, Wind, Thermometer, CloudRain, CloudSnow, CloudLightning, Cloud } from 'lucide-react';
 import { motion } from 'motion/react';
-import { getShowWeatherAndWarnings } from './ShowsView';
+import { getShowWeatherAndWarnings } from '../../../utils/weatherUtils';
 
 // Coordinates registry for major tour nodes to simulate highly realistic routes
 const cityCoords: { [key: string]: { lat: number; lng: number } } = {

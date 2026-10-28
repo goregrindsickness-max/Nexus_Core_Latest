@@ -19,28 +19,12 @@ export default defineConfig(() => {
       minify: 'esbuild',
       sourcemap: false,
       reportCompressedSize: false,
-      chunkSizeWarningLimit: 3000,
+      chunkSizeWarningLimit: 5000,
       target: ['es2020', 'chrome87', 'safari14', 'firefox78', 'edge88'],
       rollupOptions: {
         maxParallelFileOps: 1,
         output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
-                return 'vendor-react';
-              }
-              if (id.includes('lucide-react') || id.includes('motion')) {
-                return 'vendor-ui';
-              }
-              if (id.includes('@supabase') || id.includes('@google/genai')) {
-                return 'vendor-data';
-              }
-              if (id.includes('mapbox-gl')) {
-                return 'vendor-mapbox';
-              }
-              return 'vendor-core';
-            }
-          },
+          manualChunks: undefined,
         },
       },
     },

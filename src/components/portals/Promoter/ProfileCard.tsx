@@ -54,7 +54,7 @@ export const getReleaseCoverUrl = (release: any): string | null => {
   return null;
 };
 
-import { PublicProfileModalProps } from '../../social/modals/PublicProfileModal';
+import type { PublicProfileModalProps } from '../../social/modals/PublicProfileModal';
 export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   selectedUserProfile,
   setSelectedUserProfile,

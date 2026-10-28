@@ -44,14 +44,29 @@
       }
     </style>
     <script>
+      function isIgnorable(msg) {
+        if (!msg) return false;
+        var s = String(msg).toLowerCase();
+        return s.indexOf('websocket') !== -1 ||
+               s.indexOf('vite') !== -1 ||
+               s.indexOf('hmr') !== -1 ||
+               s.indexOf('resizeobserver') !== -1 ||
+               s.indexOf('script error') !== -1;
+      }
       window.addEventListener('error', function(e) {
-        console.error('Fatal Script Execution Error:', e);
+        if (isIgnorable(e.message)) return;
         showBootError(e.message || 'Script initialization failed');
       });
       window.addEventListener('unhandledrejection', function(e) {
-        console.error('Fatal Promise Rejection:', e.reason);
+        var reasonMsg = e && e.reason ? (e.reason.message || String(e.reason)) : 'Promise rejected';
+        if (isIgnorable(reasonMsg)) return;
+        var loader = document.getElementById('nexus-boot-loader');
+        if (loader) {
+          showBootError(reasonMsg);
+        }
       });
       function showBootError(msg) {
+        if (isIgnorable(msg)) return;
         var root = document.getElementById('root');
         if (root && (!root.children.length || document.getElementById('nexus-boot-loader'))) {
           root.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#0c0e12;color:#ff3366;padding:24px;text-align:center;">' +
@@ -61,6 +76,13 @@
             '</div>';
         }
       }
+      setTimeout(function() {
+        var loader = document.getElementById('nexus-boot-loader');
+        if (loader && document.getElementById('root')) {
+          console.warn('Nexus Core boot watchdog: loading took longer than expected.');
+          showBootError('Initialization took longer than expected. Please reload or clear local cache.');
+        }
+      }, 8000);
     </script>
   </head>
   <body>

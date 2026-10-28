@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { getSupabase } from '../supabase';
+import { getSupabase } from '../services/clientService';
 
 export interface UserPresenceInfo {
   userId?: string;

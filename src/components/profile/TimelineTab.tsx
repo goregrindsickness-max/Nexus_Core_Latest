@@ -38,7 +38,7 @@ import { formatPostTimestamp } from '../../utils/socialFeedUtils';
 import { savePostReaction, mergePostWithReactions, normalizeReactionCounts } from '../social/utils/reactionStore';
 import { isValidStorageOrImageUrl } from '../../services/storageService';
 import { communityBandManager } from '../../lib/communityBands';
-import { DEFAULT_PERSONAL_AVATAR, resolveCommentAvatar } from '../../utils/bandProfileUtils';
+import { DEFAULT_PERSONAL_AVATAR, resolveCommentAvatar, resolveCommentAuthorName } from '../../utils/bandProfileUtils';
 import {
   fetchGlobalInteractions,
   submitGlobalComment,
@@ -362,6 +362,29 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState<string>('');
   const [viewingReactionsPost, setViewingReactionsPost] = useState<any | null>(null);
+
+  const [commentReactionsState, setCommentReactionsState] = useState<Record<string, { counts: { flame: number; horns: number; like: number }; user: { flame: boolean; horns: boolean; like: boolean } }>>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_comment_reactions_v2');
+      return saved ? JSON.parse(saved) : {};
+    } catch (_) {
+      return {};
+    }
+  });
+
+  const handleToggleCommentReaction = (commentId: string, rxType: 'flame' | 'horns' | 'like') => {
+    setCommentReactionsState(prev => {
+      const curr = prev[commentId] || { counts: { flame: 0, horns: 0, like: 0 }, user: { flame: false, horns: false, like: false } };
+      const wasActive = curr.user[rxType];
+      const newCounts = { ...curr.counts, [rxType]: wasActive ? Math.max(0, curr.counts[rxType] - 1) : curr.counts[rxType] + 1 };
+      const newUser = { ...curr.user, [rxType]: !wasActive };
+      const updated = { ...prev, [commentId]: { counts: newCounts, user: newUser } };
+      try {
+        localStorage.setItem('nexus_comment_reactions_v2', JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+  };
 
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressRef = useRef(false);
@@ -2618,26 +2641,47 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                   </button>
                 </div>
 
-                {/* Collapsed Comment Preview Banner */}
-                {!expandedComments[post.id] && postCommentsList.length > 0 && (
-                  <div 
-                    onClick={() => toggleComments(post.id)}
-                    className="bg-[#08090b] border border-red-950/40 hover:border-red-900/70 rounded-xl p-3 px-3.5 text-xs transition-all cursor-pointer group mt-2.5 shadow-sm space-y-1.5"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-mono font-bold text-rose-400 mr-2">{postCommentsList[0].username || postCommentsList[0].author}:</span>
-                      <span className="text-zinc-200 font-sans leading-relaxed break-words">{postCommentsList[0].text || postCommentsList[0].content}</span>
+                {/* Collapsed Comment Display (Image 2 Style): Renders top comment directly with simple text link to open all comments */}
+                {!expandedComments[post.id] && postCommentsList.length > 0 && (() => {
+                  const firstComment = postCommentsList.filter(c => !c.parent_comment_id)[0] || postCommentsList[0];
+                  const firstCommentAvatar = resolveCommentAvatar(firstComment, activeUserProfile, activeUserId, currentUserName);
+                  const firstCommentAuthor = resolveCommentAuthorName(firstComment, activeUserProfile, activeUserId, currentUserName);
+
+                  return (
+                    <div className="mt-2.5 space-y-1.5">
+                      {/* Top Comment Bubble Card */}
+                      <div className="bg-[#1c1e24] border border-zinc-800/80 rounded-2xl p-3 px-3.5 shadow-sm flex items-start gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-xs text-white overflow-hidden shrink-0 border border-zinc-700/80 mt-0.5 shadow-sm">
+                          <img
+                            src={firstCommentAvatar}
+                            className="w-full h-full object-cover"
+                            alt={firstCommentAuthor}
+                            onError={(e) => {
+                              (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
+                            }}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0 text-xs font-sans">
+                          <span className="font-bold text-rose-400 mr-2">{firstCommentAuthor}:</span>
+                          <span className="text-zinc-200 leading-relaxed break-words">{firstComment.text || firstComment.content}</span>
+                        </div>
+                      </div>
+
+                      {/* Simple Text Link to Open All Comments */}
+                      <div 
+                        onClick={() => toggleComments(post.id)}
+                        className="flex items-center justify-between pt-1 text-[11px] font-mono cursor-pointer group/link px-1"
+                      >
+                        <span className="text-zinc-500 group-hover/link:text-rose-400 transition-colors uppercase font-bold tracking-wider">
+                          CLICK TO VIEW ALL ({postCommentsList.length} COMMENT{postCommentsList.length > 1 ? 's' : ''})
+                        </span>
+                        <span className="text-zinc-600 text-[10px]">
+                          {formatPostTimestamp(firstComment.created_at || firstComment.time, firstComment.time)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between pt-1.5 border-t border-zinc-900/80 text-[10px] font-mono">
-                      <span className="text-zinc-500 group-hover:text-red-400 transition-colors uppercase font-bold tracking-wider">
-                        Click to view all ({postCommentsList.length} comment{postCommentsList.length > 1 ? 's' : ''})
-                      </span>
-                      <span className="text-zinc-600">
-                        {formatPostTimestamp(postCommentsList[0].created_at || postCommentsList[0].time, postCommentsList[0].time)}
-                      </span>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Expanded Comments Thread & Input Drawer */}
                 {expandedComments[post.id] && (
@@ -2662,6 +2706,8 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                               post.author_id === activeUserId
                             );
                             const topCommentAvatar = resolveCommentAvatar(comment, activeUserProfile, activeUserId, currentUserName);
+                            const topCommentAuthor = resolveCommentAuthorName(comment, activeUserProfile, activeUserId, currentUserName);
+                            const commentRx = commentReactionsState[comment.id] || { counts: { flame: 0, horns: 0, like: 0 }, user: { flame: false, horns: false, like: false } };
 
                             return (
                               <div key={comment.id ? `comm-${comment.id}-${cIdx}` : `comm-${cIdx}`} className="space-y-1.5 group/comm">
@@ -2672,7 +2718,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                     <img
                                       src={topCommentAvatar}
                                       className="w-full h-full object-cover"
-                                      alt={comment.username || 'User'}
+                                      alt={topCommentAuthor}
                                       onError={(e) => {
                                         (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
                                       }}
@@ -2685,7 +2731,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                     <div className="bg-[#1c1e24] border border-zinc-800/80 rounded-2xl px-3.5 py-2 shadow-sm inline-block max-w-full">
                                       <div className="flex items-center gap-1.5 flex-wrap">
                                         <span className="font-bold text-xs text-white hover:underline cursor-pointer">
-                                          {comment.username || comment.author || 'Scene Member'}
+                                          {topCommentAuthor}
                                         </span>
                                         {comment.edited && <span className="text-[9px] text-zinc-500 italic font-mono">(edited)</span>}
                                       </div>
@@ -2743,18 +2789,55 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                       )}
                                     </div>
 
-                                    {/* Facebook Action Bar Underneath Bubble */}
-                                    <div className="flex items-center gap-3 text-[11px] font-mono font-bold text-zinc-400 pl-2.5 mt-1">
+                                    {/* Action Bar Underneath Bubble */}
+                                    <div className="flex items-center gap-3 text-[11px] font-mono font-bold text-zinc-400 pl-2.5 mt-1 flex-wrap">
                                       <button
                                         type="button"
                                         onClick={() => setReplyingTo(prev => ({
                                           ...prev,
-                                          [post.id]: { commentId: comment.id, username: comment.username || comment.author || 'Fan' }
+                                          [post.id]: { commentId: comment.id, username: topCommentAuthor }
                                         }))}
                                         className="hover:text-white hover:underline cursor-pointer flex items-center gap-1"
                                       >
                                         <span>Reply</span>
                                       </button>
+
+                                      {/* Basic Reactions */}
+                                      <div className="flex items-center gap-1 border-l border-zinc-800 pl-2 my-0.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleCommentReaction(comment.id, 'flame')}
+                                          className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                                            commentRx.user.flame ? 'bg-amber-950/80 border border-amber-500/80 text-amber-300 font-bold' : 'text-zinc-500 hover:text-amber-400'
+                                          }`}
+                                          title="Flame reaction"
+                                        >
+                                          <span className="text-[10px]">🔥</span>
+                                          {commentRx.counts.flame > 0 && <span className="text-[9px] font-mono">{commentRx.counts.flame}</span>}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleCommentReaction(comment.id, 'horns')}
+                                          className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                                            commentRx.user.horns ? 'bg-rose-950/80 border border-rose-500/80 text-rose-300 font-bold' : 'text-zinc-500 hover:text-rose-400'
+                                          }`}
+                                          title="Horns reaction"
+                                        >
+                                          <span className="text-[10px]">🤘</span>
+                                          {commentRx.counts.horns > 0 && <span className="text-[9px] font-mono">{commentRx.counts.horns}</span>}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleCommentReaction(comment.id, 'like')}
+                                          className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                                            commentRx.user.like ? 'bg-blue-950/80 border border-blue-500/80 text-blue-300 font-bold' : 'text-zinc-500 hover:text-blue-400'
+                                          }`}
+                                          title="Like reaction"
+                                        >
+                                          <span className="text-[10px]">👍</span>
+                                          {commentRx.counts.like > 0 && <span className="text-[9px] font-mono">{commentRx.counts.like}</span>}
+                                        </button>
+                                      </div>
 
                                       {isCommentAuthor && (
                                         <button
@@ -2801,6 +2884,8 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                             post.author_id === activeUserId
                                           );
                                           const replyAvatarUrl = resolveCommentAvatar(reply, activeUserProfile, activeUserId, currentUserName);
+                                          const replyAuthorName = resolveCommentAuthorName(reply, activeUserProfile, activeUserId, currentUserName);
+                                          const replyRx = commentReactionsState[reply.id] || { counts: { flame: 0, horns: 0, like: 0 }, user: { flame: false, horns: false, like: false } };
 
                                           return (
                                             <div key={reply.id ? `reply-${reply.id}-${rIdx}` : `reply-${cIdx}-${rIdx}`} className="flex items-start gap-2 group/rep">
@@ -2809,7 +2894,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                 <img
                                                   src={replyAvatarUrl}
                                                   className="w-full h-full object-cover"
-                                                  alt={reply.username || 'User'}
+                                                  alt={replyAuthorName}
                                                   onError={(e) => {
                                                     (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
                                                   }}
@@ -2821,7 +2906,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                 <div className="bg-[#181a20] border border-zinc-800/70 rounded-2xl px-3 py-1.5 shadow-sm inline-block max-w-full">
                                                   <div className="flex items-center gap-1.5 flex-wrap">
                                                     <span className="font-bold text-xs text-rose-300 hover:underline cursor-pointer">
-                                                      {reply.username || reply.author || 'Scene Member'}
+                                                      {replyAuthorName}
                                                     </span>
                                                     {reply.edited && <span className="text-[9px] text-zinc-500 italic font-mono">(edited)</span>}
                                                   </div>
@@ -2880,7 +2965,43 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                 </div>
 
                                                 {/* Reply Action Bar */}
-                                                <div className="flex items-center gap-3 text-[10px] font-mono font-bold text-zinc-400 pl-2 mt-1">
+                                                <div className="flex items-center gap-2.5 text-[10px] font-mono font-bold text-zinc-400 pl-2 mt-1 flex-wrap">
+                                                  {/* Basic Reactions */}
+                                                  <div className="flex items-center gap-1">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleToggleCommentReaction(reply.id, 'flame')}
+                                                      className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                                                        replyRx.user.flame ? 'bg-amber-950/80 border border-amber-500/80 text-amber-300 font-bold' : 'text-zinc-500 hover:text-amber-400'
+                                                      }`}
+                                                      title="Flame reaction"
+                                                    >
+                                                      <span className="text-[10px]">🔥</span>
+                                                      {replyRx.counts.flame > 0 && <span className="text-[9px] font-mono">{replyRx.counts.flame}</span>}
+                                                    </button>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleToggleCommentReaction(reply.id, 'horns')}
+                                                      className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                                                        replyRx.user.horns ? 'bg-rose-950/80 border border-rose-500/80 text-rose-300 font-bold' : 'text-zinc-500 hover:text-rose-400'
+                                                      }`}
+                                                      title="Horns reaction"
+                                                    >
+                                                      <span className="text-[10px]">🤘</span>
+                                                      {replyRx.counts.horns > 0 && <span className="text-[9px] font-mono">{replyRx.counts.horns}</span>}
+                                                    </button>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleToggleCommentReaction(reply.id, 'like')}
+                                                      className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                                                        replyRx.user.like ? 'bg-blue-950/80 border border-blue-500/80 text-blue-300 font-bold' : 'text-zinc-500 hover:text-blue-400'
+                                                      }`}
+                                                      title="Like reaction"
+                                                    >
+                                                      <span className="text-[10px]">👍</span>
+                                                      {replyRx.counts.like > 0 && <span className="text-[9px] font-mono">{replyRx.counts.like}</span>}
+                                                    </button>
+                                                  </div>
                                                   {isReplyAuthor && (
                                                     <button
                                                       type="button"

@@ -1,7 +1,9 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { supabase as singletonSupabase } from '../lib/supabaseClient';
-import { compressAndTranscodeImageToWebP } from './storageService';
-import { wrapQueryBuilder } from './offlineSyncService';
+let queryBuilderWrapper: ((builder: any, table: string) => any) | null = null;
+export function setQueryBuilderWrapper(wrapper: (builder: any, table: string) => any) {
+  queryBuilderWrapper = wrapper;
+}
 
 // Caches per portal type: 'band' | 'promoter' | 'creative'
 const rawSupabaseInstances: Record<string, SupabaseClient | null> = {};
@@ -300,7 +302,7 @@ export function getSupabase(customPortalType?: 'band' | 'promoter' | 'creative')
         if (prop === 'from') {
           return (table: string) => {
             const queryBuilder = target.from(table);
-            return wrapQueryBuilder(queryBuilder, table);
+            return queryBuilderWrapper ? queryBuilderWrapper(queryBuilder, table) : queryBuilder;
           };
         }
 
@@ -368,6 +370,7 @@ export function getSupabase(customPortalType?: 'band' | 'promoter' | 'creative')
                           } else if (fileArg && typeof fileArg === 'object' && 'type' in fileArg && typeof fileArg.type === 'string' && fileArg.type.startsWith('image/')) {
                             // Only transcode actual image files
                             try {
+                              const { compressAndTranscodeImageToWebP } = await import('./storageService');
                               processedFile = await compressAndTranscodeImageToWebP(fileArg);
                               if (
                                 processedFile &&

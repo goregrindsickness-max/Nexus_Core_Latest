@@ -1,6 +1,6 @@
 import { getSupabase } from './clientService';
 import { parseLocationFields } from './bandService';
-import { generateUUID, executeWithSchemaResilience } from './schemaResilienceService';
+import { generateUUID, executeWithSchemaResilience, registerSchemaSanitizers } from './schemaResilienceService';
 import { hasRegisteredWorkspace } from '../types';
 
 export const VALID_CREATIVE_COLUMNS = new Set([
@@ -193,6 +193,8 @@ export function sanitizeCreativePayload(rawPayload: any): Record<string, any> {
 
   return clean;
 }
+
+registerSchemaSanitizers({ sanitizeCreativePayload });
 
 /**
  * Format creative payload cleanly without bleeding user profile / band attributes.

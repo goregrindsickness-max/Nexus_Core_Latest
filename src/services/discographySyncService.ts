@@ -1,6 +1,6 @@
 import { inventoryStore, labelCatalogStore } from '../utils/indexedDB';
 import { InventoryItem } from '../types';
-import { DiscographyRelease } from '../lib/communityBands';
+import type { DiscographyRelease } from '../lib/communityBands';
 
 /**
  * Checks whether an item or release is a split / collaborative release

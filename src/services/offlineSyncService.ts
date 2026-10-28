@@ -1,5 +1,5 @@
 import localforage from 'localforage';
-import { getRawSupabase } from './clientService';
+import { getRawSupabase, setQueryBuilderWrapper } from './clientService';
 import { generateUUID, ensureUUID, sanitizeShowForDb, sanitizeInventoryItemForDb } from './schemaResilienceService';
 import { sanitizeBandPayload } from './bandService';
 import { sanitizeReleaseForDb } from './releasesService';
@@ -504,6 +504,9 @@ export function wrapQueryBuilder(realBuilder: any, table: string): any {
 
   return new Proxy(realBuilder, handler);
 }
+
+// Register offline query builder wrapper with client service
+setQueryBuilderWrapper(wrapQueryBuilder);
 
 /**
  * Checks if a Supabase error or throw suggests that a database egress/network bypass is required

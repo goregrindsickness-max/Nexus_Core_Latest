@@ -32,6 +32,7 @@ import { tourPackageManager } from './lib/tourPackageManager';
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import InteractiveRoutePreview from './components/portals/Band/InteractiveRoutePreview';
 import { inventoryStore, posSalesStore, itinerariesStore, socialFeedStore, reviewsStore, showsStore, registrationStagingStore, venuesStore, offersStore, routingBeaconsStore, creativeNodesStore, expensesStore, profileStore } from './utils/indexedDB';
+import { safeSetLocalStorageItem } from './utils/safeStorage';
 import { wipeAllLocalData } from './utils/resetApp';
 import { registerNotificationsOnStartup } from './services/pushNotificationService';
 import { initializeSonicActivityListeners } from './services/sonicFootprintService';
@@ -1592,11 +1593,9 @@ export default function App() {
     if (userProfile) {
       try {
         profileStore.setItem('nexus_core_user_profile', userProfile);
-        localStorage.setItem('nexus_core_user_profile', JSON.stringify(userProfile));
-        
-        // Automatic upsert to supabase removed to prevent ghost profiles.
+        safeSetLocalStorageItem('nexus_core_user_profile', userProfile);
       } catch (e) {
-        console.error('Failed to save userProfile to local DB:', e);
+        console.warn('Failed to save userProfile to local DB:', e);
       }
     }
   }, [userProfile, isOnline]);
@@ -1686,7 +1685,7 @@ export default function App() {
             };
             try {
               profileStore.setItem('nexus_core_user_profile', merged);
-              localStorage.setItem('nexus_core_user_profile', JSON.stringify(merged));
+              safeSetLocalStorageItem('nexus_core_user_profile', merged);
               if (merged.avatar_url) {
                 localStorage.setItem('nexus_user_avatar', merged.avatar_url);
                 localStorage.setItem('nexus_avatar', merged.avatar_url);
@@ -1816,7 +1815,7 @@ export default function App() {
             userProfile.bandName = null;
             userProfile.band_id = null;
             try {
-              localStorage.setItem('nexus_core_user_profile', JSON.stringify(userProfile));
+              safeSetLocalStorageItem('nexus_core_user_profile', userProfile);
               localStorage.removeItem('nexus_my_band_profile');
             } catch (_) {}
           }
@@ -1837,7 +1836,7 @@ export default function App() {
           userProfile.bio = authenticPersonalBio;
           try {
             localStorage.setItem('nexus_user_bio', authenticPersonalBio);
-            localStorage.setItem('nexus_core_user_profile', JSON.stringify(userProfile));
+            safeSetLocalStorageItem('nexus_core_user_profile', userProfile);
           } catch (_) {}
           if (supabase && userProfile.id) {
             supabase.from('profiles').update({ bio: authenticPersonalBio }).eq('id', userProfile.id).then();
@@ -1863,7 +1862,7 @@ export default function App() {
             userProfile.band_name = isOwnerMiguel ? 'Virulent Excision' : null;
             userProfile.bandName = isOwnerMiguel ? 'Virulent Excision' : null;
             try {
-              localStorage.setItem('nexus_core_user_profile', JSON.stringify(userProfile));
+              safeSetLocalStorageItem('nexus_core_user_profile', userProfile);
               if (isOwnerMiguel) {
                 localStorage.setItem('nexus_active_band_id', 'cbddb810-259b-4230-9968-3d402dfdb872');
               }
@@ -1894,7 +1893,7 @@ export default function App() {
             };
             setUserProfile(updatedProfile);
             try {
-              localStorage.setItem('nexus_core_user_profile', JSON.stringify(updatedProfile));
+              safeSetLocalStorageItem('nexus_core_user_profile', updatedProfile);
             } catch (_) {}
 
             if (supabase) {
@@ -1946,7 +1945,7 @@ export default function App() {
                   }
                 };
                 try {
-                  localStorage.setItem('nexus_core_user_profile', JSON.stringify(healedProfile));
+                  safeSetLocalStorageItem('nexus_core_user_profile', healedProfile);
                   if (cName) localStorage.setItem('nexus_creative_business_name', cName);
                   if (cHandle) localStorage.setItem('nexus_creative_handle', cHandle);
                   if (cAvatar) localStorage.setItem('nexus_creative_avatar', cAvatar);
@@ -1986,7 +1985,7 @@ export default function App() {
                   }
                 };
                 try {
-                  localStorage.setItem('nexus_core_user_profile', JSON.stringify(healedProfile));
+                  safeSetLocalStorageItem('nexus_core_user_profile', healedProfile);
                   if (synced.bio) localStorage.setItem('nexus_promoter_bio', synced.bio);
                   if (synced.promoter_logo || synced.logo_url) localStorage.setItem('nexus_promoter_logo', synced.promoter_logo || synced.logo_url);
                   if (synced.promoter_cover_image || synced.banner_url) localStorage.setItem('nexus_promoter_cover', synced.promoter_cover_image || synced.banner_url);
@@ -2004,7 +2003,7 @@ export default function App() {
               delete cleaned.promoter_brand;
               delete cleaned.promoter_name;
               delete cleaned.promoter_id;
-              try { localStorage.setItem('nexus_core_user_profile', JSON.stringify(cleaned)); } catch (_) {}
+              try { safeSetLocalStorageItem('nexus_core_user_profile', cleaned); } catch (_) {}
               return cleaned;
             });
           }

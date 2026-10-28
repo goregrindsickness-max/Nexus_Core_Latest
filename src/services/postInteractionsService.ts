@@ -4,7 +4,7 @@
  */
 
 import { savePostReaction, ReactionCounts } from '../components/social/utils/reactionStore';
-import { getSupabase } from '../supabase';
+import { getSupabase } from './clientService';
 
 export interface GlobalComment {
   id: string;

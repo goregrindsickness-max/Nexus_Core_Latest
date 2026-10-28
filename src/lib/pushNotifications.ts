@@ -1,7 +1,7 @@
 // Nexus Real-Time Device Push Notification Engine
 // Tailored for Industry Pro and Fan Workspaces
 
-import { getSupabase } from '../supabase';
+import { getSupabase } from '../services/clientService';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications } from '@capacitor/push-notifications';

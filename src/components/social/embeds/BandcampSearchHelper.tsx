@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Disc, ExternalLink, Music2, Loader2, Play, Pause, X, Sparkles, Check } from 'lucide-react';
 import { openBandcampLink } from '../../../utils/socialFeedUtils';
-import { ComposerThemeConfig } from '../CreatePostCard';
+import type { ComposerThemeConfig } from '../CreatePostCard';
 
 export interface BandcampSearchHelperProps {
   onSelectTrack: (track: { url: string; title: string; artist: string; artworkUrl?: string; previewUrl?: string }) => void;

@@ -2,9 +2,9 @@ import { supabase as singletonSupabase } from '../lib/supabaseClient';
 import { getSupabase } from './clientService';
 import { labelCatalogStore } from '../utils/indexedDB';
 import { uploadBase64ToStorage } from './storageService';
-import { ensureUUID, executeWithSchemaResilience } from './schemaResilienceService';
+import { ensureUUID, executeWithSchemaResilience, registerSchemaSanitizers } from './schemaResilienceService';
 
-import { markReleaseDeletedInStorage, communityBandManager, saveBandDiscographyToCache } from '../lib/communityBands';
+
 
 const getActiveSupabase = (portalType?: 'band' | 'promoter' | 'creative') => {
   return getSupabase(portalType) || singletonSupabase;
@@ -131,6 +131,8 @@ export function sanitizeReleaseForDb(release: any): any {
   }
   return dbRelease;
 }
+
+registerSchemaSanitizers({ sanitizeReleaseForDb });
 
 /**
  * Persist releases reliably into both IndexedDB (client storage),
@@ -723,11 +725,10 @@ export async function deleteReleaseFromDatabase(
     const cleanTitle = (releaseTitle || '').toLowerCase().trim();
     const cleanBand = (bandIdOrName || '').toLowerCase().trim();
 
-    // Mark in persistent deletion storage set
-    markReleaseDeletedInStorage(cleanId, releaseTitle, bandIdOrName);
-
-    // Update communityBandManager in memory and cache
+    // Update communityBandManager in memory and persistent cache
     try {
+      const { markReleaseDeletedInStorage, communityBandManager, saveBandDiscographyToCache } = await import('../lib/communityBands');
+      markReleaseDeletedInStorage(cleanId, releaseTitle, bandIdOrName);
       if (cleanBand) {
         const matchedBand = communityBandManager.getById(cleanBand) || communityBandManager.findByName(cleanBand);
         if (matchedBand && Array.isArray(matchedBand.discography)) {
