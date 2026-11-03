@@ -306,37 +306,21 @@ export const StorefrontView: React.FC<StorefrontViewProps> = (props) => {
   return (
     <>
 <div className="max-w-4xl mx-auto px-4 py-6 pb-20 animate-in fade-in duration-300">
-          {/* Storefront Mode Banner & Selector */}
-          <div className="bg-gradient-to-r from-zinc-950 via-black to-zinc-950 border border-zinc-850 rounded-2xl p-3.5 sm:p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xl">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                {isDemoMode ? (
-                  <span className="text-[9px] font-black uppercase text-rose-400 bg-rose-950/60 border border-rose-900/50 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 font-mono animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                    DEMO SHOWCASE VERSION
-                  </span>
-                ) : (
-                  <span className="text-[9px] font-black uppercase text-emerald-400 bg-emerald-950/60 border border-emerald-900/50 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 font-mono">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    LIVE SELLER ACCOUNTS ({realAccountItems.length})
-                  </span>
-                )}
-                <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider">
-                  {isDemoMode ? 'Preview Catalog' : 'Live Storefront'}
-                </span>
-              </div>
-              <p className="text-xs text-zinc-400 font-medium leading-tight">
-                {isDemoMode 
-                  ? "Displaying showcase demo catalog until real items are listed and sold by active user accounts." 
-                  : "Displaying real items and merchandise posted directly by active user accounts."}
-              </p>
+          {/* Top Header: Pulsing Green Glow Title & Reduced Catalog Switcher Toggle Pill */}
+          <div className="flex flex-col items-center justify-center text-center mb-6">
+            <div className="flex items-center justify-center gap-2.5">
+              <ShoppingBag className="w-8 h-8 sm:w-9 sm:h-9 text-[#39ff14] drop-shadow-[0_0_15px_rgba(57,255,20,0.85)] animate-pulse" />
+              <h1 className="text-3xl sm:text-4xl font-black uppercase tracking-widest text-[#39ff14] drop-shadow-[0_0_20px_rgba(57,255,20,0.85)] animate-pulse font-mono">
+                NEXUS SHOP
+              </h1>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 shrink-0 select-none w-full sm:w-auto justify-stretch">
+            {/* Compact Catalog Switcher Toggle Pill */}
+            <div className="flex items-center gap-1.5 bg-zinc-950/90 p-1.5 rounded-xl border border-zinc-800 shadow-xl select-none mt-3">
               <button
                 type="button"
                 onClick={() => setIsDemoMode(true)}
-                className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer font-mono ${
+                className={`px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer font-mono ${
                   isDemoMode 
                     ? 'bg-rose-600 text-white shadow-md shadow-rose-950/50' 
                     : 'text-zinc-400 hover:text-white'
@@ -347,7 +331,7 @@ export const StorefrontView: React.FC<StorefrontViewProps> = (props) => {
               <button
                 type="button"
                 onClick={() => setIsDemoMode(false)}
-                className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer font-mono ${
+                className={`px-4 py-2 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer font-mono ${
                   !isDemoMode 
                     ? 'bg-rose-600 text-white shadow-md shadow-rose-950/50' 
                     : 'text-zinc-400 hover:text-white'
@@ -358,65 +342,35 @@ export const StorefrontView: React.FC<StorefrontViewProps> = (props) => {
             </div>
           </div>
 
-          {/* Shop Header */}
-          <div className="mb-6 text-center sm:text-left flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-            {shopBrandFilter ? (
-              <div className="w-full bg-gradient-to-r from-orange-950/40 via-black to-zinc-950 border border-orange-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 justify-center sm:justify-start">
-                    <span className="text-[9px] font-black uppercase text-orange-400 tracking-widest bg-orange-950/60 border border-orange-500/40 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
-                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                      Label Storefront Active
-                    </span>
-                    <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">
-                      In-App Exclusive
-                    </span>
-                  </div>
-                  <h2 className="text-xl sm:text-2xl font-black uppercase tracking-wider text-white mt-2 font-mono flex items-center justify-center sm:justify-start gap-2">
-                    <ShoppingBag className="w-5 h-5 text-orange-500" />
-                    {shopBrandFilter.toUpperCase()} STORE
-                  </h2>
-                  <p className="text-xs text-zinc-400 mt-1 font-medium">Curated merch, exclusive physical print runs, and official media releases.</p>
-                </div>
-                {portalRole !== 'label' && (
-                  <button
-                    onClick={() => setShopBrandFilter(null)}
-                    className="self-center sm:self-auto px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-700 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 font-mono cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5 text-zinc-500" /> View Global Store
-                  </button>
-                )}
-              </div>
-            ) : (
+          {/* Active Brand Filter Banner (if present) */}
+          {shopBrandFilter && (
+            <div className="w-full bg-gradient-to-r from-orange-950/40 via-black to-zinc-950 border border-orange-500/30 rounded-2xl p-4 sm:p-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <span className="text-[10px] font-black uppercase text-rose-500 tracking-widest bg-rose-950/30 border border-rose-900/50 px-2.5 py-1 rounded-full">
-                  Official Band Merch
-                </span>
-                <h2 className="text-2xl font-black uppercase tracking-wider text-white mt-3">Apparel & Media Store</h2>
-                <p className="text-xs text-zinc-400 mt-1 font-medium">Direct support for artists. High quality prints, vintage washes, and exclusive physical media.</p>
+                <div className="flex items-center gap-2 justify-center sm:justify-start">
+                  <span className="text-[9px] font-black uppercase text-orange-400 tracking-widest bg-orange-950/60 border border-orange-500/40 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                    Label Storefront Active
+                  </span>
+                  <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">
+                    In-App Exclusive
+                  </span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-wider text-white mt-2 font-mono flex items-center justify-center sm:justify-start gap-2">
+                  <ShoppingBag className="w-5 h-5 text-orange-500" />
+                  {shopBrandFilter.toUpperCase()} STORE
+                </h2>
+                <p className="text-xs text-zinc-400 mt-1 font-medium">Curated merch, exclusive physical print runs, and official media releases.</p>
               </div>
-            )}
-
-            {/* Search Bar */}
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <input
-                type="text"
-                placeholder="Search merch..."
-                value={shopSearchQuery}
-                onChange={(e) => setShopSearchQuery(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-900 focus:border-rose-900/50 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none transition-all"
-              />
-              {shopSearchQuery && (
+              {portalRole !== 'label' && (
                 <button
-                  onClick={() => setShopSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                  onClick={() => setShopBrandFilter(null)}
+                  className="self-center sm:self-auto px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-700 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 font-mono cursor-pointer"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3.5 h-3.5 text-zinc-500" /> View Global Store
                 </button>
               )}
             </div>
-          </div>
+          )}
 
           {/* EMPTY STATE FOR LIVE ACCOUNTS MODE WHEN 0 REAL ITEMS ARE LISTED */}
           {!isDemoMode && realAccountItems.length === 0 ? (

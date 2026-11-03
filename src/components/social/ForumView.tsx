@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import { MASTER_GENRES } from '../../constants/genres';
 import { getSupabase } from '../../supabase';
+import { uploadBase64ToStorage } from '../../services/storageService';
+import { FirstTimeTooltip } from '../common/FirstTimeTooltip';
 
 export function isAudioUrl(url?: string): boolean {
   if (!url || typeof url !== 'string') return false;
@@ -49,7 +51,15 @@ export async function uploadForumMediaToStorage(file: File): Promise<string> {
   if (!supabase) {
     return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onload = (e) => resolve((e.target?.result as string) || '');
+      reader.onload = async (e) => {
+        const base64 = (e.target?.result as string) || '';
+        if (base64) {
+          const storageUrl = await uploadBase64ToStorage(base64, 'forum-media', 'forum', 'forum-upload');
+          resolve(storageUrl || base64);
+        } else {
+          resolve('');
+        }
+      };
       reader.onerror = () => resolve('');
       reader.readAsDataURL(file);
     });
@@ -86,13 +96,21 @@ export async function uploadForumMediaToStorage(file: File): Promise<string> {
       }
     }
   } catch (err) {
-    console.warn('[Forum Storage] Bucket upload failed, falling back to data URL:', err);
+    console.warn('[Forum Storage] Bucket upload failed, using storage service fallback:', err);
   }
 
-  // Fallback to Data URL
+  // Convert to base64 and upload via storage service to storage bucket
   return new Promise((resolve) => {
     const reader = new FileReader();
-    reader.onload = (e) => resolve((e.target?.result as string) || '');
+    reader.onload = async (e) => {
+      const base64 = (e.target?.result as string) || '';
+      if (base64) {
+        const storageUrl = await uploadBase64ToStorage(base64, 'forum-media', 'forum', 'forum-upload');
+        resolve(storageUrl || base64);
+      } else {
+        resolve('');
+      }
+    };
     reader.onerror = () => resolve('');
     reader.readAsDataURL(file);
   });
@@ -979,26 +997,46 @@ export const ForumView: React.FC<ForumViewProps> = ({
 
   const renderAvatarForName = (name: string) => {
     if (!name) return null;
-    if (name === userProfile?.name && profileAvatarUrl) {
+    const isValidImgUrl = (url?: string) =>
+      typeof url === 'string' &&
+      url.length > 5 &&
+      (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('/') || url.startsWith('blob:'));
+
+    const myAvatar = profileAvatarUrl || userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar;
+
+    if ((isUserOwner(name) || name === userProfile?.name || name === profileHandle) && isValidImgUrl(myAvatar)) {
       return (
         <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 border border-zinc-900/50">
-          <img src={profileAvatarUrl} className="w-full h-full object-cover" alt={name} />
+          <img src={myAvatar} className="w-full h-full object-cover" alt={name} />
         </div>
       );
     }
+
+    const cleanName = name.replace('@', '').toLowerCase().trim();
     const found =
-      discoverProfiles.find((p) => p.name === name) ||
-      allProfiles.find((p) => p.name === name);
-    if (found && found.avatar) {
+      discoverProfiles.find((p) => {
+        const pName = (p?.name || '').toLowerCase().trim();
+        const pHandle = (p?.handle || p?.console_handle || '').replace('@', '').toLowerCase().trim();
+        return pName === cleanName || pHandle === cleanName;
+      }) ||
+      allProfiles.find((p) => {
+        const pName = (p?.name || '').toLowerCase().trim();
+        const pHandle = (p?.handle || p?.console_handle || '').replace('@', '').toLowerCase().trim();
+        return pName === cleanName || pHandle === cleanName;
+      });
+
+    const foundAvatar = found?.avatar || found?.avatar_url || found?.profile_avatar;
+    if (isValidImgUrl(foundAvatar)) {
       return (
         <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 border border-zinc-900/50">
-          <img src={found.avatar} className="w-full h-full object-cover" alt={name} />
+          <img src={foundAvatar} className="w-full h-full object-cover" alt={name} />
         </div>
       );
     }
+
     return (
       <div className="w-5 h-5 rounded-full bg-rose-950/60 border border-rose-900/40 text-[9px] font-black text-rose-400 flex items-center justify-center shrink-0">
-        {name.charAt(0).toUpperCase()}
+        {(cleanName || 'A').charAt(0).toUpperCase()}
       </div>
     );
   };
@@ -1006,7 +1044,10 @@ export const ForumView: React.FC<ForumViewProps> = ({
   const handleCreateThread = async () => {
     if (!newThreadTitle.trim() || !newThreadContent.trim()) return;
     const authorName = getEffectiveUserHandle();
-    const avatarUrl = profileAvatarUrl || (userProfile?.name?.charAt(0).toUpperCase() || 'F');
+    const myAvatar = profileAvatarUrl || userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || '';
+    const avatarUrl = (typeof myAvatar === 'string' && myAvatar.length > 5 && (myAvatar.startsWith('http') || myAvatar.startsWith('data:') || myAvatar.startsWith('/')))
+      ? myAvatar
+      : '';
     const yId = newThreadYoutubeUrl ? getYouTubeId(newThreadYoutubeUrl) : undefined;
     const threadUUID = generateUUID();
 
@@ -1397,13 +1438,22 @@ export const ForumView: React.FC<ForumViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={() => setShowCreateThread(!showCreateThread)}
-          className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all duration-150 shadow-md shadow-rose-900/30 font-bold cursor-pointer inline-flex items-center gap-1.5 active:scale-95"
+        <FirstTimeTooltip
+          id="forum_new_discussion"
+          title="Start a Discussion"
+          tip="Post recommendations, gig reviews, album debates, or gear questions on forum boards."
+          position="bottom"
+          accentColor="rose"
+          triggerOn="hover"
         >
-          <Plus className="w-3.5 h-3.5" />
-          {showCreateThread ? 'View Board' : 'New Discussion'}
-        </button>
+          <button
+            onClick={() => setShowCreateThread(!showCreateThread)}
+            className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all duration-150 shadow-md shadow-rose-900/30 font-bold cursor-pointer inline-flex items-center gap-1.5 active:scale-95"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            {showCreateThread ? 'View Board' : 'New Discussion'}
+          </button>
+        </FirstTimeTooltip>
 
         {forumMicroGenre !== 'All' && (
           <button
@@ -1786,7 +1836,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
                     </div>
                     <h3 className="text-lg font-black text-white leading-snug">{thread.title}</h3>
                     <div className="flex items-center gap-2">
-                      {thread.authorAvatar ? (
+                      {thread.authorAvatar && typeof thread.authorAvatar === 'string' && thread.authorAvatar.length > 5 && (thread.authorAvatar.startsWith('http') || thread.authorAvatar.startsWith('data:') || thread.authorAvatar.startsWith('/')) ? (
                         <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 border border-zinc-900/50">
                           <img src={thread.authorAvatar} alt={formatForumAuthor(thread.author)} className="w-full h-full object-cover" />
                         </div>
@@ -2126,7 +2176,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
 
                         {/* Author line */}
                         <div className="flex items-center gap-1.5 min-w-0 pt-0.5">
-                          {thread.authorAvatar ? (
+                          {thread.authorAvatar && typeof thread.authorAvatar === 'string' && thread.authorAvatar.length > 5 && (thread.authorAvatar.startsWith('http') || thread.authorAvatar.startsWith('data:') || thread.authorAvatar.startsWith('/')) ? (
                             <div className="w-3.5 h-3.5 rounded-full overflow-hidden shrink-0 border border-zinc-800">
                               <img src={thread.authorAvatar} alt={formatForumAuthor(thread.author)} className="w-full h-full object-cover" />
                             </div>

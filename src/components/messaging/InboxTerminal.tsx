@@ -1549,10 +1549,10 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-3.5 overflow-x-auto no-scrollbar pt-7 pb-1.5">
+          <div className="flex items-center gap-4.5 overflow-x-auto no-scrollbar pt-14 pb-2.5 px-2">
             {/* 1. User's Own Thought/Story Item */}
             <div 
-              className="flex flex-col items-center gap-1 shrink-0 relative cursor-pointer group" 
+              className="flex flex-col items-center gap-1.5 shrink-0 relative cursor-pointer group" 
               onClick={() => {
                 if (myNote) {
                   setExpandedThought({
@@ -1571,28 +1571,34 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
             >
               {myNote && (
                 <div 
-                  className="absolute -top-5 left-1/2 -translate-x-1/2 bg-zinc-900 text-purple-300 text-[8px] font-bold px-2 py-0.5 rounded-full max-w-[68px] truncate z-10 shadow-md border border-purple-500/60 group-hover:scale-105 transition-transform text-center font-sans"
+                  className="absolute -top-[52px] left-1/2 -translate-x-1/2 w-[68px] h-[52px] bg-zinc-900/95 text-blue-100 border border-blue-500/80 rounded-2xl z-20 shadow-lg group-hover:scale-105 transition-all font-sans p-1.5 flex flex-col items-center justify-center text-center"
                   title={myNote}
                 >
-                  {myNote.length > 9 ? myNote.substring(0, 8) + '…' : myNote}
-                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[3px] border-t-zinc-900" />
+                  <span className="text-[8.5px] font-semibold leading-snug line-clamp-3 text-center break-words w-full text-blue-200">
+                    {myNote}
+                  </span>
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-zinc-900" />
                 </div>
               )}
-              <div className="relative">
-                <div className="w-12 h-12 rounded-full bg-zinc-800 border-2 border-purple-500/80 flex items-center justify-center overflow-hidden shadow-[0_0_10px_rgba(168,85,247,0.3)]">
+              <div className="relative flex items-center justify-center">
+                {/* Darker Blue Glow Ring - STRICTLY BEHIND THE AVATAR ONLY */}
+                {myNote && (
+                  <div className="absolute -inset-1.5 rounded-full bg-gradient-to-r from-blue-700 via-blue-900 to-indigo-950 opacity-90 blur-[6px] animate-pulse pointer-events-none -z-10" />
+                )}
+                <div className={`w-[68px] h-[68px] rounded-full bg-zinc-900 border-2 ${myNote ? 'border-blue-500 shadow-[0_0_16px_rgba(30,64,175,0.6)] animate-pulse' : 'border-zinc-800 shadow-[0_0_8px_rgba(0,0,0,0.5)] group-hover:border-blue-600/70'} flex items-center justify-center overflow-hidden relative z-0`}>
                   {userProfile?.avatar || userProfile?.avatar_url ? (
                     <img src={userProfile?.avatar || userProfile?.avatar_url} alt="You" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   ) : (
-                    <span className="text-xs font-bold text-zinc-400 font-mono">{userProfile?.name?.substring(0, 2).toUpperCase() || 'YOU'}</span>
+                    <span className="text-sm font-bold text-zinc-400 font-mono">{userProfile?.name?.substring(0, 2).toUpperCase() || 'YOU'}</span>
                   )}
                 </div>
                 {!myNote && (
-                  <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-purple-600 border-2 border-black rounded-full flex items-center justify-center text-white group-hover:bg-purple-500 transition-colors shadow">
-                    <Plus className="w-2.5 h-2.5" />
+                  <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-blue-600 border-2 border-black rounded-full flex items-center justify-center text-white group-hover:bg-blue-500 transition-colors shadow z-10">
+                    <Plus className="w-3 h-3" />
                   </div>
                 )}
               </div>
-              <span className="text-[9px] text-zinc-400 mt-0.5 font-mono">{myNote ? 'Your thought' : 'Add thought'}</span>
+              <span className="text-[10px] text-zinc-400 mt-0.5 font-mono max-w-[76px] truncate text-center">{myNote ? 'Your thought' : 'Add thought'}</span>
             </div>
 
             {/* 2. Merged Roster Stories / Active Signals */}
@@ -1624,6 +1630,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
 
               return mergedList.map((story, sIdx) => {
                 const hasSong = Boolean(story.song);
+                const hasActiveUpdate = Boolean(story.note || story.song);
                 return (
                   <div 
                     key={`signal-${sIdx}-${story.id || ''}-${story.profileName || ''}`} 
@@ -1659,26 +1666,36 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                         }
                       }
                     }}
-                    className="flex flex-col items-center gap-1 shrink-0 relative cursor-pointer group hover:-translate-y-0.5 transition-transform"
+                    className="flex flex-col items-center gap-1.5 shrink-0 relative cursor-pointer group hover:-translate-y-0.5 transition-transform"
                   >
-                    {/* Note / Thought Bubble above avatar */}
+                    {/* Note / Thought Bubble above avatar - Compact fixed card matching reference */}
                     {story.note && (
                       <div 
-                        className="absolute -top-5 left-1/2 -translate-x-1/2 bg-zinc-900/95 text-zinc-200 text-[8px] font-bold px-2 py-0.5 rounded-full max-w-[68px] truncate z-10 shadow-md border border-purple-500/40 group-hover:scale-105 group-hover:border-purple-400 transition-all text-center font-sans"
+                        className="absolute -top-[52px] left-1/2 -translate-x-1/2 w-[68px] h-[52px] bg-zinc-900/95 text-zinc-100 border border-blue-500/70 rounded-2xl z-20 shadow-lg group-hover:scale-105 group-hover:border-blue-400 transition-all font-sans p-1.5 flex flex-col items-center justify-center text-center"
                         title={story.note}
                       >
-                        {story.note.length > 9 ? story.note.substring(0, 8) + '…' : story.note}
-                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[3px] border-t-zinc-900" />
+                        <span className="text-[8.5px] font-semibold leading-snug line-clamp-3 text-center break-words w-full text-zinc-200">
+                          {story.note}
+                        </span>
+                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-zinc-900" />
                       </div>
                     )}
 
-                    <div className="relative">
-                      <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden border-2 border-purple-600/90 p-[2px] shadow-[0_0_10px_rgba(168,85,247,0.25)] group-hover:border-purple-400 transition-colors">
-                        <div className="w-full h-full rounded-full overflow-hidden bg-zinc-900 flex items-center justify-center">
+                    <div className="relative flex items-center justify-center">
+                      {/* Darker Blue Glow Ring - STRICTLY BEHIND THE AVATAR ONLY */}
+                      {hasActiveUpdate && (
+                        <div className="absolute -inset-1.5 rounded-full bg-gradient-to-r from-blue-700 via-blue-900 to-indigo-950 opacity-90 blur-[6px] animate-pulse pointer-events-none -z-10" />
+                      )}
+                      <div className={`w-[68px] h-[68px] rounded-full bg-zinc-900 flex items-center justify-center overflow-hidden border-2 relative z-0 transition-all ${
+                        hasActiveUpdate
+                          ? 'border-blue-500 shadow-[0_0_16px_rgba(30,64,175,0.6)] animate-pulse' 
+                          : 'border-zinc-800 shadow-[0_0_8px_rgba(0,0,0,0.5)] group-hover:border-blue-600/70'
+                      } p-[2px]`}>
+                        <div className="w-full h-full rounded-full overflow-hidden bg-zinc-950 flex items-center justify-center">
                           {story.avatarUrl ? (
                             <img src={story.avatarUrl} alt={story.profileName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                           ) : (
-                            <span className="text-xs font-bold text-purple-400 font-mono">
+                            <span className="text-sm font-bold text-blue-400 font-mono">
                               {story.profileName?.substring(0, 2).toUpperCase() || 'NC'}
                             </span>
                           )}
@@ -1687,17 +1704,17 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
 
                       {/* Equalizer / Music Badge ONLY IF AN ACTUAL SONG IS LINKED */}
                       {hasSong && (
-                        <div className="absolute -bottom-0.5 -right-0.5 bg-black/90 border border-[#00ffcc]/80 rounded-full px-1 py-0.5 flex items-center gap-0.5 shadow-md" title={`Song track linked: ${story.song}`}>
-                          <Music className="w-2.5 h-2.5 text-[#00ffcc]" />
-                          <div className="flex items-end gap-0.5 h-2">
-                            <span className="w-0.5 bg-[#00ffcc] animate-[bounce_0.6s_infinite_100ms] h-1.5 rounded-full" />
-                            <span className="w-0.5 bg-[#00ffcc] animate-[bounce_0.6s_infinite_300ms] h-2 rounded-full" />
+                        <div className="absolute -bottom-0.5 -right-0.5 bg-black/90 border border-[#00ffcc]/80 rounded-full px-1.5 py-0.5 flex items-center gap-1 shadow-md z-10" title={`Song track linked: ${story.song}`}>
+                          <Music className="w-3 h-3 text-[#00ffcc]" />
+                          <div className="flex items-end gap-0.5 h-2.5">
+                            <span className="w-0.5 bg-[#00ffcc] animate-[bounce_0.6s_infinite_100ms] h-2 rounded-full" />
+                            <span className="w-0.5 bg-[#00ffcc] animate-[bounce_0.6s_infinite_300ms] h-2.5 rounded-full" />
                           </div>
                         </div>
                       )}
                     </div>
 
-                    <span className="text-[9px] text-zinc-300 mt-0.5 truncate max-w-[58px] font-mono group-hover:text-purple-300 transition-colors">
+                    <span className="text-[10px] text-zinc-300 mt-0.5 truncate max-w-[76px] font-mono group-hover:text-blue-300 transition-colors text-center">
                       {story.profileName?.split(' ')[0] || 'Member'}
                     </span>
                   </div>

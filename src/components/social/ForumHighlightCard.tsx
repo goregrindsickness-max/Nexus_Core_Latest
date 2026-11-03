@@ -157,31 +157,46 @@ export const ForumHighlightCard: React.FC<ForumHighlightCardProps> = ({
         </div>
 
         {/* Author Info */}
-        <div className="flex items-center gap-2.5">
-          <div className={`w-7 h-7 rounded-full flex items-center justify-center font-mono font-bold text-xs shrink-0 overflow-hidden ${
-            isUserPost
-              ? 'bg-gradient-to-tr from-violet-900 to-fuchsia-900 border border-violet-500/50 text-violet-200'
-              : 'bg-gradient-to-tr from-amber-900 to-zinc-800 border border-amber-600/30 text-amber-200'
-          }`}>
-            {thread.authorAvatar ? (
-              <img src={thread.authorAvatar} alt={thread.author} className="w-full h-full object-cover" />
-            ) : (
-              (thread.author || 'A').replace('@', '').charAt(0).toUpperCase()
-            )}
-          </div>
-          <div className="flex items-baseline gap-1.5 text-xs font-mono flex-wrap">
-            <span className={`font-bold ${isUserPost ? 'text-violet-300' : 'text-zinc-200'}`}>
-              {isUserPost ? `You (${thread.author?.startsWith('@') ? thread.author : `@${thread.author || 'you'}`})` : (thread.author?.startsWith('@') ? thread.author : `@${thread.author || 'anonymous'}`)}
-            </span>
-            {isUserPost && (
-              <span className="px-1.5 py-0.5 rounded bg-violet-950/90 border border-violet-700/60 text-[9px] text-violet-300 font-mono font-bold uppercase tracking-wider">
-                Original Poster
-              </span>
-            )}
-            <span className="text-zinc-600">•</span>
-            <span className="text-[11px] text-zinc-500">{thread.timeAgo || 'Active discussion'}</span>
-          </div>
-        </div>
+        {(() => {
+          const isValidImgUrl = (url?: string) =>
+            typeof url === 'string' &&
+            url.length > 5 &&
+            (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('/') || url.startsWith('blob:'));
+
+          const resolvedAvatar = isValidImgUrl(thread.authorAvatar)
+            ? thread.authorAvatar
+            : (isUserPost || (thread.author && thread.author.toLowerCase().includes('you'))
+                ? (isValidImgUrl(currentUserAvatar) ? currentUserAvatar : undefined)
+                : (isValidImgUrl(currentUserAvatar) && isUserPost ? currentUserAvatar : undefined));
+
+          return (
+            <div className="flex items-center gap-2.5">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center font-mono font-bold text-xs shrink-0 overflow-hidden ${
+                isUserPost
+                  ? 'bg-gradient-to-tr from-violet-900 to-fuchsia-900 border border-violet-500/50 text-violet-200'
+                  : 'bg-gradient-to-tr from-amber-900 to-zinc-800 border border-amber-600/30 text-amber-200'
+              }`}>
+                {resolvedAvatar ? (
+                  <img src={resolvedAvatar} alt={thread.author} className="w-full h-full object-cover" />
+                ) : (
+                  (thread.author || 'A').replace('@', '').charAt(0).toUpperCase()
+                )}
+              </div>
+              <div className="flex items-baseline gap-1.5 text-xs font-mono flex-wrap">
+                <span className={`font-bold ${isUserPost ? 'text-violet-300' : 'text-zinc-200'}`}>
+                  {isUserPost ? `You (${thread.author?.startsWith('@') ? thread.author : `@${thread.author || 'you'}`})` : (thread.author?.startsWith('@') ? thread.author : `@${thread.author || 'anonymous'}`)}
+                </span>
+                {isUserPost && (
+                  <span className="px-1.5 py-0.5 rounded bg-violet-950/90 border border-violet-700/60 text-[9px] text-violet-300 font-mono font-bold uppercase tracking-wider">
+                    Original Poster
+                  </span>
+                )}
+                <span className="text-zinc-600">•</span>
+                <span className="text-[11px] text-zinc-500">{thread.timeAgo || 'Active discussion'}</span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Thread Title & Content */}
         <div

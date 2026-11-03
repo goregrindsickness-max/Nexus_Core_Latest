@@ -27,8 +27,8 @@ export const GENERIC_VINYL_THUMBNAIL = "https://images.unsplash.com/photo-153918
  * Maps known Supabase image filenames or resource keys to reliable fallbacks.
  */
 const KNOWN_SUPABASE_IMAGE_MAP: Record<string, string> = {
-  'band-logo': VIRULENT_EXCISION_SVG_LOGO,
-  'band-cover': VIRULENT_EXCISION_SVG_COVER,
+  'virulent-band-logo': VIRULENT_EXCISION_SVG_LOGO,
+  'virulent-band-cover': VIRULENT_EXCISION_SVG_COVER,
   'promoter-avatar': PROMOTER_SVG_AVATAR,
   'promoter-banner': PROMOTER_SVG_COVER,
   'creative-avatar': VORTEX_GRAPHICS_SVG_AVATAR,

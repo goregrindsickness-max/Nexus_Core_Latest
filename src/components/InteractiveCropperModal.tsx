@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ZoomIn, ZoomOut, Move, RotateCcw, Check, X, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, RefreshCw } from 'lucide-react';
+import { ZoomIn, ZoomOut, Move, RotateCcw, Check, X, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, RefreshCw, Loader2 } from 'lucide-react';
+import { uploadBase64ToStorage } from '../services/storageService';
 
 interface InteractiveCropperModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ export const InteractiveCropperModal: React.FC<InteractiveCropperModalProps> = (
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [imgLoaded, setImgLoaded] = useState<boolean>(false);
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const [isUploading, setIsUploading] = useState<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -135,64 +137,74 @@ export const InteractiveCropperModal: React.FC<InteractiveCropperModalProps> = (
     setPosition({ x: 0, y: 0 });
   };
 
-  // Crop drawing onto hidden canvas and output optimized base64
+  // Crop drawing onto hidden canvas and output uploaded storage URL
   const handleCrop = () => {
     if (!imageSrc) return;
 
     const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+    img.onload = async () => {
+      setIsUploading(true);
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
 
-      // Define standard output sizes
-      if (aspectRatio === '1:1') {
-        canvas.width = 400;
-        canvas.height = 400;
-      } else {
-        canvas.width = 1200;
-        canvas.height = 400; // 3:1 ratio
+        // Define standard output sizes
+        if (aspectRatio === '1:1') {
+          canvas.width = 400;
+          canvas.height = 400;
+        } else {
+          canvas.width = 1200;
+          canvas.height = 400; // 3:1 ratio
+        }
+
+        // Backdrop fill
+        ctx.fillStyle = '#09090b';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Determine dimensions to completely cover the canvas area (cover fit)
+        const imgRatio = img.width / img.height;
+        const canvasRatio = canvas.width / canvas.height;
+
+        let renderWidth = canvas.width;
+        let renderHeight = canvas.height;
+
+        if (imgRatio > canvasRatio) {
+          renderHeight = canvas.height;
+          renderWidth = canvas.height * imgRatio;
+        } else {
+          renderWidth = canvas.width;
+          renderHeight = canvas.width / imgRatio;
+        }
+
+        // Move context origin to center of canvas
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+
+        // Apply drag offset converted from preview pixel space to canvas coordinate space
+        const scaleFactorX = canvas.width / previewWidth;
+        const scaleFactorY = canvas.height / previewHeight;
+        const canvasOffsetX = position.x * scaleFactorX;
+        const canvasOffsetY = position.y * scaleFactorY;
+        ctx.translate(canvasOffsetX, canvasOffsetY);
+
+        // Apply zoom factor
+        ctx.scale(zoom, zoom);
+
+        // Draw image centered at current offsets
+        ctx.drawImage(img, -renderWidth / 2, -renderHeight / 2, renderWidth, renderHeight);
+
+        // Output high-quality optimized JPEG
+        const croppedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+        const bucket = aspectRatio === '1:1' ? 'avatars' : 'bannersv2';
+        const finalUrl = await uploadBase64ToStorage(croppedBase64, bucket, 'cropped', aspectRatio === '1:1' ? 'avatar' : 'banner');
+
+        onCropComplete(finalUrl || croppedBase64);
+        onClose();
+      } catch (e) {
+        console.error("Cropper upload failed:", e);
+      } finally {
+        setIsUploading(false);
       }
-
-      // Backdrop fill
-      ctx.fillStyle = '#09090b';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Determine dimensions to completely cover the canvas area (cover fit)
-      const imgRatio = img.width / img.height;
-      const canvasRatio = canvas.width / canvas.height;
-
-      let renderWidth = canvas.width;
-      let renderHeight = canvas.height;
-
-      if (imgRatio > canvasRatio) {
-        renderHeight = canvas.height;
-        renderWidth = canvas.height * imgRatio;
-      } else {
-        renderWidth = canvas.width;
-        renderHeight = canvas.width / imgRatio;
-      }
-
-      // Move context origin to center of canvas
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-
-      // Apply drag offset converted from preview pixel space to canvas coordinate space
-      const scaleFactorX = canvas.width / previewWidth;
-      const scaleFactorY = canvas.height / previewHeight;
-      const canvasOffsetX = position.x * scaleFactorX;
-      const canvasOffsetY = position.y * scaleFactorY;
-      ctx.translate(canvasOffsetX, canvasOffsetY);
-
-      // Apply zoom factor
-      ctx.scale(zoom, zoom);
-
-      // Draw image centered at current offsets
-      ctx.drawImage(img, -renderWidth / 2, -renderHeight / 2, renderWidth, renderHeight);
-
-      // Output high-quality optimized JPEG or PNG
-      const croppedBase64 = canvas.toDataURL('image/jpeg', 0.85);
-      onCropComplete(croppedBase64);
-      onClose();
     };
     img.src = imageSrc;
   };
@@ -389,10 +401,18 @@ export const InteractiveCropperModal: React.FC<InteractiveCropperModalProps> = (
           <button
             type="button"
             onClick={handleCrop}
-            disabled={!imgLoaded}
+            disabled={!imgLoaded || isUploading}
             className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-black uppercase font-mono tracking-wider rounded-xl transition-all cursor-pointer shadow-lg shadow-rose-600/10 hover:shadow-rose-600/20 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-1.5"
           >
-            <Check className="w-4 h-4" /> Save Crop
+            {isUploading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> Saving...
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4" /> Save Crop
+              </>
+            )}
           </button>
         </div>
 

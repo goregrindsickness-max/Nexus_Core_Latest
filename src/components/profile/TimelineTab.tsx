@@ -998,7 +998,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
       return ['WALL TRANSMISSION', 'COMMENDATION / REVIEW', 'SHOW / TOUR SHOUT', 'COLLABORATION', 'TRACK REACTION'];
     }
     return ['WALL TRANSMISSION', 'COMMENDATION', 'SHOW SHOUTOUT', 'COLLAB INQUIRY', 'GREETING'];
-  }, [isEffYou, selectedUserProfile, portalRole]);
+  }, [isEffYou, selectedUserProfile?.id, selectedUserProfile?.role, selectedUserProfile?.portalRole, selectedUserProfile?.workspace_type, portalRole]);
 
   const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1827,7 +1827,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [profileId, userId, profileName, selectedProfileId, selectedProfileName, isYou, selectedUserProfile]);
+  }, [profileId, userId, profileName, selectedProfileId, selectedProfileName, isYou, selectedUserProfile?.id, selectedUserProfile?.name, selectedUserProfile?.full_name, selectedUserProfile?.avatar_url, selectedUserProfile?.avatar, selectedUserProfile?.role, selectedUserProfile?.active_workspace]);
 
   useEffect(() => {
     fetchTimelinePosts();
@@ -2695,15 +2695,9 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                           .map((comment, cIdx) => {
                             const replies = postCommentsList.filter(r => r.parent_comment_id === comment.id);
                             const isCommentAuthor = Boolean(
-                              comment.user_id === activeUserId ||
-                              comment.userId === activeUserId ||
+                              (activeUserId && (comment.user_id === activeUserId || comment.userId === activeUserId)) ||
                               (comment.username && currentUserName && comment.username.toLowerCase() === currentUserName.toLowerCase()) ||
-                              (comment.author && currentUserName && comment.author.toLowerCase() === currentUserName.toLowerCase()) ||
-                              activeUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-                              (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
-                              isYou ||
-                              post.profile_id === activeUserId ||
-                              post.author_id === activeUserId
+                              (comment.author && currentUserName && comment.author.toLowerCase() === currentUserName.toLowerCase())
                             );
                             const topCommentAvatar = resolveCommentAvatar(comment, activeUserProfile, activeUserId, currentUserName);
                             const topCommentAuthor = resolveCommentAuthorName(comment, activeUserProfile, activeUserId, currentUserName);
@@ -2873,15 +2867,9 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                       <div className="ml-3 sm:ml-5 pl-3 border-l-2 border-zinc-800/80 space-y-2.5 mt-2.5 relative">
                                         {replies.map((reply, rIdx) => {
                                           const isReplyAuthor = Boolean(
-                                            reply.user_id === activeUserId ||
-                                            reply.userId === activeUserId ||
+                                            (activeUserId && (reply.user_id === activeUserId || reply.userId === activeUserId)) ||
                                             (reply.username && currentUserName && reply.username.toLowerCase() === currentUserName.toLowerCase()) ||
-                                            (reply.author && currentUserName && reply.author.toLowerCase() === currentUserName.toLowerCase()) ||
-                                            activeUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-                                            (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
-                                            isYou ||
-                                            post.profile_id === activeUserId ||
-                                            post.author_id === activeUserId
+                                            (reply.author && currentUserName && reply.author.toLowerCase() === currentUserName.toLowerCase())
                                           );
                                           const replyAvatarUrl = resolveCommentAvatar(reply, activeUserProfile, activeUserId, currentUserName);
                                           const replyAuthorName = resolveCommentAuthorName(reply, activeUserProfile, activeUserId, currentUserName);

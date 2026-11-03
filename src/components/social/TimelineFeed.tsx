@@ -586,7 +586,7 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
                       <ForumHighlightCard
                         thread={highlightToRender}
                         currentUserName={userProfile?.name || currentUserName || 'You'}
-                        currentUserAvatar={userProfile?.avatar || ''}
+                        currentUserAvatar={userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || (userProfile as any)?.avatarUrl || ''}
                         isUserPost={isUserForumThread(highlightToRender, userProfile, currentUserName, currentUserId)}
                         onOpenThread={(threadId) => {
                           if (onNavigateToForum) {

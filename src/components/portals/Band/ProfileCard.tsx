@@ -683,7 +683,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       isMounted = false;
       supabase.removeChannel(channel);
     };
-  }, [fetchedBandData?.id, selectedUserProfile, targetProfile, supabase]);
+  }, [fetchedBandData?.id, selectedUserProfile?.id, selectedUserProfile?.name, selectedUserProfile?.band_name, targetProfile?.id, targetProfile?.name, targetProfile?.band_name, supabase]);
 
   React.useEffect(() => {
     const handleBandUpdate = (evt: any) => {
@@ -760,7 +760,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       window.removeEventListener('nexus_band_updated', handleBandUpdate);
       window.removeEventListener('community_band_saved', handleBandUpdate);
     };
-  }, [selectedUserProfile, targetProfile]);
+  }, [selectedUserProfile?.id, selectedUserProfile?.name, targetProfile?.id, targetProfile?.name]);
 
   if (!selectedUserProfile) return null;
 
@@ -829,7 +829,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       lineup: isOwnBand && localSavedBand?.lineup?.length ? localSavedBand.lineup : (fetchedBandData?.lineup?.length ? fetchedBandData.lineup : (directMatch?.lineup || [])),
       discography: isOwnBand && localSavedBand?.discography?.length ? localSavedBand.discography : (fetchedBandData?.discography?.length ? fetchedBandData.discography : (directMatch?.discography || [])),
     };
-  }, [isExplicitPersonal, fetchedBandData, communityArchiveMatch, localSavedBand, selectedUserProfile, targetProfile, userProfile, baseTarget, targetId]);
+  }, [isExplicitPersonal, fetchedBandData, communityArchiveMatch, localSavedBand, selectedUserProfile?.id, selectedUserProfile?.name, targetProfile?.id, targetProfile?.name, userProfile?.id, baseTarget?.id, targetId]);
 
   const isArtistOrBand = !isExplicitPersonal && Boolean(
     baseTarget?.isBandProfile ||

@@ -108,7 +108,7 @@ const DEFAULT_CLIPS: ClipItem[] = [
     id: 'c2',
     creator: 'Devourment',
     role: '💀 Band',
-    avatar: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396',
+    avatar: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=300&q=80',
     caption: 'Official performance cut! Slamming technical death metal execution. 🔥 #Devourment #Slam',
     videoUrl: 'https://www.youtube.com/watch?v=jQ26iMGJbW4',
     likes: 1850,
@@ -315,13 +315,15 @@ const SingleClipPlayerCard: React.FC<{
         onClick={handleTogglePlayPause}
       >
         {ytId ? (
-          <iframe
-            src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=${isActive ? 1 : 0}&mute=${isMuted ? 1 : 0}&loop=1&playlist=${ytId}&controls=1&modestbranding=1&rel=0`}
-            className="w-full h-full object-cover"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            title={clip.title || clip.caption || 'Clip'}
-          />
+          <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden pointer-events-auto">
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=${isActive ? 1 : 0}&mute=${isMuted ? 1 : 0}&loop=1&playlist=${ytId}&controls=1&modestbranding=1&rel=0`}
+              className="w-full aspect-video min-h-[50vh] sm:min-h-full sm:w-[177.77vh] object-cover scale-[1.08] sm:scale-100 transition-transform origin-center shadow-2xl"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              title={clip.title || clip.caption || 'Clip'}
+            />
+          </div>
         ) : currentSrc && !currentSrc.match(/\.(jpg|jpeg|png|webp|gif|svg)$/i) ? (
           <>
             <video
@@ -438,7 +440,7 @@ const SingleClipPlayerCard: React.FC<{
       </div>
 
       {/* Content Overlay */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/80 to-transparent flex items-end justify-between pointer-events-none z-20">
+      <div className="absolute bottom-0 left-0 right-0 p-4 pt-12 bg-gradient-to-t from-black/90 via-black/25 to-transparent flex items-end justify-between pointer-events-none z-20">
         <div className="flex-1 max-w-[80%] pr-4 pointer-events-auto">
           <div
             className="flex items-center gap-3 mb-2.5 cursor-pointer group/prof"

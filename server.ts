@@ -2056,7 +2056,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       // Load existing cache (from memory, falling back to Supabase)
       const existingTracks = await getPlaylistCache(playlistId);
 
-      // Fetch latest from YouTube RSS feed (max 15 tracks)
+      // Fetch latest from YouTube RSS feed (max 15 tracks) and full HTML page scraper (for 38+ tracks)
       let xml = "";
       let fetchSuccess = false;
       try {
@@ -2068,17 +2068,74 @@ Return a valid JSON object matching the requested schema. If any field is not fo
         if (response.ok) {
           xml = await response.text();
           fetchSuccess = true;
-        } else {
-          // Suppress 500 and 404 warnings since we have a hardcoded fallback mechanism
-          if (response.status !== 500 && response.status !== 404) {
-            console.warn(`[SERVER RADIO INFO] Using fallback feed for playlist ${playlistId}.`);
-          }
         }
       } catch (fetchErr: any) {
-        // Suppress fetch errors as we have a hardcoded fallback
+        // Suppress fetch errors as we have fallbacks
       }
 
       const freshTracks: PlaylistTrack[] = [];
+
+      // Scrape YouTube playlist HTML page for all videos (bypasses RSS 15-track limit)
+      try {
+        const htmlRes = await fetch(`https://www.youtube.com/playlist?list=${playlistId}`, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9"
+          }
+        });
+        if (htmlRes.ok) {
+          const html = await htmlRes.text();
+          const idx = html.indexOf("var ytInitialData = ");
+          if (idx !== -1) {
+            const end = html.indexOf(";</script>", idx);
+            const jsonStr = html.slice(idx + "var ytInitialData = ".length, end !== -1 ? end : idx + 2000000);
+            const data = JSON.parse(jsonStr);
+
+            const map = new Map<string, PlaylistTrack>();
+            function searchYTData(obj: any) {
+              if (!obj || typeof obj !== "object") return;
+              if (obj.lockupViewModel) {
+                const lockup = obj.lockupViewModel;
+                const contentId = lockup.contentId;
+                const title = lockup.metadata?.lockupMetadataViewModel?.title?.content;
+                const author = lockup.metadata?.lockupMetadataViewModel?.metadata?.rows?.[0]?.metadataParts?.[0]?.text?.content;
+                if (contentId && contentId.length === 11 && !map.has(contentId)) {
+                  map.set(contentId, {
+                    videoId: contentId,
+                    title: title || "Metal Track",
+                    author: author || "Scene Artist",
+                    thumbnailUrl: `https://img.youtube.com/vi/${contentId}/hqdefault.jpg`
+                  });
+                }
+              }
+              if (obj.playlistVideoRenderer) {
+                const v = obj.playlistVideoRenderer;
+                const videoId = v.videoId;
+                const title = v.title?.runs?.[0]?.text || v.title?.simpleText;
+                const author = v.shortBylineText?.runs?.[0]?.text || v.ownerText?.runs?.[0]?.text;
+                if (videoId && videoId.length === 11 && !map.has(videoId)) {
+                  map.set(videoId, {
+                    videoId,
+                    title: title || "Metal Track",
+                    author: author || "Scene Artist",
+                    thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+                  });
+                }
+              }
+              for (const k of Object.keys(obj)) {
+                searchYTData(obj[k]);
+              }
+            }
+            searchYTData(data);
+            const scrapedTracks = Array.from(map.values());
+            if (scrapedTracks.length > 0) {
+              freshTracks.push(...scrapedTracks);
+            }
+          }
+        }
+      } catch (htmlErr) {
+        // ignore
+      }
 
       if (fetchSuccess && xml) {
         const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
@@ -2105,14 +2162,13 @@ Return a valid JSON object matching the requested schema. If any field is not fo
             .replace(/&quot;/g, '"')
             .replace(/&apos;/g, "'");
 
-          if (videoId) {
+          if (videoId && !freshTracks.some(t => t.videoId === videoId)) {
             freshTracks.push({ videoId, title, author, thumbnailUrl });
           }
         }
       }
 
       // Merge fresh tracks with existing cached tracks (deduplicating by videoId)
-      // Fresh/newly fetched items go first to keep the queue hot, rest of historical cache follows.
       const mergedMap = new Map<string, PlaylistTrack>();
       
       // 1. Add fresh tracks
@@ -2163,8 +2219,10 @@ Return a valid JSON object matching the requested schema. If any field is not fo
             { videoId: 'v8FkP_Y7lE0', title: 'Dead Shall Rise', author: 'Terrorizer', thumbnailUrl: 'https://img.youtube.com/vi/v8FkP_Y7lE0/hqdefault.jpg' }
           ],
           'PLchMzReuuu_8av4RYcuW8rptIqmr0kSHS': [ // Blackened Death
+            { videoId: 'JCN8qkWVu1w', title: 'Let the Devil In', author: 'Dark Funeral', thumbnailUrl: 'https://img.youtube.com/vi/JCN8qkWVu1w/hqdefault.jpg' },
+            { videoId: 'Xi70GHpdOSs', title: 'Conjuring The Dead', author: 'Belphegor', thumbnailUrl: 'https://img.youtube.com/vi/Xi70GHpdOSs/hqdefault.jpg' },
+            { videoId: 'ZVWuutfWY8M', title: 'Virtus Asinaria - Prayer', author: 'Belphegor', thumbnailUrl: 'https://img.youtube.com/vi/ZVWuutfWY8M/hqdefault.jpg' },
             { videoId: '8f7kP_Y7l0U', title: 'Blow Your Trumpets Gabriel', author: 'Behemoth', thumbnailUrl: 'https://img.youtube.com/vi/8f7kP_Y7l0U/hqdefault.jpg' },
-            { videoId: 'f7kP_Z7l_E0', title: 'Virtus Asinaria', author: 'Belphegor', thumbnailUrl: 'https://img.youtube.com/vi/f7kP_Z7l_E0/hqdefault.jpg' },
             { videoId: 'v7kP_Y7l_k8', title: 'Sovereign Sanctity', author: 'Hate', thumbnailUrl: 'https://img.youtube.com/vi/v7kP_Y7l_k8/hqdefault.jpg' }
           ],
           'PLchMzReuuu_8tMyh0UKsCasYz6BlbKGmW': [ // Black Metal

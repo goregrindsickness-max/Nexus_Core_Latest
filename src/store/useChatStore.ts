@@ -323,7 +323,11 @@ export const useChatStore = () => {
           }
         )
         .subscribe((status: string) => {
-          console.log('Realtime chat subscription status:', status);
+          if (status === 'SUBSCRIBED') {
+            console.log('[Realtime Chat] Subscribed to direct messages');
+          } else if (status === 'CLOSED') {
+            console.debug('[Realtime Chat] Direct message channel closed');
+          }
         });
     });
 

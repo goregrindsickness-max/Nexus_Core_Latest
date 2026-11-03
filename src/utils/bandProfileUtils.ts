@@ -646,30 +646,41 @@ export const resolveCommentAvatar = (
 ): string => {
   if (!comment) return DEFAULT_PERSONAL_AVATAR;
 
-  const commentUsername = String(comment.username || comment.author || comment.user_name || '').trim().toLowerCase();
+  const commentUsername = String(comment.username || comment.author || comment.author_name || comment.user_name || '').trim().toLowerCase();
   const commentUserId = String(comment.user_id || comment.userId || '').trim();
 
-  const isMiguel = isMiguelNameOrProfile(commentUsername) || isMiguelNameOrProfile(commentUserId);
+  // 1. Is this comment written by the current logged-in user or Miguel?
   const isCurrentUser = Boolean(
     (currentUserId && commentUserId && commentUserId === currentUserId) ||
-    (currentUserName && commentUsername && (commentUsername.includes(currentUserName.toLowerCase()) || currentUserName.toLowerCase().includes(commentUsername))) ||
-    (commentUsername && (commentUsername.includes('miguel') || commentUsername.includes('goregrinder')))
+    (currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' && commentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
+    (currentUserName && commentUsername && commentUsername === currentUserName.toLowerCase()) ||
+    (commentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
+    isMiguelNameOrProfile(commentUserId)
   );
 
-  // 1. If comment was written by current user or Miguel, always prioritize current live profile avatar
-  if (isMiguel || isCurrentUser) {
-    const liveAvatar =
-      userProfile?.avatar_url ||
-      userProfile?.avatar ||
-      userProfile?.profile_avatar ||
-      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null);
+  if (isCurrentUser) {
+    const myLiveAvatar =
+      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) ||
+      (comment.avatar && typeof comment.avatar === 'string' && comment.avatar.startsWith('http') ? comment.avatar : null) ||
+      (comment.user_avatar && typeof comment.user_avatar === 'string' && comment.user_avatar.startsWith('http') ? comment.user_avatar : null);
 
-    if (liveAvatar && typeof liveAvatar === 'string' && liveAvatar.trim() && liveAvatar !== '👤' && !liveAvatar.includes('ui-avatars.com')) {
-      return liveAvatar.trim();
+    if (myLiveAvatar && typeof myLiveAvatar === 'string' && myLiveAvatar.trim() && myLiveAvatar !== '👤' && !myLiveAvatar.includes('ui-avatars.com')) {
+      return myLiveAvatar.trim();
     }
   }
 
-  // 2. Explicit comment avatar if present
+  // 2. Is comment written by the profile/timeline owner being viewed?
+  if (userProfile && (
+    (commentUserId && (commentUserId === userProfile.id || commentUserId === userProfile.user_id)) ||
+    (commentUsername && (commentUsername === String(userProfile.name).toLowerCase() || commentUsername === String(userProfile.username).toLowerCase()))
+  )) {
+    const viewedAvatar = userProfile.avatar_url || userProfile.avatar || userProfile.profile_avatar;
+    if (viewedAvatar && typeof viewedAvatar === 'string' && viewedAvatar.trim() && !viewedAvatar.includes('undefined')) {
+      return viewedAvatar.trim();
+    }
+  }
+
+  // 3. Explicit comment avatar if present on the comment object itself
   const explicitAvatar = comment.avatar || comment.userAvatar || comment.user_avatar || comment.authorAvatar;
   if (
     explicitAvatar &&
@@ -682,7 +693,7 @@ export const resolveCommentAvatar = (
     return explicitAvatar.trim();
   }
 
-  // 3. Check known user avatar registry
+  // 4. Check known user avatar registry
   if (commentUsername && KNOWN_USER_AVATARS[commentUsername]) {
     return KNOWN_USER_AVATARS[commentUsername];
   }
@@ -706,38 +717,42 @@ export const resolveCommentAuthorName = (
   const rawUserId = String(comment.user_id || comment.userId || '').trim();
   const rawUsername = String(comment.username || comment.author || comment.author_name || comment.user_name || comment.full_name || comment.name || '').trim();
 
-  // 1. Is it current user or Miguel?
-  const isMiguelId =
-    rawUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-    (currentUserId && rawUserId === currentUserId) ||
-    rawUsername === '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
-
-  const isMiguelName =
-    isMiguelNameOrProfile(rawUsername) ||
+  // 1. Is this comment written by the current logged-in user or Miguel?
+  const isCurrentUser = Boolean(
+    (currentUserId && rawUserId && rawUserId === currentUserId) ||
+    (currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' && rawUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
+    (rawUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
     isMiguelNameOrProfile(rawUserId) ||
-    (currentUserName && rawUsername.toLowerCase().includes(currentUserName.toLowerCase())) ||
-    (currentUserName && currentUserName.toLowerCase().includes('miguel'));
+    (currentUserName && rawUsername && rawUsername.toLowerCase() === currentUserName.toLowerCase())
+  );
 
-  if (isMiguelId || isMiguelName) {
-    const liveName =
-      userProfile?.full_name ||
-      userProfile?.name ||
-      userProfile?.username ||
-      userProfile?.band_name ||
-      currentUserName;
+  if (isCurrentUser) {
+    const myLiveName =
+      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_name') || localStorage.getItem('nexus_username') || localStorage.getItem('nexus_full_name')) : null) ||
+      currentUserName ||
+      (rawUsername && !isUuidString(rawUsername) ? rawUsername : null);
 
-    if (liveName && typeof liveName === 'string' && liveName.trim() && !isUuidString(liveName)) {
-      return liveName.trim();
+    if (myLiveName && typeof myLiveName === 'string' && myLiveName.trim() && !isUuidString(myLiveName)) {
+      return myLiveName.trim();
     }
     return 'Miguel Goregrinder Medina';
   }
 
-  // 2. If rawUsername exists and is NOT a UUID, return it
+  // 2. Is this comment written by the profile being viewed?
+  if (userProfile && (
+    (rawUserId && (rawUserId === userProfile.id || rawUserId === userProfile.user_id)) ||
+    (rawUsername && (rawUsername === userProfile.name || rawUsername === userProfile.username))
+  )) {
+    const viewedName = userProfile.full_name || userProfile.name || userProfile.username || userProfile.band_name;
+    if (viewedName && typeof viewedName === 'string' && viewedName.trim() && !isUuidString(viewedName)) {
+      return viewedName.trim();
+    }
+  }
+
+  // 3. Explicit non-UUID username or author from the comment object itself
   if (rawUsername && !isUuidString(rawUsername)) {
     return rawUsername;
   }
-
-  // 3. Check author fields
   if (comment.author && typeof comment.author === 'string' && !isUuidString(comment.author)) {
     return comment.author.trim();
   }

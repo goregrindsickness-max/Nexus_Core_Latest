@@ -44,27 +44,105 @@
       }
     </style>
     <script>
+      // 1. Stub Vite HMR WebSocket so dev client's createWebSocketModuleRunnerTransport never fails in iframe sandbox
+      (function() {
+        if (typeof window === 'undefined') return;
+        var NativeWebSocket = window.WebSocket;
+        if (!NativeWebSocket) return;
+        function ViteHmrStub(url, protocols) {
+          var isHmr = false;
+          try {
+            if (typeof url === 'string' && (url.indexOf('vite-hmr') !== -1 || url.indexOf('/@vite/') !== -1 || url.indexOf('token=') !== -1)) {
+              isHmr = true;
+            }
+            if (protocols === 'vite-hmr' || (Array.isArray(protocols) && protocols.indexOf('vite-hmr') !== -1)) {
+              isHmr = true;
+            }
+          } catch (_) {}
+
+          if (isHmr) {
+            var target = new EventTarget();
+            var ws = {
+              readyState: 1, // WebSocket.OPEN
+              url: String(url),
+              protocol: 'vite-hmr',
+              bufferedAmount: 0,
+              extensions: '',
+              binaryType: 'blob',
+              onopen: null,
+              onclose: null,
+              onerror: null,
+              onmessage: null,
+              send: function() {},
+              close: function(code, reason) {
+                ws.readyState = 3;
+                var ev = new CloseEvent('close', { code: code || 1000, reason: reason || 'Normal Closure', wasClean: true });
+                target.dispatchEvent(ev);
+                if (typeof ws.onclose === 'function') ws.onclose(ev);
+              },
+              addEventListener: function(type, listener, options) {
+                target.addEventListener(type, listener, options);
+              },
+              removeEventListener: function(type, listener, options) {
+                target.removeEventListener(type, listener, options);
+              },
+              dispatchEvent: function(event) {
+                return target.dispatchEvent(event);
+              }
+            };
+            setTimeout(function() {
+              if (ws.readyState === 1) {
+                var ev = new Event('open');
+                target.dispatchEvent(ev);
+                if (typeof ws.onopen === 'function') ws.onopen(ev);
+              }
+            }, 0);
+            return ws;
+          }
+          return new NativeWebSocket(url, protocols);
+        }
+        ViteHmrStub.prototype = NativeWebSocket.prototype;
+        ViteHmrStub.CONNECTING = 0;
+        ViteHmrStub.OPEN = 1;
+        ViteHmrStub.CLOSING = 2;
+        ViteHmrStub.CLOSED = 3;
+        window.WebSocket = ViteHmrStub;
+      })();
+
       function isIgnorable(msg) {
         if (!msg) return false;
         var s = String(msg).toLowerCase();
         return s.indexOf('websocket') !== -1 ||
                s.indexOf('vite') !== -1 ||
                s.indexOf('hmr') !== -1 ||
+               s.indexOf('createwebsocketmodulerunnertransport') !== -1 ||
                s.indexOf('resizeobserver') !== -1 ||
                s.indexOf('script error') !== -1;
       }
       window.addEventListener('error', function(e) {
-        if (isIgnorable(e.message)) return;
-        showBootError(e.message || 'Script initialization failed');
-      });
+        var msg = (e && e.message) || (e && e.error && e.error.message) || '';
+        var file = (e && e.filename) || '';
+        var stack = (e && e.error && e.error.stack) || '';
+        if (isIgnorable(msg) || isIgnorable(file) || isIgnorable(stack)) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          return;
+        }
+        showBootError(msg || 'Script initialization failed');
+      }, true);
       window.addEventListener('unhandledrejection', function(e) {
         var reasonMsg = e && e.reason ? (e.reason.message || String(e.reason)) : 'Promise rejected';
-        if (isIgnorable(reasonMsg)) return;
+        var reasonStack = (e && e.reason && e.reason.stack) || '';
+        if (isIgnorable(reasonMsg) || isIgnorable(reasonStack)) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          return;
+        }
         var loader = document.getElementById('nexus-boot-loader');
         if (loader) {
           showBootError(reasonMsg);
         }
-      });
+      }, true);
       function showBootError(msg) {
         if (isIgnorable(msg)) return;
         var root = document.getElementById('root');

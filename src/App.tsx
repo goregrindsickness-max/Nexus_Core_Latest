@@ -21,6 +21,7 @@ import { BrandNavigationHeader } from './components/navigation/BrandNavigationHe
 import { NexusTopBar } from './components/navigation/NexusTopBar';
 import { GlobalModalsContainer } from './components/modals/GlobalModalsContainer';
 import { BugMonitorDrawer } from './components/common/BugMonitorDrawer';
+import { SceneRadioPlayer } from './components/social/player/SceneRadioPlayer';
 import { useModalStore } from './store/useModalStore';
 import { MainTabRouter } from './components/views/MainTabRouter';
 import { AnimatedCount, AnimatedText } from "./components/AnimatedElements";
@@ -434,11 +435,18 @@ export default function App() {
     initializeSonicActivityListeners();
   }, []);
 
-  // Suppress "Invalid Refresh Token" from Supabase if it throws an unhandled rejection
+  // Suppress "Invalid Refresh Token" from Supabase and Vite HMR WebSocket errors if they throw unhandled rejections
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      if (event.reason && typeof event.reason.message === 'string' && event.reason.message.includes('Invalid Refresh Token')) {
-        console.warn('Supabase Auth Warning: Invalid Refresh Token. Suppressing unhandled rejection.', event.reason.message);
+      const msg = String(event.reason?.message || event.reason || '');
+      const stack = String(event.reason?.stack || '');
+      if (
+        msg.includes('Invalid Refresh Token') ||
+        msg.includes('WebSocket') ||
+        msg.includes('@vite/client') ||
+        stack.includes('@vite/client') ||
+        stack.includes('createWebSocketModuleRunnerTransport')
+      ) {
         event.preventDefault(); // Prevents the error from crashing the app or showing Error Boundary
       }
     };
@@ -543,6 +551,7 @@ export default function App() {
     } catch (_) {}
     return 'social';
   });
+  const [showSceneRadio, setShowSceneRadio] = useState<boolean>(true);
 
   // Sync activeTab to localStorage so session view state is remembered across minimizes/reloads
   useEffect(() => {
@@ -4698,6 +4707,8 @@ list.push({
             setBands={setBands}
             activeBand={activeBand}
             activeBandId={activeBandId}
+            showSceneRadio={showSceneRadio}
+            setShowSceneRadio={setShowSceneRadio}
             onLogout={() => {
               localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
               triggerNotification?.("Session closed. Goodbye.");
@@ -5144,6 +5155,18 @@ list.push({
         activeTab={activeTab as string}
         activeBand={activeBand}
       />
+
+      {/* Seamless Global Scene Radio Player (Maintains background playback continuously across all tabs and visibility changes) */}
+      {!isLoggedOut && !showSplash && userProfile && (
+        <SceneRadioPlayer
+          showSceneRadio={showSceneRadio}
+          setShowSceneRadio={setShowSceneRadio}
+          activeTab={activeTab as string}
+          portalRole={userProfile?.active_workspace || (userProfile?.account_type === 'fan' ? 'fan_only' : 'band')}
+          userProfile={userProfile}
+          triggerNotification={triggerNotification}
+        />
+      )}
     </div>
   );
 }

@@ -1036,8 +1036,8 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
             })}
           </div>
 
-          {/* Universal Live Search Bar (Hidden in Photo Pit to keep UI focused) */}
-          {activeTab !== 'photopit' && activeTab !== 'gallery' && (
+          {/* Universal Live Search Bar (Hidden in Photo Pit and Shop to keep UI focused) */}
+          {activeTab !== 'photopit' && activeTab !== 'gallery' && activeTab !== 'shop' && (
             <div className="w-full p-2 pb-2.5 border-t border-zinc-900 bg-[#060607] relative">
               <div className="relative flex items-center">
                 <Search className="w-4 h-4 text-zinc-500 absolute left-3 pointer-events-none" />

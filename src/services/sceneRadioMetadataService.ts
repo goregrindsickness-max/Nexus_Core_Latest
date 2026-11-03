@@ -138,7 +138,9 @@ export async function fetchDirectVideoOEmbed(videoId: string): Promise<RadioTrac
 export async function getPlaylistTracksResilient(playlistId: string): Promise<RadioTrackMeta[]> {
   if (!playlistId) return [];
 
-  // Tier 1: Check LocalStorage / Cached Tracks for this playlist
+  const expectedMinCount = (FRONTEND_FALLBACK_PLAYLISTS[playlistId] || []).length;
+
+  // Tier 1: Check LocalStorage / Cached Tracks for this playlist (must be at least expectedMinCount or >= 30)
   let localList: RadioTrackMeta[] = [];
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + playlistId);
@@ -149,40 +151,14 @@ export async function getPlaylistTracksResilient(playlistId: string): Promise<Ra
     // ignore
   }
 
-  if (localList.length >= 10 && localList.some(t => t.title && !t.title.startsWith('Track '))) {
+  if (localList.length >= Math.max(expectedMinCount, 10) && localList.some(t => t.title && !t.title.startsWith('Track '))) {
     localList.forEach(t => {
       if (t.videoId) MEMORY_CACHE.set(t.videoId, t);
     });
     return localList;
   }
 
-  // Tier 2: Query direct Supabase database cache (nexus_notifications table)
-  try {
-    const supabase = getRawSupabase();
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('nexus_notifications')
-        .select('data')
-        .eq('id', `playlist_cache_${playlistId}`)
-        .maybeSingle();
-
-      if (!error && data && Array.isArray(data.data) && data.data.length > 0) {
-        const dbTracks: RadioTrackMeta[] = data.data;
-        // Save to local cache
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + playlistId, JSON.stringify(dbTracks));
-        } catch {}
-        dbTracks.forEach(t => {
-          if (t.videoId) MEMORY_CACHE.set(t.videoId, t);
-        });
-        return dbTracks;
-      }
-    }
-  } catch (dbErr) {
-    console.warn('[RADIO METADATA SERVICE] Supabase direct cache lookup note:', dbErr);
-  }
-
-  // Tier 3: Try local backend route /api/playlist/:playlistId (if running on web preview / Cloud Run)
+  // Tier 2: Try local backend route /api/playlist/:playlistId (if running on web preview / Cloud Run)
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 2500); // 2.5s timeout so APK does not hang
@@ -192,7 +168,7 @@ export async function getPlaylistTracksResilient(playlistId: string): Promise<Ra
 
     if (response.ok) {
       const json = await response.json();
-      if (json && Array.isArray(json.videos) && json.videos.length > 0) {
+      if (json && Array.isArray(json.videos) && json.videos.length >= Math.max(expectedMinCount, 1)) {
         const serverTracks: RadioTrackMeta[] = json.videos;
         try {
           localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + playlistId, JSON.stringify(serverTracks));
@@ -207,10 +183,39 @@ export async function getPlaylistTracksResilient(playlistId: string): Promise<Ra
     // On APK, /api/playlist/... fails immediately, perfectly fine
   }
 
+  // Tier 3: Query direct Supabase database cache (nexus_notifications table)
+  try {
+    const supabase = getRawSupabase();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('nexus_notifications')
+        .select('data')
+        .eq('id', `playlist_cache_${playlistId}`)
+        .maybeSingle();
+
+      if (!error && data && Array.isArray(data.data) && data.data.length >= Math.max(expectedMinCount, 10)) {
+        const dbTracks: RadioTrackMeta[] = data.data;
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + playlistId, JSON.stringify(dbTracks));
+        } catch {}
+        dbTracks.forEach(t => {
+          if (t.videoId) MEMORY_CACHE.set(t.videoId, t);
+        });
+        return dbTracks;
+      }
+    }
+  } catch (dbErr) {
+    console.warn('[RADIO METADATA SERVICE] Supabase direct cache lookup note:', dbErr);
+  }
+
   // Tier 4: Fallback to seed catalog
   const fallbackList: RadioTrackMeta[] = FRONTEND_FALLBACK_PLAYLISTS[playlistId] || [
     { videoId: 's7oZ4xV_f_k', title: 'Metal Scene Radio', author: 'Scene Radio', thumbnailUrl: 'https://img.youtube.com/vi/s7oZ4xV_f_k/hqdefault.jpg' }
   ];
+
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + playlistId, JSON.stringify(fallbackList));
+  } catch {}
 
   return fallbackList;
 }

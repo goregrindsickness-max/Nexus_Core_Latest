@@ -1738,13 +1738,9 @@ export const PostCard: React.FC<PostCardProps> = ({
           const replies = commentList.filter(r => r.parent_comment_id === comment.id);
           const postAuthor = (post as any).author?.name || post.authorName || '';
           const isCommentOwner = Boolean(
-            comment.user_id === currentUserId ||
-            (comment as any).userId === currentUserId ||
+            (currentUserId && (comment.user_id === currentUserId || (comment as any).userId === currentUserId)) ||
             (comment.username && currentUserName && comment.username.toLowerCase() === currentUserName.toLowerCase()) ||
-            ((comment as any).author && currentUserName && (comment as any).author.toLowerCase() === currentUserName.toLowerCase()) ||
-            currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-            (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
-            (postAuthor && currentUserName && postAuthor.toLowerCase() === currentUserName.toLowerCase())
+            ((comment as any).author && currentUserName && (comment as any).author.toLowerCase() === currentUserName.toLowerCase())
           );
 
           const topCommentAvatar = resolveCommentAvatar(comment, userProfile, currentUserId, currentUserName);
@@ -1913,13 +1909,9 @@ export const PostCard: React.FC<PostCardProps> = ({
                     <div className="ml-3 sm:ml-5 pl-3 border-l-2 border-zinc-800/80 space-y-2.5 mt-2.5 relative">
                       {replies.map((reply, rIdx) => {
                         const isReplyOwner = Boolean(
-                          reply.user_id === currentUserId ||
-                          (reply as any).userId === currentUserId ||
+                          (currentUserId && (reply.user_id === currentUserId || (reply as any).userId === currentUserId)) ||
                           (reply.username && currentUserName && reply.username.toLowerCase() === currentUserName.toLowerCase()) ||
-                          ((reply as any).author && currentUserName && (reply as any).author.toLowerCase() === currentUserName.toLowerCase()) ||
-                          currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-                          (currentUserName && currentUserName.toLowerCase().includes('miguel')) ||
-                          (postAuthor && currentUserName && postAuthor.toLowerCase() === currentUserName.toLowerCase())
+                          ((reply as any).author && currentUserName && (reply as any).author.toLowerCase() === currentUserName.toLowerCase())
                         );
                         const replyAvatarUrl = resolveCommentAvatar(reply, userProfile, currentUserId, currentUserName);
                         const replyAuthorName = resolveCommentAuthorName(reply, userProfile, currentUserId, currentUserName);

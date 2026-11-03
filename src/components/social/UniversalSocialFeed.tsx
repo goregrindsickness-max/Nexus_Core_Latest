@@ -53,7 +53,6 @@ import { useSocialProfileState } from './hooks/useSocialProfileState';
 import { FeedTopHeader } from './navigation/FeedTopHeader';
 import { FeedSideDrawers } from './navigation/FeedSideDrawers';
 import { SocialModalsOverlay } from './modals/SocialModalsOverlay';
-import { SceneRadioPlayer } from './player/SceneRadioPlayer';
 import { CartDrawer } from './drawers/CartDrawer';
 import { AlbumDetailsModal } from './modals/AlbumDetailsModal';
 import { AttachSongModal } from './modals/AttachSongModal';
@@ -172,7 +171,9 @@ export function UniversalSocialFeed({
   setDashboardV2ActiveNav,
   dashboardV2ActiveNav,
   shows: propShows,
-  setShows: propSetShows
+  setShows: propSetShows,
+  showSceneRadio: propShowSceneRadio,
+  setShowSceneRadio: propSetShowSceneRadio
 }: any) {
   const portalRoleState = useSocialPortalRole({
     initialRole: propPortalRole,
@@ -1537,7 +1538,9 @@ export function UniversalSocialFeed({
   const [activeReactions, setActiveReactions] = useState<{ id: string; emoji: string; x: number }[]>([]);
 
   // New Feature States
-  const [showSceneRadio, setShowSceneRadio] = useState(true);
+  const [internalShowSceneRadio, setInternalShowSceneRadio] = useState(true);
+  const showSceneRadio = propShowSceneRadio !== undefined ? propShowSceneRadio : internalShowSceneRadio;
+  const setShowSceneRadio = propSetShowSceneRadio || setInternalShowSceneRadio;
   const [sceneRadioTrack, setSceneRadioTrack] = useState<{title: string, artist: string, albumArt: string}>({
     title: 'Phobophile',
     artist: 'CRYPTOPSY',
@@ -2590,6 +2593,19 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
     });
   }, []);
 
+  // Listen for public profile modal open triggers from Scene Radio or other components
+  useEffect(() => {
+    const handleOpenPublicProfile = (e: any) => {
+      if (e.detail?.profile) {
+        handleSelectUserProfile(e.detail.profile);
+      }
+    };
+    window.addEventListener('nexus_open_public_profile', handleOpenPublicProfile);
+    return () => {
+      window.removeEventListener('nexus_open_public_profile', handleOpenPublicProfile);
+    };
+  }, [handleSelectUserProfile]);
+
   const [liveProfileData, setLiveProfileData] = useState<any>(null);
   const [liveProfileStats, setLiveProfileStats] = useState<{ followers: number; following: number; shares: number } | null>(null);
   const [currentUserStats, setCurrentUserStats] = useState<{ followers: number; following: number; shares: number } | null>(null);
@@ -2901,7 +2917,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
       top_song_title: baseProf.top_song_title || baseProf.favoriteSong || '',
       top_song_url: baseProf.top_song_url || ''
     };
-  }, [selectedUserProfile, allProfiles, liveProfileData, liveProfileStats]);
+  }, [selectedUserProfile?.id, selectedUserProfile?.role, selectedUserProfile?.name, allProfiles, liveProfileData, liveProfileStats]);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -2929,7 +2945,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
         setProfileActiveTab('timeline');
       }
     }
-  }, [selectedUserProfile, profileActiveTab]);
+  }, [selectedUserProfile?.id, selectedUserProfile?.role, profileActiveTab]);
   const [viewingFollowersOrFollowing, setViewingFollowersOrFollowing] = useState<'followers' | 'following' | null>(null);
   const [liveFollowsList, setLiveFollowsList] = useState<any[]>([]);
   const [liveFollowsLoading, setLiveFollowsLoading] = useState(false);
@@ -3454,7 +3470,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
       setEpkFormTracks([]);
       setEpkSubmissionSuccess(false);
     }
-  }, [selectedUserProfile]);
+  }, [selectedUserProfile?.id]);
 
   const playAmbientMetalDrone = (songName: string) => {
     if (rotationIsPlaying === songName) {

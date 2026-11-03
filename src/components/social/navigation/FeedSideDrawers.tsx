@@ -2,7 +2,7 @@ import React from 'react';
 import { User, Settings, Bell } from 'lucide-react';
 import { LeftProfileDrawer } from '../drawers/LeftProfileDrawer';
 import { RightNotificationsDrawer } from '../drawers/RightNotificationsDrawer';
-import { SceneRadioPlayer } from '../player/SceneRadioPlayer';
+
 
 export interface FeedSideDrawersProps {
   leftDrawerOpen: boolean;
@@ -310,16 +310,7 @@ export const FeedSideDrawers: React.FC<FeedSideDrawersProps> = ({
         userProfile={userProfile}
       />
 
-      <SceneRadioPlayer
-        showSceneRadio={showSceneRadio}
-        setShowSceneRadio={setShowSceneRadio}
-        activeTab={activeTab}
-        selectedChatId={selectedChatId}
-        traysHiddenOnMobile={traysHiddenOnMobile}
-        triggerNotification={triggerNotification}
-        portalRole={portalRole}
-        userProfile={userProfile}
-      />
+
 
       {/* Floating Left Handle - Pull to open User/Profile settings */}
       {activeTab !== 'reels' && activeTab !== 'messages' && !traysHiddenOnMobile && (

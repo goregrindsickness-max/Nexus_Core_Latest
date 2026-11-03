@@ -929,8 +929,9 @@ export function subscribeToTable(table: string, onEvent: (payload: any) => void)
   const supabase = getSupabase();
   if (!supabase) return null;
 
+  const topic = `realtime_sync_${table}_${Math.random().toString(36).substring(2, 8)}`;
   const channel = supabase
-    .channel(`realtime_sync_${table}`)
+    .channel(topic)
     .on(
       'postgres_changes',
       {
@@ -942,13 +943,20 @@ export function subscribeToTable(table: string, onEvent: (payload: any) => void)
         onEvent(payload);
       }
     )
-    .subscribe((status) => {
-      console.log(`Supabase Realtime subscription current status [${table}]:`, status);
+    .subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        console.log(`[Supabase Realtime] Subscribed to [${table}]`);
+      } else if (status === 'CLOSED') {
+        // Normal channel unsubscribe or cleanup
+        console.debug(`[Supabase Realtime] Subscription closed for [${table}]`);
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.warn(`[Supabase Realtime] Subscription issue on [${table}]: ${status}`, err || '');
+      }
     });
 
   return () => {
     if (supabase && channel) {
-      supabase.removeChannel(channel).then();
+      supabase.removeChannel(channel).catch(() => {});
     }
   };
 }

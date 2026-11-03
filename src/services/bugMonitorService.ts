@@ -170,8 +170,11 @@ class BugMonitorService {
         message.includes('failed to connect to websocket') ||
         message.includes('WebSocket') ||
         stack.includes('@vite/client') ||
-        message.includes('@vite/client')
+        message.includes('@vite/client') ||
+        stack.includes('createWebSocketModuleRunnerTransport') ||
+        message.includes('createWebSocketModuleRunnerTransport')
       ) {
+        if (event.preventDefault) event.preventDefault();
         return;
       }
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Plus, Upload, Trash2, ShoppingBag } from 'lucide-react';
 import { compressImageInSocialFeed } from '../../../utils/socialFeedUtils';
+import { uploadBase64ToStorage } from '../../../services/storageService';
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -177,7 +178,8 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                                   try {
                                     const base64 = reader.result as string;
                                     const compressed = await compressImageInSocialFeed(base64, 800, 800, 0.75);
-                                    setItemImages(prev => [...prev, compressed].slice(0, 4));
+                                    const uploadedUrl = await uploadBase64ToStorage(compressed, 'shop-merch', 'user', 'marketplace-item');
+                                    setItemImages(prev => [...prev, uploadedUrl || compressed].slice(0, 4));
                                   } catch (err) {
                                     console.error("Image upload failed:", err);
                                   }
