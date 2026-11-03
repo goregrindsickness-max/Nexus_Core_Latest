@@ -1215,7 +1215,6 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
     window.dispatchEvent(
       new CustomEvent('nexus_chat_read', { detail: { chatId: partnerUserId } })
     );
-    window.dispatchEvent(new CustomEvent('nexus_chats_updated'));
 
     // 3. Persist Read Status to Supabase Database via shared helper
     await markChatAsRead(partnerUserId, currentUserId || undefined);
@@ -1223,10 +1222,10 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
 
   // Automatically mark messages as read when active thread changes
   useEffect(() => {
-    if (selectedContact?.contactId) {
+    if (selectedContact?.contactId && (!selectedContact.isRead || (selectedContact as any).unread)) {
       handleSelectThread(selectedContact.contactId);
     }
-  }, [selectedContact?.contactId, currentUserId]);
+  }, [selectedContact?.contactId, selectedContact?.isRead, currentUserId]);
 
   // Handle selecting a conversation
   const handleSelectContact = (chat: InboxConversation) => {

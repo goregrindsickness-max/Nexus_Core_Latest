@@ -149,6 +149,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
   // Matched App Band Profile State
   const [matchedBandProfile, setMatchedBandProfile] = useState<any | null>(null);
   const [isFollowingMatched, setIsFollowingMatched] = useState<boolean>(false);
+  const lastQueriedArtistRef = useRef<string>('');
 
   // Automatically query Supabase / profiles whenever currently playing track changes
   useEffect(() => {
@@ -156,14 +157,22 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     const currentTrack = playlistVideos[currentVideoIndex];
     if (!currentTrack) {
       setMatchedBandProfile(null);
+      lastQueriedArtistRef.current = '';
       return;
     }
 
     const searchArtistName = currentTrack.author || currentTrack.title?.split(' - ')[0] || '';
     if (!searchArtistName || searchArtistName.trim().length < 2) {
       setMatchedBandProfile(null);
+      lastQueriedArtistRef.current = '';
       return;
     }
+
+    const cleanQuery = searchArtistName.trim().toLowerCase();
+    if (lastQueriedArtistRef.current === cleanQuery && matchedBandProfile) {
+      return;
+    }
+    lastQueriedArtistRef.current = cleanQuery;
 
     const resolveMatchedProfile = async () => {
       const client = getSupabase();
@@ -771,18 +780,25 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     }
   };
 
+  // Keep playlistVideos ref synchronized for background media controls and lockscreen callbacks
+  const playlistVideosRef = useRef<any[]>([]);
+  useEffect(() => {
+    playlistVideosRef.current = playlistVideos;
+  }, [playlistVideos]);
+
   const handleNextSong = () => {
     hasUserInteractedWithRadio.current = true;
     markSceneRadioUserActive(3000);
+    const list = playlistVideosRef.current;
     // In continuous random radio mode, skip to a random track
-    if (!userSelectedTrackRef.current && playlistVideos.length > 1) {
-      const nextIdx = getRandomTrackIndex(playlistVideos.length, currentVideoIndex);
+    if (!userSelectedTrackRef.current && list.length > 1) {
+      const nextIdx = getRandomTrackIndex(list.length, currentVideoIndexRef.current);
       setCurrentVideoIndex(nextIdx);
       currentVideoIndexRef.current = nextIdx;
       if (ytPlayerRef.current) {
         if (typeof ytPlayerRef.current.getPlaylist === 'function') {
           const ids = ytPlayerRef.current.getPlaylist() || [];
-          const targetId = playlistVideos[nextIdx]?.videoId;
+          const targetId = list[nextIdx]?.videoId;
           const idxInYt = ids.indexOf(targetId);
           if (idxInYt !== -1 && typeof ytPlayerRef.current.playVideoAt === 'function') {
             ytPlayerRef.current.playVideoAt(idxInYt);
@@ -798,7 +814,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
       if (ytPlayerRef.current && typeof ytPlayerRef.current.nextVideo === 'function') {
         ytPlayerRef.current.nextVideo();
       } else {
-        setCurrentVideoIndex(prevIndex => (prevIndex + 1) % Math.max(playlistVideos.length, 1));
+        setCurrentVideoIndex(prevIndex => (prevIndex + 1) % Math.max(list.length, 1));
       }
     }
   };
@@ -806,14 +822,15 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
   const handlePrevSong = () => {
     hasUserInteractedWithRadio.current = true;
     markSceneRadioUserActive(3000);
-    if (!userSelectedTrackRef.current && playlistVideos.length > 1) {
-      const prevIdx = getRandomTrackIndex(playlistVideos.length, currentVideoIndex);
+    const list = playlistVideosRef.current;
+    if (!userSelectedTrackRef.current && list.length > 1) {
+      const prevIdx = getRandomTrackIndex(list.length, currentVideoIndexRef.current);
       setCurrentVideoIndex(prevIdx);
       currentVideoIndexRef.current = prevIdx;
       if (ytPlayerRef.current) {
         if (typeof ytPlayerRef.current.getPlaylist === 'function') {
           const ids = ytPlayerRef.current.getPlaylist() || [];
-          const targetId = playlistVideos[prevIdx]?.videoId;
+          const targetId = list[prevIdx]?.videoId;
           const idxInYt = ids.indexOf(targetId);
           if (idxInYt !== -1 && typeof ytPlayerRef.current.playVideoAt === 'function') {
             ytPlayerRef.current.playVideoAt(idxInYt);
@@ -829,7 +846,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
       if (ytPlayerRef.current && typeof ytPlayerRef.current.previousVideo === 'function') {
         ytPlayerRef.current.previousVideo();
       } else {
-        setCurrentVideoIndex(prevIndex => (prevIndex - 1 + playlistVideos.length) % Math.max(playlistVideos.length, 1));
+        setCurrentVideoIndex(prevIndex => (prevIndex - 1 + list.length) % Math.max(list.length, 1));
       }
     }
   };
@@ -911,10 +928,12 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     }
   }, [sceneRadioPlaying, currentVideoIndex, playlistVideos, selectedRadioGenre]);
 
-  // Listen for native audio interruptions (e.g. phone call or headset unplugged)
+  // Listen for native audio interruptions (e.g. phone call or headset unplugged or OS media notification control)
   useEffect(() => {
     const handleNativeInterruption = (e: any) => {
       const action = e.detail?.action;
+      console.log('[RADIO PLAYER] Native audio event received:', action);
+
       if (action === 'pause' && sceneRadioPlayingRef.current) {
         if (isSceneRadioImmune()) {
           console.log('[RADIO PLAYER] Ignoring native pause during immunity window');
@@ -927,14 +946,18 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
         }
         persistentAudioService.pause();
         setSceneRadioPlaying(false);
-        triggerNotification?.('🎧 Audio paused due to incoming call or unplugged headset');
-      } else if (action === 'resume' && !sceneRadioPlayingRef.current) {
+        triggerNotification?.('🎧 Audio paused');
+      } else if ((action === 'resume' || action === 'play') && !sceneRadioPlayingRef.current) {
         if (ytPlayerRef.current && typeof ytPlayerRef.current.playVideo === 'function') {
           try {
             ytPlayerRef.current.playVideo();
             markSceneRadioUserActive(3000);
             setSceneRadioPlaying(true);
-          } catch (_) {}
+          } catch (_) {
+            togglePlayPause();
+          }
+        } else {
+          togglePlayPause();
         }
       } else if (action === 'next') {
         handleNextSong();
@@ -1166,7 +1189,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
         onClick={() => setShowClipControls(prev => !prev)}
         className={`fixed z-[99999] transition-all duration-300 ${
           isRadioExpanded && showVideo
-            ? 'bottom-24 left-1/2 -translate-x-1/2 w-[92vw] max-w-4xl h-[220px] sm:h-[320px] bg-black border border-zinc-700/80 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.95)] pointer-events-auto group/clip'
+            ? 'bottom-[185px] sm:bottom-[210px] left-1/2 -translate-x-1/2 w-[94vw] max-w-4xl h-[210px] sm:h-[310px] bg-zinc-950/95 border border-rose-500/40 rounded-2xl overflow-hidden shadow-[0_10px_50px_rgba(225,29,72,0.35)] backdrop-blur-2xl pointer-events-auto group/clip'
             : 'left-[-9999px] top-[-9999px] w-[200px] h-[200px] opacity-0 pointer-events-none'
         }`}
       >

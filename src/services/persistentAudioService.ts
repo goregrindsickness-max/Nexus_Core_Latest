@@ -336,34 +336,44 @@ class PersistentAudioService {
 
     const actionHandlers: Array<[MediaSessionAction, MediaSessionActionHandler | null]> = [
       ['play', () => {
+        console.log('[PersistentAudioService] MediaSession PLAY action triggered');
         if (this.callbacks.onPlay) {
           this.callbacks.onPlay();
         } else {
           this.resume();
         }
+        window.dispatchEvent(new CustomEvent('nexus_native_audio_interruption', { detail: { action: 'resume' } }));
       }],
       ['pause', () => {
+        console.log('[PersistentAudioService] MediaSession PAUSE action triggered');
         if (this.callbacks.onPause) {
           this.callbacks.onPause();
         } else {
           this.pause();
         }
+        window.dispatchEvent(new CustomEvent('nexus_native_audio_interruption', { detail: { action: 'pause' } }));
       }],
       ['stop', () => {
+        console.log('[PersistentAudioService] MediaSession STOP action triggered');
         if (this.callbacks.onPause) {
           this.callbacks.onPause();
         }
         this.stop();
+        window.dispatchEvent(new CustomEvent('nexus_native_audio_interruption', { detail: { action: 'stop' } }));
       }],
       ['previoustrack', () => {
+        console.log('[PersistentAudioService] MediaSession PREVIOUS ACTION triggered');
         if (this.callbacks.onPrevious) {
           this.callbacks.onPrevious();
         }
+        window.dispatchEvent(new CustomEvent('nexus_native_audio_interruption', { detail: { action: 'previous' } }));
       }],
       ['nexttrack', () => {
+        console.log('[PersistentAudioService] MediaSession NEXT ACTION triggered');
         if (this.callbacks.onNext) {
           this.callbacks.onNext();
         }
+        window.dispatchEvent(new CustomEvent('nexus_native_audio_interruption', { detail: { action: 'next' } }));
       }],
       ['seekto', (details) => {
         if (details.seekTime !== undefined && details.seekTime !== null) {
