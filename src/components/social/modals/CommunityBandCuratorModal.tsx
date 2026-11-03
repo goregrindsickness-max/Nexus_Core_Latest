@@ -321,9 +321,11 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     setCity(band.city || '');
     setStateProvince(band.state_province || band.state || '');
     setCountry(band.country || 'USA');
-    setRecordLabel(band.record_label || band.label || '');
-    setBio(band.bio || (band as any).description || '');
-    setAvatarUrl(band.avatar_url || band.logo_url || (band as any).avatar || (band as any).image || '');
+    const userBio = userProfile?.bio || userProfile?.profileBlurb;
+    const rawBio = band.bio || (band as any).description || '';
+    const isUserBio = Boolean(userBio && (rawBio === userBio || rawBio === (userProfile as any)?.profileBlurb));
+    const validBio = (rawBio && !isUserBio && !rawBio.startsWith('Community-curated archive')) ? rawBio : 'Not written yet.';
+    setBio(validBio);
     setCoverUrl(band.cover_url || band.banner_url || (band as any).cover || (band as any).banner || '');
     setSpotifyUrl(band.spotify_url || '');
     setBandcampUrl(band.bandcamp_url || '');
@@ -437,7 +439,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     setStateProvince('');
     setCountry('USA');
     setRecordLabel('');
-    setBio('');
+    setBio('Not written yet.');
     setAvatarUrl('https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400');
     setCoverUrl('https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=1200');
     setSpotifyUrl('');

@@ -212,6 +212,30 @@ export const BugMonitorDrawer: React.FC<BugMonitorDrawerProps> = ({
     }
   };
 
+  const handleResolveAll = async () => {
+    const unresolved = reports.filter(r => r.status !== 'resolved');
+    for (const bug of unresolved) {
+      await bugMonitor.updateBugStatus(bug.id, 'resolved');
+    }
+    setReports(prev => prev.map(r => ({ ...r, status: 'resolved' })));
+  };
+
+  const formatMassDiagnosticMarkdown = () => {
+    const unresolved = reports.filter(r => r.status !== 'resolved');
+    if (unresolved.length === 0) return 'No unresolved bug reports found.';
+
+    let summary = `### [MASS BUG DIAGNOSTICS BATCH REPORT] (${unresolved.length} Unresolved Issues)\n\n`;
+    unresolved.forEach((bug, index) => {
+      summary += `#### ${index + 1}. [${bug.category.toUpperCase()}] ${bug.title}\n`;
+      summary += `- **Severity:** ${bug.severity} | **Occurrences:** ${bug.occurrences}\n`;
+      summary += `- **Message:** \`${bug.message}\`\n`;
+      if (bug.endpoint) summary += `- **Endpoint:** ${bug.httpMethod || 'GET'} ${bug.endpoint} (${bug.httpStatus || 'N/A'})\n`;
+      if (bug.stack) summary += `- **Stack snippet:** \`${bug.stack.split('\n')[0]}\`\n`;
+      summary += `\n`;
+    });
+    return summary;
+  };
+
   const handleSimulateBug = (type: 'silent_api' | 'console_error' | 'promise_rejection') => {
     bugMonitor.simulateBug(type);
   };
@@ -283,6 +307,39 @@ ${bug.breadcrumbs.slice(-15).map((b, idx) => `${idx + 1}. [${new Date(b.timestam
 
               {/* Action Toolbar */}
               <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                {/* Copy Mass Report Button */}
+                {unresolvedCount > 0 && (
+                  <button
+                    onClick={() => handleCopy(formatMassDiagnosticMarkdown(), 'mass-ai-report')}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-mono font-bold text-cyan-300 bg-cyan-950/40 border border-cyan-700/50 rounded-lg hover:bg-cyan-900/50 transition-all shadow-sm cursor-pointer"
+                    title="Copy all unresolved bug diagnostics into a single markdown summary ready to paste into chat"
+                  >
+                    {copiedKey === 'mass-ai-report' ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Copied Summary!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                        <span className="hidden sm:inline">Copy Mass AI Report</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Resolve All Button */}
+                {unresolvedCount > 0 && (
+                  <button
+                    onClick={handleResolveAll}
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-bold text-emerald-300 bg-emerald-950/40 border border-emerald-800/50 rounded-lg hover:bg-emerald-900/50 transition-colors cursor-pointer"
+                    title="Mark all active bug reports as resolved"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span className="hidden sm:inline">Resolve All</span>
+                  </button>
+                )}
+
                 {/* Test Bug Button */}
                 <button
                   onClick={() => handleSimulateBug('silent_api')}

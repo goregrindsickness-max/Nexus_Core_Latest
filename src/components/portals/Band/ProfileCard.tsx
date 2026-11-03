@@ -171,7 +171,52 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         setCommunityArchiveMatch(match);
       }
     }
-  }, [selectedUserProfile?.id, selectedUserProfile?.isYou, selectedUserProfile?.name, selectedUserProfile?.band_name, selectedUserProfile?.bandName, targetProfile?.id, targetProfile?.isYou, targetProfile?.name, targetProfile?.band_name, targetProfile?.bandName]);
+  }, [selectedUserProfile?.id, selectedUserProfile?.isYou, selectedUserProfile?.name, selectedUserProfile?.band_name, selectedUserProfile?.bandName, targetProfile?.id, targetProfile?.name, targetProfile?.band_name, targetProfile?.bandName]);
+
+  const handleCurateBandClick = () => {
+    const effectiveBandName = rawResolvedBandName || bData?.band_name || bData?.name || selectedUserProfile?.band_name || selectedUserProfile?.name || targetProfile?.band_name || targetProfile?.name || 'Band';
+    
+    let existing = communityArchiveMatch || communityBandManager.findMatch(effectiveBandName) || communityBandManager.findByName(effectiveBandName);
+
+    const userBio = userProfile?.bio || userProfile?.profileBlurb;
+
+    if (!existing) {
+      const existingBio = (bData?.bio && !bData.bio.startsWith('Community-curated archive') && bData.bio !== userBio && bData.bio !== profileBlurb) ? bData.bio : '';
+      const freshBandPayload: Partial<CommunityBandRecord> = {
+        id: bData?.id || generateUUID(),
+        name: effectiveBandName,
+        band_name: effectiveBandName,
+        genre: bData?.genre || 'Extreme Metal',
+        micro_genres: bData?.micro_genres || bData?.subgenres || ['Extreme Metal'],
+        subgenres: bData?.micro_genres || bData?.subgenres || ['Extreme Metal'],
+        bio: existingBio || 'Not written yet.',
+        avatar_url: rawResolvedBandLogo || bData?.avatar_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400',
+        logo_url: rawResolvedBandLogo || bData?.logo_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400',
+        cover_url: bData?.cover_url || bData?.banner_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=1200',
+        banner_url: bData?.cover_url || bData?.banner_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=1200',
+        city: bData?.city || '',
+        state_province: bData?.state_province || bData?.state || '',
+        country: bData?.country || 'USA',
+        record_label: bData?.record_label || bData?.label || '',
+        label: bData?.record_label || bData?.label || '',
+        spotify_url: bData?.spotify_url || '',
+        bandcamp_url: bData?.bandcamp_url || '',
+        metal_archives_url: bData?.metal_archives_url || '',
+        youtube_url: bData?.youtube_url || '',
+        lineup: bData?.lineup || [],
+        discography: bData?.discography || [],
+        curated_by: userProfile?.console_handle || userProfile?.handle || '@community_archivist'
+      };
+
+      existing = communityBandManager.upsertBand(freshBandPayload);
+      setCommunityArchiveMatch(existing);
+      triggerNotification?.(`✨ Created new community entry for "${effectiveBandName}" in Community Bands Hub!`);
+    } else {
+      setCommunityArchiveMatch(existing);
+    }
+
+    setShowCuratorModal(true);
+  };
 
   React.useEffect(() => {
     let isMounted = true;
@@ -550,7 +595,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
             setFetchedBandData(normalizedRecord);
             if ((normalizedRecord.bio || normalizedRecord.description) && setProfileBlurb) {
               if (base?.isYou || selectedUserProfile?.isYou) {
-                setProfileBlurb(normalizedRecord.bio || normalizedRecord.description);
+                const bioVal = normalizedRecord.bio || normalizedRecord.description;
+                setProfileBlurb(bioVal);
               }
             }
           }
@@ -897,24 +943,20 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   ) : null;
 
   const resolvedBandBio = (() => {
-    // 1. Check if bData has a real custom bio (not default fallback)
-    if (bData?.bio && !bData.bio.startsWith('Community-curated archive')) return bData.bio;
-    // 2. Check if local profileBlurb state has a real custom bio
-    if (profileBlurb && profileBlurb !== fetchedProfileData?.bio && !profileBlurb.startsWith('Community-curated archive')) return profileBlurb;
+    const userBio = userProfile?.bio || userProfile?.profileBlurb;
+
+    // 1. Check if bData has a real custom bio (not default fallback and not viewing user's personal bio)
+    if (bData?.bio && !bData.bio.startsWith('Community-curated archive') && bData.bio !== userBio && bData.bio !== profileBlurb) return bData.bio;
+    // 2. Check if communityArchiveMatch has a real custom bio
+    if ((communityArchiveMatch as any)?.bio && !(communityArchiveMatch as any).bio.startsWith('Community-curated archive') && (communityArchiveMatch as any).bio !== userBio && (communityArchiveMatch as any).bio !== profileBlurb) return (communityArchiveMatch as any).bio;
     // 3. Check if localSavedBand has a real bio
-    if (localSavedBand?.bio && !localSavedBand.bio.startsWith('Community-curated archive')) return localSavedBand.bio;
-    // 4. Check if communityArchiveMatch has a real custom bio
-    if ((communityArchiveMatch as any)?.bio && !(communityArchiveMatch as any).bio.startsWith('Community-curated archive')) return (communityArchiveMatch as any).bio;
-    // 5. Fall back to any available non-empty bio
-    return (
-      bData?.bio ||
-      (communityArchiveMatch as any)?.bio ||
-      localSavedBand?.bio ||
-      baseTarget?.band_bio ||
-      (baseTarget?.isBandProfile ? baseTarget?.bio : '') ||
-      (isBandTarget && profileBlurb ? profileBlurb : '') ||
-      ''
-    );
+    if (localSavedBand?.bio && !localSavedBand.bio.startsWith('Community-curated archive') && localSavedBand.bio !== userBio && localSavedBand.bio !== profileBlurb) return localSavedBand.bio;
+    // 4. Check baseTarget.band_bio
+    if (baseTarget?.band_bio && baseTarget.band_bio !== userBio && baseTarget.band_bio !== profileBlurb) return baseTarget.band_bio;
+    // 5. Check baseTarget.bio IF baseTarget is explicitly a band profile and not personal
+    if (baseTarget?.isBandProfile && baseTarget?.bio && baseTarget.bio !== userBio && baseTarget.bio !== profileBlurb) return baseTarget.bio;
+
+    return 'Not written yet.';
   })();
 
   const isSelfTarget = Boolean(
@@ -1528,7 +1570,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             {/* Button for fans to edit/curate without forms */}
                             <button
                               type="button"
-                              onClick={() => setShowCuratorModal(true)}
+                              onClick={() => handleCurateBandClick()}
                               className="px-2 py-0.5 rounded-full font-mono font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
                               title="Edit fan archive info & discography"
                             >
@@ -4936,27 +4978,41 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       onClose={() => setShowCuratorModal(false)}
       initialBand={
         communityArchiveMatch ||
-        (rawResolvedBandName && rawResolvedBandName !== 'Band' ? communityBandManager.findByName(rawResolvedBandName) : null) ||
-        (bData ? {
-          id: bData.id || generateUUID(),
-          name: rawResolvedBandName || bData.name || bData.band_name || 'Band',
-          band_name: rawResolvedBandName || bData.name || bData.band_name || 'Band',
-          genre: bData.genre || 'Extreme Metal',
-          micro_genres: bData.micro_genres || bData.subgenres || [],
-          bio: resolvedBandBio || bData.bio || '',
-          avatar_url: rawResolvedBandLogo || bData.avatar_url || '',
-          cover_url: bData.cover_url || bData.banner_url || '',
-          city: bData.city || '',
-          state_province: bData.state_province || bData.state || '',
-          country: bData.country || 'USA',
-          record_label: bData.record_label || bData.label || '',
-          spotify_url: bData.spotify_url || '',
-          bandcamp_url: bData.bandcamp_url || '',
-          metal_archives_url: bData.metal_archives_url || '',
-          youtube_url: bData.youtube_url || '',
-          lineup: bData.lineup || [],
-          discography: bData.discography || []
-        } as CommunityBandRecord : null)
+        (rawResolvedBandName && rawResolvedBandName !== 'Band' ? (communityBandManager.findMatch(rawResolvedBandName) || communityBandManager.findByName(rawResolvedBandName)) : null) ||
+        (() => {
+          const nameToUse = rawResolvedBandName || bData?.band_name || bData?.name || selectedUserProfile?.band_name || selectedUserProfile?.name || targetProfile?.band_name || targetProfile?.name;
+          if (!nameToUse || nameToUse === 'Band') return null;
+
+          const userBio = userProfile?.bio || userProfile?.profileBlurb;
+          const existingBio = (bData?.bio && !bData.bio.startsWith('Community-curated archive') && bData.bio !== userBio && bData.bio !== profileBlurb) ? bData.bio : '';
+
+          const freshRec: Partial<CommunityBandRecord> = {
+            id: bData?.id || generateUUID(),
+            name: nameToUse,
+            band_name: nameToUse,
+            genre: bData?.genre || 'Extreme Metal',
+            micro_genres: bData?.micro_genres || bData?.subgenres || ['Extreme Metal'],
+            subgenres: bData?.micro_genres || bData?.subgenres || ['Extreme Metal'],
+            bio: existingBio || 'Not written yet.',
+            avatar_url: rawResolvedBandLogo || bData?.avatar_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400',
+            logo_url: rawResolvedBandLogo || bData?.logo_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400',
+            cover_url: bData?.cover_url || bData?.banner_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=1200',
+            banner_url: bData?.cover_url || bData?.banner_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=1200',
+            city: bData?.city || '',
+            state_province: bData?.state_province || bData?.state || '',
+            country: bData?.country || 'USA',
+            record_label: bData?.record_label || bData?.label || '',
+            label: bData?.record_label || bData?.label || '',
+            spotify_url: bData?.spotify_url || '',
+            bandcamp_url: bData?.bandcamp_url || '',
+            metal_archives_url: bData?.metal_archives_url || '',
+            youtube_url: bData?.youtube_url || '',
+            lineup: bData?.lineup || [],
+            discography: bData?.discography || [],
+            curated_by: userProfile?.console_handle || userProfile?.handle || '@community_archivist'
+          };
+          return communityBandManager.upsertBand(freshRec);
+        })()
       }
       userProfile={userProfile}
       triggerNotification={triggerNotification}

@@ -1976,16 +1976,16 @@ export function UniversalSocialFeed({
   useEffect(() => {
     if (portalRole === 'band' && activeBand) {
       if (activeBand.homebase) {
-        setLabelHeadquarters(activeBand.homebase);
+        setLabelHeadquarters(prev => (prev === activeBand.homebase ? prev : activeBand.homebase));
       }
       if (activeBand.founded_year) {
-        setLabelFoundedYear(activeBand.founded_year);
+        setLabelFoundedYear(prev => (prev === activeBand.founded_year ? prev : activeBand.founded_year));
       }
       if (activeBand.ticker) {
-        setLabelRosterTicker(activeBand.ticker);
+        setLabelRosterTicker(prev => (prev === activeBand.ticker ? prev : activeBand.ticker));
       }
       if (activeBand.blurb) {
-        setProfileBlurb(activeBand.blurb);
+        setProfileBlurb(prev => (prev === activeBand.blurb ? prev : activeBand.blurb));
       }
     }
   }, [portalRole, activeBand?.id, activeBand?.homebase, activeBand?.founded_year, activeBand?.ticker, activeBand?.blurb]);

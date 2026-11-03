@@ -593,8 +593,24 @@ export function useUserPresence(targetIdentifierOrProfile?: any) {
   targetRef.current = targetIdentifierOrProfile;
 
   const update = useCallback(() => {
-    setPresence(presenceManager.getPresence(targetRef.current));
+    setPresence(prev => {
+      const next = presenceManager.getPresence(targetRef.current);
+      if (
+        prev.isOnline === next.isOnline &&
+        prev.lastActiveAt === next.lastActiveAt &&
+        prev.showActiveStatus === next.showActiveStatus &&
+        prev.userId === next.userId &&
+        prev.email === next.email
+      ) {
+        return prev;
+      }
+      return next;
+    });
   }, []);
+
+  const targetKey = typeof targetIdentifierOrProfile === 'object' && targetIdentifierOrProfile !== null
+    ? `${targetIdentifierOrProfile.id || ''}_${targetIdentifierOrProfile.email || ''}_${targetIdentifierOrProfile.userId || ''}_${targetIdentifierOrProfile.name || ''}`
+    : String(targetIdentifierOrProfile || '');
 
   useEffect(() => {
     update();
@@ -607,7 +623,7 @@ export function useUserPresence(targetIdentifierOrProfile?: any) {
       unsub();
       clearInterval(interval);
     };
-  }, [update, targetIdentifierOrProfile]);
+  }, [update, targetKey]);
 
   const formatted = formatPresenceStatus(presence);
 

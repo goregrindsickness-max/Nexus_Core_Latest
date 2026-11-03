@@ -491,10 +491,22 @@ export function useUserProfileState({
       }
     }
 
-    if (freshBio && freshBio !== profileBlurb) {
-      setProfileBlurb(freshBio);
+    if (freshBio) {
+      setProfileBlurb(prev => (prev === freshBio ? prev : freshBio));
     }
-  }, [portalRole, activeBand?.id, activeBand?.name, activeBand?.bio, activeBand?.description, userProfile?.band_bio, userProfile?.creative_metadata?.bio, userProfile?.creative_bio, userProfile?.promoter_metadata?.bio, userProfile?.promoter_bio, userProfile?.label_bio, userProfile?.bio, userProfile?.profileBlurb]);
+  }, [
+    portalRole, 
+    activeBand?.id, 
+    activeBand?.name, 
+    activeBand?.bio, 
+    activeBand?.description, 
+    userProfile?.band_bio, 
+    userProfile?.creative_metadata?.bio, 
+    userProfile?.creative_bio, 
+    userProfile?.promoter_metadata?.bio, 
+    userProfile?.promoter_bio, 
+    userProfile?.label_bio
+  ]);
 
   const [profileStealthMode, setProfileStealthMode] = useState(false);
   const [filterHideTicketPresales, setFilterHideTicketPresales] = useState(false);

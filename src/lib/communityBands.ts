@@ -980,6 +980,13 @@ export class CommunityBandManager {
     }
   }
 
+  public upsertBand(
+    band: Partial<CommunityBandRecord> & { name?: string; id?: string },
+    options?: { isNew?: boolean }
+  ): CommunityBandRecord {
+    return this.upsertCommunityBand(band, options);
+  }
+
   // Create or quick-edit a fan/community band page without official registration forms
   public upsertCommunityBand(
     band: Partial<CommunityBandRecord> & { name?: string; id?: string },
@@ -1120,7 +1127,7 @@ export class CommunityBandManager {
         record_label: band.record_label || band.label || band.label_name || '',
         label: band.label || band.record_label || band.label_name || '',
         label_name: band.label_name || band.record_label || band.label || '',
-        bio: band.bio || `Community-curated archive and discography for ${validName}.`,
+        bio: band.bio || 'Not written yet.',
         avatar_url: resolvedAvatar || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400',
         logo_url: resolvedAvatar || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400',
         avatar: resolvedAvatar || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400',
@@ -1910,7 +1917,7 @@ export class CommunityBandManager {
             if (b.bio && b.bio.trim() !== '') return b.bio.trim();
             if (existingItem?.bio && existingItem.bio.trim() !== '') return existingItem.bio.trim();
             if (seedMatch?.bio && seedMatch.bio.trim() !== '') return seedMatch.bio.trim();
-            return `Community-curated archive for ${bandName}.`;
+            return 'Not written yet.';
           })(),
           avatar_url: resolvedAvatar,
           logo_url: resolvedAvatar,

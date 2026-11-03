@@ -56,6 +56,181 @@ export interface SceneRadioPlayerProps {
   userProfile?: any;
 }
 
+// Helper to parse actual Band Name from video title (ignoring record label uploaders & uploader channels)
+export const extractBandNameFromTrack = (track: any): string => {
+  if (!track) return 'Unknown Band';
+  let rawTitle = String(track.title || '').trim();
+  let rawAuthor = String(track.author || '').trim();
+
+  // Decode common HTML entities (e.g. &quot;, &#39;, &amp;)
+  rawTitle = rawTitle
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+
+  rawAuthor = rawAuthor
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+
+  // Clean title from common YouTube brackets like (Official Video), [HD], [Official Audio], etc.
+  const cleanedTitle = rawTitle
+    .replace(/\[(OFFICIAL|AUDIO|MUSIC VIDEO|LYRIC VIDEO|HD|4K|VISUALIZER|FULL ALBUM|TOP TRACKS|REMASTERED).*?\]/gi, '')
+    .replace(/\((OFFICIAL|AUDIO|MUSIC VIDEO|LYRIC VIDEO|HD|4K|VISUALIZER|FULL ALBUM|TOP TRACKS|REMASTERED).*?\)/gi, '')
+    .trim();
+
+  // Look for standard music video title separators: "Band - Song Title", "Band : Song Title", "Band | Song Title", etc.
+  const separators = [' - ', ' – ', ' — ', ' : ', ' | '];
+  for (const sep of separators) {
+    if (cleanedTitle.includes(sep)) {
+      const parts = cleanedTitle.split(sep).map(p => p.trim()).filter(Boolean);
+      if (parts[0] && parts[0].length >= 2) {
+        return parts[0];
+      }
+    }
+  }
+
+  // Check if author is a known record label or aggregator channel
+  const knownLabels = [
+    'nuclear blast', 'metal blade', 'unique leader', 'century media', 'napalm records',
+    'relapse records', 'season of mist', 'profound lore', 'dark descent', 'debemur morti',
+    'indie recordings', 'goregrind', 'slam worldwide', 'death metal promotion', 'hardcore worldwide',
+    'vevo', 'official', 'records', 'entertainment', 'music'
+  ];
+
+  const authorLower = rawAuthor.toLowerCase();
+  const isKnownLabel = knownLabels.some(lbl => authorLower.includes(lbl));
+
+  // If author is NOT a known label, use author if author exists and title didn't have separators
+  if (rawAuthor && !isKnownLabel && rawAuthor.length >= 2) {
+    return rawAuthor.replace(/\s*-\s*Topic$/i, '').replace(/VEVO$/i, '').trim();
+  }
+
+  // Otherwise return cleaned title before separator or full cleaned title
+  return cleanedTitle || rawAuthor || 'Unknown Band';
+};
+
+// Dynamic Theme Accent Color Helper based on active portal role or profile workspace
+export const getRoleAccentTheme = (portalRole?: string, activeWorkspace?: string) => {
+  const role = (activeWorkspace || portalRole || 'band').toLowerCase();
+
+  // Label = Neon Orange
+  if (role.includes('label')) {
+    return {
+      name: 'orange',
+      primaryBg: 'bg-orange-500 hover:bg-orange-400 text-black font-black shadow-orange-950/80',
+      activeBadge: 'bg-orange-950/90 text-orange-300 border-orange-500/60',
+      subtleBg: 'bg-orange-950/40 border-orange-500/40 text-orange-300',
+      text: 'text-orange-400',
+      textBright: 'text-orange-300',
+      border: 'border-orange-500/40',
+      ring: 'ring-orange-500/60',
+      glow: 'shadow-[0_0_20px_rgba(249,115,22,0.4)]',
+      progressFromTo: 'from-orange-500 via-amber-400 to-orange-400',
+      playButton: 'bg-orange-500 hover:bg-orange-400 text-black font-black shadow-lg shadow-orange-950/80',
+      playIcon: 'fill-black text-black',
+      accentHex: '#ff5500'
+    };
+  }
+
+  // Creative = Magenta
+  if (role.includes('creative')) {
+    return {
+      name: 'magenta',
+      primaryBg: 'bg-fuchsia-500 hover:bg-fuchsia-400 text-white font-black shadow-fuchsia-950/80',
+      activeBadge: 'bg-fuchsia-950/90 text-fuchsia-300 border-fuchsia-500/60',
+      subtleBg: 'bg-fuchsia-950/40 border-fuchsia-500/40 text-fuchsia-300',
+      text: 'text-fuchsia-400',
+      textBright: 'text-fuchsia-300',
+      border: 'border-fuchsia-500/40',
+      ring: 'ring-fuchsia-500/60',
+      glow: 'shadow-[0_0_20px_rgba(217,70,239,0.4)]',
+      progressFromTo: 'from-fuchsia-500 via-pink-500 to-rose-400',
+      playButton: 'bg-fuchsia-500 hover:bg-fuchsia-400 text-white shadow-lg shadow-fuchsia-950/80',
+      playIcon: 'fill-white text-white',
+      accentHex: '#ff007f'
+    };
+  }
+
+  // Industry Pro = Darker Purple
+  if (role.includes('industry') || role.includes('pro')) {
+    return {
+      name: 'purple',
+      primaryBg: 'bg-purple-800 hover:bg-purple-700 text-white shadow-purple-950/80',
+      activeBadge: 'bg-purple-950/90 text-purple-300 border-purple-600/60',
+      subtleBg: 'bg-purple-950/60 border-purple-600/40 text-purple-300',
+      text: 'text-purple-400',
+      textBright: 'text-purple-300',
+      border: 'border-purple-600/50',
+      ring: 'ring-purple-600/60',
+      glow: 'shadow-[0_0_20px_rgba(147,51,234,0.4)]',
+      progressFromTo: 'from-purple-800 via-purple-700 to-indigo-900',
+      playButton: 'bg-purple-800 hover:bg-purple-700 text-white shadow-lg shadow-purple-950/90',
+      playIcon: 'fill-white text-white',
+      accentHex: '#7e22ce'
+    };
+  }
+
+  // Promoter = Yellow
+  if (role.includes('promoter')) {
+    return {
+      name: 'yellow',
+      primaryBg: 'bg-yellow-400 hover:bg-yellow-300 text-black font-black shadow-yellow-950/80',
+      activeBadge: 'bg-yellow-950/90 text-yellow-300 border-yellow-500/60',
+      subtleBg: 'bg-yellow-950/40 border-yellow-500/40 text-yellow-300',
+      text: 'text-yellow-400',
+      textBright: 'text-yellow-300',
+      border: 'border-yellow-500/40',
+      ring: 'ring-yellow-500/60',
+      glow: 'shadow-[0_0_20px_rgba(234,179,8,0.4)]',
+      progressFromTo: 'from-yellow-500 via-amber-400 to-yellow-300',
+      playButton: 'bg-yellow-400 hover:bg-yellow-300 text-black shadow-lg shadow-yellow-950/80',
+      playIcon: 'fill-black text-black',
+      accentHex: '#eab308'
+    };
+  }
+
+  // Fan = Cyan
+  if (role.includes('fan')) {
+    return {
+      name: 'cyan',
+      primaryBg: 'bg-cyan-400 hover:bg-cyan-300 text-black font-black shadow-cyan-950/80',
+      activeBadge: 'bg-cyan-950/90 text-cyan-300 border-cyan-500/60',
+      subtleBg: 'bg-cyan-950/40 border-cyan-500/40 text-cyan-300',
+      text: 'text-cyan-400',
+      textBright: 'text-cyan-300',
+      border: 'border-cyan-500/40',
+      ring: 'ring-cyan-500/60',
+      glow: 'shadow-[0_0_20px_rgba(34,211,238,0.4)]',
+      progressFromTo: 'from-cyan-500 via-sky-400 to-blue-400',
+      playButton: 'bg-cyan-400 hover:bg-cyan-300 text-black shadow-lg shadow-cyan-950/80',
+      playIcon: 'fill-black text-black',
+      accentHex: '#00e5ff'
+    };
+  }
+
+  // Band = Neon Green (#39ff14)
+  return {
+    name: 'green',
+    primaryBg: 'bg-[#39ff14] hover:bg-[#28d00d] text-black font-black shadow-emerald-950/80',
+    activeBadge: 'bg-emerald-950/90 text-emerald-300 border-emerald-500/60',
+    subtleBg: 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300',
+    text: 'text-[#39ff14]',
+    textBright: 'text-emerald-300',
+    border: 'border-emerald-500/40',
+    ring: 'ring-emerald-500/60',
+    glow: 'shadow-[0_0_20px_rgba(57,255,20,0.4)]',
+    progressFromTo: 'from-[#39ff14] via-[#00ffcc] to-emerald-400',
+    playButton: 'bg-[#39ff14] hover:bg-[#28d00d] text-black shadow-lg shadow-[#39ff14]/30',
+    playIcon: 'fill-black text-black',
+    accentHex: '#39ff14'
+  };
+};
+
 // Helper to choose a completely random genre on initial mount
 const getRandomRadioGenre = (): keyof typeof RADIO_PLAYLISTS => {
   const genreKeys = Object.keys(RADIO_PLAYLISTS) as Array<keyof typeof RADIO_PLAYLISTS>;
@@ -84,6 +259,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
   userProfile,
 }) => {
   const isBandWorkspace = portalRole === 'band' || userProfile?.active_workspace === 'band';
+  const theme = getRoleAccentTheme(portalRole, userProfile?.active_workspace);
   const [internalShowSceneRadio, setInternalShowSceneRadio] = useState(true);
   const showSceneRadio = externalShowSceneRadio !== undefined ? externalShowSceneRadio : internalShowSceneRadio;
   const setShowSceneRadio = externalSetShowSceneRadio || setInternalShowSceneRadio;
@@ -161,7 +337,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
       return;
     }
 
-    const searchArtistName = currentTrack.author || currentTrack.title?.split(' - ')[0] || '';
+    const searchArtistName = extractBandNameFromTrack(currentTrack);
     if (!searchArtistName || searchArtistName.trim().length < 2) {
       setMatchedBandProfile(null);
       lastQueriedArtistRef.current = '';
@@ -258,10 +434,49 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
         }
 
         if (active) {
-          setMatchedBandProfile(null);
+          const rawBandName = searchArtistName.trim();
+          const fallbackProf = {
+            id: `artist-${cleanQuery.replace(/[^a-z0-9]/g, '-')}`,
+            raw_id: cleanQuery,
+            name: rawBandName,
+            role: 'Band',
+            category: 'bands',
+            genre: RADIO_PLAYLISTS[selectedRadioGenre]?.name || 'Scene Radio',
+            desc: `${rawBandName} • Featured Artist on Nexus Core Scene Radio`,
+            avatar: currentTrack.thumbnailUrl || (currentTrack.videoId ? `https://i.ytimg.com/vi/${currentTrack.videoId}/hqdefault.jpg` : ''),
+            image: currentTrack.thumbnailUrl || (currentTrack.videoId ? `https://i.ytimg.com/vi/${currentTrack.videoId}/hqdefault.jpg` : ''),
+            isSynthetic: true,
+            isBandProfile: true
+          };
+          setMatchedBandProfile(fallbackProf);
+
+          try {
+            const localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
+            const isFollowed = Boolean(
+              localFollows[fallbackProf.id] ||
+              localFollows[cleanQuery]
+            );
+            setIsFollowingMatched(isFollowed);
+          } catch (_) {}
         }
       } catch (err) {
-        if (active) setMatchedBandProfile(null);
+        if (active) {
+          const rawBandName = searchArtistName.trim();
+          const fallbackProf = {
+            id: `artist-${cleanQuery.replace(/[^a-z0-9]/g, '-')}`,
+            raw_id: cleanQuery,
+            name: rawBandName,
+            role: 'Band',
+            category: 'bands',
+            genre: RADIO_PLAYLISTS[selectedRadioGenre]?.name || 'Scene Radio',
+            desc: `${rawBandName} • Featured Artist on Nexus Core Scene Radio`,
+            avatar: currentTrack.thumbnailUrl || (currentTrack.videoId ? `https://i.ytimg.com/vi/${currentTrack.videoId}/hqdefault.jpg` : ''),
+            image: currentTrack.thumbnailUrl || (currentTrack.videoId ? `https://i.ytimg.com/vi/${currentTrack.videoId}/hqdefault.jpg` : ''),
+            isSynthetic: true,
+            isBandProfile: true
+          };
+          setMatchedBandProfile(fallbackProf);
+        }
       }
     };
 
@@ -270,7 +485,9 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     return () => {
       active = false;
     };
-  }, [currentVideoIndex, playlistVideos]);
+  }, [currentVideoIndex, playlistVideos, selectedRadioGenre]);
+
+  const [showFollowBandPopup, setShowFollowBandPopup] = useState<boolean>(false);
 
   // Toggle follow handler for matched app band
   const handleToggleFollowMatched = () => {
@@ -1327,7 +1544,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                         onClick={() => handleSelectGenre(genreKey)}
                         className={`px-3.5 py-2 sm:py-2.5 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider font-mono shrink-0 transition-all border cursor-pointer min-h-[38px] sm:min-h-[42px] flex items-center justify-center gap-1.5 ${
                           isActive
-                            ? 'bg-rose-600 text-white border-rose-400 shadow-lg shadow-rose-950/80 scale-[1.03] animate-pulse ring-2 ring-rose-500/60'
+                            ? `${theme.primaryBg} ${theme.glow} scale-[1.03] animate-pulse ring-2 ${theme.ring}`
                             : 'bg-zinc-900/90 text-zinc-400 hover:text-zinc-200 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-850 active:scale-95'
                         }`}
                       >
@@ -1335,7 +1552,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                           <span className="w-2 h-2 rounded-full bg-white animate-ping shrink-0" />
                         )}
                         {RADIO_PLAYLISTS[genreKey].name.split(' ').map((word, wIdx) => (
-                          <span key={`radio-word-${genreKey}-${wIdx}-${word}`} className={wIdx > 0 ? 'text-rose-200 ml-0.5' : ''}>{word} </span>
+                          <span key={`radio-word-${genreKey}-${wIdx}-${word}`} className={wIdx > 0 ? `${theme.textBright} ml-0.5` : ''}>{word} </span>
                         ))}
                       </button>
                     );
@@ -1359,7 +1576,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                   {/* Title & Artist Display */}
                   <div className="flex items-center gap-3">
                     {/* Disc / Thumbnail */}
-                    <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-black overflow-hidden border border-zinc-800 shrink-0 shadow-md group-hover:border-rose-500/40 transition-colors">
+                    <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-black overflow-hidden border border-zinc-800 shrink-0 shadow-md group-hover:border-zinc-700 transition-colors">
                       {playlistVideos[currentVideoIndex]?.thumbnailUrl ? (
                         <img
                           referrerPolicy="no-referrer"
@@ -1368,13 +1585,13 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full bg-zinc-900 flex items-center justify-center text-rose-500">
+                        <div className={`w-full h-full bg-zinc-900 flex items-center justify-center ${theme.text}`}>
                           <Radio className="w-6 h-6 animate-pulse" />
                         </div>
                       )}
                       {sceneRadioPlaying && (
                         <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] flex items-center justify-center">
-                          <div className="w-3.5 h-3.5 rounded-full bg-rose-500 animate-ping" />
+                          <div className={`w-3.5 h-3.5 rounded-full animate-ping ${theme.primaryBg}`} />
                         </div>
                       )}
                     </div>
@@ -1399,7 +1616,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-[10px] sm:text-xs text-rose-400/90 truncate font-mono">
+                        <span className={`text-[10px] sm:text-xs truncate font-mono ${theme.text}`}>
                           {playlistVideos[currentVideoIndex]?.author || 'Unknown Channel'}
                         </span>
                         {matchedBandProfile && (
@@ -1412,10 +1629,10 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                                 }));
                                 triggerNotification?.(`👤 Opening ${matchedBandProfile.name}'s Profile...`);
                               }}
-                              className="px-2 py-0.5 rounded-full bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-300 text-[8px] font-mono font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors"
+                              className={`px-2 py-0.5 rounded-full border text-[8px] font-mono font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors ${theme.subtleBg}`}
                               title={`Open ${matchedBandProfile.name}'s App Profile`}
                             >
-                              <User className="w-2.5 h-2.5 text-rose-400" />
+                              <User className={`w-2.5 h-2.5 ${theme.text}`} />
                               <span className="truncate max-w-[90px]">{matchedBandProfile.name}</span>
                             </button>
                             <button
@@ -1426,7 +1643,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                               className={`px-2 py-0.5 rounded-full text-[8px] font-mono font-black uppercase tracking-wider transition-all border flex items-center gap-1 cursor-pointer active:scale-95 shadow-sm ${
                                 isFollowingMatched
                                   ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/60'
-                                  : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-400 shadow-rose-950/60 animate-pulse'
+                                  : `${theme.primaryBg} animate-pulse`
                               }`}
                               title={isFollowingMatched ? `Following ${matchedBandProfile.name}` : `Follow ${matchedBandProfile.name} on Nexus`}
                             >
@@ -1460,7 +1677,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                         className="p-1.5 sm:p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer transition-colors"
                         title="Share Track to Community Feed"
                       >
-                        <Share2 className="w-4 h-4 text-rose-400" />
+                        <Share2 className={`w-4 h-4 ${theme.text}`} />
                       </button>
                       <button
                         onClick={() => {
@@ -1472,12 +1689,12 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                         disabled={playlistVideos.length === 0}
                         className={`p-1.5 sm:p-2 rounded-lg border transition-all cursor-pointer ${
                           likedTrackIds.has(playlistVideos[currentVideoIndex]?.videoId)
-                            ? 'bg-rose-950/80 border-rose-500/50 text-rose-400 scale-105 shadow-sm shadow-rose-950'
+                            ? `${theme.subtleBg} ${theme.text} scale-105 shadow-sm`
                             : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'
                         }`}
                         title={likedTrackIds.has(playlistVideos[currentVideoIndex]?.videoId) ? "Unlike Song" : "Favorite Song"}
                       >
-                        <Heart className={`w-4 h-4 ${likedTrackIds.has(playlistVideos[currentVideoIndex]?.videoId) ? 'fill-rose-500 text-rose-500' : ''}`} />
+                        <Heart className={`w-4 h-4 ${likedTrackIds.has(playlistVideos[currentVideoIndex]?.videoId) ? `fill-current ${theme.text}` : ''}`} />
                       </button>
                       {playlistVideos[currentVideoIndex]?.videoId && (
                         <a
@@ -1487,7 +1704,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                           className="p-1.5 sm:p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer transition-colors flex items-center justify-center"
                           title="Open directly on YouTube (Bypass Age Gate)"
                         >
-                          <ExternalLink className="w-4 h-4 text-rose-400" />
+                          <ExternalLink className={`w-4 h-4 ${theme.text}`} />
                         </a>
                       )}
                       <button
@@ -1512,7 +1729,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                           href={`https://www.youtube.com/watch?v=${playlistVideos[currentVideoIndex].videoId}&list=${RADIO_PLAYLISTS[selectedRadioGenre]?.playlistId || ''}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-black text-[9.5px] uppercase tracking-wider flex items-center gap-1 shrink-0 transition-all shadow-md shadow-rose-950 cursor-pointer"
+                          className={`px-2.5 py-1 rounded font-black text-[9.5px] uppercase tracking-wider flex items-center gap-1 shrink-0 transition-all shadow-md cursor-pointer ${theme.primaryBg}`}
                           title="Bypass Age Limit - Play directly on YouTube"
                         >
                           <span>Open YouTube</span>
@@ -1523,7 +1740,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                   ) : (
                     <div className="flex flex-col gap-1 w-full pt-1">
                       <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 px-0.5">
-                        <span className="text-rose-400 font-bold">{formatTime(currentTime)}</span>
+                        <span className={`${theme.text} font-bold`}>{formatTime(currentTime)}</span>
                         <span className="text-zinc-500 font-medium">{formatTime(duration)}</span>
                       </div>
                       <div className="relative w-full flex items-center h-3 group cursor-pointer">
@@ -1538,9 +1755,9 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                           onTouchStart={() => setIsScrubbing(true)}
                           onTouchEnd={() => setIsScrubbing(false)}
                           onChange={handleSeek}
-                          className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-rose-500 focus:outline-none transition-all hover:h-2"
+                          className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer focus:outline-none transition-all hover:h-2"
                           style={{
-                            background: `linear-gradient(to right, #e11d48 0%, #e11d48 ${
+                            background: `linear-gradient(to right, ${theme.accentHex} 0%, ${theme.accentHex} ${
                               duration > 0 ? (currentTime / duration) * 100 : 0
                             }%, #27272a ${
                               duration > 0 ? (currentTime / duration) * 100 : 0
@@ -1558,12 +1775,12 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                       onClick={() => setShowVideo(!showVideo)}
                       className={`p-1.5 px-2.5 rounded-lg border text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                         showVideo
-                          ? 'bg-rose-950/80 border-rose-500/50 text-rose-300'
+                          ? `${theme.subtleBg}`
                           : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
                       }`}
                       title="Toggle Video Embed View"
                     >
-                      <Video className="w-3.5 h-3.5 text-rose-400" />
+                      <Video className={`w-3.5 h-3.5 ${theme.text}`} />
                       <span>{showVideo ? 'Hide Clip' : 'View Clip'}</span>
                     </button>
 
@@ -1572,7 +1789,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                       <button
                         onClick={toggleShuffleMode}
                         className={`p-1.5 rounded transition-colors cursor-pointer ${
-                          !userSelectedTrack && isShuffle ? 'text-rose-400 bg-rose-950/50 border border-rose-500/30' : 'text-zinc-500 hover:text-zinc-300'
+                          !userSelectedTrack && isShuffle ? `${theme.text} ${theme.subtleBg}` : 'text-zinc-500 hover:text-zinc-300'
                         }`}
                         title={!userSelectedTrack && isShuffle ? "Random Radio Active (Click for Sequential)" : "Sequential / Locked Track (Click for Random Radio)"}
                       >
@@ -1589,21 +1806,13 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                       <button
                         onClick={togglePlayPause}
                         disabled={playlistVideos.length === 0}
-                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95 cursor-pointer disabled:opacity-50 ${
-                          isBandWorkspace
-                            ? 'bg-[#39ff14] hover:bg-[#28d00d] text-black shadow-lg shadow-[#39ff14]/30'
-                            : portalRole === 'promoter'
-                            ? 'bg-yellow-400 hover:bg-yellow-300 text-black shadow-lg shadow-yellow-500/30'
-                            : portalRole === 'fan_only'
-                            ? 'bg-cyan-400 hover:bg-cyan-300 text-black shadow-lg shadow-cyan-500/30'
-                            : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/60'
-                        }`}
+                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95 cursor-pointer disabled:opacity-50 ${theme.playButton}`}
                         title={sceneRadioPlaying ? "Pause" : "Play"}
                       >
                         {sceneRadioPlaying ? (
-                          <Pause className={`w-4 h-4 ${isBandWorkspace || portalRole === 'promoter' || portalRole === 'fan_only' ? 'fill-black text-black' : 'fill-white text-white'}`} />
+                          <Pause className={`w-4 h-4 ${theme.playIcon}`} />
                         ) : (
-                          <Play className={`w-4 h-4 ml-0.5 ${isBandWorkspace || portalRole === 'promoter' || portalRole === 'fan_only' ? 'fill-black text-black' : 'fill-white text-white'}`} />
+                          <Play className={`w-4 h-4 ml-0.5 ${theme.playIcon}`} />
                         )}
                       </button>
                       <button
@@ -1628,28 +1837,28 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                   {/* Playlist Search/Header */}
                   <div className="px-3 py-2 border-b border-zinc-900 flex items-center justify-between bg-zinc-950 shrink-0">
                     <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                      <Music className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                      <Music className={`w-3.5 h-3.5 ${theme.text} shrink-0`} />
                       <span className="text-[9px] font-black uppercase tracking-wider text-zinc-300 font-mono shrink-0">PLAYLIST QUEUE</span>
                       <a
                         href={`https://www.youtube.com/watch?v=${playlistVideos[currentVideoIndex]?.videoId || 'JCN8qkWVu1w'}&list=${RADIO_PLAYLISTS[selectedRadioGenre]?.playlistId || ''}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="px-1.5 py-0.5 rounded text-[8px] font-mono font-bold flex items-center gap-1 border bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-rose-300 hover:border-rose-500/40 transition-all cursor-pointer shrink-0"
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold flex items-center gap-1 border transition-all cursor-pointer shrink-0 ${theme.subtleBg}`}
                         title={`Open ${RADIO_PLAYLISTS[selectedRadioGenre].name} playlist on YouTube`}
                       >
-                        <ExternalLink className="w-2.5 h-2.5 text-rose-400" />
+                        <ExternalLink className={`w-2.5 h-2.5 ${theme.text}`} />
                         <span>OPEN ON YOUTUBE</span>
                       </a>
                       <button
                         onClick={toggleShuffleMode}
                         className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold flex items-center gap-1 border transition-all cursor-pointer shrink-0 ${
                           !userSelectedTrack && isShuffle
-                            ? 'bg-rose-950/80 text-rose-300 border-rose-500/40'
+                            ? `${theme.subtleBg}`
                             : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200'
                         }`}
                         title={!userSelectedTrack && isShuffle ? "Endless Random Radio Mode Active. Click to switch to sequential mode." : "Track Locked. Click to switch to endless random mode."}
                       >
-                        <Sparkles className="w-2.5 h-2.5 text-rose-400" />
+                        <Sparkles className={`w-2.5 h-2.5 ${theme.text}`} />
                         <span>{!userSelectedTrack && isShuffle ? 'RANDOM RADIO' : 'LOCKED TRACK'}</span>
                       </button>
                     </div>
@@ -1660,7 +1869,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                         placeholder="Search songs..."
                         value={searchPlaylistQuery}
                         onChange={(e) => setSearchPlaylistQuery(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-0.5 text-[9.5px] text-zinc-300 focus:outline-none focus:border-rose-500/50 font-mono"
+                        className={`w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-0.5 text-[9.5px] text-zinc-300 focus:outline-none focus:${theme.border} font-mono`}
                       />
                     </div>
                   </div>
@@ -1669,7 +1878,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                   <div className="flex-grow overflow-y-auto min-h-0 p-2 space-y-1 custom-scrollbar max-h-[180px] sm:max-h-[220px]">
                     {isLoadingPlaylist ? (
                       <div className="flex flex-col items-center justify-center py-6 gap-2 text-zinc-500 font-mono text-[9.5px]">
-                        <RefreshCw className="w-4 h-4 animate-spin text-rose-500" />
+                        <RefreshCw className={`w-4 h-4 animate-spin ${theme.text}`} />
                         <span>Loading scene tracks...</span>
                       </div>
                     ) : playlistVideos.length === 0 ? (
@@ -1698,7 +1907,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                               }}
                               className={`w-full flex items-center gap-2 p-1.5 rounded-lg text-left transition-all cursor-pointer border ${
                                 isCurrent
-                                  ? 'bg-rose-950/40 border-rose-500/30 text-rose-200'
+                                  ? `${theme.subtleBg}`
                                   : 'bg-zinc-900/30 hover:bg-zinc-900/80 border-transparent text-zinc-400 hover:text-zinc-200'
                               }`}
                             >
@@ -1706,9 +1915,9 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                               <div className="w-4 text-center shrink-0">
                                 {isCurrent && sceneRadioPlaying ? (
                                   <span className="flex items-center justify-center gap-0.5">
-                                    <span className="w-0.5 h-2.5 bg-rose-500 animate-[bounce_0.6s_infinite]" />
-                                    <span className="w-0.5 h-3 bg-rose-400 animate-[bounce_0.8s_infinite_0.1s]" />
-                                    <span className="w-0.5 h-1.5 bg-rose-500 animate-[bounce_0.5s_infinite_0.2s]" />
+                                    <span className={`w-0.5 h-2.5 ${theme.primaryBg} animate-[bounce_0.6s_infinite]`} />
+                                    <span className={`w-0.5 h-3 ${theme.primaryBg} animate-[bounce_0.8s_infinite_0.1s]`} />
+                                    <span className={`w-0.5 h-1.5 ${theme.primaryBg} animate-[bounce_0.5s_infinite_0.2s]`} />
                                   </span>
                                 ) : (
                                   <span className="text-[9px] font-mono font-bold text-zinc-600">
@@ -1745,7 +1954,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                                     e.stopPropagation();
                                     handleShareTrackPost(video);
                                   }}
-                                  className="p-1 rounded text-zinc-600 hover:text-rose-400 transition-colors"
+                                  className={`p-1 rounded text-zinc-600 hover:${theme.text} transition-colors`}
                                   title="Share track as post"
                                 >
                                   <Share2 className="w-3.5 h-3.5" />
@@ -1756,11 +1965,11 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                                     toggleLikeTrack(video.videoId, video.title);
                                   }}
                                   className={`p-1 rounded transition-colors ${
-                                    likedTrackIds.has(video.videoId) ? 'text-rose-500 scale-110' : 'text-zinc-600 hover:text-zinc-400'
+                                    likedTrackIds.has(video.videoId) ? `${theme.text} scale-110` : 'text-zinc-600 hover:text-zinc-400'
                                   }`}
                                   title={likedTrackIds.has(video.videoId) ? "Unlike song" : "Favorite song"}
                                 >
-                                  <Heart className={`w-3.5 h-3.5 ${likedTrackIds.has(video.videoId) ? 'fill-rose-500 text-rose-500' : ''}`} />
+                                  <Heart className={`w-3.5 h-3.5 ${likedTrackIds.has(video.videoId) ? `fill-current ${theme.text}` : ''}`} />
                                 </button>
                               </div>
                             </div>
@@ -1778,15 +1987,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
             {/* Live Progress Bar on Top Border of Docked Footer */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-zinc-900/90 overflow-hidden">
               <div
-                className={`h-full transition-all duration-300 ${
-                  isBandWorkspace
-                    ? 'bg-gradient-to-r from-[#39ff14] via-[#00ffcc] to-emerald-400'
-                    : portalRole === 'promoter'
-                    ? 'bg-gradient-to-r from-yellow-500 via-amber-400 to-yellow-300'
-                    : portalRole === 'fan_only'
-                    ? 'bg-gradient-to-r from-cyan-500 via-sky-400 to-blue-400'
-                    : 'bg-gradient-to-r from-rose-600 via-rose-500 to-rose-400'
-                }`}
+                className={`h-full transition-all duration-300 bg-gradient-to-r ${theme.progressFromTo}`}
                 style={{
                   width: duration > 0 ? `${Math.min(100, Math.max(0, (currentTime / duration) * 100))}%` : (sceneRadioPlaying ? '100%' : '0%')
                 }}
@@ -1800,7 +2001,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
               title="Click to toggle Queue & Channels"
             >
               {/* Currently Playing Track Artwork Thumbnail */}
-              <div className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden shadow-sm group-hover:border-rose-500/50 transition-colors">
+              <div className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden shadow-sm group-hover:border-zinc-700 transition-colors">
                 {(() => {
                   const currentTrack = playlistVideos[currentVideoIndex];
                   const thumb = currentTrack?.thumbnailUrl || (currentTrack?.videoId ? `https://i.ytimg.com/vi/${currentTrack.videoId}/hqdefault.jpg` : null);
@@ -1815,7 +2016,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                     );
                   }
                   return (
-                    <Disc className={`w-4 h-4 ${isBandWorkspace ? 'text-[#39ff14]' : portalRole === 'promoter' ? 'text-yellow-400' : portalRole === 'fan_only' ? 'text-cyan-400' : 'text-rose-500'} ${sceneRadioPlaying ? 'animate-spin' : ''}`} />
+                    <Disc className={`w-4 h-4 ${theme.text} ${sceneRadioPlaying ? 'animate-spin' : ''}`} />
                   );
                 })()}
               </div>
@@ -1823,12 +2024,8 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
               {/* Title & Channel Marquee */}
               <div className="min-w-0 flex flex-col justify-center">
                 <div className="flex items-center gap-1.5">
-                  <span className={`w-1.5 h-1.5 rounded-full animate-ping shrink-0 ${
-                    isBandWorkspace ? 'bg-[#39ff14]' : portalRole === 'promoter' ? 'bg-yellow-400' : portalRole === 'fan_only' ? 'bg-cyan-400' : 'bg-rose-500'
-                  }`} />
-                  <span className={`text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-wider font-mono truncate ${
-                    isBandWorkspace ? 'text-[#39ff14]' : portalRole === 'promoter' ? 'text-yellow-400' : portalRole === 'fan_only' ? 'text-cyan-400' : 'text-rose-400'
-                  }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full animate-ping shrink-0 ${theme.text}`} />
+                  <span className={`text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-wider font-mono truncate ${theme.text}`}>
                     SCENE RADIO • {RADIO_PLAYLISTS[selectedRadioGenre].name} {duration > 0 && `[${formatTime(currentTime)} / ${formatTime(duration)}]`}
                   </span>
                 </div>
@@ -1839,50 +2036,6 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                 </div>
               </div>
             </div>
-
-            {/* Matched App Band Follow Badge (If band is registered in app) */}
-            {matchedBandProfile && (
-              <div className="hidden sm:flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    window.dispatchEvent(new CustomEvent('nexus_open_public_profile', {
-                      detail: { profile: matchedBandProfile }
-                    }));
-                    triggerNotification?.(`👤 Opening ${matchedBandProfile.name}'s Profile...`);
-                  }}
-                  className="px-2 py-0.5 rounded-full bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-300 text-[8px] font-mono font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
-                  title={`Open ${matchedBandProfile.name}'s App Profile`}
-                >
-                  <User className="w-2.5 h-2.5 text-rose-400" />
-                  <span className="truncate max-w-[80px]">{matchedBandProfile.name}</span>
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggleFollowMatched();
-                  }}
-                  className={`px-2 py-0.5 rounded-full text-[8px] font-mono font-black uppercase tracking-wider transition-all border flex items-center gap-1 cursor-pointer active:scale-95 shadow-sm ${
-                    isFollowingMatched
-                      ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/60'
-                      : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-400 shadow-rose-950/60 animate-pulse'
-                  }`}
-                  title={isFollowingMatched ? `Following ${matchedBandProfile.name}` : `Follow ${matchedBandProfile.name} on Nexus`}
-                >
-                  {isFollowingMatched ? (
-                    <>
-                      <Check className="w-2.5 h-2.5 text-emerald-400" />
-                      <span>Following</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-2.5 h-2.5 text-white" />
-                      <span>+ Follow</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
 
             {/* Center Section: Quick Channel Selector (Hidden on mobile, visible on lg+) */}
             <div className="hidden lg:flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 max-w-[35%]">
@@ -1897,7 +2050,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                     }}
                     className={`px-2.5 py-1 rounded-md text-[8.5px] font-black uppercase tracking-wider font-mono shrink-0 transition-all border cursor-pointer flex items-center gap-1.5 ${
                       isActive
-                        ? 'bg-rose-600/90 text-white border-rose-400 shadow-md shadow-rose-950/60 animate-pulse ring-1 ring-rose-400/80'
+                        ? `${theme.primaryBg} animate-pulse ring-1 ${theme.ring}`
                         : 'bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border-zinc-800'
                     }`}
                   >
@@ -1939,21 +2092,13 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                     e.stopPropagation();
                     togglePlayPause();
                   }}
-                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all active:scale-95 cursor-pointer ${
-                    isBandWorkspace
-                      ? 'bg-[#39ff14] hover:bg-[#28d00d] text-black shadow-md shadow-[#39ff14]/30'
-                      : portalRole === 'promoter'
-                      ? 'bg-yellow-400 hover:bg-yellow-300 text-black shadow-md shadow-yellow-500/30'
-                      : portalRole === 'fan_only'
-                      ? 'bg-cyan-400 hover:bg-cyan-300 text-black shadow-md shadow-cyan-500/30'
-                      : 'bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-950/60'
-                  }`}
+                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all active:scale-95 cursor-pointer ${theme.playButton}`}
                   title={sceneRadioPlaying ? "Pause" : "Play"}
                 >
                   {sceneRadioPlaying ? (
-                    <Pause className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isBandWorkspace || portalRole === 'promoter' || portalRole === 'fan_only' ? 'fill-black text-black' : 'fill-white text-white'}`} />
+                    <Pause className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${theme.playIcon}`} />
                   ) : (
-                    <Play className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5 ${isBandWorkspace || portalRole === 'promoter' || portalRole === 'fan_only' ? 'fill-black text-black' : 'fill-white text-white'}`} />
+                    <Play className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5 ${theme.playIcon}`} />
                   )}
                 </button>
               </FirstTimeTooltip>
@@ -1982,10 +2127,10 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                     }
                   }}
                   disabled={playlistVideos.length === 0}
-                  className="p-1 sm:p-1.5 text-zinc-500 hover:text-rose-400 disabled:opacity-30 cursor-pointer transition-colors"
+                  className={`p-1 sm:p-1.5 text-zinc-500 hover:${theme.text} disabled:opacity-30 cursor-pointer transition-colors`}
                   title="Share Track as Feed Post"
                 >
-                  <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400" />
+                  <Share2 className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${theme.text}`} />
                 </button>
               )}
 
@@ -2001,13 +2146,35 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                 disabled={playlistVideos.length === 0}
                 className={`p-1 sm:p-1.5 transition-colors cursor-pointer ${
                   likedTrackIds.has(playlistVideos[currentVideoIndex]?.videoId)
-                    ? 'text-rose-500 scale-110'
+                    ? `${theme.text} scale-110`
                     : 'text-zinc-500 hover:text-zinc-300'
                 }`}
                 title={likedTrackIds.has(playlistVideos[currentVideoIndex]?.videoId) ? "Unlike Track" : "Favorite Track"}
               >
-                <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${likedTrackIds.has(playlistVideos[currentVideoIndex]?.videoId) ? 'fill-rose-500 text-rose-500' : ''}`} />
+                <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${likedTrackIds.has(playlistVideos[currentVideoIndex]?.videoId) ? `fill-current ${theme.text}` : ''}`} />
               </button>
+
+              {/* Discreet Follow Band Button (Opens Follow Modal) */}
+              {matchedBandProfile && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowFollowBandPopup(true);
+                  }}
+                  className={`p-1 sm:p-1.5 rounded-lg transition-all cursor-pointer ${
+                    isFollowingMatched
+                      ? 'text-emerald-400 hover:text-emerald-300'
+                      : `text-zinc-500 hover:${theme.text}`
+                  }`}
+                  title={isFollowingMatched ? `Following ${matchedBandProfile.name} (Click for Band Profile)` : `Follow ${matchedBandProfile.name} on Nexus`}
+                >
+                  {isFollowingMatched ? (
+                    <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
+                  ) : (
+                    <UserPlus className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${theme.text}`} />
+                  )}
+                </button>
+              )}
 
               {/* Volume Slider Control */}
               <div className="hidden sm:flex items-center gap-1.5 ml-1 pl-2 border-l border-zinc-800">
@@ -2023,7 +2190,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                   className="text-zinc-400 hover:text-white cursor-pointer transition-colors"
                   title={radioVolume > 0 ? "Mute Volume" : "Unmute Volume"}
                 >
-                  {radioVolume > 0 ? <Volume2 className="w-3.5 h-3.5 text-zinc-400" /> : <VolumeX className="w-3.5 h-3.5 text-rose-500" />}
+                  {radioVolume > 0 ? <Volume2 className="w-3.5 h-3.5 text-zinc-400" /> : <VolumeX className={`w-3.5 h-3.5 ${theme.text}`} />}
                 </button>
                 <input
                   type="range"
@@ -2035,7 +2202,8 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                     handleRadioVolumeChange(e);
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="w-16 sm:w-20 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-rose-500"
+                  className="w-16 sm:w-20 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                  style={{ accentColor: theme.accentHex }}
                   title={`Volume: ${radioVolume}%`}
                 />
               </div>
@@ -2047,10 +2215,10 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="p-1 sm:p-1.5 text-zinc-500 hover:text-rose-400 transition-colors flex items-center justify-center cursor-pointer"
+                  className={`p-1 sm:p-1.5 text-zinc-500 hover:${theme.text} transition-colors flex items-center justify-center cursor-pointer`}
                   title="Open on YouTube (Bypass Age Gate)"
                 >
-                  <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400" />
+                  <ExternalLink className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${theme.text}`} />
                 </a>
               )}
 
@@ -2063,12 +2231,12 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                 }}
                 className={`p-1.5 rounded-lg border text-[10px] font-mono font-bold hidden sm:flex items-center gap-1 transition-all cursor-pointer ${
                   showVideo
-                    ? 'bg-rose-950/80 border-rose-500/50 text-rose-300'
+                    ? theme.activeBadge
                     : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
                 }`}
                 title="Toggle Clip Video View"
               >
-                <Video className="w-3.5 h-3.5 text-rose-400" />
+                <Video className={`w-3.5 h-3.5 ${theme.text}`} />
                 <span className="hidden md:inline">{showVideo ? 'Hide Clip' : 'Clip'}</span>
               </button>
 
@@ -2093,7 +2261,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                 }}
                 className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center border transition-colors cursor-pointer ${
                   isRadioExpanded
-                    ? 'bg-rose-950/80 border-rose-500/50 text-rose-300'
+                    ? theme.activeBadge
                     : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border-zinc-800'
                 }`}
                 title={isRadioExpanded ? "Collapse Queue" : "Expand Queue & Channels"}
@@ -2113,7 +2281,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                     setIsTucked(true);
                     setIsRadioExpanded(false);
                   }}
-                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-zinc-900 hover:bg-rose-950/80 text-zinc-500 hover:text-rose-300 flex items-center justify-center border border-zinc-800 hover:border-rose-800/50 transition-colors cursor-pointer"
+                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-white flex items-center justify-center border border-zinc-800 transition-colors cursor-pointer"
                   title="Tuck Scene Radio Player to Mini-Pill"
                 >
                   <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -2121,6 +2289,114 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
               )}
             </div>
           </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* Follow Band Interactive Popup Modal */}
+    <AnimatePresence>
+      {showFollowBandPopup && matchedBandProfile && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[10000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 select-none"
+          onClick={() => setShowFollowBandPopup(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0, y: 15 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 15 }}
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-md bg-zinc-950 border ${theme.border} rounded-2xl p-5 sm:p-6 ${theme.glow} flex flex-col gap-4 text-left relative overflow-hidden`}
+          >
+            {/* Ambient background glow */}
+            <div
+              className="absolute -top-16 -right-16 w-36 h-36 rounded-full blur-3xl pointer-events-none opacity-30"
+              style={{ backgroundColor: theme.accentHex }}
+            />
+
+            <div className="flex items-center justify-between border-b border-zinc-850 pb-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className={`w-4 h-4 ${theme.text} animate-pulse`} />
+                <span className={`text-xs font-black font-mono uppercase tracking-widest ${theme.text}`}>
+                  Follow Band on Nexus Core
+                </span>
+              </div>
+              <button
+                onClick={() => setShowFollowBandPopup(false)}
+                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-start gap-3.5 pt-1">
+              <img
+                src={matchedBandProfile.avatar || matchedBandProfile.image}
+                alt={matchedBandProfile.name}
+                className={`w-16 h-16 rounded-xl object-cover border-2 ${theme.border} shrink-0 shadow-lg`}
+              />
+              <div className="flex flex-col min-w-0">
+                <span className="text-base sm:text-lg font-black text-white font-mono truncate tracking-tight">
+                  {matchedBandProfile.name}
+                </span>
+                <span className={`text-xs ${theme.text} font-mono font-semibold`}>
+                  {matchedBandProfile.genre || 'Scene Radio Featured Artist'}
+                </span>
+                <p className="text-[11px] text-zinc-400 font-mono line-clamp-2 mt-1 leading-relaxed">
+                  {matchedBandProfile.desc || `Official band profile for ${matchedBandProfile.name} on the Nexus Core network.`}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2.5 pt-3 border-t border-zinc-850">
+              <button
+                onClick={() => {
+                  handleToggleFollowMatched();
+                }}
+                className={`w-full py-3 rounded-xl text-xs font-mono font-black uppercase tracking-wider transition-all border flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-lg ${
+                  isFollowingMatched
+                    ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/60 shadow-emerald-950/40'
+                    : `${theme.primaryBg} border-transparent animate-pulse`
+                }`}
+              >
+                {isFollowingMatched ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span>Following {matchedBandProfile.name} on Nexus</span>
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-4 h-4" />
+                    <span>+ Follow {matchedBandProfile.name} on Nexus</span>
+                  </>
+                )}
+              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    setShowFollowBandPopup(false);
+                    window.dispatchEvent(new CustomEvent('nexus_open_public_profile', {
+                      detail: { profile: matchedBandProfile }
+                    }));
+                    triggerNotification?.(`👤 Opening ${matchedBandProfile.name}'s Profile...`);
+                  }}
+                  className="py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-mono font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <User className={`w-3.5 h-3.5 ${theme.text}`} />
+                  <span>Public Profile</span>
+                </button>
+                <button
+                  onClick={() => setShowFollowBandPopup(false)}
+                  className="py-2.5 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-850 text-zinc-400 hover:text-zinc-200 text-xs font-mono font-bold flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </motion.div>
         </motion.div>
       )}
     </AnimatePresence>

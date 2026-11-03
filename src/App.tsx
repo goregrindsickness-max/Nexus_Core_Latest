@@ -2288,9 +2288,7 @@ export default function App() {
     if (activeSimulatedMember) {
       const lvl = activeSimulatedMember.clearanceLevel || 5;
       if (lvl !== activeClearanceLevel) {
-        queueMicrotask(() => {
-          setActiveClearanceLevel(lvl);
-        });
+        setActiveClearanceLevel(lvl);
       }
       localStorage.setItem('nexus_core_active_clearance_level', String(lvl));
       localStorage.setItem('nexus_core_simulated_member_id', activeSimulatedMember.id);
@@ -2826,16 +2824,16 @@ export default function App() {
 
 
   useEffect(() => {
-    if (userProfile && !reviewerName) {
-      setReviewerName(userProfile?.name);
+    if (userProfile && !reviewerName && userProfile?.name) {
+      setReviewerName(userProfile.name);
     }
-  }, [userProfile?.id]);
+  }, [userProfile?.name, reviewerName]);
 
   useEffect(() => {
-    if (activeBand && !reviewerGroup) {
-      setReviewerGroup(activeBand?.name);
+    if (activeBand && !reviewerGroup && activeBand?.name) {
+      setReviewerGroup(activeBand.name);
     }
-  }, [activeBand]);
+  }, [activeBand?.name, reviewerGroup]);
 
 
 

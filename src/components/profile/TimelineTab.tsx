@@ -1829,6 +1829,16 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     }
   }, [profileId, userId, profileName, selectedProfileId, selectedProfileName, isYou, selectedUserProfile?.id, selectedUserProfile?.name, selectedUserProfile?.full_name, selectedUserProfile?.avatar_url, selectedUserProfile?.avatar, selectedUserProfile?.role, selectedUserProfile?.active_workspace]);
 
+  const timelineProfileKey = [
+    profileId,
+    userId,
+    selectedProfileId,
+    selectedUserProfile?.id,
+    selectedUserProfile?.uuid,
+    selectedUserProfile?.band_id,
+    isYou ? 'you' : 'other'
+  ].filter(Boolean).join('_');
+
   useEffect(() => {
     fetchTimelinePosts();
 
@@ -1872,7 +1882,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         window.removeEventListener('nexus_poll_voted', handlePollVotedGlobal as EventListener);
       }
     };
-  }, [fetchTimelinePosts]);
+  }, [timelineProfileKey]);
 
   const handleImageError = (postId: string) => {
     setFailedImages((prev) => ({ ...prev, [postId]: true }));
