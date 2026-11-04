@@ -2636,8 +2636,8 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
 
   useEffect(() => {
     if (!selectedUserProfile || !supabase) {
-      setLiveProfileData(null);
-      setLiveProfileStats(null);
+      setLiveProfileData(prev => prev === null ? prev : null);
+      setLiveProfileStats(prev => prev === null ? prev : null);
       return;
     }
 
@@ -2763,13 +2763,28 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
           } else {
             setLiveProfileData(selectedUserProfile);
           }
-          setLiveProfileStats({
-            followers: followerCount,
-            following: followingCount,
-            shares: profileData?.reputation || profileData?.sharesCount || selectedUserProfile?.sharesCount || 0
+          setLiveProfileStats(prev => {
+            const nextShares = profileData?.reputation || profileData?.sharesCount || selectedUserProfile?.sharesCount || 0;
+            if (prev && prev.followers === followerCount && prev.following === followingCount && prev.shares === nextShares) {
+              return prev;
+            }
+            return {
+              followers: followerCount,
+              following: followingCount,
+              shares: nextShares
+            };
           });
           setSelectedUserProfile(prev => {
             if (!prev) return null;
+            if (
+              prev.isFollowed === isFollowedByMe &&
+              prev.followersCount === followerCount &&
+              prev.followingCount === followingCount &&
+              (prev as any).followers === followerCount &&
+              (prev as any).following === followingCount
+            ) {
+              return prev;
+            }
             return {
               ...prev,
               isFollowed: isFollowedByMe,
@@ -2815,10 +2830,18 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
             .eq('follower_id', currentUserId);
             
           if (active) {
-            setCurrentUserStats({
-              followers: followers || 0,
-              following: following || 0,
-              shares: userProfile?.sharesCount || 0
+            setCurrentUserStats(prev => {
+              const nextFollowers = followers || 0;
+              const nextFollowing = following || 0;
+              const nextShares = userProfile?.sharesCount || 0;
+              if (prev && prev.followers === nextFollowers && prev.following === nextFollowing && prev.shares === nextShares) {
+                return prev;
+              }
+              return {
+                followers: nextFollowers,
+                following: nextFollowing,
+                shares: nextShares
+              };
             });
           }
         }

@@ -4,7 +4,7 @@ import { X, MessageSquare, Send, Clock, Sparkles, Image as ImageIcon, ZoomIn, Zo
 import { OPEN_AVATAR_POPUP_EVENT, OpenAvatarPopupPayload } from '../../utils/avatarPopupEvents';
 import { getSupabase } from '../../supabase';
 import { usePinchZoom } from '../../hooks/usePinchZoom';
-import { resolveCommentAvatar, DEFAULT_PERSONAL_AVATAR } from '../../utils/bandProfileUtils';
+import { resolveCommentAvatar, DEFAULT_PERSONAL_AVATAR, MIGUEL_DEFAULT_AVATAR } from '../../utils/bandProfileUtils';
 
 interface Reaction {
   userId: string;
@@ -495,7 +495,7 @@ export const AvatarPopupOverlay: React.FC = () => {
                             referrerPolicy="no-referrer"
                             className="w-full h-full object-cover"
                             onError={(e) => {
-                              (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
+                              (e.target as HTMLElement).setAttribute('src', (comment.username || '').toLowerCase().includes('miguel') ? MIGUEL_DEFAULT_AVATAR : DEFAULT_PERSONAL_AVATAR);
                             }}
                           />
                         </div>

@@ -132,9 +132,25 @@ const InboxConversationRow: React.FC<{
         <div className="relative shrink-0">
           <div className="w-11 h-11 rounded-full bg-zinc-800 border border-zinc-700/80 flex items-center justify-center font-black text-xs text-rose-400 overflow-hidden shadow-md">
             {chat.avatarUrl ? (
-              <img src={chat.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+              <img 
+                src={chat.avatarUrl} 
+                alt={displayName} 
+                className="w-full h-full object-cover" 
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  const target = e.currentTarget as HTMLImageElement;
+                  target.style.display = 'none';
+                  const parent = target.parentElement;
+                  if (parent && !parent.querySelector('.fallback-initials')) {
+                    const span = document.createElement('span');
+                    span.className = 'text-xs font-mono font-bold text-rose-400 fallback-initials';
+                    span.textContent = (displayName || 'NC').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
+                    parent.appendChild(span);
+                  }
+                }}
+              />
             ) : (
-              displayName.substring(0, 2).toUpperCase()
+              (displayName || 'NC').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()
             )}
           </div>
           <span
@@ -1107,11 +1123,12 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
             ? (p.console_handle.startsWith('@') ? p.console_handle : `@${p.console_handle}`)
             : '';
           
+          const hasRealUpdate = Boolean(p.update_ticker || p.rosterTicker || p.top_song_title);
           const rawNote =
             p.update_ticker ||
             p.rosterTicker ||
             (p.bio ? (p.bio.length > 70 ? p.bio.substring(0, 67) + '…' : p.bio) : null) ||
-            (p.top_song_title ? `Listening to: ${p.top_song_title}` : (p.genre_tags?.length ? `Into ${p.genre_tags[0]}` : 'Connecting on Nexus'));
+            (p.top_song_title ? `Listening to: ${p.top_song_title}` : (p.genre_tags?.length ? `Into ${p.genre_tags[0]}` : null));
 
           return {
             id: p.id,
@@ -1122,6 +1139,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
             song: p.top_song_title || p.favoriteSong || '',
             accountType: (p.account_type || p.role || 'User').toUpperCase(),
             hasStory: Boolean(p.avatar_url || p.update_ticker || p.bio),
+            hasRealUpdate: hasRealUpdate,
             rawProfile: p,
           };
         });
@@ -1629,7 +1647,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
 
               return mergedList.map((story, sIdx) => {
                 const hasSong = Boolean(story.song);
-                const hasActiveUpdate = Boolean(story.note || story.song);
+                const hasActiveUpdate = Boolean((story.hasRealUpdate || story.note) && (story.hasRealUpdate || story.song));
                 return (
                   <div 
                     key={`signal-${sIdx}-${story.id || ''}-${story.profileName || ''}`} 
@@ -1670,13 +1688,13 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                     {/* Note / Thought Bubble above avatar - Compact fixed card matching reference */}
                     {story.note && (
                       <div 
-                        className="absolute -top-[52px] left-1/2 -translate-x-1/2 w-[68px] h-[52px] bg-zinc-900/95 text-zinc-100 border border-blue-500/70 rounded-2xl z-20 shadow-lg group-hover:scale-105 group-hover:border-blue-400 transition-all font-sans p-1.5 flex flex-col items-center justify-center text-center"
+                        className="absolute -top-[52px] left-1/2 -translate-x-1/2 w-[68px] h-[52px] bg-gradient-to-b from-zinc-900 via-zinc-900/90 to-zinc-950 text-zinc-100 rounded-2xl z-20 shadow-lg group-hover:scale-105 transition-all font-sans p-1.5 flex flex-col items-center justify-center text-center border border-t-white border-r-white/60 border-b-white/10 border-l-white/60 shadow-[0_0_12px_rgba(255,255,255,0.15)]"
                         title={story.note}
                       >
-                        <span className="text-[8.5px] font-semibold leading-snug line-clamp-3 text-center break-words w-full text-zinc-200">
+                        <span className="text-[8.5px] font-semibold leading-snug line-clamp-3 text-center break-words w-full text-zinc-100">
                           {story.note}
                         </span>
-                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-zinc-900" />
+                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-zinc-950" />
                       </div>
                     )}
 
@@ -1688,14 +1706,30 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                       <div className={`w-[68px] h-[68px] rounded-full bg-zinc-900 flex items-center justify-center overflow-hidden border-2 relative z-0 transition-all ${
                         hasActiveUpdate
                           ? 'border-blue-500 shadow-[0_0_16px_rgba(30,64,175,0.6)] animate-pulse' 
-                          : 'border-zinc-800 shadow-[0_0_8px_rgba(0,0,0,0.5)] group-hover:border-blue-600/70'
+                          : 'border-zinc-700/60 shadow-[0_0_6px_rgba(0,0,0,0.4)] group-hover:border-blue-600/70'
                       } p-[2px]`}>
                         <div className="w-full h-full rounded-full overflow-hidden bg-zinc-950 flex items-center justify-center">
                           {story.avatarUrl ? (
-                            <img src={story.avatarUrl} alt={story.profileName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <img 
+                              src={story.avatarUrl} 
+                              alt={story.profileName} 
+                              className="w-full h-full object-cover" 
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                const target = e.currentTarget as HTMLImageElement;
+                                target.style.display = 'none';
+                                const parent = target.parentElement;
+                                if (parent && !parent.querySelector('.fallback-initials')) {
+                                  const span = document.createElement('span');
+                                  span.className = 'text-sm font-bold text-blue-400 font-mono fallback-initials';
+                                  span.textContent = (story.profileName || 'NC').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
+                                  parent.appendChild(span);
+                                }
+                              }}
+                            />
                           ) : (
                             <span className="text-sm font-bold text-blue-400 font-mono">
-                              {story.profileName?.substring(0, 2).toUpperCase() || 'NC'}
+                              {(story.profileName || 'NC').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
                             </span>
                           )}
                         </div>
@@ -1897,8 +1931,8 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                       <div
                         className={`p-3.5 text-xs leading-relaxed max-w-[85%] sm:max-w-[75%] shadow-md font-sans transition-all ${
                           isSentByMe
-                            ? 'bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-rose-950/80 border border-[#00ffcc]/40 text-white shadow-[0_0_15px_rgba(0,255,204,0.12)] rounded-2xl rounded-tr-xs ml-auto'
-                            : 'bg-zinc-900/95 border border-zinc-800 text-zinc-100 rounded-2xl rounded-tl-xs mr-auto'
+                            ? 'bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-rose-950/80 text-white shadow-[0_0_15px_rgba(0,255,204,0.12)] rounded-2xl rounded-tr-xs ml-auto border border-t-white/40 border-r-white/20 border-b-white/5 border-l-white/20'
+                            : 'bg-gradient-to-r from-zinc-900 via-zinc-900/95 to-zinc-950 text-zinc-100 rounded-2xl rounded-tl-xs mr-auto border border-t-white/40 border-r-white/20 border-b-white/5 border-l-white/20'
                         }`}
                       >
                         {/* Specialized High-Contrast Card Enclosure for Rich Quick Signals */}

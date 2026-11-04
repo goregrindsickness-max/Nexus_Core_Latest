@@ -5014,40 +5014,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       initialBand={
         communityArchiveMatch ||
         (rawResolvedBandName && rawResolvedBandName !== 'Band' ? (communityBandManager.findMatch(rawResolvedBandName) || communityBandManager.findByName(rawResolvedBandName)) : null) ||
-        (() => {
-          const nameToUse = rawResolvedBandName || bData?.band_name || bData?.name || selectedUserProfile?.band_name || selectedUserProfile?.name || targetProfile?.band_name || targetProfile?.name;
-          if (!nameToUse || nameToUse === 'Band') return null;
-
-          const userBio = userProfile?.bio || userProfile?.profileBlurb;
-          const existingBio = (bData?.bio && !bData.bio.startsWith('Community-curated archive') && bData.bio !== userBio && bData.bio !== profileBlurb) ? bData.bio : '';
-
-          const freshRec: Partial<CommunityBandRecord> = {
-            id: bData?.id || generateUUID(),
-            name: nameToUse,
-            band_name: nameToUse,
-            genre: bData?.genre || 'Extreme Metal',
-            micro_genres: bData?.micro_genres || bData?.subgenres || ['Extreme Metal'],
-            subgenres: bData?.micro_genres || bData?.subgenres || ['Extreme Metal'],
-            bio: existingBio || 'Not written yet.',
-            avatar_url: rawResolvedBandLogo || bData?.avatar_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400',
-            logo_url: rawResolvedBandLogo || bData?.logo_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400',
-            cover_url: bData?.cover_url || bData?.banner_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=1200',
-            banner_url: bData?.cover_url || bData?.banner_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=1200',
-            city: bData?.city || '',
-            state_province: bData?.state_province || bData?.state || '',
-            country: bData?.country || 'USA',
-            record_label: bData?.record_label || bData?.label || '',
-            label: bData?.record_label || bData?.label || '',
-            spotify_url: bData?.spotify_url || '',
-            bandcamp_url: bData?.bandcamp_url || '',
-            metal_archives_url: bData?.metal_archives_url || '',
-            youtube_url: bData?.youtube_url || '',
-            lineup: bData?.lineup || [],
-            discography: bData?.discography || [],
-            curated_by: userProfile?.console_handle || userProfile?.handle || '@community_archivist'
-          };
-          return communityBandManager.upsertBand(freshRec);
-        })()
+        null
       }
       userProfile={userProfile}
       triggerNotification={triggerNotification}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 
 export interface UseSubscriptionTimerReturn {
   activePlan: string;
@@ -35,23 +35,24 @@ export function useSubscriptionTimer(): UseSubscriptionTimerReturn {
     return now;
   });
 
-  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-    }, 1000);
+    }, 5000);
     return () => clearInterval(timer);
   }, []);
 
   const getTrialCountdownStr = useCallback(() => {
+    const now = Date.now();
     if (activePlan === 'touring-pro' || activePlan === 'touring-pro-plus') {
       try {
         const isPromoGated = localStorage.getItem('nexus_core_promo_gated') === 'true';
         if (isPromoGated) {
           const yearInMs = 365 * 24 * 60 * 60 * 1000;
           const endTime = trialStartTime + yearInMs;
-          const timeLeft = Math.max(0, endTime - currentTime.getTime());
+          const timeLeft = Math.max(0, endTime - now);
           if (timeLeft <= 0) return "Expired (1 Year)";
 
           const days = Math.floor(timeLeft / (24 * 60 * 60 * 1000));
@@ -63,7 +64,7 @@ export function useSubscriptionTimer(): UseSubscriptionTimerReturn {
     }
     const trialDurationMs = 14 * 24 * 60 * 60 * 1000; // 14 days
     const endTime = trialStartTime + trialDurationMs;
-    const timeLeft = Math.max(0, endTime - currentTime.getTime());
+    const timeLeft = Math.max(0, endTime - now);
 
     if (timeLeft <= 0) {
       return "Expired";
@@ -75,9 +76,11 @@ export function useSubscriptionTimer(): UseSubscriptionTimerReturn {
     const seconds = Math.floor((timeLeft % (60 * 1000)) / 1000);
 
     return `${days}d ${hours}h ${minutes}m ${seconds}s`;
-  }, [activePlan, trialStartTime, currentTime]);
+  }, [activePlan, trialStartTime]);
 
-  const isTrialExpired = getTrialCountdownStr().startsWith("Expired");
+  const isTrialExpired = useMemo(() => {
+    return getTrialCountdownStr().startsWith("Expired");
+  }, [getTrialCountdownStr]);
 
   return {
     activePlan,

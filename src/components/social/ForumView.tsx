@@ -590,7 +590,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
     const cleanAuthor = authorName.replace('@', '').toLowerCase();
     if (myHandle && (cleanAuthor === myHandle || cleanAuthor.includes(myHandle))) return true;
     if (currentUserName && authorName.toLowerCase() === currentUserName.toLowerCase()) return true;
-    if (authorName.toLowerCase() === 'fan' || authorName.toLowerCase() === '@fan') return true;
+    if (cleanAuthor === 'fan' || cleanAuthor === '@fan' || cleanAuthor === 'scene member') return true;
     return false;
   };
 
@@ -1003,16 +1003,40 @@ export const ForumView: React.FC<ForumViewProps> = ({
       (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('/') || url.startsWith('blob:'));
 
     const myAvatar = profileAvatarUrl || userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar;
+    const cleanName = name.replace('@', '').toLowerCase().trim();
+
+    const initials = (name || 'Fan')
+      .replace(/@/g, '')
+      .split(/[\s_]+/)
+      .map((n: string) => n[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase() || 'FA';
 
     if ((isUserOwner(name) || name === userProfile?.name || name === profileHandle) && isValidImgUrl(myAvatar)) {
       return (
-        <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 border border-zinc-900/50">
-          <img src={myAvatar} className="w-full h-full object-cover" alt={name} />
+        <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 border border-zinc-900/50 bg-rose-950/60 flex items-center justify-center">
+          <img 
+            src={myAvatar} 
+            className="w-full h-full object-cover" 
+            alt={name} 
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              const target = e.currentTarget as HTMLImageElement;
+              target.style.display = 'none';
+              const parent = target.parentElement;
+              if (parent && !parent.querySelector('.fallback-initials')) {
+                const span = document.createElement('span');
+                span.className = 'text-[9px] font-black text-rose-400 font-mono fallback-initials';
+                span.textContent = initials;
+                parent.appendChild(span);
+              }
+            }}
+          />
         </div>
       );
     }
 
-    const cleanName = name.replace('@', '').toLowerCase().trim();
     const found =
       discoverProfiles.find((p) => {
         const pName = (p?.name || '').toLowerCase().trim();
@@ -1028,15 +1052,31 @@ export const ForumView: React.FC<ForumViewProps> = ({
     const foundAvatar = found?.avatar || found?.avatar_url || found?.profile_avatar;
     if (isValidImgUrl(foundAvatar)) {
       return (
-        <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 border border-zinc-900/50">
-          <img src={foundAvatar} className="w-full h-full object-cover" alt={name} />
+        <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 border border-zinc-900/50 bg-rose-950/60 flex items-center justify-center">
+          <img 
+            src={foundAvatar} 
+            className="w-full h-full object-cover" 
+            alt={name} 
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              const target = e.currentTarget as HTMLImageElement;
+              target.style.display = 'none';
+              const parent = target.parentElement;
+              if (parent && !parent.querySelector('.fallback-initials')) {
+                const span = document.createElement('span');
+                span.className = 'text-[9px] font-black text-rose-400 font-mono fallback-initials';
+                span.textContent = initials;
+                parent.appendChild(span);
+              }
+            }}
+          />
         </div>
       );
     }
 
     return (
       <div className="w-5 h-5 rounded-full bg-rose-950/60 border border-rose-900/40 text-[9px] font-black text-rose-400 flex items-center justify-center shrink-0">
-        {(cleanName || 'A').charAt(0).toUpperCase()}
+        {initials}
       </div>
     );
   };
@@ -1837,8 +1877,24 @@ export const ForumView: React.FC<ForumViewProps> = ({
                     <h3 className="text-lg font-black text-white leading-snug">{thread.title}</h3>
                     <div className="flex items-center gap-2">
                       {thread.authorAvatar && typeof thread.authorAvatar === 'string' && thread.authorAvatar.length > 5 && (thread.authorAvatar.startsWith('http') || thread.authorAvatar.startsWith('data:') || thread.authorAvatar.startsWith('/')) ? (
-                        <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 border border-zinc-900/50">
-                          <img src={thread.authorAvatar} alt={formatForumAuthor(thread.author)} className="w-full h-full object-cover" />
+                        <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 border border-zinc-900/50 bg-rose-950/60 flex items-center justify-center">
+                          <img 
+                            src={thread.authorAvatar} 
+                            alt={formatForumAuthor(thread.author)} 
+                            className="w-full h-full object-cover" 
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              const target = e.currentTarget as HTMLImageElement;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent && !parent.querySelector('.fallback-initials')) {
+                                const span = document.createElement('span');
+                                span.className = 'text-[9px] font-black text-rose-400 font-mono fallback-initials';
+                                span.textContent = (thread.author || 'Fan').replace(/@/g, '').split(/[\s_]+/).map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
+                                parent.appendChild(span);
+                              }
+                            }}
+                          />
                         </div>
                       ) : (
                         renderAvatarForName(thread.author)

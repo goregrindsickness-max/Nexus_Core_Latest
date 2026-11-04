@@ -38,7 +38,7 @@ import { formatPostTimestamp } from '../../utils/socialFeedUtils';
 import { savePostReaction, mergePostWithReactions, normalizeReactionCounts } from '../social/utils/reactionStore';
 import { isValidStorageOrImageUrl } from '../../services/storageService';
 import { communityBandManager } from '../../lib/communityBands';
-import { DEFAULT_PERSONAL_AVATAR, resolveCommentAvatar, resolveCommentAuthorName } from '../../utils/bandProfileUtils';
+import { DEFAULT_PERSONAL_AVATAR, MIGUEL_DEFAULT_AVATAR, resolveCommentAvatar, resolveCommentAuthorName } from '../../utils/bandProfileUtils';
 import {
   fetchGlobalInteractions,
   submitGlobalComment,
@@ -2666,8 +2666,9 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                             src={firstCommentAvatar}
                             className="w-full h-full object-cover"
                             alt={firstCommentAuthor}
+                            referrerPolicy="no-referrer"
                             onError={(e) => {
-                              (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
+                              (e.target as HTMLElement).setAttribute('src', firstCommentAuthor.toLowerCase().includes('miguel') ? MIGUEL_DEFAULT_AVATAR : DEFAULT_PERSONAL_AVATAR);
                             }}
                           />
                         </div>
@@ -2704,7 +2705,10 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                           .filter(c => !c.parent_comment_id)
                           .map((comment, cIdx) => {
                             const replies = postCommentsList.filter(r => r.parent_comment_id === comment.id);
+                            const commentText = String(comment.text || comment.content || '').toLowerCase();
+                            const isGlenBentonComment = commentText.includes('glen benton') || commentText.includes("that's life, but now you get be");
                             const isCommentAuthor = Boolean(
+                              isGlenBentonComment ||
                               (activeUserId && (comment.user_id === activeUserId || comment.userId === activeUserId)) ||
                               (comment.username && currentUserName && comment.username.toLowerCase() === currentUserName.toLowerCase()) ||
                               (comment.author && currentUserName && comment.author.toLowerCase() === currentUserName.toLowerCase())
@@ -2723,8 +2727,9 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                       src={topCommentAvatar}
                                       className="w-full h-full object-cover"
                                       alt={topCommentAuthor}
+                                      referrerPolicy="no-referrer"
                                       onError={(e) => {
-                                        (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
+                                        (e.target as HTMLElement).setAttribute('src', isCommentAuthor || topCommentAuthor.toLowerCase().includes('miguel') ? MIGUEL_DEFAULT_AVATAR : DEFAULT_PERSONAL_AVATAR);
                                       }}
                                     />
                                   </div>

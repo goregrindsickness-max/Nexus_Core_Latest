@@ -42,6 +42,7 @@ import {
   isUserForumThread,
   ForumHighlightThread,
 } from '../../services/forumHighlightService';
+import { MIGUEL_DEFAULT_AVATAR } from '../../utils/bandProfileUtils';
 
 export type {
   FeedComment,
@@ -585,8 +586,15 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
                     >
                       <ForumHighlightCard
                         thread={highlightToRender}
-                        currentUserName={userProfile?.name || currentUserName || 'You'}
-                        currentUserAvatar={userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || (userProfile as any)?.avatarUrl || ''}
+                        currentUserName={userProfile?.name || currentUserName || 'Miguel Goregrinder Medina'}
+                        currentUserAvatar={
+                          userProfile?.avatar_url ||
+                          userProfile?.avatar ||
+                          userProfile?.profile_avatar ||
+                          (userProfile as any)?.avatarUrl ||
+                          (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : '') ||
+                          MIGUEL_DEFAULT_AVATAR
+                        }
                         isUserPost={isUserForumThread(highlightToRender, userProfile, currentUserName, currentUserId)}
                         onOpenThread={(threadId) => {
                           if (onNavigateToForum) {

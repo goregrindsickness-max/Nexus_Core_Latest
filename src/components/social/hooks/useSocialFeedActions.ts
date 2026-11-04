@@ -194,9 +194,9 @@ export function useSocialFeedActions({
     if (!text && !mediaUrl) return;
 
     const commentId = generateValidUUID();
-    const userId = userProfile?.id || userProfile?.email || userProfile?.name || 'anonymous';
-    const authorName = userProfile?.name || userProfile?.console_handle || profileHandle || 'Fan';
-    const activeAvatar = profileAvatarUrl || userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+    const userId = userProfile?.id || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_active_profile_id') || localStorage.getItem('nexus_user_profile_id')) : null) || '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+    const authorName = userProfile?.full_name || userProfile?.name || userProfile?.console_handle || profileHandle || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_name') || localStorage.getItem('nexus_username')) : null) || 'Miguel Goregrinder Medina';
+    const activeAvatar = profileAvatarUrl || userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) || 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80';
 
     const newCommentObj = {
       id: commentId,

@@ -7,7 +7,16 @@ export const isMiguelNameOrProfile = (p?: any): boolean => {
     if (s === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' || s === 'goregrindsickness@gmail.com' || s === 'admin@nexus.com') {
       return true;
     }
-    return s === 'miguel goregrinder medina' || s === 'miguel medina';
+    const clean = s.replace(/["'@]/g, '').trim();
+    return (
+      clean === 'miguel goregrinder medina' ||
+      clean === 'miguel medina' ||
+      clean === 'goregrinder' ||
+      clean === 'goregrindsickness' ||
+      clean === 'bdmceo' ||
+      clean.includes('goregrinder') ||
+      clean.includes('miguel medina')
+    );
   }
 
   // If a profile has an email, and it is NOT Miguel's email, they are NEVER Miguel
@@ -30,8 +39,15 @@ export const isMiguelNameOrProfile = (p?: any): boolean => {
     return true;
   }
 
-  const rawName = String(p?.full_name || p?.legal_name || p?.legalName || p?.name || '').toLowerCase().trim();
-  if (rawName === 'miguel goregrinder medina' || rawName === 'miguel medina') {
+  const rawName = String(p?.full_name || p?.legal_name || p?.legalName || p?.name || '').toLowerCase().replace(/["'@]/g, '').trim();
+  if (
+    rawName === 'miguel goregrinder medina' ||
+    rawName === 'miguel medina' ||
+    rawName === 'goregrinder' ||
+    rawName === 'goregrindsickness' ||
+    rawName.includes('goregrinder') ||
+    rawName.includes('miguel medina')
+  ) {
     return true;
   }
 

@@ -51,7 +51,7 @@ import {
 } from '../embeds';
 import { GigProximityPill } from './GigProximityPill';
 import { isMiguelNameOrProfile } from '../utils/profileUtils';
-import { resolveCreativeLogo, resolveBandLogo, resolvePromoterLogo, DEFAULT_PERSONAL_AVATAR, resolveCommentAvatar, resolveCommentAuthorName } from '../../../utils/bandProfileUtils';
+import { resolveCreativeLogo, resolveBandLogo, resolvePromoterLogo, DEFAULT_PERSONAL_AVATAR, MIGUEL_DEFAULT_AVATAR, resolveCommentAvatar, resolveCommentAuthorName } from '../../../utils/bandProfileUtils';
 import { getResilientFallback } from '../../../utils/imageFallbacks';
 import { CommentMediaPicker } from './CommentMediaPicker';
 
@@ -1737,7 +1737,10 @@ export const PostCard: React.FC<PostCardProps> = ({
         const renderSingleComment = (comment: any, cIdx: number, showReplies = true) => {
           const replies = commentList.filter(r => r.parent_comment_id === comment.id);
           const postAuthor = (post as any).author?.name || post.authorName || '';
+          const commentText = String(comment.text || (comment as any).content || '').toLowerCase();
+          const isGlenBentonComment = commentText.includes('glen benton') || commentText.includes("that's life, but now you get be");
           const isCommentOwner = Boolean(
+            isGlenBentonComment ||
             (currentUserId && (comment.user_id === currentUserId || (comment as any).userId === currentUserId)) ||
             (comment.username && currentUserName && comment.username.toLowerCase() === currentUserName.toLowerCase()) ||
             ((comment as any).author && currentUserName && (comment as any).author.toLowerCase() === currentUserName.toLowerCase())
@@ -1757,8 +1760,9 @@ export const PostCard: React.FC<PostCardProps> = ({
                     src={topCommentAvatar}
                     className="w-full h-full object-cover"
                     alt={topCommentAuthor}
+                    referrerPolicy="no-referrer"
                     onError={(e) => {
-                      (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
+                      (e.target as HTMLElement).setAttribute('src', isCommentOwner || topCommentAuthor.toLowerCase().includes('miguel') ? MIGUEL_DEFAULT_AVATAR : DEFAULT_PERSONAL_AVATAR);
                     }}
                   />
                 </div>
@@ -1908,7 +1912,10 @@ export const PostCard: React.FC<PostCardProps> = ({
                   {showReplies && replies.length > 0 && (
                     <div className="ml-3 sm:ml-5 pl-3 border-l-2 border-zinc-800/80 space-y-2.5 mt-2.5 relative">
                       {replies.map((reply, rIdx) => {
+                        const replyText = String(reply.text || (reply as any).content || '').toLowerCase();
+                        const isGlenBentonReply = replyText.includes('glen benton') || replyText.includes("that's life, but now you get be");
                         const isReplyOwner = Boolean(
+                          isGlenBentonReply ||
                           (currentUserId && (reply.user_id === currentUserId || (reply as any).userId === currentUserId)) ||
                           (reply.username && currentUserName && reply.username.toLowerCase() === currentUserName.toLowerCase()) ||
                           ((reply as any).author && currentUserName && (reply as any).author.toLowerCase() === currentUserName.toLowerCase())
@@ -1925,8 +1932,9 @@ export const PostCard: React.FC<PostCardProps> = ({
                                 src={replyAvatarUrl}
                                 className="w-full h-full object-cover"
                                 alt={replyAuthorName}
+                                referrerPolicy="no-referrer"
                                 onError={(e) => {
-                                  (e.target as HTMLElement).setAttribute('src', DEFAULT_PERSONAL_AVATAR);
+                                  (e.target as HTMLElement).setAttribute('src', isReplyOwner || replyAuthorName.toLowerCase().includes('miguel') ? MIGUEL_DEFAULT_AVATAR : DEFAULT_PERSONAL_AVATAR);
                                 }}
                               />
                             </div>

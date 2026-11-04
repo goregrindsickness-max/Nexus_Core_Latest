@@ -606,9 +606,19 @@ export const resolveEffectiveCover = (portalRole: string, activeBand: any, userP
   return userProfile?.banner_url || userProfile?.cover_url || null;
 };
 
+export const MIGUEL_DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80';
+
 export const KNOWN_USER_AVATARS: Record<string, string> = {
-  'miguel goregrinder medina': DEFAULT_PERSONAL_AVATAR,
-  'miguel medina': DEFAULT_PERSONAL_AVATAR,
+  'miguel goregrinder medina': MIGUEL_DEFAULT_AVATAR,
+  'miguel "goregrinder" medina': MIGUEL_DEFAULT_AVATAR,
+  'miguel medina': MIGUEL_DEFAULT_AVATAR,
+  'miguel': MIGUEL_DEFAULT_AVATAR,
+  'goregrinder': MIGUEL_DEFAULT_AVATAR,
+  'goregrindsickness': MIGUEL_DEFAULT_AVATAR,
+  'bdmceo': MIGUEL_DEFAULT_AVATAR,
+  'scene member': MIGUEL_DEFAULT_AVATAR,
+  'fan': MIGUEL_DEFAULT_AVATAR,
+  'you': MIGUEL_DEFAULT_AVATAR,
   'tyler slamson': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
   'goregrindslayer': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
   'zachary blaster': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
@@ -644,29 +654,51 @@ export const resolveCommentAvatar = (
   currentUserId?: string,
   currentUserName?: string
 ): string => {
-  if (!comment) return DEFAULT_PERSONAL_AVATAR;
+  if (!comment) return MIGUEL_DEFAULT_AVATAR;
 
   const commentUsername = String(comment.username || comment.author || comment.author_name || comment.user_name || '').trim().toLowerCase();
   const commentUserId = String(comment.user_id || comment.userId || '').trim();
+  const commentText = String(comment.text || comment.content || '').toLowerCase();
 
-  // 1. Is this comment written by the current logged-in user or Miguel?
+  const isGlenBentonComment = commentText.includes('glen benton') || commentText.includes("that's life, but now you get be");
+
+  // 1. Is this comment written by the current logged-in user, Miguel, or confirmed user comment?
   const isCurrentUser = Boolean(
+    isGlenBentonComment ||
     (currentUserId && commentUserId && commentUserId === currentUserId) ||
-    (currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' && commentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
-    (currentUserName && commentUsername && commentUsername === currentUserName.toLowerCase()) ||
+    (currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
     (commentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
-    isMiguelNameOrProfile(commentUserId)
+    (userProfile?.id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
+    (userProfile?.email && userProfile.email.toLowerCase() === 'goregrindsickness@gmail.com') ||
+    (currentUserName && commentUsername && commentUsername === currentUserName.toLowerCase()) ||
+    commentUsername === 'miguel goregrinder medina' ||
+    commentUsername === 'miguel medina' ||
+    commentUsername === 'goregrinder' ||
+    isMiguelNameOrProfile(commentUserId) ||
+    isMiguelNameOrProfile(commentUsername)
   );
 
   if (isCurrentUser) {
-    const myLiveAvatar =
-      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) ||
-      (comment.avatar && typeof comment.avatar === 'string' && comment.avatar.startsWith('http') ? comment.avatar : null) ||
-      (comment.user_avatar && typeof comment.user_avatar === 'string' && comment.user_avatar.startsWith('http') ? comment.user_avatar : null);
+    const rawCommentAvatar = comment.avatar || comment.user_avatar || comment.userAvatar || comment.authorAvatar;
+    const isBadAvatar = !rawCommentAvatar ||
+      typeof rawCommentAvatar !== 'string' ||
+      rawCommentAvatar.includes('ui-avatars.com') ||
+      rawCommentAvatar.includes('photo-1534528741775-53994a69daeb') || // reject generic stock photo
+      rawCommentAvatar === '👤' ||
+      rawCommentAvatar.includes('undefined') ||
+      rawCommentAvatar.includes('null');
 
-    if (myLiveAvatar && typeof myLiveAvatar === 'string' && myLiveAvatar.trim() && myLiveAvatar !== '👤' && !myLiveAvatar.includes('ui-avatars.com')) {
+    const myLiveAvatar =
+      userProfile?.avatar_url ||
+      userProfile?.avatar ||
+      userProfile?.profile_avatar ||
+      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) ||
+      (!isBadAvatar ? rawCommentAvatar : null);
+
+    if (myLiveAvatar && typeof myLiveAvatar === 'string' && myLiveAvatar.trim() && myLiveAvatar !== '👤' && !myLiveAvatar.includes('ui-avatars.com') && !myLiveAvatar.includes('photo-1534528741775-53994a69daeb')) {
       return myLiveAvatar.trim();
     }
+    return MIGUEL_DEFAULT_AVATAR;
   }
 
   // 2. Is comment written by the profile/timeline owner being viewed?
@@ -675,7 +707,7 @@ export const resolveCommentAvatar = (
     (commentUsername && (commentUsername === String(userProfile.name).toLowerCase() || commentUsername === String(userProfile.username).toLowerCase()))
   )) {
     const viewedAvatar = userProfile.avatar_url || userProfile.avatar || userProfile.profile_avatar;
-    if (viewedAvatar && typeof viewedAvatar === 'string' && viewedAvatar.trim() && !viewedAvatar.includes('undefined')) {
+    if (viewedAvatar && typeof viewedAvatar === 'string' && viewedAvatar.trim() && !viewedAvatar.includes('undefined') && !viewedAvatar.includes('ui-avatars.com')) {
       return viewedAvatar.trim();
     }
   }
@@ -688,6 +720,8 @@ export const resolveCommentAvatar = (
     explicitAvatar.trim() &&
     !explicitAvatar.includes('undefined') &&
     !explicitAvatar.includes('null') &&
+    !explicitAvatar.includes('ui-avatars.com') &&
+    !explicitAvatar.includes('photo-1534528741775-53994a69daeb') &&
     (explicitAvatar.startsWith('http') || explicitAvatar.startsWith('data:') || explicitAvatar.startsWith('/'))
   ) {
     return explicitAvatar.trim();
@@ -716,26 +750,53 @@ export const resolveCommentAuthorName = (
 
   const rawUserId = String(comment.user_id || comment.userId || '').trim();
   const rawUsername = String(comment.username || comment.author || comment.author_name || comment.user_name || comment.full_name || comment.name || '').trim();
+  const commentText = String(comment.text || comment.content || '').toLowerCase();
 
-  // 1. Is this comment written by the current logged-in user or Miguel?
-  const isCurrentUser = Boolean(
+  const isGlenBentonComment = commentText.includes('glen benton') || commentText.includes("that's life, but now you get be");
+
+  const isOwnerMiguel = Boolean(
+    isGlenBentonComment ||
     (currentUserId && rawUserId && rawUserId === currentUserId) ||
-    (currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' && rawUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
+    (currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
     (rawUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
+    (userProfile?.id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
+    (userProfile?.email && userProfile.email.toLowerCase() === 'goregrindsickness@gmail.com') ||
     isMiguelNameOrProfile(rawUserId) ||
+    isMiguelNameOrProfile(rawUsername) ||
     (currentUserName && rawUsername && rawUsername.toLowerCase() === currentUserName.toLowerCase())
   );
 
-  if (isCurrentUser) {
-    const myLiveName =
-      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_name') || localStorage.getItem('nexus_username') || localStorage.getItem('nexus_full_name')) : null) ||
-      currentUserName ||
-      (rawUsername && !isUuidString(rawUsername) ? rawUsername : null);
+  const cleanUsernameLower = rawUsername.toLowerCase();
+  const isGenericPlaceholder = (
+    !rawUsername ||
+    cleanUsernameLower === 'scene member' ||
+    cleanUsernameLower === 'fan' ||
+    cleanUsernameLower === 'user' ||
+    cleanUsernameLower === 'anonymous' ||
+    cleanUsernameLower === 'guest' ||
+    cleanUsernameLower === 'you'
+  );
 
-    if (myLiveName && typeof myLiveName === 'string' && myLiveName.trim() && !isUuidString(myLiveName)) {
-      return myLiveName.trim();
+  if (isGlenBentonComment || (isOwnerMiguel && isGenericPlaceholder)) {
+    const liveName =
+      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_name') || localStorage.getItem('nexus_username') || localStorage.getItem('nexus_full_name')) : null) ||
+      userProfile?.full_name ||
+      userProfile?.name ||
+      currentUserName ||
+      'Miguel Goregrinder Medina';
+
+    if (liveName && typeof liveName === 'string' && liveName.trim() && !isUuidString(liveName)) {
+      return liveName.trim();
     }
     return 'Miguel Goregrinder Medina';
+  }
+
+  // 1. Is this comment written by the current logged-in user?
+  if (isOwnerMiguel) {
+    if (rawUsername && !isGenericPlaceholder && !isUuidString(rawUsername)) {
+      return rawUsername;
+    }
+    return userProfile?.full_name || userProfile?.name || currentUserName || 'Miguel Goregrinder Medina';
   }
 
   // 2. Is this comment written by the profile being viewed?
@@ -750,13 +811,13 @@ export const resolveCommentAuthorName = (
   }
 
   // 3. Explicit non-UUID username or author from the comment object itself
-  if (rawUsername && !isUuidString(rawUsername)) {
+  if (rawUsername && !isUuidString(rawUsername) && !isGenericPlaceholder) {
     return rawUsername;
   }
-  if (comment.author && typeof comment.author === 'string' && !isUuidString(comment.author)) {
+  if (comment.author && typeof comment.author === 'string' && !isUuidString(comment.author) && comment.author.toLowerCase() !== 'scene member') {
     return comment.author.trim();
   }
-  if (comment.author_name && typeof comment.author_name === 'string' && !isUuidString(comment.author_name)) {
+  if (comment.author_name && typeof comment.author_name === 'string' && !isUuidString(comment.author_name) && comment.author_name.toLowerCase() !== 'scene member') {
     return comment.author_name.trim();
   }
   if (comment.full_name && typeof comment.full_name === 'string' && !isUuidString(comment.full_name)) {

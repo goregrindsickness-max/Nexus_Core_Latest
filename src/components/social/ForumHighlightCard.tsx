@@ -17,6 +17,10 @@ import {
   voteForumHighlight,
   addQuickCommentToThread,
 } from '../../services/forumHighlightService';
+import {
+  MIGUEL_DEFAULT_AVATAR,
+  KNOWN_USER_AVATARS,
+} from '../../utils/bandProfileUtils';
 
 export interface ForumHighlightCardProps {
   thread: ForumHighlightThread;
@@ -161,13 +165,47 @@ export const ForumHighlightCard: React.FC<ForumHighlightCardProps> = ({
           const isValidImgUrl = (url?: string) =>
             typeof url === 'string' &&
             url.length > 5 &&
+            !url.includes('ui-avatars.com') &&
+            !url.includes('undefined') &&
+            !url.includes('null') &&
             (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('/') || url.startsWith('blob:'));
 
-          const resolvedAvatar = isValidImgUrl(thread.authorAvatar)
-            ? thread.authorAvatar
-            : (isUserPost || (thread.author && thread.author.toLowerCase().includes('you'))
-                ? (isValidImgUrl(currentUserAvatar) ? currentUserAvatar : undefined)
-                : (isValidImgUrl(currentUserAvatar) && isUserPost ? currentUserAvatar : undefined));
+          const cleanAuthor = (thread.author || '').toLowerCase().replace(/[@"']/g, '').trim();
+          const isUserAuthor = Boolean(
+            isUserPost ||
+            cleanAuthor === 'you' ||
+            cleanAuthor.includes('miguel') ||
+            cleanAuthor.includes('goregrinder') ||
+            (currentUserName && (cleanAuthor === currentUserName.toLowerCase() || cleanAuthor.includes(currentUserName.toLowerCase())))
+          );
+
+          let resolvedAvatar: string | undefined = undefined;
+          if (isUserAuthor) {
+            if (isValidImgUrl(currentUserAvatar)) {
+              resolvedAvatar = currentUserAvatar;
+            } else if (typeof window !== 'undefined' && isValidImgUrl(localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar') || '')) {
+              resolvedAvatar = (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar'))!;
+            } else if (isValidImgUrl(thread.authorAvatar)) {
+              resolvedAvatar = thread.authorAvatar;
+            } else {
+              resolvedAvatar = MIGUEL_DEFAULT_AVATAR;
+            }
+          } else {
+            if (isValidImgUrl(thread.authorAvatar)) {
+              resolvedAvatar = thread.authorAvatar;
+            } else if (KNOWN_USER_AVATARS[cleanAuthor]) {
+              resolvedAvatar = KNOWN_USER_AVATARS[cleanAuthor];
+            }
+          }
+
+          const initials = (thread.author || 'Fan')
+            .replace(/@/g, '')
+            .split(/[\s_]+/)
+            .map((n: string) => n[0])
+            .filter(Boolean)
+            .join('')
+            .substring(0, 2)
+            .toUpperCase() || 'FA';
 
           return (
             <div className="flex items-center gap-2.5">
@@ -177,9 +215,29 @@ export const ForumHighlightCard: React.FC<ForumHighlightCardProps> = ({
                   : 'bg-gradient-to-tr from-amber-900 to-zinc-800 border border-amber-600/30 text-amber-200'
               }`}>
                 {resolvedAvatar ? (
-                  <img src={resolvedAvatar} alt={thread.author} className="w-full h-full object-cover" />
+                  <img
+                    src={resolvedAvatar}
+                    alt={thread.author}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      const target = e.currentTarget as HTMLImageElement;
+                      if (isUserAuthor) {
+                        target.src = MIGUEL_DEFAULT_AVATAR;
+                      } else {
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent && !parent.querySelector('.fallback-initials')) {
+                          const span = document.createElement('span');
+                          span.className = 'text-[10px] font-black text-amber-300 font-mono fallback-initials';
+                          span.textContent = initials;
+                          parent.appendChild(span);
+                        }
+                      }
+                    }}
+                  />
                 ) : (
-                  (thread.author || 'A').replace('@', '').charAt(0).toUpperCase()
+                  <span className="text-[10px] font-black font-mono">{initials}</span>
                 )}
               </div>
               <div className="flex items-baseline gap-1.5 text-xs font-mono flex-wrap">

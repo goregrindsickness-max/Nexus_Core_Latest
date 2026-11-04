@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Plus,
@@ -238,18 +238,34 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     }).catch(() => {});
   };
 
+  const prevIsOpenRef = useRef(false);
+  const prevBandKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (isOpen) {
-      loadBands();
-      if (initialBand) {
-        populateForm(initialBand);
-        setActivePage('editor');
-      } else {
-        resetForm();
-        setActivePage('list');
+      const isOpening = !prevIsOpenRef.current;
+      const currentBandKey = initialBand ? `${initialBand.id || ''}:${initialBand.name || ''}` : null;
+      const isDifferentBand = currentBandKey !== prevBandKeyRef.current;
+
+      if (isOpening) {
+        loadBands();
       }
+
+      if (isOpening || isDifferentBand) {
+        prevBandKeyRef.current = currentBandKey;
+        if (initialBand) {
+          populateForm(initialBand);
+          setActivePage('editor');
+        } else {
+          resetForm();
+          setActivePage('list');
+        }
+      }
+    } else {
+      prevBandKeyRef.current = null;
     }
-  }, [isOpen, initialBand]);
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, initialBand?.id, initialBand?.name]);
 
   useEffect(() => {
     const handleUpdate = () => {
