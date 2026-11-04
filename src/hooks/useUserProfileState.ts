@@ -140,6 +140,7 @@ export function useUserProfileState({
   const [profilePassword, setProfilePassword] = useState('hardcore123');
   const [profilePin, setProfilePin] = useState(userProfile?.pin || '123456');
   const [profileLocation, setProfileLocation] = useState(() => {
+    const isOwner = isMiguelNameOrProfile(userProfile) || userProfile?.email?.toLowerCase() === 'goregrindsickness@gmail.com';
     if (portalRole === 'band') {
       return resolveBandLocation(activeBand, userProfile);
     }
@@ -152,9 +153,16 @@ export function useUserProfileState({
     if (portalRole === 'promoter') {
       return resolvePromoterLocation(userProfile);
     }
-    const signupLocation = (userProfile?.city && userProfile?.state_province) ? formatCleanLocation(userProfile.city, userProfile.state_province) : null;
-    if (portalRole === 'fan_only') return signupLocation || formatCleanLocation(userProfile?.city_state || userProfile?.location_code) || 'Denison, TX';
-    return signupLocation || formatCleanLocation(userProfile?.city_state || userProfile?.location_code) || 'Detroit, MI';
+    const savedUserLoc = typeof window !== 'undefined' ? localStorage.getItem('nexus_user_location') : null;
+    if (savedUserLoc && (!isOwner || !savedUserLoc.toLowerCase().includes('detroit'))) {
+      return formatCleanLocation(savedUserLoc);
+    }
+    const signupLocation = (userProfile?.city && userProfile?.state_province) ? formatCleanLocation(userProfile.city, userProfile.state_province) : (userProfile?.city ? userProfile.city : null);
+    const candidateLoc = signupLocation || formatCleanLocation(userProfile?.city_state || userProfile?.location_code || userProfile?.location);
+    if (candidateLoc && (!isOwner || !candidateLoc.toLowerCase().includes('detroit'))) {
+      return candidateLoc;
+    }
+    return 'Denison, TX';
   });
 
   const [profileZip, setProfileZip] = useState(userProfile?.zip_code || '');
@@ -516,6 +524,12 @@ export function useUserProfileState({
   const [prefLocationServices, setPrefLocationServices] = useState(false);
 
   const saveProfileData = (finalSave: boolean = false) => {
+    const isOwner = isMiguelNameOrProfile(userProfile) || userProfile?.email?.toLowerCase() === 'goregrindsickness@gmail.com';
+    const cleanLoc = formatCleanLocation(profileLocation) || (isOwner ? 'Denison, TX' : 'Denison, TX');
+    const locParts = cleanLoc.split(',').map(s => s.trim());
+    const resolvedCity = locParts[0] || (isOwner ? 'Denison' : 'Denison');
+    const resolvedState = locParts[1] || (isOwner ? 'TX' : 'TX');
+
     const combinedGenres = Array.from(new Set([
       ...profilePrimaryGenres,
       ...profileMicroGenres,
@@ -528,7 +542,9 @@ export function useUserProfileState({
       profileEmail,
       profilePassword,
       profilePin,
-      profileLocation,
+      profileLocation: cleanLoc,
+      city: resolvedCity,
+      state_province: resolvedState,
       profileGenres: combinedGenres,
       profilePrimaryGenres,
       profileMicroGenres,
@@ -553,6 +569,10 @@ export function useUserProfileState({
 
     try {
       localStorage.setItem(profileCacheKey, JSON.stringify(dataToSave));
+      localStorage.setItem('nexus_user_location', cleanLoc);
+      localStorage.setItem('nexus_user_city', resolvedCity);
+      localStorage.setItem('nexus_user_state', resolvedState);
+      localStorage.setItem('nexus_user_location_code', cleanLoc);
       if (profileTopSongUrl) localStorage.setItem('nexus_user_top_song_url', profileTopSongUrl);
       if (profileTopSongArtist) localStorage.setItem('nexus_user_top_song_artist', profileTopSongArtist);
       if (profileTopSongTitle) localStorage.setItem('nexus_user_top_song_title', profileTopSongTitle);
@@ -601,6 +621,11 @@ export function useUserProfileState({
       setUserProfile((prev: any) => {
         if (!prev) return prev;
         const sharedUpdates = {
+          city: resolvedCity,
+          state_province: resolvedState,
+          city_state: cleanLoc,
+          location_code: cleanLoc,
+          location: cleanLoc,
           top_song_url: profileTopSongUrl || prev?.top_song_url,
           featured_youtube_url: profileTopSongUrl || prev?.featured_youtube_url,
           top_song_artist: profileTopSongArtist || prev?.top_song_artist,
@@ -909,8 +934,10 @@ export function useUserProfileState({
           top_song_url: personalTopSongUrl,
           avatar_url: personalAvatar,
           banner_url: personalBanner,
-          city: isProfessionalPortal ? (userProfile?.city || undefined) : profileLocation,
-          zip_code: profileZip,
+          city: resolvedCity,
+          state_province: resolvedState,
+          country: userProfile?.country || 'USA',
+          zip_code: profileZip || userProfile?.zip_code,
           pin: profilePin,
           update_ticker: userProfile?.update_ticker || userProfile?.rosterTicker || 'No updates posted yet',
           creative_id: isCreative ? (userProfile?.creative_id || userProfile?.registered_creative_id) : undefined,

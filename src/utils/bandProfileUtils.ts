@@ -830,13 +830,14 @@ export const resolveCommentAuthorName = (
   return 'Scene Member';
 };
 
-/**
- * Determines if a band is split up / disbanded.
- */
-export const isBandSplitUp = (target: any): boolean => {
-  if (!target) return false;
+export type BandActivityStatus = 'active' | 'split-up' | 'on-hold' | 'unknown';
 
-  if (target.is_split_up === true || target.isSplitUp === true) return true;
+/**
+ * Resolves a band's current activity status ('active' | 'split-up' | 'on-hold' | 'unknown').
+ * Defaults to 'active' as requested.
+ */
+export const resolveBandStatus = (target: any): BandActivityStatus => {
+  if (!target) return 'active';
 
   const statusStr = String(
     target.status ||
@@ -847,13 +848,15 @@ export const isBandSplitUp = (target: any): boolean => {
   ).toLowerCase().trim();
 
   if (
+    target.is_split_up === true ||
+    target.isSplitUp === true ||
     statusStr === 'split-up' ||
     statusStr === 'split_up' ||
     statusStr === 'split up' ||
     statusStr === 'disbanded' ||
     statusStr === 'dissolved'
   ) {
-    return true;
+    return 'split-up';
   }
 
   const candidateName = String(
@@ -865,7 +868,7 @@ export const isBandSplitUp = (target: any): boolean => {
   ).toLowerCase().trim();
 
   if (candidateName === 'abnormality' || candidateName.includes('abnormality')) {
-    return true;
+    return 'split-up';
   }
 
   const yearStr = String(
@@ -876,10 +879,70 @@ export const isBandSplitUp = (target: any): boolean => {
   ).toLowerCase();
 
   if (yearStr.includes('split') || yearStr.includes('disbanded')) {
-    return true;
+    return 'split-up';
   }
 
-  return false;
+  if (
+    statusStr === 'on-hold' ||
+    statusStr === 'on_hold' ||
+    statusStr === 'on hold' ||
+    statusStr === 'hiatus' ||
+    yearStr.includes('on-hold') ||
+    yearStr.includes('on hold') ||
+    yearStr.includes('hiatus')
+  ) {
+    return 'on-hold';
+  }
+
+  if (
+    statusStr === 'unknown' ||
+    yearStr.includes('unknown')
+  ) {
+    return 'unknown';
+  }
+
+  return 'active';
+};
+
+/**
+ * Returns formatted text label e.g. "(active)", "(split-up)", "(on-hold)", "(unknown)".
+ */
+export const getBandStatusLabel = (status: BandActivityStatus | string): string => {
+  const norm = String(status || '').toLowerCase().trim();
+  if (norm === 'split-up' || norm === 'split_up' || norm === 'split up' || norm === 'disbanded') {
+    return '(split-up)';
+  }
+  if (norm === 'on-hold' || norm === 'on_hold' || norm === 'on hold' || norm === 'hiatus') {
+    return '(on-hold)';
+  }
+  if (norm === 'unknown') {
+    return '(unknown)';
+  }
+  return '(active)';
+};
+
+/**
+ * Returns styling classes for band activity badges.
+ */
+export const getBandStatusBadgeClass = (status: BandActivityStatus | string): string => {
+  const norm = String(status || '').toLowerCase().trim();
+  if (norm === 'split-up' || norm === 'split_up' || norm === 'split up' || norm === 'disbanded') {
+    return 'text-rose-400 border-rose-500/30 bg-rose-500/10';
+  }
+  if (norm === 'on-hold' || norm === 'on_hold' || norm === 'on hold' || norm === 'hiatus') {
+    return 'text-amber-400 border-amber-500/30 bg-amber-500/10';
+  }
+  if (norm === 'unknown') {
+    return 'text-zinc-400 border-zinc-700/50 bg-zinc-800/40';
+  }
+  return 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10';
+};
+
+/**
+ * Determines if a band is split up / disbanded.
+ */
+export const isBandSplitUp = (target: any): boolean => {
+  return resolveBandStatus(target) === 'split-up';
 };
 
 

@@ -13,6 +13,7 @@ import {
   Heart
 } from 'lucide-react';
 import { CommunityBandRecord, communityBandManager } from '../../../lib/communityBands';
+import { resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
 
 interface BandClaimHandoverModalProps {
   isOpen: boolean;
@@ -95,8 +96,11 @@ export const BandClaimHandoverModal: React.FC<BandClaimHandoverModalProps> = ({
               />
               <div>
                 <h4 className="text-sm font-bold text-white font-display">{bandRecord.name}</h4>
-                <p className="text-xs text-zinc-400 font-mono">
-                  {bandRecord.genre} • {bandRecord.city || bandRecord.country || 'Global'}
+                <p className="text-xs text-zinc-400 font-mono flex items-center gap-1.5 flex-wrap">
+                  <span>{bandRecord.genre} • {bandRecord.city || bandRecord.country || 'Global'}</span>
+                  <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded border ${getBandStatusBadgeClass(resolveBandStatus(bandRecord))}`}>
+                    {getBandStatusLabel(resolveBandStatus(bandRecord))}
+                  </span>
                 </p>
                 <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
                   Curated by: <span className="text-amber-400">{bandRecord.curated_by || '@fan_archivist'}</span>

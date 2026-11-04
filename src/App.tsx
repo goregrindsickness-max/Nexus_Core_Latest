@@ -833,6 +833,7 @@ export default function App() {
           if (client) {
             ensureValidSupabaseAuthSession(client).catch(() => {});
           }
+          communityBandManager.fetchFromSupabase().catch(() => {});
         }
       });
     } catch (e) {

@@ -49,6 +49,8 @@ import { uploadBase64ToStorage, generateUUID, ensureUUID } from '../../../supaba
 import { MASTER_GENRES } from '../../../constants/genres';
 import { MetalArchivesImportModal } from './MetalArchivesImportModal';
 import { resolvePublicBandData, enrichBandMetadataAsync } from '../../../services/bandEnrichmentService';
+import { getSupabase } from '../../../services/clientService';
+import { BandActivityStatus, resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
 
 interface CommunityBandCuratorModalProps {
   isOpen: boolean;
@@ -105,7 +107,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
   const [genre, setGenre] = useState('Extreme Metal');
   const [microGenres, setMicroGenres] = useState<string[]>([]);
   const [foundedYear, setFoundedYear] = useState('');
-  const [bandStatus, setBandStatus] = useState<'active' | 'split-up' | 'on_hold'>('active');
+  const [bandStatus, setBandStatus] = useState<BandActivityStatus>('active');
   const [city, setCity] = useState('');
   const [stateProvince, setStateProvince] = useState('');
   const [country, setCountry] = useState('USA');
@@ -257,6 +259,34 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
         if (initialBand) {
           populateForm(initialBand);
           setActivePage('editor');
+
+          // Always fetch freshest cloud record from Supabase to guarantee APK has live cloud sync
+          try {
+            const supabase = getSupabase();
+            if (supabase && (initialBand.id || initialBand.name)) {
+              const queryName = (initialBand.name || (initialBand as any).band_name || '').trim();
+              const validUUID = initialBand.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(initialBand.id) ? initialBand.id : null;
+              let pQuery = supabase.from('bands').select('*');
+              if (validUUID) {
+                pQuery = pQuery.eq('id', validUUID);
+              } else if (queryName) {
+                pQuery = pQuery.ilike('band_name', `%${queryName}%`);
+              }
+              Promise.resolve(pQuery.maybeSingle()).then(({ data }: any) => {
+                if (data) {
+                  const refreshedBand: CommunityBandRecord = {
+                    ...initialBand,
+                    ...data,
+                    name: data.band_name || data.name || initialBand.name,
+                    band_name: data.band_name || data.name || initialBand.name,
+                    status: data.status || ((data as any).is_split_up ? 'split-up' : initialBand.status),
+                  };
+                  communityBandManager.upsertBand(refreshedBand);
+                  populateForm(refreshedBand);
+                }
+              }).catch(() => {});
+            }
+          } catch (_) {}
         } else {
           resetForm();
           setActivePage('list');
@@ -338,15 +368,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     const matchedCluster = MASTER_GENRES.find(c => c.name.toLowerCase() === targetGenreName.toLowerCase() || c.tags.some(t => bandMicro.includes(t.label)))?.name || MASTER_GENRES[0]?.name || 'Extreme Metal';
     setGenre(matchedCluster);
     setFoundedYear(band.founded_year || publicDetails.founded_year || '');
-    const isSplit = Boolean(
-      (band as any)?.is_split_up ||
-      (band as any)?.isSplitUp ||
-      band.status === 'split-up' ||
-      band.status === 'split_up' ||
-      band.status === 'disbanded' ||
-      ((band.name || (band as any).band_name || '').toLowerCase().includes('abnormality'))
-    );
-    setBandStatus(isSplit ? 'split-up' : ((band.status as any) || 'active'));
+    setBandStatus(resolveBandStatus(band));
     setCity(band.city || publicDetails.city || '');
     setStateProvince(band.state_province || band.state || publicDetails.state_province || '');
     setCountry(band.country || publicDetails.country || 'USA');
@@ -481,6 +503,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     setGenre('Extreme Metal');
     setMicroGenres(['Death Metal']);
     setFoundedYear('');
+    setBandStatus('active');
     setCity('');
     setStateProvince('');
     setCountry('USA');
@@ -990,8 +1013,18 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                       </div>
                     </div>
 
-                    <div className="text-xs text-zinc-400 truncate font-mono mt-1">
-                      {band.genre} • {band.city || band.country || 'Global'}
+                    <div className="text-xs text-zinc-400 truncate font-mono mt-1 flex items-center gap-1.5 flex-wrap">
+                      <span>{band.genre} • {band.city || band.country || 'Global'}</span>
+                      {(() => {
+                        const bStatus = resolveBandStatus(band);
+                        const label = getBandStatusLabel(bStatus);
+                        const badgeCls = getBandStatusBadgeClass(bStatus);
+                        return (
+                          <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${badgeCls}`}>
+                            {label}
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     <div className="text-[10px] text-zinc-500 font-mono mt-1.5 flex items-center justify-between gap-2">
@@ -1128,12 +1161,13 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                       <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Activity Status</label>
                       <select
                         value={bandStatus}
-                        onChange={(e) => setBandStatus(e.target.value as any)}
+                        onChange={(e) => setBandStatus(e.target.value as BandActivityStatus)}
                         className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
                       >
-                        <option value="active">Active Band</option>
+                        <option value="active">Active Band (displays &quot;(active)&quot;)</option>
                         <option value="split-up">Split-Up / Disbanded (displays &quot;(split-up)&quot;)</option>
-                        <option value="on_hold">On Hold / Hiatus</option>
+                        <option value="on-hold">On Hold / Hiatus (displays &quot;(on-hold)&quot;)</option>
+                        <option value="unknown">Unknown Activity (displays &quot;(unknown)&quot;)</option>
                       </select>
                     </div>
                   </div>

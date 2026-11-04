@@ -132,6 +132,7 @@ import {
   FRONTEND_FALLBACK_PLAYLISTS
 } from '../../data/socialFeedMockData';
 import { playAmbientMetalDrone as playAmbientMetalDroneEngine } from '../../utils/audioEngine';
+import { formatCleanLocation } from '../../utils/bandProfileUtils';
 import {
   isAudioUrl,
   getCollectionsTrackDuration,
@@ -2154,13 +2155,20 @@ export function UniversalSocialFeed({
 
       // Reset to defaults first based on portalRole to avoid state leaking / overwriting professional profiles
       
-      const signupLocation = (userProfile?.city && userProfile?.state_province) ? `${userProfile.city}, ${userProfile.state_province}` : null;
+      const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+      const savedUserLoc = typeof window !== 'undefined' ? localStorage.getItem('nexus_user_location') : null;
+      const signupLocation = (userProfile?.city && userProfile?.state_province) ? formatCleanLocation(userProfile.city, userProfile.state_province) : (userProfile?.city ? userProfile.city : null);
+      const fallbackHometown = (savedUserLoc && (!isOwnerMiguel || !savedUserLoc.toLowerCase().includes('detroit')))
+        ? formatCleanLocation(savedUserLoc)
+        : 'Denison, TX';
       
       let defaultName = '';
       let defaultHandle = '';
       let defaultAvatar = null;
       let defaultCover = null;
-      let defaultLocation = signupLocation || userProfile?.location_code || userProfile?.city_state || 'Detroit, MI';
+      let defaultLocation = (savedUserLoc && (!isOwnerMiguel || !savedUserLoc.toLowerCase().includes('detroit')))
+        ? formatCleanLocation(savedUserLoc)
+        : (signupLocation || userProfile?.location_code || userProfile?.city_state || fallbackHometown);
       let defaultGenres = (userProfile?.genre_tags && userProfile.genre_tags.length > 0) ? userProfile.genre_tags : ['Death Metal', 'Technical Death Metal', 'Grindcore'];
       let defaultFavoriteSong = '';
       let defaultBlurb = '';
@@ -2176,14 +2184,18 @@ export function UniversalSocialFeed({
         defaultHandle = userProfile?.console_handle || userProfile?.screen_name?.replace(/\s+/g, '') || 'fan_core';
         defaultAvatar = userProfile?.avatar_url || 'FL';
         defaultCover = userProfile?.banner_url || null;
-        defaultLocation = signupLocation || userProfile?.location_code || 'Denison, TX';
+        defaultLocation = (savedUserLoc && (!isOwnerMiguel || !savedUserLoc.toLowerCase().includes('detroit')))
+          ? formatCleanLocation(savedUserLoc)
+          : (signupLocation || userProfile?.location_code || 'Denison, TX');
         defaultGenres = (userProfile?.genre_tags && userProfile.genre_tags.length > 0) ? userProfile.genre_tags : ['Goregrind', 'Slam', 'Brutal Death Metal', 'Death Metal'];
       } else if (portalRole === 'industry_pro' || portalRole === 'industry pro') {
         defaultName = userProfile?.full_name || userProfile?.legal_name || userProfile?.name || 'Industry Pro';
         defaultHandle = userProfile?.console_handle || userProfile?.handle || (userProfile?.screen_name || userProfile?.name || '').replace(/\s+/g, '') || 'pro_user';
         defaultAvatar = userProfile?.avatar_url || null;
         defaultCover = userProfile?.banner_url || null;
-        defaultLocation = signupLocation || userProfile?.location_code || 'Detroit, MI';
+        defaultLocation = (savedUserLoc && (!isOwnerMiguel || !savedUserLoc.toLowerCase().includes('detroit')))
+          ? formatCleanLocation(savedUserLoc)
+          : (signupLocation || userProfile?.location_code || userProfile?.city_state || 'Denison, TX');
         defaultGenres = (userProfile?.genre_tags && userProfile.genre_tags.length > 0) ? userProfile.genre_tags : ['Death Metal', 'Technical Death Metal', 'Grindcore'];
         defaultFavoriteSong = '';
       } else {
@@ -2216,7 +2228,7 @@ export function UniversalSocialFeed({
           : portalRole === 'label' && userProfile?.label_headquarters ? userProfile.label_headquarters 
           : portalRole === 'creative' && userProfile?.creative_metadata?.base_location ? userProfile.creative_metadata.base_location
           : portalRole === 'promoter' ? resolvePromoterLocation(userProfile)
-          : (signupLocation || userProfile?.location_code || userProfile?.city_state || 'Detroit, MI');
+          : (savedUserLoc && (!isOwnerMiguel || !savedUserLoc.toLowerCase().includes('detroit'))) ? formatCleanLocation(savedUserLoc) : (signupLocation || userProfile?.location_code || userProfile?.city_state || fallbackHometown);
       }
 
       setProfileFullLegalName(defaultName);
@@ -2342,11 +2354,18 @@ try {
       setProfilePin(parsed.profilePin);
     }
 
-    const uLoc = userProfile?.location_code || userProfile?.location;
-    if (uLoc && uLoc !== '') {
-      setProfileLocation(uLoc);
-    } else if (parsed.profileLocation) {
-      setProfileLocation(parsed.profileLocation);
+    const savedUserLoc = typeof window !== 'undefined' ? localStorage.getItem('nexus_user_location') : null;
+    const uLoc = (userProfile?.city && userProfile?.state_province)
+      ? formatCleanLocation(userProfile.city, userProfile.state_province)
+      : (userProfile?.location_code || userProfile?.city_state || userProfile?.location || userProfile?.city);
+    if (savedUserLoc && (!isOwnerMiguel || !savedUserLoc.toLowerCase().includes('detroit'))) {
+      setProfileLocation(formatCleanLocation(savedUserLoc));
+    } else if (uLoc && uLoc !== '' && (!isOwnerMiguel || !uLoc.toLowerCase().includes('detroit'))) {
+      setProfileLocation(formatCleanLocation(uLoc));
+    } else if (parsed.profileLocation && (!isOwnerMiguel || !parsed.profileLocation.toLowerCase().includes('detroit'))) {
+      setProfileLocation(formatCleanLocation(parsed.profileLocation));
+    } else {
+      setProfileLocation('Denison, TX');
     }
 
     if (parsed.profileGenres) setProfileGenres(parsed.profileGenres);
@@ -2435,8 +2454,10 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
       
       if (portalRole === 'label' && userProfile?.label_headquarters) {
         setProfileLocation(userProfile.label_headquarters);
-      } else if (data.profileLocation) {
-        setProfileLocation(data.profileLocation);
+      } else if (data.profileLocation && (!isOwnerMiguel || !data.profileLocation.toLowerCase().includes('detroit'))) {
+        setProfileLocation(formatCleanLocation(data.profileLocation));
+      } else if (isOwnerMiguel) {
+        setProfileLocation('Denison, TX');
       }
 
       if (data.profileGenres) setProfileGenres(data.profileGenres);

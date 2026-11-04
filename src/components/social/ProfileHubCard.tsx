@@ -11,7 +11,10 @@ import {
   resolvePromoterHandle,
   resolveEffectiveAvatar,
   resolveEffectiveCover,
-  formatCleanLocation
+  formatCleanLocation,
+  resolveBandStatus,
+  getBandStatusLabel,
+  getBandStatusBadgeClass
 } from '../../utils/bandProfileUtils';
 
 interface ProfileHubCardProps {
@@ -213,6 +216,11 @@ export const ProfileHubCard: React.FC<ProfileHubCardProps> = ({
                 {role}
               </span>
             ))}
+            {portalRole === 'band' && (
+              <span className={`text-[7px] font-mono font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${getBandStatusBadgeClass(resolveBandStatus(activeBand || userProfile))}`}>
+                {getBandStatusLabel(resolveBandStatus(activeBand || userProfile))}
+              </span>
+            )}
             {profileLocation && (
               <span className="text-[7px] font-mono font-black uppercase tracking-wider bg-zinc-900/60 border border-zinc-850 text-zinc-300 px-1.5 py-0.5 rounded-full flex items-center gap-1">
                 📍 {formatCleanLocation(profileLocation)}

@@ -128,6 +128,8 @@ export const VALID_BAND_COLUMNS = new Set([
   'executive_contact_email',
   'executive_contact_phone',
   'client_roster_notes',
+  'status',
+  'is_split_up',
 ]);
 
 export function sanitizeBandPayload(rawPayload: any): Record<string, any> {
@@ -352,7 +354,22 @@ export function sanitizeBandPayload(rawPayload: any): Record<string, any> {
     clean.custom_slug = clean.band_name.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
   }
   delete clean.slug;
-  delete clean.status;
+
+  // Preserve and normalize band activity status ('active' | 'split-up' | 'on-hold' | 'unknown')
+  const rawStatus = String(clean.status || '').toLowerCase().trim();
+  if (rawStatus === 'split-up' || rawStatus === 'split_up' || rawStatus === 'split up' || rawStatus === 'disbanded' || clean.is_split_up === true) {
+    clean.status = 'split-up';
+    clean.is_split_up = true;
+  } else if (rawStatus === 'on-hold' || rawStatus === 'on_hold' || rawStatus === 'on hold' || rawStatus === 'hiatus') {
+    clean.status = 'on-hold';
+    clean.is_split_up = false;
+  } else if (rawStatus === 'unknown') {
+    clean.status = 'unknown';
+    clean.is_split_up = false;
+  } else {
+    clean.status = 'active';
+    clean.is_split_up = false;
+  }
 
   // 7. Sanitize logo_url and cover_url strictly
   let rawLogo =

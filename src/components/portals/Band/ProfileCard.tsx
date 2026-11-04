@@ -7,7 +7,7 @@ import { formatLocationDisplay } from '../../../constants/location';
 import { useUserPresence } from '../../../lib/presence';
 import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, upsertBandToDatabase, generateUUID } from '../../../supabase';
-import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER, resolvePromoterLogo, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER, isBandSplitUp } from '../../../utils/bandProfileUtils';
+import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER, resolvePromoterLogo, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER, isBandSplitUp, resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
 import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
@@ -179,6 +179,19 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     const effectiveBandName = rawResolvedBandName || bData?.band_name || bData?.name || selectedUserProfile?.band_name || selectedUserProfile?.name || targetProfile?.band_name || targetProfile?.name || 'Band';
     
     let existing = communityArchiveMatch || communityBandManager.findMatch(effectiveBandName) || communityBandManager.findByName(effectiveBandName);
+
+    if (existing && bData) {
+      existing = communityBandManager.upsertBand({
+        ...existing,
+        ...bData,
+        id: existing.id || bData.id,
+        name: effectiveBandName,
+        band_name: effectiveBandName,
+        status: bData.status || existing.status,
+        is_split_up: Boolean(bData.status === 'split-up' || (bData as any).is_split_up || existing.status === 'split-up')
+      });
+      setCommunityArchiveMatch(existing);
+    }
 
     const userBio = userProfile?.bio || userProfile?.profileBlurb;
 
@@ -634,6 +647,12 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
               band_name: record.band_name || record.name || ''
             };
             setFetchedBandData(normalizedRecord);
+            try {
+              const updatedMatch = communityBandManager.upsertBand(normalizedRecord);
+              if (updatedMatch) {
+                setCommunityArchiveMatch(updatedMatch);
+              }
+            } catch (_) {}
             if ((normalizedRecord.bio || normalizedRecord.description) && setProfileBlurb) {
               if (base?.isYou || selectedUserProfile?.isYou) {
                 const bioVal = normalizedRecord.bio || normalizedRecord.description;
@@ -1711,16 +1730,33 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           </div>
                         )}
 
-                        {/* Location and Founded Year */}
-                        {(effTarget?.founded_year || isBandSplitUp(effTarget) || isBandSplitUp(selectedUserProfile)) && (
+                        {/* Location, Founded Year, and Activity Status */}
+                        {(effTarget?.founded_year || bData?.founded_year || communityArchiveMatch?.founded_year || isBandProfile) && (
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-zinc-400 text-xs mt-1">
                             <div className="flex items-center">
                               <Calendar className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-amber-500" />
                               <span className="font-mono text-[11px] text-zinc-300 font-bold">
-                                Year Formed: {effTarget?.founded_year || '2005'}
-                                {(isBandSplitUp(effTarget) || isBandSplitUp(selectedUserProfile) || isBandSplitUp(bData) || isBandSplitUp(communityArchiveMatch)) && (
-                                  <span className="ml-1.5 text-rose-400 font-black uppercase tracking-wider text-[11px]">(split-up)</span>
-                                )}
+                                Year Formed: {effTarget?.founded_year || bData?.founded_year || communityArchiveMatch?.founded_year || '2005'}
+                                {(() => {
+                                  const effectiveStatusTarget = {
+                                    ...communityArchiveMatch,
+                                    ...bData,
+                                    ...effTarget,
+                                    ...selectedUserProfile
+                                  };
+                                  const resolvedStatus = resolveBandStatus(effectiveStatusTarget);
+                                  const statusLabel = getBandStatusLabel(resolvedStatus);
+                                  return (
+                                    <span className={`ml-1.5 font-black uppercase tracking-wider text-[11px] ${
+                                      resolvedStatus === 'split-up' ? 'text-rose-400' :
+                                      resolvedStatus === 'on-hold' ? 'text-amber-400' :
+                                      resolvedStatus === 'unknown' ? 'text-zinc-400' :
+                                      'text-emerald-400'
+                                    }`}>
+                                      {statusLabel}
+                                    </span>
+                                  );
+                                })()}
                               </span>
                             </div>
                           </div>

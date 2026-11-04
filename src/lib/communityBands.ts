@@ -81,6 +81,7 @@ export interface CommunityBandRecord {
   curated_by?: string; // Fan curator handle or user ID
   curator_name?: string;
   created_at: string;
+  updated_at?: string;
   verification_status: BandVerificationStatus;
   claimed_by_user_id?: string;
   claimed_at?: string;
@@ -1491,6 +1492,8 @@ export class CommunityBandManager {
         lineup: resolvedLineup,
         is_verified: (band as any).is_verified !== undefined ? Boolean((band as any).is_verified) : (((band as any).verification_status === 'verified_official') || (existing as any)?.is_verified || false),
         custom_slug: (targetSlug || resolvedBandName).toLowerCase().trim().replace(/[^a-z0-9_-]+/g, '-'),
+        status: band.status || (band.is_split_up ? 'split-up' : (existing?.status || 'active')),
+        is_split_up: Boolean(band.status === 'split-up' || band.is_split_up || existing?.status === 'split-up' || (existing as any)?.is_split_up),
         updated_at: new Date().toISOString()
       };
 
@@ -1938,6 +1941,9 @@ export class CommunityBandManager {
           curated_by: existingItem?.curated_by || seedMatch?.curated_by || '@fan_archivist',
           curator_name: existingItem?.curator_name || seedMatch?.curator_name || 'Community Archivist',
           created_at: b.created_at || existingItem?.created_at || seedMatch?.created_at || new Date().toISOString(),
+          updated_at: b.updated_at || existingItem?.updated_at || new Date().toISOString(),
+          status: b.status || ((b as any).is_split_up ? 'split-up' : (existingItem?.status || 'active')),
+          is_split_up: Boolean(b.status === 'split-up' || (b as any).is_split_up || existingItem?.status === 'split-up' || (existingItem as any)?.is_split_up),
           verification_status: resolvedVerification,
           followers_count: existingItem?.followers_count || seedMatch?.followers_count || 120
         };
@@ -1982,6 +1988,11 @@ export class CommunityBandManager {
             const isOfficialB = (b.id === 'cbddb810-259b-4230-9968-3d402dfdb872' || (b.name || '').toLowerCase() === 'virulent excision');
             if (isOfficialA && !isOfficialB) return -1;
             if (!isOfficialA && isOfficialB) return 1;
+
+            // Prioritize most recently updated record (cloud updates always supersede older local caches)
+            const timeA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+            const timeB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+            if (timeB !== timeA) return timeB - timeA;
 
             const scoreA = (a.discography?.length || 0) * 10 +
               (a.lineup?.length || 0) * 2 +

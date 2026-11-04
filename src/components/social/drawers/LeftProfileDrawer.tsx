@@ -35,6 +35,7 @@ import {
 import { WalletOAuthModal } from "../modals/WalletOAuthModal";
 import { PaymentMethodsSettings } from "../../PaymentMethodsSettings";
 import { CommunityBandCuratorModal } from "../modals/CommunityBandCuratorModal";
+import { communityBandManager } from "../../../lib/communityBands";
 import { isMiguelNameOrProfile } from "../utils/profileUtils";
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from "../../../utils/followSyncService";
 import { bugMonitor } from "../../../services/bugMonitorService";
@@ -674,7 +675,10 @@ if (!leftDrawerOpen) return null;
                         {!isPromoter && (
                           <button 
                             type="button"
-                            onClick={() => setIsCommunityCuratorOpen(true)} 
+                            onClick={() => {
+                              communityBandManager.fetchFromSupabase().catch(() => {});
+                              setIsCommunityCuratorOpen(true);
+                            }} 
                             className="w-full flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/60 hover:bg-zinc-900/90 border border-zinc-900 hover:border-zinc-800 transition-all duration-200 group cursor-pointer text-left"
                           >
                             <div className="flex items-center gap-3 min-w-0">

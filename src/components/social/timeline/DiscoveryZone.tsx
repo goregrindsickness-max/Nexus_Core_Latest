@@ -28,6 +28,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { getSupabase } from '../../../supabase';
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
 import { communityBandManager, purgeDeletedAndZombieBands, isDeletedOrZombieBand } from '../../../lib/communityBands';
+import { resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
 
 export interface DiscoveryProfile {
   id: string;
@@ -55,6 +56,9 @@ export interface DiscoveryProfile {
   is_community_archive?: boolean;
   verification_status?: string;
   is_verified?: boolean;
+  status?: string;
+  is_split_up?: boolean;
+  founded_year?: string;
   followers_count?: number;
   registered_workspaces?: string[];
   allowed_workspaces?: string[];
@@ -268,6 +272,9 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
             is_community_archive: isArchive,
             verification_status: b.verification_status || (b.is_verified ? 'verified_official' : 'community_archive'),
             is_verified: b.is_verified === true || b.verification_status === 'verified_official',
+            status: b.status,
+            is_split_up: b.is_split_up || b.status === 'split-up',
+            founded_year: b.founded_year || b.year_formed || b.yearFormed,
             followers_count: b.followers_count || 150,
             followed: false
           };
@@ -1088,12 +1095,22 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
                       )}
                     </h4>
 
-                    {/* Category Role Capsule Tag */}
-                    <div 
-                      className={`text-[8px] font-bold mt-1 px-2 py-0.5 rounded-md border flex items-center gap-1 max-w-[146px] truncate ${theme.badgeBg}`}
-                    >
-                      <RoleIcon className="w-2.5 h-2.5 shrink-0" style={{ color: theme.accentHex }} />
-                      <span className={`truncate ${theme.badgeText}`}>{theme.label}</span>
+                    {/* Category Role Capsule Tag & Band Activity Status */}
+                    <div className="flex items-center justify-center gap-1 mt-1 max-w-[146px] flex-wrap">
+                      <div 
+                        className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md border flex items-center gap-1 truncate ${theme.badgeBg}`}
+                      >
+                        <RoleIcon className="w-2.5 h-2.5 shrink-0" style={{ color: theme.accentHex }} />
+                        <span className={`truncate ${theme.badgeText}`}>{theme.label}</span>
+                      </div>
+                      {isBand && (
+                        <span 
+                          className={`text-[7.5px] font-mono font-black uppercase tracking-wider px-1.5 py-0.5 rounded border shrink-0 ${getBandStatusBadgeClass(resolveBandStatus(profile))}`}
+                          title={`Band Activity Status: ${getBandStatusLabel(resolveBandStatus(profile))}`}
+                        >
+                          {getBandStatusLabel(resolveBandStatus(profile))}
+                        </span>
+                      )}
                     </div>
 
                     {/* Location Indicator */}
