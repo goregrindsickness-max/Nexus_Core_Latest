@@ -2009,6 +2009,9 @@ export class CommunityBandManager {
       });
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sortedDedupedList));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: sortedDedupedList }));
+      }
       return sortedDedupedList;
     } catch (err) {
       console.warn('[communityBands] fetchFromSupabase exception:', err);

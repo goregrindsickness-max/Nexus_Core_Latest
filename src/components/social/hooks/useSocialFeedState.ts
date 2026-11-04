@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { FeedItem } from '../../../data/socialFeedMockData';
 import { mockFeed } from '../../../data/socialFeedMockData';
 import { getSupabase, uploadBase64ToStorage, createShopMerchItem } from '../../../supabase';
+import { ensureUUID } from '../../../services/schemaResilienceService';
 import { isAudioUrl, extractUUID, isBandcampUrl, resolveBandcampMetadata, formatBandcampEmbedDarkUrl } from '../../../utils/socialFeedUtils';
 import { registerCommunityEvent } from '../../../utils/communityEventUtils';
 import { generateDeterministicUUID } from '../follows/followService';
@@ -451,7 +452,7 @@ export function useSocialFeedState({
         if (targetUUID) {
           const { data } = await supabase
             .from('nexus_posts')
-            .select('id, data, reactions, likes_count')
+            .select('id, data, reactions')
             .eq('id', targetUUID)
             .limit(1);
           existingRows = data;
@@ -462,7 +463,6 @@ export function useSocialFeedState({
           const postObj = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data || {});
           await supabase.from('nexus_posts').update({
             reactions: fullCurr,
-            likes_count: fullCurr.likes,
             data: {
               ...postObj,
               reactions: fullCurr,
@@ -470,14 +470,13 @@ export function useSocialFeedState({
             },
           }).eq('id', row.id);
         } else if (targetPost) {
-          // If mock/seed post, upsert into nexus_posts so it is globally stored in Supabase
+          const cleanPostUUID = ensureUUID(postId);
           await supabase.from('nexus_posts').upsert([{
-            id: postId,
+            id: cleanPostUUID,
             profile_id: (activeUserId && activeUserId !== 'guest') ? activeUserId : '00000000-0000-0000-0000-000000000000',
             content: targetPost.content || (targetPost as any).text || (targetPost as any).message || ' ',
             media_url: (targetPost as any).media_url || (targetPost as any).mediaUrl || targetPost.image || null,
             reactions: fullCurr,
-            likes_count: fullCurr.likes,
             data: {
               ...targetPost,
               reactions: fullCurr,
@@ -486,7 +485,6 @@ export function useSocialFeedState({
             created_at: targetPost.created_at || targetPost.timestamp || new Date().toISOString()
           }], { onConflict: 'id' });
         }
-
 
 
         // 4. Notifications:
@@ -550,16 +548,16 @@ export function useSocialFeedState({
           // 3. Persist to Supabase database
           await supabase.from('nexus_notifications').upsert([
             {
-              id: notifItem.id,
+              id: ensureUUID(notifItem.id),
               user_id: validReceiverUUID,
               actor_id: currentActorId,
               title: notifItem.title,
               message: notifItem.message,
-              category: 'REACTION',
               type: 'post_reaction',
               is_read: false,
               data: {
                 ...notifItem,
+                category: 'REACTION',
                 actor_id: currentActorId,
                 actor_email: currentActorEmail,
               },

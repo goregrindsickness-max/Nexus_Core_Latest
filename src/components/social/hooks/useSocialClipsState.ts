@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '../../../supabase';
-import { reviveClipsArray, clipsMediaStore } from '../utils/clipsPersistenceService';
+import { 
+  reviveClipsArray, 
+  clipsMediaStore, 
+  isGhostOrDeletedClip, 
+  markClipDeleted, 
+  purgeGhostClipsFromStorage 
+} from '../utils/clipsPersistenceService';
 
 export interface UseSocialClipsStateParams {
   triggerNotification?: (msg: string) => void;
@@ -30,11 +36,14 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
     tags?: string[];
   }[]>(() => {
     try {
+      purgeGhostClipsFromStorage();
       const saved = localStorage.getItem('nexus_saved_clips');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          const sanitized = parsed.filter(c => !isGhostOrDeletedClip(c));
+          localStorage.setItem('nexus_saved_clips', JSON.stringify(sanitized));
+          return sanitized;
         }
       }
     } catch (_) {}
@@ -73,8 +82,9 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
 
   const deleteClip = async (clipId: string | number) => {
     const idStr = String(clipId).trim();
+    markClipDeleted(idStr);
     setClips(prev => {
-      const updated = prev.filter(c => String(c.id).trim().toLowerCase() !== idStr.toLowerCase());
+      const updated = prev.filter(c => String(c.id).trim().toLowerCase() !== idStr.toLowerCase() && !isGhostOrDeletedClip(c));
       try {
         localStorage.setItem('nexus_saved_clips', JSON.stringify(updated));
       } catch (_) {}
@@ -107,13 +117,15 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
     // Initial revival of cached local clips
     const initLocalClips = async () => {
       try {
+        purgeGhostClipsFromStorage();
         const saved = localStorage.getItem('nexus_saved_clips');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            const revived = await reviveClipsArray(parsed);
+            const sanitized = parsed.filter(c => !isGhostOrDeletedClip(c));
+            const revived = await reviveClipsArray(sanitized);
             if (isMounted) {
-              setClips(revived);
+              setClips(revived.filter(c => !isGhostOrDeletedClip(c)));
             }
           }
         }
@@ -128,7 +140,7 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
         if (aRes.ok) {
           const aData = await aRes.json();
           if (Array.isArray(aData)) {
-            apiClips = aData;
+            apiClips = aData.filter((c: any) => !isGhostOrDeletedClip(c));
           }
         }
       } catch (_) {}
@@ -212,10 +224,7 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
               : (clip.band_name ? '💀 Band' : 'Operator');
 
             const rawVideoUrl = clip.video_url || clip.videoUrl || clip.url || '';
-            const isCorrupted = !rawVideoUrl || rawVideoUrl.startsWith('/9j/') || rawVideoUrl.startsWith('data:image');
-            const videoUrl = (String(clip.id) === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' && isCorrupted)
-              ? 'https://www.youtube.com/watch?v=jQ26iMGJbW4'
-              : rawVideoUrl;
+            const videoUrl = rawVideoUrl;
             const caption = clip.caption || clip.description || clip.title || '';
             const songTitle = clip.song_title || clip.songTitle || clip.audio || 'Original Audio';
             const bandName = clip.band_name || clip.bandName || creatorName;
@@ -248,7 +257,7 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
               created_at: clip.created_at,
               user_id: userId
             };
-          });
+          }).filter(c => !isGhostOrDeletedClip(c));
 
           // Revive all video URLs ensuring IndexedDB binaries and valid sources
           const revivedMapped = await reviveClipsArray(mappedClips);
@@ -259,13 +268,18 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
               let localCached: any[] = [];
               try {
                 const raw = localStorage.getItem('nexus_saved_clips');
-                if (raw) localCached = JSON.parse(raw);
+                if (raw) {
+                  const parsed = JSON.parse(raw);
+                  if (Array.isArray(parsed)) {
+                    localCached = parsed.filter(c => !isGhostOrDeletedClip(c));
+                  }
+                }
               } catch (_) {}
 
-              const existingClips = [...prev, ...localCached];
+              const existingClips = [...prev, ...localCached].filter(c => !isGhostOrDeletedClip(c));
               const existingMap = new Map<string, any>();
               existingClips.forEach(c => {
-                if (c && c.id) {
+                if (c && c.id && !isGhostOrDeletedClip(c)) {
                   existingMap.set(String(c.id).toLowerCase(), c);
                 }
               });
@@ -273,7 +287,7 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
               const dbIds = new Set(revivedMapped.map(c => String(c.id).toLowerCase()));
 
               // Preserve interaction states (likes, hasLiked, views) and local video URLs
-              const mergedDbClips = revivedMapped.map(dbClip => {
+              const mergedDbClips = revivedMapped.filter(c => !isGhostOrDeletedClip(c)).map(dbClip => {
                 const local = existingMap.get(String(dbClip.id).toLowerCase());
                 if (!local) return dbClip;
                 return {
@@ -293,18 +307,18 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
                 };
               });
 
-              // Retain any clips present locally that haven't synced to DB yet
+              // Retain any clips present locally that haven't synced to DB yet (excluding any deleted/ghost clips)
               const localOnly: any[] = [];
               const seenLocal = new Set<string>();
               existingClips.forEach(c => {
                 const cId = String(c?.id || '').toLowerCase();
-                if (cId && !dbIds.has(cId) && !seenLocal.has(cId)) {
+                if (cId && !dbIds.has(cId) && !seenLocal.has(cId) && !isGhostOrDeletedClip(c)) {
                   seenLocal.add(cId);
                   localOnly.push(c);
                 }
               });
 
-              const merged = [...mergedDbClips, ...localOnly];
+              const merged = [...mergedDbClips, ...localOnly].filter(c => !isGhostOrDeletedClip(c));
               try {
                 localStorage.setItem('nexus_saved_clips', JSON.stringify(merged));
               } catch (_) {}

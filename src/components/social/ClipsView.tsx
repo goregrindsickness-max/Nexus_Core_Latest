@@ -38,7 +38,9 @@ import {
   resolveClipVideoPlaybackUrl,
   trackRealClipView,
   calculateClipsDashboardStats,
-  SCENE_PERFORMANCE_VIDEOS
+  SCENE_PERFORMANCE_VIDEOS,
+  isGhostOrDeletedClip,
+  markClipDeleted,
 } from './utils/clipsPersistenceService';
 import { extractYouTubeId } from './utils/postSyncUtils';
 
@@ -277,28 +279,34 @@ const SingleClipPlayerCard: React.FC<{
     try {
       let fallback = await resolveClipVideoPlaybackUrl(clip.id, currentSrc);
       if (!fallback || fallback === currentSrc || fallback.startsWith('blob:')) {
-        // Fallback to resilient stream from SCENE_PERFORMANCE_VIDEOS
         const safeIdx = Math.abs(index) % SCENE_PERFORMANCE_VIDEOS.length;
-        fallback = SCENE_PERFORMANCE_VIDEOS[safeIdx] || 'https://www.youtube.com/watch?v=jQ26iMGJbW4';
+        fallback = SCENE_PERFORMANCE_VIDEOS[safeIdx] || '';
       }
 
-      console.log(`[ClipPlayer] Applying revived/resolved video URL for clip "${clip.id}" -> ${fallback}`);
-      setCurrentSrc(fallback);
-      setHasError(false);
-      if (videoRef.current) {
-        videoRef.current.src = fallback;
-        videoRef.current.load();
-        if (isActive) {
-          videoRef.current.play().catch(() => {});
+      // Do NOT apply Devourment fallback if this clip is associated with Virulent Excision
+      const bandName = String(clip.band_name || clip.creator || clip.bandName || '').toLowerCase();
+      if (bandName.includes('virulent') && fallback.includes('jQ26iMGJbW4')) {
+        fallback = '';
+      }
+
+      if (fallback) {
+        console.log(`[ClipPlayer] Applying revived/resolved video URL for clip "${clip.id}" -> ${fallback}`);
+        setCurrentSrc(fallback);
+        setHasError(false);
+        if (videoRef.current) {
+          videoRef.current.src = fallback;
+          videoRef.current.load();
+          if (isActive) {
+            videoRef.current.play().catch(() => {});
+          }
         }
+      } else {
+        setHasError(true);
       }
       return;
     } catch (e) {
       console.warn("[ClipPlayer] Fallback resolution error:", e);
-      // As a last-resort fallback stream, use Virulent Excision / Devourment live YouTube cut
-      const ultimateFallback = SCENE_PERFORMANCE_VIDEOS[0];
-      setCurrentSrc(ultimateFallback);
-      setHasError(false);
+      setHasError(true);
     }
   };
 
@@ -631,11 +639,12 @@ const SingleClipPlayerCard: React.FC<{
                   return;
                 }
                 setConfirmDelete(false);
+                markClipDeleted(clip.id);
                 if (deleteClip) {
                   await deleteClip(clip.id);
                 } else {
                   setClips((prev) => {
-                    const updated = prev.filter((c) => String(c.id).toLowerCase() !== String(clip.id).toLowerCase());
+                    const updated = prev.filter((c) => String(c.id).toLowerCase() !== String(clip.id).toLowerCase() && !isGhostOrDeletedClip(c));
                     try {
                       localStorage.setItem('nexus_saved_clips', JSON.stringify(updated));
                     } catch (_) {}
@@ -701,15 +710,17 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          const sanitized = parsed.filter(c => !isGhostOrDeletedClip(c));
+          return sanitized;
         }
       }
     } catch (_) {}
-    return DEFAULT_CLIPS;
+    return DEFAULT_CLIPS.filter(c => !isGhostOrDeletedClip(c));
   });
-  const clips = (propClips && propClips.length > 0) 
+  const rawClips = (propClips && propClips.length > 0) 
     ? propClips 
     : (internalClips && internalClips.length > 0 ? internalClips : DEFAULT_CLIPS);
+  const clips = rawClips.filter(c => !isGhostOrDeletedClip(c));
   const setClips = propSetClips || setInternalClips;
 
   // Active clip index in viewport and global mute state

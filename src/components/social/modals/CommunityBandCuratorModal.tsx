@@ -48,6 +48,7 @@ import { deleteReleaseFromDatabase } from '../../../services/releasesService';
 import { uploadBase64ToStorage, generateUUID, ensureUUID } from '../../../supabase';
 import { MASTER_GENRES } from '../../../constants/genres';
 import { MetalArchivesImportModal } from './MetalArchivesImportModal';
+import { resolvePublicBandData, enrichBandMetadataAsync } from '../../../services/bandEnrichmentService';
 
 interface CommunityBandCuratorModalProps {
   isOpen: boolean;
@@ -310,28 +311,47 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
   }, []);
 
   const populateForm = (band: CommunityBandRecord) => {
+    const publicDetails = resolvePublicBandData(band.name || (band as any).band_name, band);
     setSelectedBand(band);
     setIsCreatingNew(false);
-    setName(band.name);
-    const bandMicro = band.micro_genres || band.subgenres || [];
+    setName(band.name || (band as any).band_name || '');
+    const bandMicro = band.micro_genres || band.subgenres || publicDetails.micro_genres || [];
     setMicroGenres(bandMicro);
-    const matchedCluster = MASTER_GENRES.find(c => c.name.toLowerCase() === (band.genre || '').toLowerCase() || c.tags.some(t => bandMicro.includes(t.label)))?.name || MASTER_GENRES[0]?.name || 'Extreme Metal';
+    const targetGenreName = band.genre || publicDetails.genre || '';
+    const matchedCluster = MASTER_GENRES.find(c => c.name.toLowerCase() === targetGenreName.toLowerCase() || c.tags.some(t => bandMicro.includes(t.label)))?.name || MASTER_GENRES[0]?.name || 'Extreme Metal';
     setGenre(matchedCluster);
-    setFoundedYear(band.founded_year || '');
-    setCity(band.city || '');
-    setStateProvince(band.state_province || band.state || '');
-    setCountry(band.country || 'USA');
+    setFoundedYear(band.founded_year || publicDetails.founded_year || '');
+    setCity(band.city || publicDetails.city || '');
+    setStateProvince(band.state_province || band.state || publicDetails.state_province || '');
+    setCountry(band.country || publicDetails.country || 'USA');
+    setRecordLabel(band.record_label || band.label || publicDetails.record_label || publicDetails.label || '');
+
     const userBio = userProfile?.bio || userProfile?.profileBlurb;
-    const rawBio = band.bio || (band as any).description || '';
+    const rawBio = band.bio || (band as any).description || publicDetails.bio || '';
     const isUserBio = Boolean(userBio && (rawBio === userBio || rawBio === (userProfile as any)?.profileBlurb));
     const validBio = (rawBio && !isUserBio && !rawBio.startsWith('Community-curated archive')) ? rawBio : 'Not written yet.';
     setBio(validBio);
     setCoverUrl(band.cover_url || band.banner_url || (band as any).cover || (band as any).banner || '');
-    setSpotifyUrl(band.spotify_url || '');
+    setSpotifyUrl(band.spotify_url || publicDetails.spotify_url || '');
     setBandcampUrl(band.bandcamp_url || '');
-    setMetalArchivesUrl(band.metal_archives_url || '');
-    setYoutubeUrl(band.youtube_url || band.featured_youtube_url || '');
+    setMetalArchivesUrl(band.metal_archives_url || publicDetails.metal_archives_url || '');
+    setYoutubeUrl(band.youtube_url || band.featured_youtube_url || publicDetails.youtube_url || '');
     setCuratorHandle(band.curated_by || (userProfile?.console_handle || userProfile?.handle || '@community_archivist'));
+
+    // Asynchronous background prefill for any remaining empty fields
+    if (!band.founded_year || !band.record_label || !band.city) {
+      enrichBandMetadataAsync(band.name || (band as any).band_name).then(asyncDetails => {
+        if (asyncDetails) {
+          if (asyncDetails.founded_year) setFoundedYear(prev => prev || asyncDetails.founded_year || '');
+          if (asyncDetails.record_label) setRecordLabel(prev => prev || asyncDetails.record_label || '');
+          if (asyncDetails.city) setCity(prev => prev || asyncDetails.city || '');
+          if (asyncDetails.state_province) setStateProvince(prev => prev || asyncDetails.state_province || '');
+          if (asyncDetails.country) setCountry(prev => prev || asyncDetails.country || 'USA');
+          if (asyncDetails.genre) setGenre(prev => prev || asyncDetails.genre || 'Extreme Metal');
+          if (asyncDetails.bio) setBio(prev => (prev === 'Not written yet.' || !prev) ? (asyncDetails.bio || 'Not written yet.') : prev);
+        }
+      }).catch(() => {});
+    }
 
     // Resilient lineup resolution
     let loadedLineup: LineupMember[] = [];

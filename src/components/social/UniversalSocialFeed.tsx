@@ -3094,7 +3094,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
               const { data: cMatch } = await supabase
                 .from('creatives')
                 .select('id, creator_id, user_id')
-                .or(`business_name.ilike.%${targetName}%,creative_name.ilike.%${targetName}%`)
+                .or(`business_name.ilike.%${targetName}%,name.ilike.%${targetName}%`)
                 .limit(1);
               if (cMatch?.[0]?.id && isValidUUID(cMatch[0].id)) {
                 activeId = cMatch[0].id;
@@ -3136,7 +3136,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
               const { data, error: fErr } = await supabase
                 .from('follows')
                 .select('*')
-                .or(`followed_id.eq.${activeId},artist_id.eq.${activeId}`);
+                .eq('followed_id', activeId);
               if (!fErr && data && data.length > 0) {
                 followsData = data;
               } else {
@@ -3272,7 +3272,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
               const { data, error: fErr } = await supabase
                 .from('follows')
                 .select('*')
-                .or(`follower_id.eq.${activeId},fan_profile_id.eq.${activeId}`);
+                .eq('follower_id', activeId);
               if (!fErr && data && data.length > 0) {
                 followsData = data;
               } else {

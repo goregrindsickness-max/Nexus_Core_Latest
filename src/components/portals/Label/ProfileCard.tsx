@@ -334,26 +334,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
             } catch (_) {}
           }
 
-          if (!linkedBandRecord && validUUID) {
-            try {
-              const { data } = await supabase.from('bands').select('*').eq('user_id', validUUID).neq('verification_status', 'community_archive').order('created_at', { ascending: false }).limit(1).maybeSingle();
-              if (data) linkedBandRecord = data;
-            } catch (_) {}
-          }
 
-          if (!linkedBandRecord && validUUID) {
-            try {
-              const { data } = await supabase.from('bands').select('*').eq('owner_id', validUUID).neq('verification_status', 'community_archive').order('created_at', { ascending: false }).limit(1).maybeSingle();
-              if (data) linkedBandRecord = data;
-            } catch (_) {}
-          }
-
-          if (!linkedBandRecord && validUUID) {
-            try {
-              const { data } = await supabase.from('bands').select('*').eq('profile_id', validUUID).neq('verification_status', 'community_archive').order('created_at', { ascending: false }).limit(1).maybeSingle();
-              if (data) linkedBandRecord = data;
-            } catch (_) {}
-          }
 
           if (!linkedBandRecord && (targetBandName || targetName)) {
             const queryName = targetBandName || targetName;

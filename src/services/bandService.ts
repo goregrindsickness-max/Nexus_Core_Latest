@@ -850,7 +850,7 @@ export const fetchUserBands = async (userId: string) => {
     const { data, error } = await supabase
       .from('bands')
       .select('*')
-      .or(`creator_id.eq.${userId},owner_id.eq.${userId}`)
+      .eq('creator_id', userId)
       .order('created_at', { ascending: false });
 
     if (error) {

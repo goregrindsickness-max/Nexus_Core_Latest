@@ -29,6 +29,7 @@ import PublicStorefrontView from '../../sales/PublicStorefrontView';
 import { MasterAudioUploaderModal } from './MasterAudioUploaderModal';
 import { fetchReleasesFromDatabase } from '../../../services/releasesService';
 import { VORTEX_GRAPHICS_SVG_AVATAR, PROMOTER_SVG_AVATAR } from '../../../utils/imageFallbacks';
+import { resolvePublicBandData, enrichBandMetadataAsync } from '../../../services/bandEnrichmentService';
 
 export type { ListenerMetric };
 export { calculateListenerMetrics };
@@ -181,36 +182,70 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     const userBio = userProfile?.bio || userProfile?.profileBlurb;
 
     if (!existing) {
-      const existingBio = (bData?.bio && !bData.bio.startsWith('Community-curated archive') && bData.bio !== userBio && bData.bio !== profileBlurb) ? bData.bio : '';
+      const publicDetails = resolvePublicBandData(effectiveBandName, {
+        ...bData,
+        ...effTarget,
+        ...selectedUserProfile,
+        ...targetProfile
+      });
+
+      const existingBio = (bData?.bio && !bData.bio.startsWith('Community-curated archive') && bData.bio !== userBio && bData.bio !== profileBlurb)
+        ? bData.bio
+        : (publicDetails.bio || 'Not written yet.');
+
       const freshBandPayload: Partial<CommunityBandRecord> = {
         id: bData?.id || generateUUID(),
         name: effectiveBandName,
         band_name: effectiveBandName,
-        genre: bData?.genre || 'Extreme Metal',
-        micro_genres: bData?.micro_genres || bData?.subgenres || ['Extreme Metal'],
-        subgenres: bData?.micro_genres || bData?.subgenres || ['Extreme Metal'],
-        bio: existingBio || 'Not written yet.',
+        genre: publicDetails.genre || bData?.genre || 'Extreme Metal',
+        micro_genres: publicDetails.micro_genres || bData?.micro_genres || bData?.subgenres || ['Extreme Metal'],
+        subgenres: publicDetails.micro_genres || bData?.micro_genres || bData?.subgenres || ['Extreme Metal'],
+        founded_year: publicDetails.founded_year || bData?.founded_year || bData?.year_formed || '',
+        record_label: publicDetails.record_label || publicDetails.label || bData?.record_label || bData?.label || '',
+        label: publicDetails.record_label || publicDetails.label || bData?.record_label || bData?.label || '',
+        city: publicDetails.city || bData?.city || '',
+        state_province: publicDetails.state_province || bData?.state_province || bData?.state || '',
+        state: publicDetails.state_province || bData?.state_province || bData?.state || '',
+        country: publicDetails.country || bData?.country || 'USA',
+        bio: existingBio,
         avatar_url: rawResolvedBandLogo || bData?.avatar_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400',
         logo_url: rawResolvedBandLogo || bData?.logo_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400',
         cover_url: bData?.cover_url || bData?.banner_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=1200',
         banner_url: bData?.cover_url || bData?.banner_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=1200',
-        city: bData?.city || '',
-        state_province: bData?.state_province || bData?.state || '',
-        country: bData?.country || 'USA',
-        record_label: bData?.record_label || bData?.label || '',
-        label: bData?.record_label || bData?.label || '',
-        spotify_url: bData?.spotify_url || '',
+        spotify_url: publicDetails.spotify_url || bData?.spotify_url || '',
         bandcamp_url: bData?.bandcamp_url || '',
-        metal_archives_url: bData?.metal_archives_url || '',
-        youtube_url: bData?.youtube_url || '',
-        lineup: bData?.lineup || [],
-        discography: bData?.discography || [],
+        metal_archives_url: publicDetails.metal_archives_url || bData?.metal_archives_url || '',
+        youtube_url: publicDetails.youtube_url || bData?.youtube_url || '',
+        lineup: (publicDetails.lineup?.length ? publicDetails.lineup : bData?.lineup) || [],
+        discography: (publicDetails.discography?.length ? publicDetails.discography : bData?.discography) || [],
         curated_by: userProfile?.console_handle || userProfile?.handle || '@community_archivist'
       };
 
       existing = communityBandManager.upsertBand(freshBandPayload);
       setCommunityArchiveMatch(existing);
-      triggerNotification?.(`✨ Created new community entry for "${effectiveBandName}" in Community Bands Hub!`);
+
+      // Async background enrichment call to Gemini & Open Music DB
+      enrichBandMetadataAsync(effectiveBandName).then(asyncDetails => {
+        if (asyncDetails && Object.keys(asyncDetails).length > 0 && existing?.id) {
+          const updated = communityBandManager.upsertBand({
+            id: existing.id,
+            name: effectiveBandName,
+            band_name: effectiveBandName,
+            founded_year: existing.founded_year || asyncDetails.founded_year,
+            record_label: existing.record_label || asyncDetails.record_label,
+            label: existing.label || asyncDetails.record_label,
+            city: existing.city || asyncDetails.city,
+            state_province: existing.state_province || asyncDetails.state_province,
+            country: existing.country || asyncDetails.country,
+            genre: existing.genre || asyncDetails.genre,
+            micro_genres: existing.micro_genres?.length ? existing.micro_genres : asyncDetails.micro_genres,
+            bio: (!existing.bio || existing.bio === 'Not written yet.') ? asyncDetails.bio : existing.bio
+          });
+          setCommunityArchiveMatch(updated);
+        }
+      }).catch(() => {});
+
+      triggerNotification?.(`✨ Created new community entry for "${effectiveBandName}" with pre-filled public metadata!`);
     } else {
       setCommunityArchiveMatch(existing);
     }
@@ -843,7 +878,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const bData = React.useMemo(() => {
     if (isExplicitPersonal) return null;
 
-    const candidateName = selectedUserProfile?.band_name || selectedUserProfile?.bandName || (selectedUserProfile?.isBandProfile ? selectedUserProfile?.name : null) || targetProfile?.band_name || targetProfile?.bandName || (targetProfile?.isBandProfile ? targetProfile?.name : null);
+    const candidateName = selectedUserProfile?.band_name || selectedUserProfile?.bandName || selectedUserProfile?.name || targetProfile?.band_name || targetProfile?.bandName || targetProfile?.name || baseTarget?.band_name || baseTarget?.name;
     const directMatch = communityArchiveMatch || (candidateName ? (communityBandManager.findMatch(candidateName) || communityBandManager.findByName(candidateName)) : null);
     if (!fetchedBandData && !directMatch && !(isOwnBand && localSavedBand)) return null;
 

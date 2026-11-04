@@ -743,9 +743,39 @@ async function startServer() {
    * Backed by local persistent cache and Supabase Storage clips/clips_manifest.json.
    */
   const clipsCacheFile = path.join(uploadsDir, 'clips_cache.json');
+  const GHOST_SERVER_CLIP_IDS = new Set([
+    'f64469f8-0340-4b31-acb5-f8b4a9d7e487',
+    '5403162d-1947-43aa-b5f6-38a1bd2a1b80'
+  ]);
+
+  function isGhostServerClip(c: any): boolean {
+    if (!c) return true;
+    const idStr = String(c.id || '').trim();
+    if (GHOST_SERVER_CLIP_IDS.has(idStr)) return true;
+
+    const bandName = String(c.band_name || c.bandName || c.title || '').toLowerCase();
+    const videoUrl = String(c.video_url || c.videoUrl || '').toLowerCase();
+    const audioTrack = String(c.audio_track_title || c.audioTrackTitle || '').toLowerCase();
+    const description = String(c.description || '').toLowerCase();
+
+    // Virulent Excision clip paired with Devourment embed or audio
+    const isVirulent = bandName.includes('virulent') || description.includes('virulent');
+    const hasDevourmentEmbed = videoUrl.includes('jq26imgjbw4') || audioTrack.includes('pious impiety') || description.includes('devourment');
+    if (isVirulent && hasDevourmentEmbed) {
+      return true;
+    }
+
+    if (videoUrl.includes('jq26imgjbw4') && (bandName.includes('virulent') || idStr === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' || idStr === 'f64469f8-0340-4b31-acb5-f8b4a9d7e487')) {
+      return true;
+    }
+
+    return false;
+  }
 
   async function loadCachedClips(): Promise<any[]> {
     const clipsMap = new Map<string, any>();
+    let hadGhost = false;
+
     // 1. Read from local disk cache
     try {
       if (fs.existsSync(clipsCacheFile)) {
@@ -754,7 +784,13 @@ async function startServer() {
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed)) {
             parsed.forEach((c: any) => {
-              if (c && c.id) clipsMap.set(String(c.id), c);
+              if (c && c.id) {
+                if (isGhostServerClip(c)) {
+                  hadGhost = true;
+                } else {
+                  clipsMap.set(String(c.id), c);
+                }
+              }
             });
           }
         }
@@ -775,8 +811,12 @@ async function startServer() {
           const parsed = JSON.parse(text);
           if (Array.isArray(parsed)) {
             parsed.forEach((c: any) => {
-              if (c && c.id && !clipsMap.has(String(c.id))) {
-                clipsMap.set(String(c.id), c);
+              if (c && c.id) {
+                if (isGhostServerClip(c)) {
+                  hadGhost = true;
+                } else if (!clipsMap.has(String(c.id))) {
+                  clipsMap.set(String(c.id), c);
+                }
               }
             });
           }
@@ -786,12 +826,19 @@ async function startServer() {
       }
     }
 
-    return Array.from(clipsMap.values());
+    const sanitizedClips = Array.from(clipsMap.values());
+    if (hadGhost) {
+      // Re-persist sanitized list to erase ghosts from local disk and storage manifest
+      await persistClipsList(sanitizedClips);
+    }
+
+    return sanitizedClips;
   }
 
   async function persistClipsList(list: any[]): Promise<void> {
+    const cleanList = (list || []).filter((c: any) => !isGhostServerClip(c));
     try {
-      await fs.promises.writeFile(clipsCacheFile, JSON.stringify(list, null, 2), 'utf8');
+      await fs.promises.writeFile(clipsCacheFile, JSON.stringify(cleanList, null, 2), 'utf8');
     } catch (e) {
       console.warn('[SERVER CLIPS] Local cache write warning:', e);
     }
@@ -801,7 +848,7 @@ async function startServer() {
       try {
         await supabase.storage
           .from('clips')
-          .upload('clips_manifest.json', Buffer.from(JSON.stringify(list, null, 2)), {
+          .upload('clips_manifest.json', Buffer.from(JSON.stringify(cleanList, null, 2)), {
             contentType: 'application/json',
             upsert: true,
           });
@@ -826,6 +873,10 @@ async function startServer() {
       const clip = req.body;
       if (!clip || !clip.id) {
         return res.status(400).json({ error: 'Invalid clip payload' });
+      }
+
+      if (isGhostServerClip(clip)) {
+        return res.status(400).json({ error: 'Clip is blacklisted/ghost' });
       }
 
       // If video or thumbnail is a base64 string, persist it to disk
@@ -868,7 +919,7 @@ async function startServer() {
       const currentMap = new Map<string, any>(current.map((c: any) => [String(c.id), c]));
 
       for (const item of incomingClips) {
-        if (!item || !item.id) continue;
+        if (!item || !item.id || isGhostServerClip(item)) continue;
         const idKey = String(item.id);
         if (!currentMap.has(idKey)) {
           currentMap.set(idKey, item);
@@ -2508,6 +2559,71 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       : 'https://www.paypal.com/signin/authorize';
 
     res.json({ url: `${authEndpoint}?${params.toString()}` });
+  });
+
+  // API ROUTE: Automatically lookup and enrich public band metadata (Year Formed, Record Label, City, State, Country, Micro-Genres, Bio)
+  app.post('/api/enrich-band', express.json(), async (req, res) => {
+    try {
+      const { bandName } = req.body;
+      if (!bandName || typeof bandName !== 'string' || !bandName.trim()) {
+        return res.status(400).json({ error: 'bandName is required' });
+      }
+
+      const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+      if (apiKey) {
+        try {
+          const ai = new GoogleGenAI({ apiKey });
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Return a valid JSON object containing public factual metadata for music band "${bandName.trim()}".
+Required schema:
+{
+  "founded_year": "string (4-digit year, e.g. 1990)",
+  "record_label": "string (e.g. Metal Blade Records)",
+  "city": "string (e.g. Boston)",
+  "state_province": "string (2-letter US state or province code if applicable, else empty)",
+  "country": "string (e.g. USA, Poland, United Kingdom)",
+  "genre": "string (e.g. Brutal Death Metal, Blackened Death Metal, Hardcore, Thrash Metal)",
+  "micro_genres": ["array of 2-4 subgenre strings"],
+  "bio": "string (2-3 concise sentences summarizing origin, style, and key history)"
+}`,
+            config: {
+              responseMimeType: 'application/json'
+            }
+          });
+
+          if (response.text) {
+            const parsed = JSON.parse(response.text);
+            if (parsed && typeof parsed === 'object') {
+              return res.json({
+                founded_year: parsed.founded_year || '',
+                record_label: parsed.record_label || '',
+                label: parsed.record_label || '',
+                city: parsed.city || '',
+                state_province: parsed.state_province || '',
+                country: parsed.country || 'USA',
+                genre: parsed.genre || 'Extreme Metal',
+                micro_genres: Array.isArray(parsed.micro_genres) ? parsed.micro_genres : [parsed.genre || 'Extreme Metal'],
+                bio: parsed.bio || ''
+              });
+            }
+          }
+        } catch (geminiErr: any) {
+          console.warn('[ENRICH BAND GEMINI WARNING]:', geminiErr.message);
+        }
+      }
+
+      return res.json({
+        founded_year: '',
+        record_label: '',
+        city: '',
+        state_province: '',
+        country: 'USA'
+      });
+    } catch (err: any) {
+      console.error('[ENRICH BAND ERROR]:', err);
+      return res.status(500).json({ error: 'Failed to enrich band' });
+    }
   });
 
   // API ROUTE: PayPal OAuth Callback

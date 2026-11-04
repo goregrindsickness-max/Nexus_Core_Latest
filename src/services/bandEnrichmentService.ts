@@ -1,0 +1,331 @@
+import { INITIAL_COMMUNITY_BANDS, CommunityBandRecord } from '../lib/communityBands';
+import { ROSTER_CATALOGS } from '../data/socialFeedMockData';
+
+export interface BandEnrichedMetadata {
+  founded_year?: string;
+  record_label?: string;
+  label?: string;
+  city?: string;
+  state_province?: string;
+  state?: string;
+  country?: string;
+  genre?: string;
+  micro_genres?: string[];
+  subgenres?: string[];
+  bio?: string;
+  lineup?: any[];
+  discography?: any[];
+  spotify_url?: string;
+  metal_archives_url?: string;
+  youtube_url?: string;
+}
+
+/**
+ * Known public band knowledge dictionary fallback for fast synchronous prefilling
+ */
+const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
+  'hate': {
+    founded_year: '1990',
+    record_label: 'Metal Blade Records / Napalm Records',
+    label: 'Metal Blade Records',
+    city: 'Warsaw',
+    country: 'Poland',
+    genre: 'Blackened Death Metal',
+    micro_genres: ['Blackened Death Metal', 'Extreme Metal', 'Death Metal'],
+    bio: 'Extreme blackened death metal titan formed in Warsaw, Poland in 1990. Led by ATF Sinner, Hate blends dark atmospheric blackened intensity with brutal death metal precision.',
+    spotify_url: 'https://open.spotify.com/artist/0UoN7E3p1wG3uLpM',
+    metal_archives_url: 'https://www.metal-archives.com/bands/Hate/1183'
+  },
+  'abnormality': {
+    founded_year: '2005',
+    record_label: 'Metal Blade Records',
+    label: 'Metal Blade Records',
+    city: 'Boston',
+    state_province: 'MA',
+    country: 'USA',
+    genre: 'Brutal Death Metal',
+    micro_genres: ['Brutal Death Metal', 'Technical Death Metal', 'Slam Death Metal'],
+    bio: 'Massive brutal technical death metal powerhouse from Boston, Massachusetts, featuring Mallika Sundaramurthy on vocals. Signed to Metal Blade Records with iconic releases including Mechanisms of Omniscience and Sociopathic Constructs.',
+    spotify_url: 'https://open.spotify.com/artist/2v6E8j010yG5tX01',
+    metal_archives_url: 'https://www.metal-archives.com/bands/Abnormality/94178'
+  },
+  'dying fetus': {
+    founded_year: '1991',
+    record_label: 'Relapse Records',
+    label: 'Relapse Records',
+    city: 'Annapolis',
+    state_province: 'MD',
+    country: 'USA',
+    genre: 'Brutal Death Metal',
+    micro_genres: ['Brutal Death Metal', 'Slam Death Metal', 'Grindcore', 'Technical Death Metal'],
+    bio: 'Iconic American brutal death metal/grindcore band formed in Annapolis, Maryland in 1991. Renowned for hyper-technical riffs, dual guttural vocals, and crushing slam breakdowns.',
+    spotify_url: 'https://open.spotify.com/artist/4X9iP7T41u6T0K8P'
+  },
+  'suffocation': {
+    founded_year: '1988',
+    record_label: 'Nuclear Blast Records',
+    label: 'Nuclear Blast Records',
+    city: 'Long Island',
+    state_province: 'NY',
+    country: 'USA',
+    genre: 'Brutal Death Metal',
+    micro_genres: ['Brutal Death Metal', 'Technical Death Metal', 'Slam Death Metal'],
+    bio: 'Pioneers of technical brutal death metal and the rhythmic slam breakdown, formed in Long Island, New York in 1988.',
+    spotify_url: 'https://open.spotify.com/artist/3s4y9G101o0G0K8P'
+  },
+  'cannibal corpse': {
+    founded_year: '1988',
+    record_label: 'Metal Blade Records',
+    label: 'Metal Blade Records',
+    city: 'Buffalo',
+    state_province: 'NY',
+    country: 'USA',
+    genre: 'Death Metal',
+    micro_genres: ['Death Metal', 'Brutal Death Metal', 'Thrash Metal'],
+    bio: 'Legendary death metal pioneers formed in Buffalo, New York in 1988. One of the top-selling death metal bands of all time.',
+    spotify_url: 'https://open.spotify.com/artist/1G14y7G101o0G0K8P'
+  },
+  'carcass': {
+    founded_year: '1985',
+    record_label: 'Nuclear Blast / Earache Records',
+    label: 'Nuclear Blast',
+    city: 'Liverpool',
+    country: 'United Kingdom',
+    genre: 'Goregrind / Melodic Death Metal',
+    micro_genres: ['Goregrind', 'Melodic Death Metal', 'Grindcore'],
+    bio: 'Pioneers of goregrind and melodic death metal from Liverpool, UK, formed in 1985. Creators of legendary albums Reek of Putrefaction and Heartwork.'
+  },
+  'exhumed': {
+    founded_year: '1990',
+    record_label: 'Relapse Records',
+    label: 'Relapse Records',
+    city: 'San Jose',
+    state_province: 'CA',
+    country: 'USA',
+    genre: 'Goregrind / Death Metal',
+    micro_genres: ['Goregrind', 'Death Metal', 'Grindcore'],
+    bio: 'Symphonies of sickness deathgrind pioneers from San Jose, California, led by Matt Harvey since 1990.'
+  },
+  'devourment': {
+    founded_year: '1995',
+    record_label: 'Relapse Records',
+    label: 'Relapse Records',
+    city: 'Dallas',
+    state_province: 'TX',
+    country: 'USA',
+    genre: 'Slam Death Metal',
+    micro_genres: ['Slam Death Metal', 'Brutal Death Metal', 'Goregrind'],
+    bio: 'Godfathers of slam death metal formed in Dallas, Texas in 1995. Inventors of the guttural slam style with 1999 masterpiece Molesting the Decapitated.'
+  },
+  'incantation': {
+    founded_year: '1989',
+    record_label: 'Relapse Records',
+    label: 'Relapse Records',
+    city: 'Johnstown',
+    state_province: 'PA',
+    country: 'USA',
+    genre: 'Death Metal',
+    micro_genres: ['Death Metal', 'Doom Metal', 'Blackened Death Metal'],
+    bio: 'Pioneers of dark, atmospheric death metal formed in 1989 by John McEntee.'
+  },
+  'archspire': {
+    founded_year: '2009',
+    record_label: 'Season of Mist',
+    label: 'Season of Mist',
+    city: 'Vancouver',
+    state_province: 'BC',
+    country: 'Canada',
+    genre: 'Technical Death Metal',
+    micro_genres: ['Technical Death Metal', 'Extreme Metal'],
+    bio: 'Hyper-technical 350+ BPM technical death metal machine from Vancouver, BC, Canada, formed in 2009.'
+  },
+  'analepsy': {
+    founded_year: '2012',
+    record_label: 'Miasma Records / Agonia Records',
+    label: 'Agonia Records',
+    city: 'Ourém',
+    country: 'Portugal',
+    genre: 'Brutal Death Metal',
+    micro_genres: ['Brutal Death Metal', 'Slam Death Metal'],
+    bio: 'Portuguese brutal death metal powerhouse delivering crushing slam breakdowns and technical death metal precision since 2012.'
+  },
+  'benighted': {
+    founded_year: '1998',
+    record_label: 'Season of Mist',
+    label: 'Season of Mist',
+    city: 'Saint-Étienne',
+    country: 'France',
+    genre: 'Deathgrind',
+    micro_genres: ['Deathgrind', 'Brutal Death Metal', 'Grindcore'],
+    bio: 'High-speed brutal deathgrind assault from Saint-Étienne, France, formed in 1998.'
+  },
+  'vulvodynia': {
+    founded_year: '2014',
+    record_label: 'Unique Leader Records',
+    label: 'Unique Leader Records',
+    city: 'Durban',
+    country: 'South Africa',
+    genre: 'Slam Death Metal',
+    micro_genres: ['Slam Death Metal', 'Brutal Death Metal'],
+    bio: 'South African slam death metal heavyweights delivering relentless breakdowns and brutal vocal onslaughts since 2014.'
+  },
+  'necroticgorebeast': {
+    founded_year: '2017',
+    record_label: 'Comatose Music',
+    label: 'Comatose Music',
+    city: 'Quebec City',
+    state_province: 'QC',
+    country: 'Canada',
+    genre: 'Brutal Death Metal',
+    micro_genres: ['Brutal Death Metal', 'Slam Death Metal'],
+    bio: 'Crushing Canadian brutal death metal behemoth featuring Michael Chamberland and Alexandre Brochu.'
+  }
+};
+
+/**
+ * Parse a location string into city, state, country
+ * Examples: "Denver, CO", "Warsaw, Poland", "Boston, Massachusetts, USA"
+ */
+export function parseLocationString(rawLocation?: string): { city?: string; state_province?: string; country?: string } {
+  if (!rawLocation || typeof rawLocation !== 'string' || !rawLocation.trim()) {
+    return {};
+  }
+
+  const clean = rawLocation.trim().replace(/^[\s,]+|[\s,]+$/g, '');
+  const parts = clean.split(',').map(s => s.trim()).filter(Boolean);
+
+  if (parts.length === 1) {
+    return { city: parts[0] };
+  }
+
+  if (parts.length === 2) {
+    const p1 = parts[0];
+    const p2 = parts[1];
+    // Check if second part is 2-letter US state code
+    if (/^[A-Z]{2}$/i.test(p2)) {
+      return { city: p1, state_province: p2.toUpperCase(), country: 'USA' };
+    }
+    // Check if second part is USA / US
+    if (/^(usa|us|united states)$/i.test(p2)) {
+      return { city: p1, country: 'USA' };
+    }
+    // Otherwise second part is country or state
+    return { city: p1, country: p2 };
+  }
+
+  if (parts.length >= 3) {
+    return {
+      city: parts[0],
+      state_province: parts[1],
+      country: parts[2]
+    };
+  }
+
+  return {};
+}
+
+/**
+ * Multi-tiered resolver that pre-fills band metadata (year formed, label, location, micro-genres, bio)
+ */
+export function resolvePublicBandData(bandName: string, activeProfileData?: any): BandEnrichedMetadata {
+  if (!bandName || typeof bandName !== 'string') return {};
+
+  const cleanName = bandName.trim().toLowerCase();
+  const alphaName = cleanName.replace(/[^a-z0-9]/g, '');
+
+  let mergedResult: BandEnrichedMetadata = {};
+
+  // 1. Check direct seed records in INITIAL_COMMUNITY_BANDS
+  const seedMatch = INITIAL_COMMUNITY_BANDS.find(b => {
+    if (!b) return false;
+    const bName = (b.name || b.band_name || '').toLowerCase().trim();
+    return bName === cleanName || bName.replace(/[^a-z0-9]/g, '') === alphaName;
+  });
+
+  if (seedMatch) {
+    mergedResult = {
+      founded_year: seedMatch.founded_year,
+      record_label: seedMatch.record_label || seedMatch.label || seedMatch.label_name,
+      label: seedMatch.record_label || seedMatch.label,
+      city: seedMatch.city,
+      state_province: seedMatch.state_province || seedMatch.state,
+      country: seedMatch.country || 'USA',
+      genre: seedMatch.genre,
+      micro_genres: seedMatch.micro_genres || seedMatch.subgenres,
+      bio: seedMatch.bio,
+      lineup: seedMatch.lineup,
+      discography: seedMatch.discography,
+      spotify_url: seedMatch.spotify_url,
+      metal_archives_url: seedMatch.metal_archives_url,
+      youtube_url: seedMatch.youtube_url
+    };
+  }
+
+  // 2. Check KNOWN_PUBLIC_BANDS dictionary
+  const dictMatch = KNOWN_PUBLIC_BANDS[cleanName] || KNOWN_PUBLIC_BANDS[alphaName];
+  if (dictMatch) {
+    mergedResult = {
+      ...dictMatch,
+      ...mergedResult,
+      founded_year: mergedResult.founded_year || dictMatch.founded_year,
+      record_label: mergedResult.record_label || dictMatch.record_label,
+      city: mergedResult.city || dictMatch.city,
+      state_province: mergedResult.state_province || dictMatch.state_province,
+      country: mergedResult.country || dictMatch.country,
+      genre: mergedResult.genre || dictMatch.genre,
+      bio: mergedResult.bio || dictMatch.bio
+    };
+  }
+
+  // 3. Extract from active profile context if provided
+  if (activeProfileData && typeof activeProfileData === 'object') {
+    const locParsed = parseLocationString(
+      activeProfileData.location || activeProfileData.homebase || activeProfileData.city
+    );
+
+    const profLabel = activeProfileData.record_label || activeProfileData.label_name || activeProfileData.labelName || activeProfileData.label;
+    const profYear = activeProfileData.founded_year || activeProfileData.year_formed || activeProfileData.yearFormed || activeProfileData.year;
+
+    mergedResult = {
+      ...mergedResult,
+      city: mergedResult.city || activeProfileData.city || locParsed.city,
+      state_province: mergedResult.state_province || activeProfileData.state_province || activeProfileData.state || locParsed.state_province,
+      country: mergedResult.country || activeProfileData.country || locParsed.country || 'USA',
+      record_label: mergedResult.record_label || profLabel,
+      label: mergedResult.label || profLabel,
+      founded_year: mergedResult.founded_year || (profYear ? String(profYear) : undefined),
+      genre: mergedResult.genre || activeProfileData.genre,
+      micro_genres: mergedResult.micro_genres || activeProfileData.micro_genres || activeProfileData.genre_tags
+    };
+  }
+
+  return mergedResult;
+}
+
+/**
+ * Asynchronously enriches band metadata by querying the server-side AI/Open Music DB API
+ */
+export async function enrichBandMetadataAsync(bandName: string): Promise<BandEnrichedMetadata> {
+  if (!bandName || typeof bandName !== 'string' || !bandName.trim()) {
+    return {};
+  }
+
+  try {
+    const response = await fetch('/api/enrich-band', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bandName: bandName.trim() })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data && typeof data === 'object') {
+        return data as BandEnrichedMetadata;
+      }
+    }
+  } catch (err) {
+    console.warn('[enrichBandMetadataAsync] Notice:', err);
+  }
+
+  return resolvePublicBandData(bandName);
+}

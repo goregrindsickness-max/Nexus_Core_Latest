@@ -90,12 +90,91 @@ export async function getClipMediaBlob(clipId: string | number): Promise<Blob | 
   }
 }
 
+export const DELETED_CLIPS_STORAGE_KEY = 'nexus_deleted_clips';
+
+export const KNOWN_GHOST_CLIP_IDS = new Set<string>([
+  'f64469f8-0340-4b31-acb5-f8b4a9d7e487',
+  '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
+]);
+
+export function getDeletedClipIds(): Set<string> {
+  const result = new Set<string>(Array.from(KNOWN_GHOST_CLIP_IDS));
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = localStorage.getItem(DELETED_CLIPS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((id: any) => {
+            if (id) result.add(String(id).toLowerCase().trim());
+          });
+        }
+      }
+    }
+  } catch (_) {}
+  return result;
+}
+
+export function markClipDeleted(clipId: string | number): void {
+  if (!clipId) return;
+  try {
+    const idStr = String(clipId).toLowerCase().trim();
+    const current = getDeletedClipIds();
+    current.add(idStr);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(DELETED_CLIPS_STORAGE_KEY, JSON.stringify(Array.from(current)));
+    }
+    purgeGhostClipsFromStorage();
+  } catch (_) {}
+}
+
+export function isGhostOrDeletedClip(clip: any): boolean {
+  if (!clip) return true;
+  const deletedSet = getDeletedClipIds();
+  const idStr = String(clip.id || '').toLowerCase().trim();
+  if (idStr && deletedSet.has(idStr)) return true;
+
+  const bandOrCreator = String(clip.bandName || clip.band_name || clip.creator || clip.username || '').toLowerCase().trim();
+  const caption = String(clip.caption || clip.title || '').toLowerCase().trim();
+  const vidUrl = String(clip.videoUrl || clip.video_url || '').toLowerCase().trim();
+  const audio = String(clip.audio || clip.songTitle || '').toLowerCase().trim();
+
+  // Specifically purge any ghost Virulent Excision clip that mistakenly embedded Devourment video
+  const isVE = bandOrCreator.includes('virulent excision') || caption.includes('virulent excision');
+  const isDevourmentEmbed = vidUrl.includes('jq26imgjbw4') || vidUrl.includes('devourment') || audio.includes('devourment') || audio.includes('pious impiety');
+
+  if (isVE && isDevourmentEmbed) {
+    return true;
+  }
+
+  return false;
+}
+
+export function purgeGhostClipsFromStorage(): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = localStorage.getItem('nexus_saved_clips');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter(c => !isGhostOrDeletedClip(c));
+          localStorage.setItem('nexus_saved_clips', JSON.stringify(cleaned));
+        }
+      }
+    }
+    Array.from(KNOWN_GHOST_CLIP_IDS).forEach((id) => {
+      clipsMediaStore.removeItem(`clip_media_${id}`).catch(() => {});
+      clipsMediaStore.removeItem(id).catch(() => {});
+    });
+  } catch (_) {}
+}
+
 export async function resolveClipVideoPlaybackUrl(clipId: string | number, currentUrl: string): Promise<string> {
   const idStr = String(clipId || '').trim();
 
-  // If this is the Virulent Excision live clip or corrupted base64 or missing video URL
-  if ((idStr === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' || idStr === 'f64469f8-0340-4b31-acb5-f8b4a9d7e487') && (!currentUrl || currentUrl.startsWith('/9j/') || currentUrl.startsWith('data:image') || currentUrl.startsWith('blob:'))) {
-    return 'https://www.youtube.com/watch?v=jQ26iMGJbW4';
+  // If this clip is a deleted or ghost entry, return empty to prevent playback
+  if (isGhostOrDeletedClip({ id: clipId })) {
+    return '';
   }
 
   // If it's a valid remote http/https URL or server relative /uploads/ path that is NOT a blob: URL, keep it
@@ -182,8 +261,9 @@ export function generateVideoThumbnail(file: File | Blob): Promise<string> {
 export async function reviveClipsArray(clips: PersistedClip[]): Promise<PersistedClip[]> {
   if (!Array.isArray(clips) || clips.length === 0) return [];
 
+  const validClips = clips.filter(c => !isGhostOrDeletedClip(c));
   const revived = await Promise.all(
-    clips.map(async (clip) => {
+    validClips.map(async (clip) => {
       const rawUrl = clip.videoUrl || clip.video_url || '';
       if (!rawUrl || rawUrl.startsWith('blob:') || rawUrl.startsWith('idb:') || rawUrl.startsWith('data:image')) {
         const resolvedUrl = await resolveClipVideoPlaybackUrl(clip.id, rawUrl);

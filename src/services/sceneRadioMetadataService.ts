@@ -13,6 +13,7 @@
 
 import { FRONTEND_FALLBACK_PLAYLISTS } from '../data/socialFeedMockData';
 import { getRawSupabase } from './clientService';
+import { ensureUUID } from './schemaResilienceService';
 
 export interface RadioTrackMeta {
   videoId: string;
@@ -190,7 +191,7 @@ export async function getPlaylistTracksResilient(playlistId: string): Promise<Ra
       const { data, error } = await supabase
         .from('nexus_notifications')
         .select('data')
-        .eq('id', `playlist_cache_${playlistId}`)
+        .eq('id', ensureUUID(`playlist_cache_${playlistId}`))
         .maybeSingle();
 
       if (!error && data && Array.isArray(data.data) && data.data.length >= Math.max(expectedMinCount, 10)) {
@@ -314,7 +315,7 @@ export async function enrichTrackBatchDirect(
         supabase
           .from('nexus_notifications')
           .upsert({
-            id: `playlist_cache_${playlistId}`,
+            id: ensureUUID(`playlist_cache_${playlistId}`),
             data: finalList,
             created_at: new Date().toISOString()
           })
