@@ -780,7 +780,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
                   ref={singleFlyerInputRef}
                   type="file" 
                   accept="image/*" 
-                  className="hidden" 
+                  className="sr-only" 
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) processImageFile(file, (url) => setFlyerUrl(url));
@@ -1281,7 +1281,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
                       ref={tourFlyerInputRef}
                       type="file" 
                       accept="image/*" 
-                      className="hidden" 
+                      className="sr-only" 
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) processImageFile(file, (url) => setTourFlyerUrl(url));

@@ -836,7 +836,15 @@ export default function CreativeSettingsTab({
                               setUserProfile((prev: any) => ({ ...prev, creative_avatar: '' }));
                               const supabase = getSupabase();
                               if (supabase && userProfile?.id) {
-                                await supabase.from('profiles').update({ creative_avatar: null }).eq('id', userProfile.id);
+                                try {
+                                  await supabase.from('profiles').update({
+                                    creative_metadata: {
+                                      ...(userProfile.creative_metadata || {}),
+                                      creative_avatar: null,
+                                      avatar_url: null
+                                    }
+                                  }).eq('id', userProfile.id);
+                                } catch (_) {}
                                 const creativeIdToUse = (userProfile as any).creative_id || userProfile.id;
                                 await supabase.from('creatives').update({ avatar_url: null }).eq('id', creativeIdToUse);
                               }
@@ -866,7 +874,7 @@ export default function CreativeSettingsTab({
                       id="creative-avatar-uploader-acc"
                       type="file" 
                       accept="image/*" 
-                      className="hidden" 
+                      className="sr-only" 
                       onChange={handleLocalImageUpload} 
                     />
                   </div>
@@ -891,7 +899,15 @@ export default function CreativeSettingsTab({
                               setUserProfile((prev: any) => ({ ...prev, creative_banner: '' }));
                               const supabase = getSupabase();
                               if (supabase && userProfile?.id) {
-                                await supabase.from('profiles').update({ creative_banner: null }).eq('id', userProfile.id);
+                                try {
+                                  await supabase.from('profiles').update({
+                                    creative_metadata: {
+                                      ...(userProfile.creative_metadata || {}),
+                                      creative_banner: null,
+                                      banner_url: null
+                                    }
+                                  }).eq('id', userProfile.id);
+                                } catch (_) {}
                                 const creativeIdToUse = (userProfile as any).creative_id || userProfile.id;
                                 await supabase.from('creatives').update({ banner_url: null, cover_url: null }).eq('id', creativeIdToUse);
                               }
@@ -924,7 +940,7 @@ export default function CreativeSettingsTab({
                       id="creative-cover-uploader-acc"
                       type="file" 
                       accept="image/*" 
-                      className="hidden" 
+                      className="sr-only" 
                       onChange={handleLocalCoverImageUpload} 
                     />
                   </div>

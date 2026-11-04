@@ -19,10 +19,14 @@ import {
   ShieldCheck,
   RefreshCw,
   Users,
-  Compass
+  Compass,
+  Play,
+  Pause,
+  Shuffle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getSupabase } from '../../../supabase';
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
 import { communityBandManager, purgeDeletedAndZombieBands, isDeletedOrZombieBand } from '../../../lib/communityBands';
 
 export interface DiscoveryProfile {
@@ -179,11 +183,16 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
   onTriggerNotification,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isHoveredRef = useRef<boolean>(false);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [localFollowedMap, setLocalFollowedMap] = useState<Record<string, boolean>>({});
+  
+  // Auto-scrolling and shuffle state
+  const [isAutoScrolling, setIsAutoScrolling] = useState<boolean>(true);
+  const [shuffleSeed, setShuffleSeed] = useState<number>(() => Math.floor(Math.random() * 10000) + 1);
   
   // Real profiles state backed strictly by Supabase
   const [supabaseBands, setSupabaseBands] = useState<DiscoveryProfile[]>([]);
@@ -547,7 +556,7 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
     };
   }, [fetchSupabaseData]);
 
-  // Combine ONLY real Supabase profiles (Bands first, then Venues, Creatives, Labels, Fans)
+  // Combine & randomize real Supabase profiles across categories
   const allRealProfiles = useMemo(() => {
     const pool = [
       ...supabaseBands,
@@ -582,8 +591,47 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
       }
     }
 
-    return unique;
-  }, [supabaseBands, supabaseOthers, currentUserId, currentUserName, dismissedIds]);
+    // Interleave profiles across categories so they are thoroughly mixed
+    const buckets: Record<string, DiscoveryProfile[]> = {
+      bands: [],
+      venues: [],
+      creatives: [],
+      labels: [],
+      fans: []
+    };
+
+    for (const item of unique) {
+      const cat = (item.category && item.category in buckets) ? item.category : 'fans';
+      buckets[cat].push(item);
+    }
+
+    const interleaved: DiscoveryProfile[] = [];
+    const keys = Object.keys(buckets).filter(k => buckets[k].length > 0);
+    let maxLen = 0;
+    keys.forEach(k => { maxLen = Math.max(maxLen, buckets[k].length); });
+
+    for (let i = 0; i < maxLen; i++) {
+      for (const k of keys) {
+        if (i < buckets[k].length) {
+          interleaved.push(buckets[k][i]);
+        }
+      }
+    }
+
+    // Deterministic shuffle with shuffleSeed to randomize order
+    if (shuffleSeed > 0) {
+      const list = [...interleaved];
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.abs(Math.sin((i + 1) * shuffleSeed * 9999)) * (i + 1));
+        const temp = list[i];
+        list[i] = list[j];
+        list[j] = temp;
+      }
+      return list;
+    }
+
+    return interleaved;
+  }, [supabaseBands, supabaseOthers, currentUserId, currentUserName, dismissedIds, shuffleSeed]);
 
   // Filter profiles based on selected category tab
   const filteredProfiles = useMemo(() => {
@@ -637,12 +685,12 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
     return counts;
   }, [allRealProfiles]);
 
-  const checkScroll = () => {
+  const checkScroll = useCallback(() => {
     if (!scrollContainerRef.current) return;
     const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
     setCanScrollLeft(scrollLeft > 10);
     setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 10);
-  };
+  }, []);
 
   useEffect(() => {
     checkScroll();
@@ -655,7 +703,32 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
         window.removeEventListener('resize', checkScroll);
       };
     }
-  }, [filteredProfiles.length, selectedCategory]);
+  }, [filteredProfiles.length, selectedCategory, checkScroll]);
+
+  // Smooth continuous auto-scrolling loop (slow to medium speed)
+  useEffect(() => {
+    if (!isAutoScrolling || filteredProfiles.length < 2) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    let animId: number;
+    const scrollSpeed = 0.55; // Slow to medium pixels per frame
+
+    const step = () => {
+      if (!isHoveredRef.current && container) {
+        container.scrollLeft += scrollSpeed;
+        // Loop continuously back to start when reaching end
+        if (container.scrollLeft + container.clientWidth >= container.scrollWidth - 6) {
+          container.scrollLeft = 0;
+        }
+        checkScroll();
+      }
+      animId = requestAnimationFrame(step);
+    };
+
+    animId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(animId);
+  }, [isAutoScrolling, filteredProfiles.length, checkScroll]);
 
   const handleScroll = (direction: 'left' | 'right') => {
     if (!scrollContainerRef.current) return;
@@ -677,45 +750,16 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
   };
 
   const handleToggleFollow = (profile: DiscoveryProfile) => {
-    let localFollows: Record<string, boolean> = {};
-    try {
-      localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
-    } catch (e) {}
-
-    const nameKey = (profile.name || '').toLowerCase().trim();
-    const currentFollowed = localFollowedMap[profile.id] !== undefined
-      ? localFollowedMap[profile.id]
-      : Boolean(
-          localFollows[profile.id] || 
-          localFollows[profile.band_id || ''] || 
-          localFollows[profile.raw_id || ''] || 
-          localFollows[nameKey] ||
-          profile.followed
-        );
-
+    const currentFollowed = isProfileFollowedGlobally(profile);
     const nextState = !currentFollowed;
+    saveFollowStateGlobally(profile, nextState);
     setLocalFollowedMap(prev => ({ 
       ...prev, 
       [profile.id]: nextState,
       ...(profile.band_id ? { [profile.band_id]: nextState } : {}),
       ...(profile.raw_id ? { [profile.raw_id]: nextState } : {}),
-      ...(nameKey ? { [nameKey]: nextState } : {})
+      ...(profile.name ? { [profile.name.toLowerCase().trim()]: nextState } : {})
     }));
-
-    try {
-      if (nextState) {
-        localFollows[profile.id] = true;
-        if (profile.band_id) localFollows[profile.band_id] = true;
-        if (profile.raw_id) localFollows[profile.raw_id] = true;
-        if (nameKey) localFollows[nameKey] = true;
-      } else {
-        delete localFollows[profile.id];
-        if (profile.band_id) delete localFollows[profile.band_id];
-        if (profile.raw_id) delete localFollows[profile.raw_id];
-        if (nameKey) delete localFollows[nameKey];
-      }
-      localStorage.setItem('nexus_local_follows_v1', JSON.stringify(localFollows));
-    } catch (e) {}
 
     if (onFollowProfile) {
       onFollowProfile(profile);
@@ -806,8 +850,31 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
             })}
           </div>
 
-          {/* Action Tools: Refresh & Navigation Arrows */}
+          {/* Action Tools: Shuffle, Auto-scroll Toggle, Refresh & Navigation Arrows */}
           <div className="flex items-center gap-1 pl-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setShuffleSeed(prev => prev + 1);
+                onTriggerNotification?.("🔀 Reshuffled Discovery Zone profiles!");
+              }}
+              className="w-7 h-7 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-purple-400 border border-zinc-800 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+              title="Reshuffle & Mix Categories"
+            >
+              <Shuffle className="w-3.5 h-3.5 text-purple-400" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAutoScrolling(prev => !prev)}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                isAutoScrolling 
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30' 
+                  : 'bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
+              }`}
+              title={isAutoScrolling ? 'Pause Auto-Scroll' : 'Resume Auto-Scroll'}
+            >
+              {isAutoScrolling ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+            </button>
             <button
               type="button"
               onClick={handleManualRefresh}
@@ -850,8 +917,11 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
       {/* Horizontal Carousel Container */}
       <div 
         ref={scrollContainerRef}
-        className="flex gap-3 overflow-x-auto scrollbar-none py-1.5 px-0.5 scroll-smooth select-none items-center min-h-[224px]"
-        style={{ scrollSnapType: 'x mandatory' }}
+        onMouseEnter={() => { isHoveredRef.current = true; }}
+        onMouseLeave={() => { isHoveredRef.current = false; }}
+        onTouchStart={() => { isHoveredRef.current = true; }}
+        onTouchEnd={() => { isHoveredRef.current = false; }}
+        className="flex gap-3 overflow-x-auto scrollbar-none py-1.5 px-0.5 select-none items-center min-h-[224px]"
       >
         {isLoading && filteredProfiles.length === 0 ? (
           // Loading Skeletons

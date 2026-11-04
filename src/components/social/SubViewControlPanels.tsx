@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { ChevronDown, MapPin, Ticket, Filter, Map as MapIcon, SlidersHorizontal, Calendar, Star, Clock, Trash2, History, UserPlus, Check, Sparkles, Building2, Palette, Music, Disc } from 'lucide-react';
 import { formatTimeTo12h, hasGigTickets, isPastShowDate } from '../../utils/socialFeedUtils';
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../utils/followSyncService';
 
 export interface LiveTonightGig {
   id: string;
@@ -194,10 +195,13 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
 
   const handleEntityFollowClick = (e: React.MouseEvent, entity: any) => {
     e.stopPropagation();
-    const entityKey = entity.id || entity.name.toLowerCase();
-    const currentFollow = Boolean(followedState[entityKey] !== undefined ? followedState[entityKey] : entity.followed);
+    const targetObj = entity.rawProfile || entity;
+    const currentFollow = isProfileFollowedGlobally(targetObj) || Boolean(followedState[entity.id] || followedState[entity.name.toLowerCase()] || entity.followed);
     const nextFollow = !currentFollow;
 
+    saveFollowStateGlobally(targetObj, nextFollow);
+
+    const entityKey = entity.id || entity.name.toLowerCase();
     setFollowedState((prev) => ({
       ...prev,
       [entityKey]: nextFollow,
@@ -205,7 +209,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
     }));
 
     if (onToggleFollow) {
-      onToggleFollow(entity.rawProfile || entity);
+      onToggleFollow(targetObj);
     }
 
     triggerNotification?.(

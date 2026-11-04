@@ -593,7 +593,7 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
                       type="file"
                       accept="image/*,video/*"
                       onChange={handleFileUpload}
-                      className="hidden"
+                      className="sr-only"
                     />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

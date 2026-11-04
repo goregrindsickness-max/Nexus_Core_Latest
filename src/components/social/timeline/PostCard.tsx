@@ -1448,7 +1448,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                 ref={editFileInputRef}
                 accept="image/*"
                 multiple={replaceSlotIndexRef.current === null}
-                className="hidden"
+                className="sr-only"
                 onChange={(e) => {
                   if (e.target.files && e.target.files.length > 0) {
                     handleProcessEditFiles(Array.from(e.target.files));

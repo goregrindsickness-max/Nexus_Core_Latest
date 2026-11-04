@@ -887,14 +887,21 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
 
     // 4. Best-effort Supabase insert
     try {
-      await supabase.from('nexus_post_comments').insert([{
-        id: commentId,
-        post_id: postId,
-        user_id: activeUserId,
-        parent_comment_id: parentInfo?.commentId || null,
-        content: draft,
-        created_at: new Date().toISOString()
-      }]);
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const cleanPostId = postId.replace(/^nexus_post_/, '');
+      if (uuidRegex.test(cleanPostId)) {
+        const safeCommentId = uuidRegex.test(commentId) ? commentId : generateValidUUID();
+        const safeUserId = uuidRegex.test(activeUserId) ? activeUserId : '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+        const safeParentId = (parentInfo?.commentId && uuidRegex.test(parentInfo.commentId)) ? parentInfo.commentId : null;
+        await supabase.from('nexus_post_comments').insert([{
+          id: safeCommentId,
+          post_id: cleanPostId,
+          user_id: safeUserId,
+          parent_comment_id: safeParentId,
+          content: draft,
+          created_at: new Date().toISOString()
+        }]);
+      }
     } catch (_) {}
 
     // 4. Dispatch sync event for other views
@@ -1286,20 +1293,21 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
       }
 
       const activeTargetId = resolvedTargetUUID || targetId;
+      const isUUIDTarget = Boolean(activeTargetId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(activeTargetId).trim()));
 
       // Query posts for this profile from Supabase
       let query = supabase
         .from('nexus_posts')
         .select('*');
 
-      if (activeTargetId && activeTargetId !== 'current') {
+      if (isUUIDTarget && activeTargetId !== 'current') {
         query = query.eq('profile_id', activeTargetId);
       }
 
       let { data, error: selectErr } = await query.order('created_at', { ascending: false });
 
       // If specific query failed due to column error or returned empty, retry safely or fetch recent pool for in-memory resolution
-      if (selectErr && activeTargetId && activeTargetId !== 'current') {
+      if (selectErr && isUUIDTarget && activeTargetId !== 'current') {
         const retryQuery = await supabase
           .from('nexus_posts')
           .select('*')
@@ -2062,7 +2070,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                     ref={timelineFileInputRef}
                     onChange={handleImageFileSelect}
                     accept="image/*"
-                    className="hidden"
+                    className="sr-only"
                   />
                   <button
                     type="button"

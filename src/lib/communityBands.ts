@@ -87,6 +87,9 @@ export interface CommunityBandRecord {
   followers_count?: number;
   custom_slug?: string;
   slug?: string;
+  status?: string;
+  is_split_up?: boolean;
+  isSplitUp?: boolean;
 }
 
 // Initial pre-seeded community archives for iconic bands loaded from seedBandsData
@@ -1586,7 +1589,7 @@ export class CommunityBandManager {
           const { data: existingRemoteReleases } = await client
             .from('releases')
             .select('id, title')
-            .or(`band_id.eq.${bandUUID},band_id.eq.${band.id},band_name.ilike.${resolvedBandName}`);
+            .or(`band_id.eq.${bandUUID},band_id.eq.${band.id}`);
           
           if (existingRemoteReleases && Array.isArray(existingRemoteReleases)) {
             const activeIds = new Set(releasePayloads.map(r => r.id));

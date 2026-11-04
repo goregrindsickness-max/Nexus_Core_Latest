@@ -12,6 +12,7 @@ import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../
 import { isCommunityBandRecord } from '../../../lib/seedBandsData';
 import { communityBandManager } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
 import MarqueeText from '../../MarqueeText';
 import BandBookingModal from '../../social/modals/BandBookingModal';
 import SubmitBandToPromoterModal from '../../social/modals/SubmitBandToPromoterModal';
@@ -389,13 +390,18 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         try {
           let showsList: any[] = [];
           const validUUID = targetId && extractUUID(targetId);
-          if (validUUID) {
-            // Only filter by band_id
+          if (validUUID || targetName) {
             const { data } = await supabase
               .from('shows')
               .select('*')
-              .eq('band_id', validUUID);
-            if (data && data.length > 0) showsList = data;
+              .order('created_at', { ascending: false })
+              .limit(50);
+            if (data && data.length > 0) {
+              showsList = data.filter((s: any) => 
+                (validUUID && (s.band_id === validUUID || s.user_id === validUUID || s.creator_id === validUUID)) ||
+                (targetName && (s.headliner?.toLowerCase().includes(targetName.toLowerCase()) || s.band_name?.toLowerCase().includes(targetName.toLowerCase())))
+              );
+            }
           }
 
           if (isMounted) {
@@ -658,6 +664,25 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   if (!selectedUserProfile) return null;
 
   const baseTarget = selectedUserProfile || targetProfile;
+
+  // Sync follow state globally across all components
+  React.useEffect(() => {
+    const handleGlobalFollowUpdate = () => {
+      if (!selectedUserProfile) return;
+      const targetObj = { ...selectedUserProfile, ...baseTarget, ...fetchedPromoterRecord };
+      const isFollowedNow = isProfileFollowedGlobally(targetObj);
+      setSelectedUserProfile((prev: any) => (prev && prev.isFollowed !== isFollowedNow) ? { ...prev, isFollowed: isFollowedNow } : prev);
+    };
+    handleGlobalFollowUpdate();
+    if (typeof window !== 'undefined') {
+      window.addEventListener(FOLLOW_EVENT_NAME, handleGlobalFollowUpdate);
+      window.addEventListener('storage', handleGlobalFollowUpdate);
+      return () => {
+        window.removeEventListener(FOLLOW_EVENT_NAME, handleGlobalFollowUpdate);
+        window.removeEventListener('storage', handleGlobalFollowUpdate);
+      };
+    }
+  }, [selectedUserProfile?.id, selectedUserProfile?.name, baseTarget?.id, baseTarget?.name]);
 
   const targetRole = (baseTarget?.role || baseTarget?.portalRole || baseTarget?.account_type || '').toLowerCase();
 
@@ -1178,7 +1203,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               triggerNotification?.("Profile Preview: Follow button is active for your audience.");
                               return;
                             }
-                            const nextFollowed = !selectedUserProfile?.isFollowed;
+                            const isCurrentlyFollowed = isProfileFollowedGlobally(effTarget) || isProfileFollowedGlobally(selectedUserProfile) || Boolean(selectedUserProfile?.isFollowed);
+                            const nextFollowed = !isCurrentlyFollowed;
+                            saveFollowStateGlobally(effTarget, nextFollowed);
+                            saveFollowStateGlobally(selectedUserProfile, nextFollowed);
                             const diff = nextFollowed ? 1 : -1;
                             setSelectedUserProfile((prev: any) => {
                               if (!prev) return null;

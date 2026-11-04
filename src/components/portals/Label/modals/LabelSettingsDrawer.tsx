@@ -117,7 +117,7 @@ export const LabelSettingsDrawer: React.FC<LabelSettingsDrawerProps> = ({
                   id="label-avatar-uploader"
                   type="file" 
                   accept="image/*" 
-                  className="hidden" 
+                  className="sr-only" 
                   onChange={handleImageUpload} 
                 />
               </div>
@@ -169,7 +169,7 @@ export const LabelSettingsDrawer: React.FC<LabelSettingsDrawerProps> = ({
                   id="label-cover-uploader"
                   type="file" 
                   accept="image/*" 
-                  className="hidden" 
+                  className="sr-only" 
                   onChange={handleCoverImageUpload} 
                 />
               </div>

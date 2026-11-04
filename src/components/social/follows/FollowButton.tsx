@@ -1,7 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { UserPlus, UserCheck, Loader2 } from 'lucide-react';
+import {
+  isProfileFollowedGlobally,
+  saveFollowStateGlobally,
+  FOLLOW_EVENT_NAME,
+  getTargetFollowKeys,
+} from '../../../utils/followSyncService';
 
 export interface FollowButtonProps {
+  targetProfile?: any;
+  target?: any;
   isFollowed?: boolean;
   onToggleFollow?: () => Promise<void> | void;
   isLoading?: boolean;
@@ -14,7 +22,9 @@ export interface FollowButtonProps {
 }
 
 export const FollowButton: React.FC<FollowButtonProps> = ({
-  isFollowed = false,
+  targetProfile,
+  target,
+  isFollowed: propIsFollowed = false,
   onToggleFollow,
   isLoading = false,
   size = 'sm',
@@ -24,18 +34,78 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
   followingText = 'Following',
   showIcon = true,
 }) => {
+  const activeTarget = targetProfile || target;
   const [internalLoading, setInternalLoading] = useState(false);
+
+  const computeIsFollowed = useCallback(() => {
+    if (activeTarget) {
+      return isProfileFollowedGlobally(activeTarget);
+    }
+    return propIsFollowed;
+  }, [activeTarget, propIsFollowed]);
+
+  const [currentIsFollowed, setCurrentIsFollowed] = useState<boolean>(computeIsFollowed);
+
+  // Sync state whenever prop or target changes
+  useEffect(() => {
+    setCurrentIsFollowed(computeIsFollowed());
+  }, [computeIsFollowed]);
+
+  // Listen to global follow update events app-wide
+  useEffect(() => {
+    const handleFollowUpdated = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (!detail) {
+        setCurrentIsFollowed(computeIsFollowed());
+        return;
+      }
+
+      if (activeTarget) {
+        const myKeys = getTargetFollowKeys(activeTarget);
+        const eventKeys: string[] = detail.keys || getTargetFollowKeys(detail.target);
+        if (myKeys.some(k => eventKeys.includes(k))) {
+          setCurrentIsFollowed(Boolean(detail.isFollowed));
+        }
+      } else {
+        setCurrentIsFollowed(computeIsFollowed());
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(FOLLOW_EVENT_NAME, handleFollowUpdated);
+      window.addEventListener('storage', handleFollowUpdated);
+      return () => {
+        window.removeEventListener(FOLLOW_EVENT_NAME, handleFollowUpdated);
+        window.removeEventListener('storage', handleFollowUpdated);
+      };
+    }
+  }, [activeTarget, computeIsFollowed]);
 
   const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isLoading || internalLoading || !onToggleFollow) return;
-    try {
-      setInternalLoading(true);
-      await onToggleFollow();
-    } catch (err) {
-      console.warn('Follow action failed:', err);
-    } finally {
-      setInternalLoading(false);
+    if (isLoading || internalLoading) return;
+    
+    const nextState = !currentIsFollowed;
+    setCurrentIsFollowed(nextState);
+
+    if (activeTarget) {
+      saveFollowStateGlobally(activeTarget, nextState);
+    }
+
+    if (onToggleFollow) {
+      try {
+        setInternalLoading(true);
+        await onToggleFollow();
+      } catch (err) {
+        console.warn('Follow action failed:', err);
+        // Rollback on error
+        setCurrentIsFollowed(!nextState);
+        if (activeTarget) {
+          saveFollowStateGlobally(activeTarget, !nextState);
+        }
+      } finally {
+        setInternalLoading(false);
+      }
     }
   };
 
@@ -50,7 +120,7 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
   }[size];
 
   // Variant styling
-  const variantClasses = isFollowed
+  const variantClasses = currentIsFollowed
     ? variant === 'outline'
       ? 'border border-emerald-500/40 text-emerald-400 bg-emerald-950/20 hover:bg-emerald-950/40 hover:border-emerald-500'
       : variant === 'ghost'
@@ -72,7 +142,7 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
     >
       {busy ? (
         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-      ) : isFollowed ? (
+      ) : currentIsFollowed ? (
         <>
           {showIcon && <UserCheck className="w-3.5 h-3.5 shrink-0" />}
           <span>{followingText}</span>

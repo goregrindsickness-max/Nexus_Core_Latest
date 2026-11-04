@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { requestPauseSceneRadio } from './utils/mediaPlaybackCoordinator';
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../utils/followSyncService';
 import {
   ArrowRight,
   PlayCircle,
@@ -482,22 +483,30 @@ const SingleClipPlayerCard: React.FC<{
               <span className="font-bold text-sm text-white drop-shadow-md group-hover/prof:underline truncate">{clip.creator}</span>
               <span className="text-[10px] font-black uppercase text-rose-400 tracking-wider truncate">{clip?.role || "Member"}</span>
             </div>
-            <button
-              className={`text-[10px] border px-3 py-1 rounded-full font-bold uppercase transition-all ml-1.5 shrink-0 ${
-                clip.isFollowed ? 'bg-white text-black border-white' : 'border-white/40 hover:bg-white hover:text-black text-white'
-              }`}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!clip.isFollowed) {
-                  triggerNotification?.(`Followed ${clip.creator}`);
-                  setClips((prev) =>
-                    prev.map((c) => (c.id === clip.id ? { ...c, isFollowed: true } : c))
-                  );
-                }
-              }}
-            >
-              {clip.isFollowed ? 'Followed' : 'Follow'}
-            </button>
+            {(() => {
+              const clipTarget = { name: clip.creator, id: (clip as any).creator_id || clip.user_id || clip.profile_id, band_name: clip.bandName || clip.band_name };
+              const isFollowed = isProfileFollowedGlobally(clipTarget) || clip.isFollowed;
+              return (
+                <button
+                  className={`text-[10px] border px-3 py-1 rounded-full font-bold uppercase transition-all ml-1.5 shrink-0 cursor-pointer ${
+                    isFollowed ? 'bg-white text-black border-white' : 'border-white/40 hover:bg-white hover:text-black text-white'
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const nextState = !isFollowed;
+                    saveFollowStateGlobally(clipTarget, nextState);
+                    triggerNotification?.(nextState ? `Followed ${clip.creator}` : `Unfollowed ${clip.creator}`);
+                    if (setClips) {
+                      setClips((prev) =>
+                        prev.map((c) => (c.id === clip.id ? { ...c, isFollowed: nextState } : c))
+                      );
+                    }
+                  }}
+                >
+                  {isFollowed ? 'Followed' : 'Follow'}
+                </button>
+              );
+            })()}
           </div>
 
           <p className="text-sm text-zinc-100 drop-shadow-md leading-snug line-clamp-3">

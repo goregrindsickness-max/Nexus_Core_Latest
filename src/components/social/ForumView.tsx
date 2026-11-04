@@ -177,7 +177,7 @@ const NativeMediaUploader: React.FC<NativeMediaUploaderProps> = ({ value, onChan
         ref={fileInputRef}
         onChange={handleFileChange}
         accept="image/*,audio/*,video/*,.mp3,.wav,.ogg,.flac,.m4a"
-        className="hidden"
+        className="sr-only"
       />
 
       {isUploading ? (

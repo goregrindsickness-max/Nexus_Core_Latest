@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from "../../../utils/followSyncService";
 import {
   Briefcase,
   UserPlus,
@@ -481,25 +482,45 @@ export default function CreativesHubView({
     }
   });
 
-  const toggleFollowTalent = (id: string, name: string) => {
-    setFollowedTalents((prev) => {
-      const isFollowing = prev.includes(id);
-      const updated = isFollowing
-        ? prev.filter((fid) => fid !== id)
-        : [...prev, id];
-      localStorage.setItem(
-        "nexus_followed_creatives",
-        JSON.stringify(updated),
-      );
-      if (triggerNotification) {
-        if (isFollowing) {
-          triggerNotification(`Unfollowed ${name}`);
-        } else {
-          triggerNotification(`✓ Following ${name}! Updates will appear in your feed.`);
+  // Sync follow state globally across components
+  useEffect(() => {
+    const handleGlobalFollowUpdate = () => {
+      try {
+        const saved = localStorage.getItem("nexus_followed_creatives");
+        if (saved) {
+          setFollowedTalents(JSON.parse(saved));
         }
-      }
+      } catch (_) {}
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener(FOLLOW_EVENT_NAME, handleGlobalFollowUpdate);
+      window.addEventListener("storage", handleGlobalFollowUpdate);
+      return () => {
+        window.removeEventListener(FOLLOW_EVENT_NAME, handleGlobalFollowUpdate);
+        window.removeEventListener("storage", handleGlobalFollowUpdate);
+      };
+    }
+  }, []);
+
+  const toggleFollowTalent = (id: string, name: string) => {
+    const isFollowing = followedTalents.includes(id) || isProfileFollowedGlobally({ id, name, creative_name: name });
+    const nextState = !isFollowing;
+
+    saveFollowStateGlobally({ id, name, creative_name: name, type: "creative" }, nextState);
+
+    setFollowedTalents((prev) => {
+      const updated = nextState ? [...prev.filter(fid => fid !== id), id] : prev.filter(fid => fid !== id);
+      localStorage.setItem("nexus_followed_creatives", JSON.stringify(updated));
       return updated;
     });
+
+    if (triggerNotification) {
+      if (!nextState) {
+        triggerNotification(`Unfollowed ${name}`);
+      } else {
+        triggerNotification(`✓ Following ${name}! Updates will appear in your feed.`);
+      }
+    }
   };
 
   const handleMessageCreative = (talent: CreativeTalent) => {

@@ -383,7 +383,7 @@ export const MasterAudioUploaderModal: React.FC<MasterAudioUploaderModalProps> =
                 ref={fileInputRef} 
                 accept=".mp3,.wav,.flac,.m4a,.aac,audio/*" 
                 multiple 
-                className="hidden" 
+                className="sr-only" 
                 onChange={(e) => {
                   const files = Array.from(e.target.files || []);
                   if (files.length > 0) handleAddFiles(files);

@@ -1239,7 +1239,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           ref={tapeFileInputRef}
           onChange={handleTapeAudioUpload}
           accept="audio/*,.mp3,.wav,.m4a"
-          className="hidden"
+          className="sr-only"
         />
       )}
 
@@ -1686,7 +1686,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
               </div>
               <input 
                 type="file" 
-                className="hidden" 
+                className="sr-only" 
                 accept="image/*,audio/*,.mp3,.wav,.flac,.m4a" 
                 multiple 
                 onChange={(e) => {

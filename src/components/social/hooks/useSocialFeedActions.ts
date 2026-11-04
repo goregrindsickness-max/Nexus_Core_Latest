@@ -250,14 +250,21 @@ export function useSocialFeedActions({
     const supabase = getSupabase();
     if (supabase) {
       try {
-        await supabase.from('nexus_post_comments').insert([{
-          id: commentId,
-          post_id: postId,
-          user_id: userId,
-          parent_comment_id: parentCommentId || null,
-          content: text,
-          created_at: new Date().toISOString()
-        }]);
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        const cleanPostId = postId.replace(/^nexus_post_/, '');
+        if (uuidRegex.test(cleanPostId)) {
+          const safeCommentId = uuidRegex.test(commentId) ? commentId : generateValidUUID();
+          const safeUserId = uuidRegex.test(userId) ? userId : '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+          const safeParentId = (parentCommentId && uuidRegex.test(parentCommentId)) ? parentCommentId : null;
+          await supabase.from('nexus_post_comments').insert([{
+            id: safeCommentId,
+            post_id: cleanPostId,
+            user_id: safeUserId,
+            parent_comment_id: safeParentId,
+            content: text,
+            created_at: new Date().toISOString()
+          }]);
+        }
       } catch (_) {}
     }
 

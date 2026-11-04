@@ -237,16 +237,21 @@ export const BandBookingModal: React.FC<BandBookingModalProps> = ({
         const supabase = getSupabase();
         if (supabase) {
           // Send notification entry
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+          const targetUserId = targetProfile?.id && uuidRegex.test(targetProfile.id)
+            ? targetProfile.id
+            : '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+
           await supabase.from('nexus_notifications').insert([{
             id: generateUUID(),
-            user_id: targetProfile?.id || 'band_inbox',
-            actor_id: userProfile?.id || null,
+            user_id: targetUserId,
+            actor_id: (userProfile?.id && uuidRegex.test(userProfile.id)) ? userProfile.id : null,
             title: `📅 Booking Offer: ${formData.eventName}`,
             message: `${formData.promoterName} sent a formal offer for ${formData.venueName} in ${formData.city} on ${formData.performanceDate} (${formData.guaranteeAmount} ${formData.currency}).`,
             type: 'booking_offer',
-            category: 'GIGS',
             data: {
               ...bookingRecord,
+              category: 'GIGS',
               sender_id: userProfile?.id || null,
               sender_name: formData.promoterName || 'Promoter / Booker',
               actor_email: userProfile?.email || null,

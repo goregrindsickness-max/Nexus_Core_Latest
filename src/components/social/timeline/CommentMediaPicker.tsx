@@ -80,7 +80,7 @@ export const CommentMediaPicker: React.FC<CommentMediaPickerProps> = ({
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        className="hidden"
+        className="sr-only"
         onChange={handleImageFileChange}
       />
 

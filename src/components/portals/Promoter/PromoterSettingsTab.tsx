@@ -893,7 +893,7 @@ export default function PromoterSettingsTab({
                       id="promoter-avatar-uploader-acc"
                       type="file" 
                       accept="image/*" 
-                      className="hidden" 
+                      className="sr-only" 
                       onChange={handleLocalImageUpload} 
                     />
                   </div>
@@ -946,7 +946,7 @@ export default function PromoterSettingsTab({
                       id="promoter-cover-uploader-acc"
                       type="file" 
                       accept="image/*" 
-                      className="hidden" 
+                      className="sr-only" 
                       onChange={handleLocalCoverImageUpload} 
                     />
                   </div>

@@ -1496,7 +1496,7 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
               accept="image/*"
               multiple
               onChange={handleImageUploadInit}
-              className="hidden"
+              className="sr-only"
             />
           </label>
         </div>
@@ -2154,7 +2154,7 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
                   type="file"
                   accept="image/*"
                   onChange={handleReplacePhotoFile}
-                  className="hidden"
+                  className="sr-only"
                 />
 
                 <div className="pt-5 border-t border-zinc-900 mt-6 flex flex-col gap-2">

@@ -1576,7 +1576,7 @@ export default function CreativeDashboardViewV2({
                             ) : (
                               <Globe className="w-4 h-4 text-fuchsia-500" />
                             )}
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => { handleImageUpload(e); setV2RoleMenuOpen(false); }} />
+                            <input type="file" accept="image/*" className="sr-only" onChange={(e) => { handleImageUpload(e); setV2RoleMenuOpen(false); }} />
                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-[7px] uppercase font-bold text-fuchsia-400">
                               Edit
                             </div>
@@ -1852,7 +1852,7 @@ export default function CreativeDashboardViewV2({
                     </button>
                     <label className="bg-zinc-950/60 hover:bg-zinc-850 border border-zinc-800 hover:border-[#d946ef] text-[#d946ef]/90 hover:text-white p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center shadow-md shadow-black">
                       <Upload className="w-4 h-4" />
-                      <input type="file" accept="image/*" className="hidden" onChange={handleCoverImageUpload} />
+                      <input type="file" accept="image/*" className="sr-only" onChange={handleCoverImageUpload} />
                     </label>
                     <button
                       type="button"
@@ -1881,7 +1881,7 @@ export default function CreativeDashboardViewV2({
                           <Globe className="w-12 h-12 text-[#d946ef] group-hover:scale-110 transition-transform duration-300" />
                         )}
                         {/* Invisible file input */}
-                        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                        <input type="file" accept="image/*" className="sr-only" onChange={handleImageUpload} />
                         <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           <span className="text-[8px] font-mono font-bold text-white uppercase bg-black/80 px-1 py-0.5 rounded border border-[#d946ef]/30">Edit</span>
                         </div>
@@ -1995,7 +1995,7 @@ export default function CreativeDashboardViewV2({
                     <label className="bg-zinc-950/60 hover:bg-zinc-850 border border-zinc-800 hover:border-[#d946ef] text-[#d946ef]/90 hover:text-white p-2.5 rounded-xl transition-all cursor-pointer shadow-md shadow-black flex items-center gap-1.5 text-[10px] font-mono font-bold tracking-wider uppercase">
                       <Upload className="w-4 h-4" />
                       <span>CHANGE BANNER</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={handleCoverImageUpload} />
+                      <input type="file" accept="image/*" className="sr-only" onChange={handleCoverImageUpload} />
                     </label>
 
                     <button 
@@ -2024,7 +2024,7 @@ export default function CreativeDashboardViewV2({
                           <Globe className="w-16 h-16 text-[#d946ef] group-hover:scale-110 transition-transform duration-300" />
                         )}
                         {/* Real file upload input triggers on label click */}
-                        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                        <input type="file" accept="image/*" className="sr-only" onChange={handleImageUpload} />
                         <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           <span className="text-[8px] font-mono font-bold text-white uppercase bg-black/80 px-1.5 py-1 rounded border border-[#d946ef]/30">Upload</span>
                         </div>

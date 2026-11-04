@@ -7,10 +7,11 @@ import { formatLocationDisplay } from '../../../constants/location';
 import { useUserPresence } from '../../../lib/presence';
 import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, upsertBandToDatabase, generateUUID } from '../../../supabase';
-import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER, resolvePromoterLogo, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER } from '../../../utils/bandProfileUtils';
+import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER, resolvePromoterLogo, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER, isBandSplitUp } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
 import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
 import CommunityBandCuratorModal from '../../social/modals/CommunityBandCuratorModal';
 import BandClaimHandoverModal from '../../social/modals/BandClaimHandoverModal';
 import BandBookingModal from '../../social/modals/BandBookingModal';
@@ -504,13 +505,18 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         try {
           let showsList: any[] = [];
           const validUUID = targetId && extractUUID(targetId);
-          if (validUUID) {
-            // Only filter by band_id
+          if (validUUID || targetName) {
             const { data } = await supabase
               .from('shows')
               .select('*')
-              .eq('band_id', validUUID);
-            if (data && data.length > 0) showsList = data;
+              .order('created_at', { ascending: false })
+              .limit(50);
+            if (data && data.length > 0) {
+              showsList = data.filter((s: any) => 
+                (validUUID && (s.band_id === validUUID || s.user_id === validUUID || s.creator_id === validUUID)) ||
+                (targetName && (s.headliner?.toLowerCase().includes(targetName.toLowerCase()) || s.band_name?.toLowerCase().includes(targetName.toLowerCase())))
+              );
+            }
           }
 
           if (isMounted) {
@@ -643,7 +649,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
               const { count, error } = await supabase
                 .from('follows')
                 .select('*', { count: 'exact', head: true })
-                .or(`followed_id.eq.${extractUUID(bandUUID)},artist_id.eq.${extractUUID(bandUUID)}`);
+                .eq('followed_id', extractUUID(bandUUID)!);
               if (!error && count !== null && count !== undefined) {
                 if (isMounted && setLiveProfileStats) {
                   setLiveProfileStats((prev: any) => ({ ...prev, followers: count }));
@@ -842,6 +848,25 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       window.removeEventListener('community_band_saved', handleBandUpdate);
     };
   }, [selectedUserProfile?.id, selectedUserProfile?.name, targetProfile?.id, targetProfile?.name]);
+
+  // Sync follow state globally across all components
+  React.useEffect(() => {
+    const handleGlobalFollowUpdate = () => {
+      if (!selectedUserProfile) return;
+      const targetObj = { ...selectedUserProfile, ...fetchedBandData };
+      const isFollowedNow = isProfileFollowedGlobally(targetObj);
+      setSelectedUserProfile((prev: any) => (prev && prev.isFollowed !== isFollowedNow) ? { ...prev, isFollowed: isFollowedNow } : prev);
+    };
+    handleGlobalFollowUpdate();
+    if (typeof window !== 'undefined') {
+      window.addEventListener(FOLLOW_EVENT_NAME, handleGlobalFollowUpdate);
+      window.addEventListener('storage', handleGlobalFollowUpdate);
+      return () => {
+        window.removeEventListener(FOLLOW_EVENT_NAME, handleGlobalFollowUpdate);
+        window.removeEventListener('storage', handleGlobalFollowUpdate);
+      };
+    }
+  }, [selectedUserProfile?.id, selectedUserProfile?.name, fetchedBandData?.id, fetchedBandData?.name]);
 
   if (!selectedUserProfile) return null;
 
@@ -1687,11 +1712,16 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         )}
 
                         {/* Location and Founded Year */}
-                        {effTarget?.founded_year && (
+                        {(effTarget?.founded_year || isBandSplitUp(effTarget) || isBandSplitUp(selectedUserProfile)) && (
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-zinc-400 text-xs mt-1">
                             <div className="flex items-center">
                               <Calendar className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-amber-500" />
-                              <span className="font-mono text-[11px] text-zinc-300 font-bold">Year Formed: {effTarget?.founded_year}</span>
+                              <span className="font-mono text-[11px] text-zinc-300 font-bold">
+                                Year Formed: {effTarget?.founded_year || '2005'}
+                                {(isBandSplitUp(effTarget) || isBandSplitUp(selectedUserProfile) || isBandSplitUp(bData) || isBandSplitUp(communityArchiveMatch)) && (
+                                  <span className="ml-1.5 text-rose-400 font-black uppercase tracking-wider text-[11px]">(split-up)</span>
+                                )}
+                              </span>
                             </div>
                           </div>
                         )}
@@ -1784,7 +1814,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               triggerNotification?.("Profile Preview: Follow button is active for your audience.");
                               return;
                             }
-                            const nextFollowed = !selectedUserProfile?.isFollowed;
+                            const isCurrentlyFollowed = isProfileFollowedGlobally(effTarget) || isProfileFollowedGlobally(selectedUserProfile) || Boolean(selectedUserProfile?.isFollowed);
+                            const nextFollowed = !isCurrentlyFollowed;
+                            saveFollowStateGlobally(effTarget, nextFollowed);
+                            saveFollowStateGlobally(selectedUserProfile, nextFollowed);
                             const diff = nextFollowed ? 1 : -1;
                             setSelectedUserProfile((prev: any) => {
                               if (!prev) return null;

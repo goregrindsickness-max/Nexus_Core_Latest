@@ -104,7 +104,7 @@ export const StemUploadModal: React.FC<StemUploadModalProps> = ({
                 type="file"
                 accept="audio/*"
                 id="stem-file-upload"
-                className="hidden"
+                className="sr-only"
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
                     setSelectedFile(e.target.files[0]);

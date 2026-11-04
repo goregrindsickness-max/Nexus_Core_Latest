@@ -323,7 +323,7 @@ export const ArtistManagementModal: React.FC<ArtistManagementModalProps> = ({
                         <input 
                           type="file"
                           ref={editRosterFileInputRef}
-                          className="hidden"
+                          className="sr-only"
                           accept="image/*"
                           onChange={(e) => e.target.files && e.target.files[0] && handleLogoUpload(e.target.files[0], true)}
                         />
@@ -669,7 +669,7 @@ export const ArtistManagementModal: React.FC<ArtistManagementModalProps> = ({
                             <input 
                               type="file"
                               ref={rosterFileInputRef}
-                              className="hidden"
+                              className="sr-only"
                               accept="image/*"
                               onChange={(e) => e.target.files && e.target.files[0] && handleLogoUpload(e.target.files[0], false)}
                             />

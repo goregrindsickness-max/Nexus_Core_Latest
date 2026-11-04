@@ -244,6 +244,8 @@ export async function uploadBase64ToStorage(
       !cleanRequested
     ) {
       primaryBucket = 'community-bands';
+    } else if (cleanRequested === 'assets') {
+      primaryBucket = 'public-assets';
     } else {
       primaryBucket = cleanRequested;
     }

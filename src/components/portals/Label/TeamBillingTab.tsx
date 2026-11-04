@@ -340,7 +340,7 @@ export default function TeamBillingTab({
                         id="label-avatar-uploader-acc"
                         type="file" 
                         accept="image/*" 
-                        className="hidden" 
+                        className="sr-only" 
                         onChange={handleLocalImageUpload} 
                       />
                     </div>
@@ -392,7 +392,7 @@ export default function TeamBillingTab({
                         id="label-cover-uploader-acc"
                         type="file" 
                         accept="image/*" 
-                        className="hidden" 
+                        className="sr-only" 
                         onChange={handleLocalCoverImageUpload} 
                       />
                     </div>

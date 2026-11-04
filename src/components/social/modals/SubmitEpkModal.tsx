@@ -246,7 +246,7 @@ export const SubmitEpkModal: React.FC<SubmitEpkModalProps> = ({
                         type="file"
                         multiple
                         accept=".mp3,.wav"
-                        className="hidden"
+                        className="sr-only"
                         onChange={(e) => {
                           if (e.target.files) {
                             const files = Array.from(e.target.files);

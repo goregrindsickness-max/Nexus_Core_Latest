@@ -1404,7 +1404,7 @@ export default function PromoHubView({
                   ref={fileInputRef} 
                   onChange={handleImageUpload} 
                   accept="image/*" 
-                  className="hidden" 
+                  className="sr-only" 
                 />
 
                 {bgType === 'gradient' ? (

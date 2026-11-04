@@ -341,7 +341,7 @@ export const CreateDIYEventModal: React.FC<CreateDIYEventModalProps> = ({
                   type="file"
                   ref={flyerFileInputRef}
                   accept="image/*"
-                  className="hidden"
+                  className="sr-only"
                   onChange={handleFlyerFileChange}
                 />
 

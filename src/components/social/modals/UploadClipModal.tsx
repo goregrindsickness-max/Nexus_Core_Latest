@@ -430,7 +430,7 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
                       <input
                         type="file"
                         accept="video/*"
-                        className="hidden"
+                        className="sr-only"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {

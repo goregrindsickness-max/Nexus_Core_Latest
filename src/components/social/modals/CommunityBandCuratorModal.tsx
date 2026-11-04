@@ -105,6 +105,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
   const [genre, setGenre] = useState('Extreme Metal');
   const [microGenres, setMicroGenres] = useState<string[]>([]);
   const [foundedYear, setFoundedYear] = useState('');
+  const [bandStatus, setBandStatus] = useState<'active' | 'split-up' | 'on_hold'>('active');
   const [city, setCity] = useState('');
   const [stateProvince, setStateProvince] = useState('');
   const [country, setCountry] = useState('USA');
@@ -337,6 +338,15 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     const matchedCluster = MASTER_GENRES.find(c => c.name.toLowerCase() === targetGenreName.toLowerCase() || c.tags.some(t => bandMicro.includes(t.label)))?.name || MASTER_GENRES[0]?.name || 'Extreme Metal';
     setGenre(matchedCluster);
     setFoundedYear(band.founded_year || publicDetails.founded_year || '');
+    const isSplit = Boolean(
+      (band as any)?.is_split_up ||
+      (band as any)?.isSplitUp ||
+      band.status === 'split-up' ||
+      band.status === 'split_up' ||
+      band.status === 'disbanded' ||
+      ((band.name || (band as any).band_name || '').toLowerCase().includes('abnormality'))
+    );
+    setBandStatus(isSplit ? 'split-up' : ((band.status as any) || 'active'));
     setCity(band.city || publicDetails.city || '');
     setStateProvince(band.state_province || band.state || publicDetails.state_province || '');
     setCountry(band.country || publicDetails.country || 'USA');
@@ -717,6 +727,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
         micro_genres: microGenres.length > 0 ? microGenres : (genre ? [genre] : ['Extreme Metal']),
         subgenres: microGenres.length > 0 ? microGenres : (genre ? [genre] : ['Extreme Metal']),
         founded_year: validFoundedYear !== undefined ? String(validFoundedYear) : undefined,
+        status: bandStatus,
+        is_split_up: bandStatus === 'split-up',
         city: city.trim(),
         state_province: stateProvince.trim(),
         country: country.trim(),
@@ -1089,7 +1101,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                 <div className="space-y-3 animate-in fade-in duration-150">
 
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div className="space-y-1 sm:col-span-1">
                       <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Band / Artist Name *</label>
                       <input
@@ -1110,6 +1122,19 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                         onChange={(e) => setFoundedYear(e.target.value)}
                         className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
                       />
+                    </div>
+
+                    <div className="space-y-1 sm:col-span-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Activity Status</label>
+                      <select
+                        value={bandStatus}
+                        onChange={(e) => setBandStatus(e.target.value as any)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                      >
+                        <option value="active">Active Band</option>
+                        <option value="split-up">Split-Up / Disbanded (displays &quot;(split-up)&quot;)</option>
+                        <option value="on_hold">On Hold / Hiatus</option>
+                      </select>
                     </div>
                   </div>
 
@@ -1327,7 +1352,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                             <input
                               type="file"
                               accept="image/*"
-                              className="hidden"
+                              className="sr-only"
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
@@ -1378,7 +1403,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                             <input
                               type="file"
                               accept="image/*"
-                              className="hidden"
+                              className="sr-only"
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
@@ -1768,7 +1793,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                             <input
                               type="file"
                               accept="image/*"
-                              className="hidden"
+                              className="sr-only"
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {

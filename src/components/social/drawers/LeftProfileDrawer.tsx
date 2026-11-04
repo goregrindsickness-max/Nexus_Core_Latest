@@ -36,6 +36,7 @@ import { WalletOAuthModal } from "../modals/WalletOAuthModal";
 import { PaymentMethodsSettings } from "../../PaymentMethodsSettings";
 import { CommunityBandCuratorModal } from "../modals/CommunityBandCuratorModal";
 import { isMiguelNameOrProfile } from "../utils/profileUtils";
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from "../../../utils/followSyncService";
 import { bugMonitor } from "../../../services/bugMonitorService";
 import { useModalStore } from "../../../store/useModalStore";
 import {
@@ -1170,7 +1171,7 @@ if (!leftDrawerOpen) return null;
                                     ref={avatarFileInputRef}
                                     type="file" 
                                     accept="image/*" 
-                                    className="hidden" 
+                                    className="sr-only" 
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
                                       if (file) {
@@ -1256,7 +1257,7 @@ if (!leftDrawerOpen) return null;
                                     ref={coverFileInputRef}
                                     type="file" 
                                     accept="image/*" 
-                                    className="hidden" 
+                                    className="sr-only" 
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
                                       if (file) {
@@ -3194,7 +3195,11 @@ if (!leftDrawerOpen) return null;
                         };
 
                         const toggleFollowProfile = (profileId: string, name: string) => {
-                          handleFollowProfile(name);
+                          const profileObj = discoverProfiles?.find(p => p.id === profileId || p.name === name);
+                          const target = profileObj || { id: profileId, name };
+                          const isFollowedNow = isProfileFollowedGlobally(target, discoverProfiles);
+                          saveFollowStateGlobally(target, !isFollowedNow);
+                          handleFollowProfile(profileObj || name);
                         };
 
                         const toggleCategoryAlerts = () => {

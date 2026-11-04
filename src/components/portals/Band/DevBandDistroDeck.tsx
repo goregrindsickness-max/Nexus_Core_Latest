@@ -1162,8 +1162,8 @@ export default function DevBandDistroDeck({
           </div>
 
           {/* Hidden HTML input triggers for custom updates */}
-          <input type="file" accept="image/*" ref={logoInputRef} className="hidden" onChange={handleLogoUploadSim} />
-          <input type="file" accept="image/*" ref={bannerInputRef} className="hidden" onChange={handleBannerUploadSim} />
+          <input type="file" accept="image/*" ref={logoInputRef} className="sr-only" onChange={handleLogoUploadSim} />
+          <input type="file" accept="image/*" ref={bannerInputRef} className="sr-only" onChange={handleBannerUploadSim} />
 
         </div>
 
@@ -2219,7 +2219,7 @@ Keep it heavy, keep it loud!
                         type="file" 
                         ref={trackFileInputRef}
                         accept=".mp3,.wav,audio/*" 
-                        className="hidden" 
+                        className="sr-only" 
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
@@ -2235,7 +2235,7 @@ Keep it heavy, keep it loud!
                           id="local-music-uploader-batch" 
                           accept=".mp3,.wav,audio/*" 
                           multiple
-                          className="hidden" 
+                          className="sr-only" 
                           onChange={(e) => {
                             const files = Array.from(e.target.files || []);
                             if (files.length === 0) return;
@@ -3235,7 +3235,7 @@ Keep it heavy, keep it loud!
         type="file"
         ref={itemImgInputRef}
         onChange={handleItemImgFileChange}
-        className="hidden"
+        className="sr-only"
         accept="image/*"
       />
 

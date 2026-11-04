@@ -649,7 +649,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
           await supabase.from('profiles').update({
             creative_id: effectiveCreativeId,
             creative_name: effectiveCreativeName,
-            creative_business_name: effectiveCreativeName,
             allowed_workspaces: normalizedProfile.allowed_workspaces,
             registered_workspaces: normalizedProfile.registered_workspaces
           }).eq('id', data.id);

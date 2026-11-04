@@ -708,7 +708,7 @@ export const DiscographyReleaseForm: React.FC<DiscographyReleaseFormProps> = ({
                   ref={batchFileInputRef} 
                   accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*" 
                   multiple 
-                  className="hidden" 
+                  className="sr-only" 
                   onChange={(e) => {
                     if (e.target.files) handleBatchAudioFiles(Array.from(e.target.files));
                     e.target.value = '';
@@ -772,7 +772,7 @@ export const DiscographyReleaseForm: React.FC<DiscographyReleaseFormProps> = ({
                       type="file" 
                       ref={textFileInputRef} 
                       accept=".txt,.md,.csv,text/*" 
-                      className="hidden" 
+                      className="sr-only" 
                       onChange={handleTextFileUpload} 
                     />
                     <button

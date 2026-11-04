@@ -6,6 +6,7 @@ import { getSupabase, executeWithSchemaResilience, sanitizeBandPayload } from '.
 import { isMiguelNameOrProfile } from '../utils/profileUtils';
 import { communityBandManager, isDeletedOrZombieBand } from '../../../lib/communityBands';
 import { isCommunityBandRecord } from '../../../lib/seedBandsData';
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
 
 const isValidUUID = (str: string | null | undefined): boolean => {
   return typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
@@ -147,7 +148,7 @@ export function useSocialFollowsAndProfiles({
       setDiscoverProfiles(prev => prev.map(dp => {
         const dpNameLower = (dp?.name || "User").toLowerCase().trim();
         const dpIdLower = String(dp.id || '').toLowerCase().trim();
-        const isFollowed = followedArtistIds.includes(dpIdLower) || followedArtistIds.includes(dpNameLower) || !!localFollows[dp.id] || !!localFollows[dpNameLower];
+        const isFollowed = isProfileFollowedGlobally(dp, allFollows);
         const isFollowedBack = whoFollowsUs.includes(dpNameLower) || whoFollowsUs.includes(dpIdLower);
         return { ...dp, followed: isFollowed, followedBack: isFollowedBack };
       }));
@@ -554,9 +555,13 @@ export function useSocialFollowsAndProfiles({
     };
     window.addEventListener('nexus_community_bands_updated', handleUpdate);
     window.addEventListener('nexus_avatar_updated', handleUpdate);
+    window.addEventListener(FOLLOW_EVENT_NAME, handleUpdate);
+    window.addEventListener('storage', handleUpdate);
     return () => {
       window.removeEventListener('nexus_community_bands_updated', handleUpdate);
       window.removeEventListener('nexus_avatar_updated', handleUpdate);
+      window.removeEventListener(FOLLOW_EVENT_NAME, handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
     };
   }, [userProfile?.id, userProfile?.email]);
 
@@ -832,19 +837,10 @@ export function useSocialFollowsAndProfiles({
     const nextAction = forceAction ? forceAction : (currentlyFollowed ? 'unfollow' : 'follow');
     const isNowFollowed = nextAction === 'follow';
 
-    // Persist to localStorage
-    try {
-      if (isNowFollowed) {
-        localFollows[finalTargetId] = true;
-        if (targetNameLower) localFollows[targetNameLower] = true;
-      } else {
-        delete localFollows[finalTargetId];
-        if (targetNameLower) delete localFollows[targetNameLower];
-      }
-      localStorage.setItem('nexus_local_follows_v1', JSON.stringify(localFollows));
-    } catch (e) {
-      console.warn("Failed to write nexus_local_follows_v1", e);
-    }
+    // Persist to localStorage via followSyncService
+    saveFollowStateGlobally(targetInput, isNowFollowed, followerId);
+    if (targetName) saveFollowStateGlobally(targetName, isNowFollowed, followerId);
+    if (finalTargetId) saveFollowStateGlobally(finalTargetId, isNowFollowed, followerId);
 
     if (supabaseClient && followerId && finalTargetId && isValidUUID(followerId) && isValidUUID(finalTargetId)) {
       const targetType = isBand ? 'band' : ((typeof targetInput === 'object' ? targetInput?.type || targetInput?.account_type || targetInput?.role : null) || 'user');

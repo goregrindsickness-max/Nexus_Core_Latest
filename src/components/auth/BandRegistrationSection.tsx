@@ -716,7 +716,7 @@ export const BandRegistrationSection: React.FC<BandRegistrationSectionProps> = (
                     <input 
                       type="file" 
                       accept=".pdf,.doc,.docx,.png,.jpg"
-                      className="hidden"
+                      className="sr-only"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {

@@ -7287,7 +7287,7 @@ export default function PromoterPortalView({
                             type="file" 
                             accept="image/*" 
                             onChange={handleAvatarLocalUpload} 
-                            className="hidden" 
+                            className="sr-only" 
                           />
                         </label>
 

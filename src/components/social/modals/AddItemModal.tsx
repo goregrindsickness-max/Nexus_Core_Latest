@@ -164,7 +164,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                           type="file" 
                           accept="image/*" 
                           multiple 
-                          className="hidden" 
+                          className="sr-only" 
                           onChange={(e) => {
                             const files = Array.from(e.target.files || []);
                             if (files.length > 0) {

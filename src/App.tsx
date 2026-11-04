@@ -732,10 +732,12 @@ export default function App() {
               actor_id: userProfile?.id || null,
               title: notifItem.title,
               message: notifItem.message,
-              category: 'REACTION',
               type: 'post_reaction',
               is_read: false,
-              data: notifItem,
+              data: {
+                ...notifItem,
+                category: 'REACTION'
+              },
               created_at: new Date().toISOString(),
             }]).then(({ error }) => {
               if (error) console.error("Notification insert error:", error);

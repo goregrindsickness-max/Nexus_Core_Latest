@@ -2089,7 +2089,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                 ref={fileInputRef}
                 onChange={handleFileUpload}
                 accept="image/*"
-                className="hidden"
+                className="sr-only"
               />
 
               <button

@@ -28,6 +28,7 @@ import {
   Check,
   User
 } from 'lucide-react';
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
 import { getSupabase } from '../../../supabase';
 import { RADIO_PLAYLISTS, FRONTEND_FALLBACK_PLAYLISTS } from '../../../data/socialFeedMockData';
 import { FirstTimeTooltip } from '../../common/FirstTimeTooltip';
@@ -385,15 +386,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
           };
           setMatchedBandProfile(prof);
 
-          try {
-            const localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
-            const isFollowed = Boolean(
-              localFollows[prof.id] ||
-              localFollows[b.id] ||
-              localFollows[cleanQuery]
-            );
-            setIsFollowingMatched(isFollowed);
-          } catch (_) {}
+            setIsFollowingMatched(isProfileFollowedGlobally(prof));
           return;
         }
 
@@ -401,7 +394,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
         const { data: profData } = await client
           .from('profiles')
           .select('*')
-          .or(`full_name.ilike.%${cleanQuery}%,bandName.ilike.%${cleanQuery}%`)
+          .or(`full_name.ilike.%${cleanQuery}%,band_name.ilike.%${cleanQuery}%`)
           .limit(1);
 
         if (active && profData && profData.length > 0) {
@@ -421,15 +414,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
           };
           setMatchedBandProfile(prof);
 
-          try {
-            const localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
-            const isFollowed = Boolean(
-              localFollows[prof.id] ||
-              localFollows[p.id] ||
-              localFollows[cleanQuery]
-            );
-            setIsFollowingMatched(isFollowed);
-          } catch (_) {}
+            setIsFollowingMatched(isProfileFollowedGlobally(prof));
           return;
         }
 
@@ -450,14 +435,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
           };
           setMatchedBandProfile(fallbackProf);
 
-          try {
-            const localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
-            const isFollowed = Boolean(
-              localFollows[fallbackProf.id] ||
-              localFollows[cleanQuery]
-            );
-            setIsFollowingMatched(isFollowed);
-          } catch (_) {}
+            setIsFollowingMatched(isProfileFollowedGlobally(fallbackProf));
         }
       } catch (err) {
         if (active) {
@@ -492,25 +470,9 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
   // Toggle follow handler for matched app band
   const handleToggleFollowMatched = () => {
     if (!matchedBandProfile) return;
-    const nameKey = (matchedBandProfile.name || '').toLowerCase().trim();
     const nextState = !isFollowingMatched;
     setIsFollowingMatched(nextState);
-
-    try {
-      const localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
-      if (nextState) {
-        localFollows[matchedBandProfile.id] = true;
-        if (matchedBandProfile.raw_id) localFollows[matchedBandProfile.raw_id] = true;
-        if (matchedBandProfile.band_id) localFollows[matchedBandProfile.band_id] = true;
-        if (nameKey) localFollows[nameKey] = true;
-      } else {
-        delete localFollows[matchedBandProfile.id];
-        if (matchedBandProfile.raw_id) delete localFollows[matchedBandProfile.raw_id];
-        if (matchedBandProfile.band_id) delete localFollows[matchedBandProfile.band_id];
-        if (nameKey) delete localFollows[nameKey];
-      }
-      localStorage.setItem('nexus_local_follows_v1', JSON.stringify(localFollows));
-    } catch (_) {}
+    saveFollowStateGlobally(matchedBandProfile, nextState);
 
     triggerNotification?.(
       nextState
@@ -518,6 +480,24 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
         : `Unfollowed ${matchedBandProfile.name}`
     );
   };
+
+  // Re-sync follow state in real-time when global follow event fires
+  useEffect(() => {
+    const syncFollow = () => {
+      if (matchedBandProfile) {
+        setIsFollowingMatched(isProfileFollowedGlobally(matchedBandProfile));
+      }
+    };
+    syncFollow();
+    if (typeof window !== 'undefined') {
+      window.addEventListener(FOLLOW_EVENT_NAME, syncFollow);
+      window.addEventListener('storage', syncFollow);
+      return () => {
+        window.removeEventListener(FOLLOW_EVENT_NAME, syncFollow);
+        window.removeEventListener('storage', syncFollow);
+      };
+    }
+  }, [matchedBandProfile]);
   
   // Live Song Progress & Duration States
   const [currentTime, setCurrentTime] = useState(0);

@@ -3,6 +3,8 @@ import { ROSTER_CATALOGS } from '../data/socialFeedMockData';
 
 export interface BandEnrichedMetadata {
   founded_year?: string;
+  status?: string;
+  is_split_up?: boolean;
   record_label?: string;
   label?: string;
   city?: string;
@@ -38,6 +40,8 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
   },
   'abnormality': {
     founded_year: '2005',
+    status: 'split-up',
+    is_split_up: true,
     record_label: 'Metal Blade Records',
     label: 'Metal Blade Records',
     city: 'Boston',
@@ -245,6 +249,8 @@ export function resolvePublicBandData(bandName: string, activeProfileData?: any)
   if (seedMatch) {
     mergedResult = {
       founded_year: seedMatch.founded_year,
+      status: seedMatch.status,
+      is_split_up: seedMatch.is_split_up || seedMatch.isSplitUp,
       record_label: seedMatch.record_label || seedMatch.label || seedMatch.label_name,
       label: seedMatch.record_label || seedMatch.label,
       city: seedMatch.city,
@@ -268,6 +274,8 @@ export function resolvePublicBandData(bandName: string, activeProfileData?: any)
       ...dictMatch,
       ...mergedResult,
       founded_year: mergedResult.founded_year || dictMatch.founded_year,
+      status: mergedResult.status || dictMatch.status,
+      is_split_up: mergedResult.is_split_up !== undefined ? mergedResult.is_split_up : dictMatch.is_split_up,
       record_label: mergedResult.record_label || dictMatch.record_label,
       city: mergedResult.city || dictMatch.city,
       state_province: mergedResult.state_province || dictMatch.state_province,

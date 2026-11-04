@@ -161,20 +161,9 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
               dbClips = cData;
             }
           } catch (_) {}
-
-          // 2. Fallback or merge with 'nexus_clips' table
-          try {
-            const { data: ncData, error: ncErr } = await supabaseClient
-              .from('nexus_clips')
-              .select('*')
-              .order('created_at', { ascending: false });
-            if (!ncErr && ncData && ncData.length > 0) {
-              const existingIds = new Set(dbClips.map((c: any) => c.id));
-              const uniqueNc = ncData.filter((c: any) => !existingIds.has(c.id));
-              dbClips = [...dbClips, ...uniqueNc];
-            }
-          } catch (_) {}
         }
+
+
 
         // 3. Merge server API clips
         if (apiClips && apiClips.length > 0) {
@@ -196,7 +185,7 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
             if (cleanUserIds.length > 0) {
               const { data: profiles } = await supabaseClient
                 .from('profiles')
-                .select('id, full_name, console_handle, avatar_url, account_type, creative_avatar, promoter_logo, role_badge')
+                .select('id, full_name, console_handle, avatar_url, account_type, role_badge')
                 .in('id', cleanUserIds);
 
               if (profiles) {

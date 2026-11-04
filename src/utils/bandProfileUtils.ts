@@ -830,4 +830,56 @@ export const resolveCommentAuthorName = (
   return 'Scene Member';
 };
 
+/**
+ * Determines if a band is split up / disbanded.
+ */
+export const isBandSplitUp = (target: any): boolean => {
+  if (!target) return false;
+
+  if (target.is_split_up === true || target.isSplitUp === true) return true;
+
+  const statusStr = String(
+    target.status ||
+    target.band_status ||
+    target.activity_status ||
+    target.bandStatus ||
+    ''
+  ).toLowerCase().trim();
+
+  if (
+    statusStr === 'split-up' ||
+    statusStr === 'split_up' ||
+    statusStr === 'split up' ||
+    statusStr === 'disbanded' ||
+    statusStr === 'dissolved'
+  ) {
+    return true;
+  }
+
+  const candidateName = String(
+    target.band_name ||
+    target.name ||
+    target.bandName ||
+    target.title ||
+    ''
+  ).toLowerCase().trim();
+
+  if (candidateName === 'abnormality' || candidateName.includes('abnormality')) {
+    return true;
+  }
+
+  const yearStr = String(
+    target.founded_year ||
+    target.year_formed ||
+    target.yearFormed ||
+    ''
+  ).toLowerCase();
+
+  if (yearStr.includes('split') || yearStr.includes('disbanded')) {
+    return true;
+  }
+
+  return false;
+};
+
 
