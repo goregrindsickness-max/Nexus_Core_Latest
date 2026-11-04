@@ -333,10 +333,10 @@ export async function uploadBase64ToStorage(
       }
     }
 
-    console.warn(`[STORAGE UPLOAD NOTICE] All storage bucket upload attempts completed without a remote URL (${lastErrorMessage || 'no matching bucket'}). Retaining local asset data.`);
+    console.warn(`[STORAGE UPLOAD NOTICE] Storage upload returned without remote URL (${lastErrorMessage || 'no matching bucket'}). Using local Base64 preview data.`);
     return base64Str;
   } catch (err: any) {
-    console.warn('[STORAGE HELPER WARNING] Exception uploading asset:', err?.message || err);
+    console.warn('[STORAGE HELPER WARNING] Exception uploading asset, using local Base64 data URI:', err?.message || err);
     return base64Str;
   }
 }

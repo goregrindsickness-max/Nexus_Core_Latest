@@ -639,6 +639,8 @@ export class CommunityBandManager {
                 label: updated[idx].label || updated[idx].record_label || initBand.label || initBand.record_label,
                 discography: bestDiscography,
                 lineup: bestLineup,
+                status: updated[idx].status || initBand.status || ((updated[idx] as any).is_split_up || (initBand as any).is_split_up ? 'split-up' : 'active'),
+                is_split_up: Boolean(updated[idx].status === 'split-up' || (updated[idx] as any).is_split_up || initBand.status === 'split-up' || (initBand as any).is_split_up),
                 verification_status: updated[idx].verification_status || initBand.verification_status || 'community_archive'
               };
             }
