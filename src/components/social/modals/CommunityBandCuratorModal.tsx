@@ -246,6 +246,9 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
 
   useEffect(() => {
     if (isOpen) {
+      // Ensure real-time listener is actively connected to Supabase
+      communityBandManager.setupRealtimeListener();
+
       const isOpening = !prevIsOpenRef.current;
       const currentBandKey = initialBand ? `${initialBand.id || ''}:${initialBand.name || ''}` : null;
       const isDifferentBand = currentBandKey !== prevBandKeyRef.current;
@@ -259,34 +262,6 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
         if (initialBand) {
           populateForm(initialBand);
           setActivePage('editor');
-
-          // Always fetch freshest cloud record from Supabase to guarantee APK has live cloud sync
-          try {
-            const supabase = getSupabase();
-            if (supabase && (initialBand.id || initialBand.name)) {
-              const queryName = (initialBand.name || (initialBand as any).band_name || '').trim();
-              const validUUID = initialBand.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(initialBand.id) ? initialBand.id : null;
-              let pQuery = supabase.from('bands').select('*');
-              if (validUUID) {
-                pQuery = pQuery.eq('id', validUUID);
-              } else if (queryName) {
-                pQuery = pQuery.ilike('band_name', `%${queryName}%`);
-              }
-              Promise.resolve(pQuery.maybeSingle()).then(({ data }: any) => {
-                if (data) {
-                  const refreshedBand: CommunityBandRecord = {
-                    ...initialBand,
-                    ...data,
-                    name: data.band_name || data.name || initialBand.name,
-                    band_name: data.band_name || data.name || initialBand.name,
-                    status: data.status || ((data as any).is_split_up ? 'split-up' : initialBand.status),
-                  };
-                  communityBandManager.upsertBand(refreshedBand);
-                  populateForm(refreshedBand);
-                }
-              }).catch(() => {});
-            }
-          } catch (_) {}
         } else {
           resetForm();
           setActivePage('list');
@@ -303,6 +278,27 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
       const freshList = communityBandManager.getAll();
       if (freshList && freshList.length > 0) {
         setBandsList(freshList);
+      }
+
+      // If user is currently editing a band in the editor, keep its details and discography in sync in real-time
+      if (selectedBand) {
+        const curId = selectedBand.id;
+        const curName = (selectedBand.name || (selectedBand as any).band_name || '').toLowerCase().trim();
+        const matched = freshList.find(b => b.id === curId || (b.name || (b as any).band_name || '').toLowerCase().trim() === curName);
+        if (matched) {
+          setSelectedBand(matched);
+          if (matched.founded_year) setFoundedYear(String(matched.founded_year));
+          if (matched.record_label || matched.label) setRecordLabel(matched.record_label || matched.label || '');
+          if (matched.city) setCity(matched.city);
+          if (matched.country) setCountry(matched.country);
+          if (matched.status) setBandStatus(resolveBandStatus(matched));
+          if (matched.logo_url) setAvatarUrl(matched.logo_url);
+          if (matched.cover_url) setCoverUrl(matched.cover_url);
+          if (matched.lineup && Array.isArray(matched.lineup) && matched.lineup.length > 0) setLineup(matched.lineup);
+          if (matched.discography && Array.isArray(matched.discography) && matched.discography.length > 0) {
+            setAlbums(matched.discography.sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0')));
+          }
+        }
       }
     };
 
@@ -460,6 +456,96 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     setEditingMemberIdx(null);
     resetReleaseInputs();
     setActivePage('editor');
+
+    // Live Supabase Direct Sync: fetch live bands & releases rows to guarantee 100% cloud parity
+    try {
+      const client = getSupabase();
+      const bandName = (band.name || (band as any).band_name || '').trim();
+      const validUUID = band.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(band.id) ? band.id : null;
+      
+      if (client && (validUUID || bandName)) {
+        let bQuery = client.from('bands').select('*');
+        if (validUUID) {
+          bQuery = bQuery.eq('id', validUUID);
+        } else if (bandName) {
+          bQuery = bQuery.ilike('band_name', `%${bandName}%`);
+        }
+
+        const bIdForRel = validUUID || band.id;
+        let rQuery = client.from('releases').select('*');
+        if (validUUID && band.id && validUUID !== band.id) {
+          rQuery = rQuery.or(`band_id.eq.${validUUID},band_id.eq.${band.id}`);
+        } else if (bIdForRel) {
+          rQuery = rQuery.eq('band_id', bIdForRel);
+        }
+
+        Promise.all([
+          Promise.resolve(bQuery.maybeSingle()).catch(() => ({ data: null })),
+          Promise.resolve(rQuery).catch(() => ({ data: [] }))
+        ]).then(([{ data: liveBand }, { data: liveReleases }]: any) => {
+          if (liveBand) {
+            if (liveBand.founded_year) setFoundedYear(String(liveBand.founded_year));
+            if (liveBand.record_label) setRecordLabel(liveBand.record_label);
+            if (liveBand.city) setCity(liveBand.city);
+            if (liveBand.state_province) setStateProvince(liveBand.state_province);
+            if (liveBand.country) setCountry(liveBand.country);
+            if (liveBand.bio && liveBand.bio !== 'Not written yet.') setBio(liveBand.bio);
+            if (liveBand.status) setBandStatus(resolveBandStatus(liveBand));
+            if (liveBand.micro_genres && Array.isArray(liveBand.micro_genres) && liveBand.micro_genres.length > 0) {
+              setMicroGenres(liveBand.micro_genres);
+            }
+            if (liveBand.logo_url) setAvatarUrl(liveBand.logo_url);
+            if (liveBand.cover_url) setCoverUrl(liveBand.cover_url);
+            if (liveBand.spotify) setSpotifyUrl(liveBand.spotify);
+            if (liveBand.bandcamp) setBandcampUrl(liveBand.bandcamp);
+            if (liveBand.metal_archives_url) setMetalArchivesUrl(liveBand.metal_archives_url);
+            if (liveBand.featured_youtube_url) setYoutubeUrl(liveBand.featured_youtube_url);
+            if (liveBand.lineup) {
+              let parsedL: LineupMember[] = [];
+              if (Array.isArray(liveBand.lineup)) parsedL = liveBand.lineup;
+              else if (typeof liveBand.lineup === 'string') {
+                try {
+                  const p = JSON.parse(liveBand.lineup);
+                  if (Array.isArray(p)) parsedL = p;
+                } catch {}
+              }
+              if (parsedL.length > 0) setLineup(parsedL);
+            }
+          }
+
+          if (liveReleases && Array.isArray(liveReleases) && liveReleases.length > 0) {
+            const mappedReleases: DiscographyRelease[] = liveReleases.map((r: any) => ({
+              id: r.id,
+              title: r.title,
+              year: r.release_date || '',
+              type: r.type || 'album',
+              cover_url: r.cover_image || r.cover_url || '',
+              cover_image: r.cover_image || r.cover_url || '',
+              release_info: r.label || '',
+              catalog_id: r.catalog_id || '',
+              label: r.label || '',
+              tracks: Array.isArray(r.tracks) ? r.tracks : []
+            }));
+            setAlbums(mappedReleases.sort((a: any, b: any) => parseInt(b.year || '0') - parseInt(a.year || '0')));
+            if (band.id) saveBandDiscographyToCache(band.id, band.name, mappedReleases);
+            if (liveBand?.id) saveBandDiscographyToCache(liveBand.id, liveBand.band_name, mappedReleases);
+          }
+
+          if (liveBand) {
+            const refreshedBand: CommunityBandRecord = {
+              ...band,
+              ...liveBand,
+              name: liveBand.band_name || liveBand.name || band.name,
+              band_name: liveBand.band_name || liveBand.name || band.name,
+              status: liveBand.status || ((liveBand as any).is_split_up ? 'split-up' : band.status),
+              discography: (liveReleases && liveReleases.length > 0) ? liveReleases : band.discography
+            };
+            communityBandManager.upsertBand(refreshedBand);
+            setSelectedBand(refreshedBand);
+          }
+        }).catch(() => {});
+      }
+    } catch (_) {}
   };
 
   // Delete Community Band Archive with clean in-app confirmation

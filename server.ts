@@ -2574,6 +2574,84 @@ Return a valid JSON object matching the requested schema. If any field is not fo
 
       // Server-side known band metadata dictionary for instant, reliable fallback
       const SERVER_KNOWN_PUBLIC_BANDS: Record<string, any> = {
+        'deeds of flesh': {
+          founded_year: '1993',
+          status: 'active',
+          is_split_up: false,
+          record_label: 'Unique Leader Records',
+          label: 'Unique Leader Records',
+          city: 'Los Osos',
+          state_province: 'CA',
+          country: 'USA',
+          genre: 'Extreme Metal',
+          micro_genres: ['Extreme Metal', 'Technical BDM', 'Brutal Death Metal'],
+          bio: 'Formed in 1993 on the Central Coast of California by guitarist/vocalist Erik Lindmark, Deeds of Flesh is a foundational pillar of modern technical and brutal death metal.'
+        },
+        'aeon': {
+          founded_year: '1999',
+          status: 'active',
+          is_split_up: false,
+          record_label: 'Metal Blade Records',
+          label: 'Metal Blade Records',
+          city: 'Östersund',
+          state_province: 'Jämtland',
+          country: 'Sweden',
+          genre: 'Death Metal',
+          micro_genres: ['Death Metal', 'Brutal Death Metal'],
+          bio: 'Formed in Östersund, Sweden, in 1999 by vocalist Tommy Dahlström and guitarist Zeb Nilsson following the demise of Defaced Creation.'
+        },
+        'birdflesh': {
+          founded_year: '1992',
+          status: 'active',
+          is_split_up: false,
+          record_label: 'Everlasting Spew Records',
+          label: 'Everlasting Spew Records',
+          city: 'Växjö',
+          state_province: 'Kronoberg',
+          country: 'Sweden',
+          genre: 'Grindcore',
+          micro_genres: ['Extreme Metal', 'Deathgrind', 'Grindcore'],
+          bio: 'Formed in 1992 in Växjö, Sweden, Birdflesh is a cult underground institution of humorous, high-octane grindcore and deathgrind.'
+        },
+        'extermination dismemberment': {
+          founded_year: '2009',
+          status: 'active',
+          is_split_up: false,
+          record_label: 'Unique Leader Records',
+          label: 'Unique Leader Records',
+          city: 'Minsk',
+          state_province: 'Minsk',
+          country: 'Belarus',
+          genre: 'Slamming BDM',
+          micro_genres: ['Slamming BDM', 'Brutal Deathcore', 'Extreme Metal'],
+          bio: 'Formed in Minsk, Belarus, in 2009, Extermination Dismemberment is an internationally renowned pioneer of slamming brutal death metal.'
+        },
+        'hate eternal': {
+          founded_year: '1997',
+          status: 'on-hold',
+          is_split_up: false,
+          record_label: 'Season of Mist',
+          label: 'Season of Mist',
+          city: 'Tampa',
+          state_province: 'FL',
+          country: 'USA',
+          genre: 'Death Metal',
+          micro_genres: ['Extreme Metal', 'Death Metal', 'Tech Death'],
+          bio: 'Formed in St. Petersburg, Florida, in 1997 by legendary guitarist and producer Erik Rutan (Morbid Angel, Cannibal Corpse).'
+        },
+        'visceral disgorge': {
+          founded_year: '2007',
+          status: 'active',
+          is_split_up: false,
+          record_label: 'Agonia Records',
+          label: 'Agonia Records',
+          city: 'Baltimore',
+          state_province: 'MD',
+          country: 'USA',
+          genre: 'Slamming BDM',
+          micro_genres: ['Extreme Metal', 'Slamming BDM', 'Brutal Death Metal'],
+          bio: 'Formed in Baltimore, Maryland, in 2007, Visceral Disgorge is an undisputed titan of brutal slam death metal.'
+        },
         'abnormality': {
           founded_year: '2005',
           status: 'split-up',

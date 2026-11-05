@@ -305,23 +305,34 @@ export function deduplicateLineup(members: LineupMember[]): LineupMember[] {
 const safeLocalStorage = {
   getItem: (key: string): string | null => {
     try {
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      if (typeof window !== 'undefined' && window?.localStorage) {
         return window.localStorage.getItem(key);
+      }
+      if (typeof localStorage !== 'undefined') {
+        return localStorage.getItem(key);
       }
     } catch {}
     return null;
   },
   setItem: (key: string, val: string): void => {
     try {
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      if (typeof window !== 'undefined' && window?.localStorage) {
         window.localStorage.setItem(key, val);
+        return;
+      }
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(key, val);
       }
     } catch {}
   },
   removeItem: (key: string): void => {
     try {
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      if (typeof window !== 'undefined' && window?.localStorage) {
         window.localStorage.removeItem(key);
+        return;
+      }
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(key);
       }
     } catch {}
   }
@@ -520,16 +531,29 @@ export class CommunityBandManager {
 
       this.isListeningToRealtime = true;
 
-      // Subscribe to live postgres_changes on the 'bands' table so all band profiles update live
+      // Subscribe to live postgres_changes on both 'bands' and 'releases' tables so all band profiles and discographies update live
       client
         .channel('public:bands_community_sync')
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'bands' },
-          async () => {
-            await this.fetchFromSupabase();
+          async (payload) => {
+            console.log('[communityBands] Live bands update received:', payload.eventType);
+            const updated = await this.fetchFromSupabase();
             if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('nexus_community_bands_updated'));
+              window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: { payload, bands: updated } }));
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'releases' },
+          async (payload) => {
+            console.log('[communityBands] Live releases update received:', payload.eventType);
+            const updated = await this.fetchFromSupabase();
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: { payload, bands: updated } }));
+              window.dispatchEvent(new CustomEvent('nexus_community_releases_updated', { detail: { payload, bands: updated } }));
             }
           }
         )
@@ -1818,10 +1842,10 @@ export class CommunityBandManager {
         }
 
         // Also retrieve cached lineup from localStorage keys to guarantee user edits are preserved
-        const cachedLineupRaw = (bId ? localStorage.getItem(`nexus_core_band_lineup_${bId}`) : null) ||
-                                (bUUID ? localStorage.getItem(`nexus_core_band_lineup_${bUUID}`) : null) ||
-                                (existingItem?.id ? localStorage.getItem(`nexus_core_band_lineup_${existingItem.id}`) : null) ||
-                                (cleanBandName ? localStorage.getItem(`nexus_core_band_lineup_${cleanBandName}`) : null);
+        const cachedLineupRaw = (bId ? safeLocalStorage.getItem(`nexus_core_band_lineup_${bId}`) : null) ||
+                                (bUUID ? safeLocalStorage.getItem(`nexus_core_band_lineup_${bUUID}`) : null) ||
+                                (existingItem?.id ? safeLocalStorage.getItem(`nexus_core_band_lineup_${existingItem.id}`) : null) ||
+                                (cleanBandName ? safeLocalStorage.getItem(`nexus_core_band_lineup_${cleanBandName}`) : null);
         let cachedLineup: LineupMember[] = [];
         if (cachedLineupRaw) {
           try {
@@ -1838,12 +1862,12 @@ export class CommunityBandManager {
 
         const bIdKey = b.id || '';
         const bUUIDKey = bIdKey ? ensureUUID(bIdKey) : '';
-        const savedLogo = (bIdKey ? localStorage.getItem(`nexus_core_band_logo_${bIdKey}`) : null) || 
-                          (bUUIDKey ? localStorage.getItem(`nexus_core_band_logo_${bUUIDKey}`) : null) ||
-                          (existingItem?.id ? localStorage.getItem(`nexus_core_band_logo_${existingItem.id}`) : null);
-        const savedCover = (bIdKey ? localStorage.getItem(`nexus_core_band_cover_${bIdKey}`) : null) || 
-                           (bUUIDKey ? localStorage.getItem(`nexus_core_band_cover_${bUUIDKey}`) : null) ||
-                           (existingItem?.id ? localStorage.getItem(`nexus_core_band_cover_${existingItem.id}`) : null);
+        const savedLogo = (bIdKey ? safeLocalStorage.getItem(`nexus_core_band_logo_${bIdKey}`) : null) || 
+                          (bUUIDKey ? safeLocalStorage.getItem(`nexus_core_band_logo_${bUUIDKey}`) : null) ||
+                          (existingItem?.id ? safeLocalStorage.getItem(`nexus_core_band_logo_${existingItem.id}`) : null);
+        const savedCover = (bIdKey ? safeLocalStorage.getItem(`nexus_core_band_cover_${bIdKey}`) : null) || 
+                           (bUUIDKey ? safeLocalStorage.getItem(`nexus_core_band_cover_${bUUIDKey}`) : null) ||
+                           (existingItem?.id ? safeLocalStorage.getItem(`nexus_core_band_cover_${existingItem.id}`) : null);
 
         const resolvedAvatar = 
           (b.logo_url && !b.logo_url.includes('unsplash') && !b.logo_url.includes('placeholder')) ? b.logo_url :
@@ -1945,10 +1969,10 @@ export class CommunityBandManager {
 
         if (mergedLineup.length > 0) {
           try {
-            if (record.id) localStorage.setItem(`nexus_core_band_lineup_${record.id}`, JSON.stringify(mergedLineup));
-            if (bId) localStorage.setItem(`nexus_core_band_lineup_${bId}`, JSON.stringify(mergedLineup));
-            if (bUUID) localStorage.setItem(`nexus_core_band_lineup_${bUUID}`, JSON.stringify(mergedLineup));
-            if (cleanBandName) localStorage.setItem(`nexus_core_band_lineup_${cleanBandName}`, JSON.stringify(mergedLineup));
+            if (record.id) safeLocalStorage.setItem(`nexus_core_band_lineup_${record.id}`, JSON.stringify(mergedLineup));
+            if (bId) safeLocalStorage.setItem(`nexus_core_band_lineup_${bId}`, JSON.stringify(mergedLineup));
+            if (bUUID) safeLocalStorage.setItem(`nexus_core_band_lineup_${bUUID}`, JSON.stringify(mergedLineup));
+            if (cleanBandName) safeLocalStorage.setItem(`nexus_core_band_lineup_${cleanBandName}`, JSON.stringify(mergedLineup));
           } catch {}
         }
 
@@ -2017,7 +2041,7 @@ export class CommunityBandManager {
         return nameA.localeCompare(nameB, undefined, { sensitivity: 'base', numeric: true });
       });
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sortedDedupedList));
+      safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(sortedDedupedList));
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: sortedDedupedList }));
       }
@@ -2054,7 +2078,7 @@ export class CommunityBandManager {
     };
 
     all[index] = updated;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+    safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(all));
     window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: updated }));
 
     // Proactively sync handover state to Supabase
