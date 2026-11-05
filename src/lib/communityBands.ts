@@ -1846,20 +1846,18 @@ export class CommunityBandManager {
                            (existingItem?.id ? localStorage.getItem(`nexus_core_band_cover_${existingItem.id}`) : null);
 
         const resolvedAvatar = 
-          (b.logo_url && !b.logo_url.includes('unsplash')) ? b.logo_url :
-          (b.avatar_url && !b.avatar_url.includes('unsplash')) ? b.avatar_url :
+          (b.logo_url && !b.logo_url.includes('unsplash') && !b.logo_url.includes('placeholder')) ? b.logo_url :
+          (b.avatar_url && !b.avatar_url.includes('unsplash') && !b.avatar_url.includes('placeholder')) ? b.avatar_url :
+          (seedMatch?.logo_url && !seedMatch.logo_url.includes('unsplash')) ? seedMatch.logo_url :
           (savedLogo && !savedLogo.includes('unsplash')) ? savedLogo :
-          (existingItem?.logo_url && !existingItem.logo_url.includes('unsplash') ? existingItem.logo_url : null) ||
-          (existingItem?.avatar_url && !existingItem.avatar_url.includes('unsplash') ? existingItem.avatar_url : null) ||
-          seedMatch?.logo_url || seedMatch?.avatar_url || b.logo_url || b.avatar_url || existingItem?.logo_url || existingItem?.avatar_url || existingItem?.image || '';
+          existingItem?.logo_url || existingItem?.avatar_url || b.logo_url || b.avatar_url || '';
 
         const resolvedCover = 
-          (b.cover_url && !b.cover_url.includes('unsplash')) ? b.cover_url :
-          (b.banner_url && !b.banner_url.includes('unsplash')) ? b.banner_url :
+          (b.cover_url && !b.cover_url.includes('unsplash') && !b.cover_url.includes('placeholder')) ? b.cover_url :
+          (b.banner_url && !b.banner_url.includes('unsplash') && !b.banner_url.includes('placeholder')) ? b.banner_url :
+          (seedMatch?.cover_url && !seedMatch.cover_url.includes('unsplash')) ? seedMatch.cover_url :
           (savedCover && !savedCover.includes('unsplash')) ? savedCover :
-          (existingItem?.cover_url && !existingItem.cover_url.includes('unsplash') ? existingItem.cover_url : null) ||
-          (existingItem?.banner_url && !existingItem.banner_url.includes('unsplash') ? existingItem.banner_url : null) ||
-          seedMatch?.cover_url || seedMatch?.banner_url || b.cover_url || b.banner_url || existingItem?.cover_url || existingItem?.banner_url || '';
+          existingItem?.cover_url || existingItem?.banner_url || b.cover_url || b.banner_url || '';
 
         // Intelligently merge discography: prioritize Supabase remoteDiscography, local edits, existing item, and seed master
         const cachedDiscography = loadBandDiscographyFromCache(bId, cleanBandName);
@@ -1888,8 +1886,8 @@ export class CommunityBandManager {
         // Merge lineup non-destructively: prioritize richest lineup with member names, roles, years, and status
         const candidateLineups = [
           (cachedLineup && cachedLineup.length > 0) ? cachedLineup : null,
-          (existingItem?.lineup && existingItem.lineup.length > 0) ? existingItem.lineup : null,
           (parsedLineup && parsedLineup.length > 0) ? parsedLineup : null,
+          (existingItem?.lineup && existingItem.lineup.length > 0) ? existingItem.lineup : null,
           (seedMatch?.lineup && seedMatch.lineup.length > 0) ? seedMatch.lineup : null
         ].filter(Boolean) as LineupMember[][];
 
@@ -1906,7 +1904,7 @@ export class CommunityBandManager {
           ? 'verified_official'
           : 'community_archive';
 
-        // Prioritize Supabase cloud data for profile fields
+        // Prioritize Supabase cloud data with absolute precedence
         const record: CommunityBandRecord = {
           id: b.id || existingItem?.id,
           name: b.band_name || b.name || existingItem?.name || bandName,
@@ -1921,12 +1919,7 @@ export class CommunityBandManager {
           record_label: b.record_label || b.label_name || b.label || existingItem?.record_label || existingItem?.label || seedMatch?.record_label || seedMatch?.label || '',
           label: b.label || b.record_label || b.label_name || existingItem?.label || existingItem?.record_label || seedMatch?.label || seedMatch?.record_label || '',
           creator_id: b.creator_id || existingItem?.creator_id,
-          bio: (() => {
-            if (b.bio && b.bio.trim() !== '') return b.bio.trim();
-            if (existingItem?.bio && existingItem.bio.trim() !== '') return existingItem.bio.trim();
-            if (seedMatch?.bio && seedMatch.bio.trim() !== '') return seedMatch.bio.trim();
-            return 'Not written yet.';
-          })(),
+          bio: (b.bio && b.bio.trim() !== '') ? b.bio.trim() : ((existingItem?.bio && existingItem.bio.trim() !== '') ? existingItem.bio.trim() : (seedMatch?.bio || 'Not written yet.')),
           avatar_url: resolvedAvatar,
           logo_url: resolvedAvatar,
           avatar: resolvedAvatar,
