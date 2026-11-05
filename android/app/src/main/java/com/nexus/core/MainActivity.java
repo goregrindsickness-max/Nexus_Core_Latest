@@ -193,11 +193,29 @@ public class MainActivity extends BridgeActivity {
                     }
                 }
 
-                // Grant Geolocation permissions inside the WebView seamlessly
+                // Grant Geolocation permissions and handle HTML file chooser intents inside the WebView seamlessly
                 webView.setWebChromeClient(new WebChromeClient() {
                     @Override
                     public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
                         callback.invoke(origin, true, false);
+                    }
+
+                    @Override
+                    public boolean onShowFileChooser(WebView webView, android.webkit.ValueCallback<android.net.Uri[]> filePathCallback, WebChromeClient.FileChooserParams fileChooserParams) {
+                        if (uploadMessage != null) {
+                            uploadMessage.onReceiveValue(null);
+                            uploadMessage = null;
+                        }
+                        uploadMessage = filePathCallback;
+
+                        try {
+                            Intent intent = fileChooserParams.createIntent();
+                            startActivityForResult(intent, REQUEST_CODE_FILE_CHOOSER);
+                        } catch (Exception e) {
+                            uploadMessage = null;
+                            return false;
+                        }
+                        return true;
                     }
                 });
 
@@ -315,6 +333,36 @@ public class MainActivity extends BridgeActivity {
             return;
         }
         super.onStop();
+    }
+
+    private android.webkit.ValueCallback<android.net.Uri[]> uploadMessage;
+    private static final int REQUEST_CODE_FILE_CHOOSER = 1001;
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent intent) {
+        if (requestCode == REQUEST_CODE_FILE_CHOOSER) {
+            if (uploadMessage == null) {
+                super.onActivityResult(requestCode, resultCode, intent);
+                return;
+            }
+            android.net.Uri[] results = null;
+            if (resultCode == RESULT_OK && intent != null) {
+                String dataString = intent.getDataString();
+                if (dataString != null) {
+                    results = new android.net.Uri[]{android.net.Uri.parse(dataString)};
+                } else if (intent.getClipData() != null) {
+                    int count = intent.getClipData().getItemCount();
+                    results = new android.net.Uri[count];
+                    for (int i = 0; i < count; i++) {
+                        results[i] = intent.getClipData().getItemAt(i).getUri();
+                    }
+                }
+            }
+            uploadMessage.onReceiveValue(results);
+            uploadMessage = null;
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, intent);
     }
 
     @Override
