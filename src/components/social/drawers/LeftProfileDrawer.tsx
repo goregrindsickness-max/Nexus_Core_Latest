@@ -124,7 +124,7 @@ interface LeftProfileDrawerProps {
   setFollowingSearchQuery?: (q: string) => void;
   discoverProfiles?: any[];
   setDiscoverProfiles?: React.Dispatch<React.SetStateAction<any[]>>;
-  handleFollowProfile?: (profile: any) => void;
+  handleFollowProfile?: (profile: any, action?: 'follow' | 'unfollow') => void;
   filterShowFollowedOnly?: boolean;
   setFilterShowFollowedOnly?: (val: boolean) => void;
   pinEntered?: string;
@@ -3203,7 +3203,7 @@ if (!leftDrawerOpen) return null;
                           const target = profileObj || { id: profileId, name };
                           const isFollowedNow = isProfileFollowedGlobally(target, discoverProfiles);
                           saveFollowStateGlobally(target, !isFollowedNow);
-                          handleFollowProfile(profileObj || name);
+                          handleFollowProfile(profileObj || target || name, !isFollowedNow ? 'follow' : 'unfollow');
                         };
 
                         const toggleCategoryAlerts = () => {

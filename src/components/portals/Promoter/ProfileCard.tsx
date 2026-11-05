@@ -1203,7 +1203,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               triggerNotification?.("Profile Preview: Follow button is active for your audience.");
                               return;
                             }
-                            const isCurrentlyFollowed = isProfileFollowedGlobally(effTarget) || isProfileFollowedGlobally(selectedUserProfile) || Boolean(selectedUserProfile?.isFollowed);
+                            const isCurrentlyFollowed = isProfileFollowedGlobally(effTarget) || isProfileFollowedGlobally(selectedUserProfile);
                             const nextFollowed = !isCurrentlyFollowed;
                             saveFollowStateGlobally(effTarget, nextFollowed);
                             saveFollowStateGlobally(selectedUserProfile, nextFollowed);

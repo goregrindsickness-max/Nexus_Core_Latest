@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getSupabase } from '../../../supabase';
-import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME, getTargetFollowKeys } from '../../../utils/followSyncService';
 import { communityBandManager, purgeDeletedAndZombieBands, isDeletedOrZombieBand } from '../../../lib/communityBands';
 import { resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
 
@@ -71,7 +71,7 @@ export interface DiscoveryZoneProps {
   currentUserId?: string;
   currentUserName?: string;
   onOpenProfile?: (authorId: any, authorName: any) => void;
-  onFollowProfile?: (profile: any) => void;
+  onFollowProfile?: (profile: any, action?: 'follow' | 'unfollow') => void;
   onTriggerNotification?: (msg: string) => void;
 }
 
@@ -193,7 +193,33 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [localFollowedMap, setLocalFollowedMap] = useState<Record<string, boolean>>({});
-  
+
+  // Real-time synchronization of follow state across all components and portals
+  useEffect(() => {
+    const handleGlobalFollowUpdate = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && detail.keys && Array.isArray(detail.keys)) {
+        setLocalFollowedMap(prev => {
+          const next = { ...prev };
+          detail.keys.forEach((k: string) => {
+            next[k] = Boolean(detail.isFollowed);
+          });
+          return next;
+        });
+      } else {
+        setLocalFollowedMap(prev => ({ ...prev }));
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(FOLLOW_EVENT_NAME, handleGlobalFollowUpdate);
+      window.addEventListener('storage', handleGlobalFollowUpdate);
+      return () => {
+        window.removeEventListener(FOLLOW_EVENT_NAME, handleGlobalFollowUpdate);
+        window.removeEventListener('storage', handleGlobalFollowUpdate);
+      };
+    }
+  }, []);
   // Auto-scrolling and shuffle state
   const [isAutoScrolling, setIsAutoScrolling] = useState<boolean>(true);
   const [shuffleSeed, setShuffleSeed] = useState<number>(() => Math.floor(Math.random() * 10000) + 1);
@@ -760,19 +786,20 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
     const currentFollowed = isProfileFollowedGlobally(profile);
     const nextState = !currentFollowed;
     saveFollowStateGlobally(profile, nextState);
-    setLocalFollowedMap(prev => ({ 
-      ...prev, 
-      [profile.id]: nextState,
-      ...(profile.band_id ? { [profile.band_id]: nextState } : {}),
-      ...(profile.raw_id ? { [profile.raw_id]: nextState } : {}),
-      ...(profile.name ? { [profile.name.toLowerCase().trim()]: nextState } : {})
-    }));
+
+    const keys = getTargetFollowKeys(profile);
+    setLocalFollowedMap(prev => {
+      const next = { ...prev };
+      keys.forEach(k => {
+        next[k] = nextState;
+      });
+      return next;
+    });
 
     if (onFollowProfile) {
-      onFollowProfile(profile);
-    } else if (onTriggerNotification) {
-      onTriggerNotification(nextState ? `Now following ${profile.name}!` : `Unfollowed ${profile.name}`);
+      onFollowProfile(profile, nextState ? 'follow' : 'unfollow');
     }
+    onTriggerNotification?.(nextState ? `✨ Now following ${profile.name}!` : `💔 Unfollowed ${profile.name}`);
   };
 
   // If no profiles at all and user dismissed everything, hide container
@@ -970,24 +997,20 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
         ) : (
           <AnimatePresence mode="popLayout">
             {filteredProfiles.map((profile, pIdx) => {
-              let localFollows: Record<string, boolean> = {};
-              try {
-                localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
-              } catch (e) {}
-
-              const nameKey = (profile.name || '').toLowerCase().trim();
-              const isFollowed = 
-                localFollowedMap[profile.id] !== undefined ? localFollowedMap[profile.id] :
-                localFollowedMap[profile.band_id || ''] !== undefined ? localFollowedMap[profile.band_id || ''] :
-                localFollowedMap[profile.raw_id || ''] !== undefined ? localFollowedMap[profile.raw_id || ''] :
-                localFollowedMap[nameKey] !== undefined ? localFollowedMap[nameKey] :
-                Boolean(
-                  localFollows[profile.id] || 
-                  localFollows[profile.band_id || ''] || 
-                  localFollows[profile.raw_id || ''] || 
-                  localFollows[nameKey] ||
-                  profile.followed
-                );
+              const profileKeys = getTargetFollowKeys(profile);
+              let isFollowed = false;
+              let localOverride: boolean | undefined = undefined;
+              for (const k of profileKeys) {
+                if (localFollowedMap[k] !== undefined) {
+                  localOverride = localFollowedMap[k];
+                  break;
+                }
+              }
+              if (localOverride !== undefined) {
+                isFollowed = localOverride;
+              } else {
+                isFollowed = isProfileFollowedGlobally(profile);
+              }
 
               const catKey = profile.category in CATEGORY_THEMES ? profile.category : 'fans';
               const theme = CATEGORY_THEMES[catKey] || CATEGORY_THEMES.fans;

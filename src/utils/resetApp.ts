@@ -2,47 +2,59 @@ import localforage from 'localforage';
 
 export const wipeAllLocalData = async () => {
   try {
-    const wipedFlag = localStorage.getItem('WIPED_ONCE_JULY_16_11_50');
-    // Clear localStorage
-    localStorage.clear();
-    if (wipedFlag) localStorage.setItem('WIPED_ONCE_JULY_16_11_50', wipedFlag);
+    // Clear localStorage & sessionStorage safely
+    try {
+      localStorage.clear();
+    } catch (_) {}
+    try {
+      sessionStorage.clear();
+    } catch (_) {}
     
-    // Clear sessionStorage
-    sessionStorage.clear();
-    
-    // Clear IndexedDB localforage stores
-    await localforage.dropInstance({ name: 'NexusCore_Offline_DB' }).catch(console.error);
-    await localforage.dropInstance({ name: 'nexus_van_stock_db' }).catch(console.error);
+    // Clear IndexedDB localforage stores safely without throwing unhandled promise rejections
+    try {
+      await localforage.dropInstance({ name: 'NexusCore_Offline_DB' });
+    } catch (_) {}
+    try {
+      await localforage.dropInstance({ name: 'nexus_van_stock_db' });
+    } catch (_) {}
     
     // Attempt to delete native indexedDB instances
-    if (window.indexedDB) {
-      if (typeof window.indexedDB.databases === 'function') {
-        const dbs = await window.indexedDB.databases();
-        for (const db of dbs) {
-          if (db.name) {
-            window.indexedDB.deleteDatabase(db.name);
+    if (typeof window !== 'undefined' && window.indexedDB) {
+      try {
+        if (typeof window.indexedDB.databases === 'function') {
+          const dbs = await window.indexedDB.databases();
+          for (const db of dbs) {
+            if (db.name) {
+              try {
+                window.indexedDB.deleteDatabase(db.name);
+              } catch (_) {}
+            }
           }
+        } else {
+          try { window.indexedDB.deleteDatabase('NexusCore_Offline_DB'); } catch (_) {}
+          try { window.indexedDB.deleteDatabase('nexus_van_stock_db'); } catch (_) {}
         }
-      } else {
-        // Fallback for older browsers if needed
-        window.indexedDB.deleteDatabase('NexusCore_Offline_DB');
-        window.indexedDB.deleteDatabase('nexus_van_stock_db');
-      }
+      } catch (_) {}
     }
     
-    // Optional: unregister service workers
-    if ('serviceWorker' in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      for (const registration of registrations) {
-        await registration.unregister();
-      }
+    // Safely unregister service workers without throwing
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          try {
+            await registration.unregister();
+          } catch (_) {}
+        }
+      } catch (_) {}
     }
     
     // Reload the page to clear memory state
-    window.location.reload();
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
   } catch (error) {
-    console.error('Error wiping local data:', error);
-    alert('Failed to completely wipe data. Check console.');
+    console.warn('Wipe local data notice:', error);
   }
 };
 

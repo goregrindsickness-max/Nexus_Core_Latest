@@ -83,6 +83,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { getSupabase, subscribeToTable, executeWithSchemaResilience, uploadBase64ToStorage, normalizeLoadedProfile, createShopMerchItem, fetchShopMerchItems, sanitizeMicroGenres, formatBandLocation, sanitizeShowForDb, ensureUUID } from '../../supabase';
 import { uploadFeedMedia } from '../../lib/storage';
 import { communityBandManager } from '../../lib/communityBands';
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../utils/followSyncService';
 import { hasRegisteredWorkspace } from '../../types';
 import { tourPackageManager } from '../../lib/tourPackageManager';
 import Barcode from 'react-barcode';
@@ -2777,6 +2778,8 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
             if (followRecord) isFollowedByMe = true;
           }
         }
+        const targetForCheck = profileData ? { ...profileData, id: targetId } : (selectedUserProfile || targetId);
+        isFollowedByMe = isProfileFollowedGlobally(targetForCheck, isFollowedByMe ? [{ followed_id: targetId }] : allFollows);
 
         if (active) {
           if (profileData) {
@@ -3976,7 +3979,9 @@ const getProfileForUser = (userParam: any) => {
       verification_status: bandObj?.verification_status || 'verified_official',
       is_verified: bandObj?.verification_status === 'verified_official' || (bandObj as any)?.is_verified === true,
       is_community_archive: bandObj?.verification_status === 'community_archive',
-      musicCatalog: bandObj?.discography || []
+      musicCatalog: bandObj?.discography || [],
+      isFollowed: isProfileFollowedGlobally({ id: bandId, name: bandName, raw_id: bandObj?.id || bandId, band_id: bandObj?.id || bandId }, allFollows),
+      isFollowedByMe: isProfileFollowedGlobally({ id: bandId, name: bandName, raw_id: bandObj?.id || bandId, band_id: bandObj?.id || bandId }, allFollows)
     };
   }
 
@@ -4000,9 +4005,10 @@ const getProfileForUser = (userParam: any) => {
 
     const isYou = isCurrentUser;
     
-    // Check if followed in discoverProfiles
+    // Check discover profiles for auxiliary assets
     const discoverProf = discoverProfiles.find(p => (p?.name || "User").toLowerCase() === (user?.name || "User").toLowerCase());
-    const isFollowed = discoverProf ? discoverProf.followed : false;
+    // Unified global follow check
+    const isFollowed = isProfileFollowedGlobally(userParam || user, allFollows);
 
     // Predefined biographies & details
     const profileRegistry = PROFILE_REGISTRY;

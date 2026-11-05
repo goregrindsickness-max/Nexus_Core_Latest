@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { ChevronDown, MapPin, Ticket, Filter, Map as MapIcon, SlidersHorizontal, Calendar, Star, Clock, Trash2, History, UserPlus, Check, Sparkles, Building2, Palette, Music, Disc } from 'lucide-react';
 import { formatTimeTo12h, hasGigTickets, isPastShowDate } from '../../utils/socialFeedUtils';
-import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../utils/followSyncService';
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME, getTargetFollowKeys } from '../../utils/followSyncService';
 
 export interface LiveTonightGig {
   id: string;
@@ -153,6 +153,33 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
   // Local follow state tracking for instant UI responsiveness
   const [followedState, setFollowedState] = useState<Record<string, boolean>>({});
 
+  // Sync follow state globally across all components
+  useEffect(() => {
+    const handleGlobalFollowUpdate = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && detail.keys && Array.isArray(detail.keys)) {
+        setFollowedState(prev => {
+          const next = { ...prev };
+          detail.keys.forEach((k: string) => {
+            next[k] = Boolean(detail.isFollowed);
+          });
+          return next;
+        });
+      } else {
+        setFollowedState(prev => ({ ...prev }));
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(FOLLOW_EVENT_NAME, handleGlobalFollowUpdate);
+      window.addEventListener('storage', handleGlobalFollowUpdate);
+      return () => {
+        window.removeEventListener(FOLLOW_EVENT_NAME, handleGlobalFollowUpdate);
+        window.removeEventListener('storage', handleGlobalFollowUpdate);
+      };
+    }
+  }, []);
+
   // Combine discoverProfiles & curated scene profiles for the ticker
   const tickerProfiles = useMemo(() => {
     const list: any[] = [];
@@ -168,10 +195,10 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
             id: p.id || `disc-${name}`,
             name: p.name,
             role: p.role || 'Creator',
-            handle: p.handle || `@${name.toLowerCase().replace(/\\s+/g, '')}`,
+            handle: p.handle || `@${name.toLowerCase().replace(/\s+/g, '')}`,
             genre: p.genre || p.bio || 'Scene Creator',
             avatar: p.avatar || p.logo_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80',
-            followed: Boolean(p.followed),
+            followed: isProfileFollowedGlobally(p),
             rawProfile: p,
           });
         }
@@ -184,7 +211,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
         seenNames.add(curated.name.toLowerCase());
         list.push({
           ...curated,
-          followed: Boolean(followedState[curated.id] || followedState[curated.name.toLowerCase()]),
+          followed: isProfileFollowedGlobally(curated),
           rawProfile: curated,
         });
       }
@@ -196,17 +223,17 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
   const handleEntityFollowClick = (e: React.MouseEvent, entity: any) => {
     e.stopPropagation();
     const targetObj = entity.rawProfile || entity;
-    const currentFollow = isProfileFollowedGlobally(targetObj) || Boolean(followedState[entity.id] || followedState[entity.name.toLowerCase()] || entity.followed);
+    const currentFollow = isProfileFollowedGlobally(targetObj);
     const nextFollow = !currentFollow;
 
     saveFollowStateGlobally(targetObj, nextFollow);
 
-    const entityKey = entity.id || entity.name.toLowerCase();
-    setFollowedState((prev) => ({
-      ...prev,
-      [entityKey]: nextFollow,
-      [entity.name.toLowerCase()]: nextFollow,
-    }));
+    const keys = getTargetFollowKeys(targetObj);
+    setFollowedState((prev) => {
+      const next = { ...prev };
+      keys.forEach(k => { next[k] = nextFollow; });
+      return next;
+    });
 
     if (onToggleFollow) {
       onToggleFollow(targetObj);
@@ -214,8 +241,8 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
 
     triggerNotification?.(
       nextFollow
-        ? `⚡ Now following ${entity.name}`
-        : `Unfollowed ${entity.name}`
+        ? `✨ Now following ${entity.name}`
+        : `💔 Unfollowed ${entity.name}`
     );
   };
 
@@ -508,8 +535,20 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
         <div className="flex-1 overflow-hidden relative flex items-center">
           <div className="animate-scene-follow-ticker flex items-center gap-2.5 shrink-0">
             {tickerProfiles.concat(tickerProfiles).map((item, idx) => {
-              const itemKey = item.id || item.name.toLowerCase();
-              const isFollowed = Boolean(followedState[itemKey] !== undefined ? followedState[itemKey] : item.followed);
+              const profileKeys = getTargetFollowKeys(item.rawProfile || item);
+              let isFollowed = false;
+              let localOverride: boolean | undefined = undefined;
+              for (const k of profileKeys) {
+                if (followedState[k] !== undefined) {
+                  localOverride = followedState[k];
+                  break;
+                }
+              }
+              if (localOverride !== undefined) {
+                isFollowed = localOverride;
+              } else {
+                isFollowed = isProfileFollowedGlobally(item.rawProfile || item);
+              }
               const roleColor =
                 item.role?.toLowerCase().includes('label')
                   ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'

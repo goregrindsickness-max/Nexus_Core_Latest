@@ -114,6 +114,17 @@ export function useSocialFollowsAndProfiles({
               .eq('follower_id', extractedUid);
             if (followsData) {
               followedArtistIds = followsData.map((f: any) => String(f.followed_id || '').toLowerCase().trim());
+              try {
+                const raw = localStorage.getItem('nexus_local_follows_v1');
+                const local = raw ? JSON.parse(raw) : {};
+                followsData.forEach((f: any) => {
+                  const fid = String(f.followed_id || '').toLowerCase().trim();
+                  if (fid && local[fid] === undefined) {
+                    local[fid] = true;
+                  }
+                });
+                localStorage.setItem('nexus_local_follows_v1', JSON.stringify(local));
+              } catch (_) {}
             }
 
             const myNames = [
@@ -794,44 +805,14 @@ export function useSocialFollowsAndProfiles({
       ? targetUserId
       : generateDeterministicUUID(`target-${cleanSearch.toLowerCase() || 'item'}`);
 
-    // Read local storage saved follows
-    let localFollows: Record<string, boolean> = {};
-    try {
-      localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
-    } catch (e) {}
-
-    let currentlyFollowed = false;
     const targetNameLower = targetName.toLowerCase().trim();
 
-    if (localFollows[finalTargetId] || localFollows[targetNameLower]) {
-      currentlyFollowed = true;
+    let currentlyFollowed = isProfileFollowedGlobally(targetInput, allFollows);
+    if (!currentlyFollowed && finalTargetId) {
+      currentlyFollowed = isProfileFollowedGlobally(finalTargetId, allFollows);
     }
-
-    if (!currentlyFollowed && followerId && finalTargetId) {
-      currentlyFollowed = allFollows.some(f => 
-        ((f.fan_profile_id === followerId || f.follower_id === followerId) && (f.artist_id === finalTargetId || f.followed_id === finalTargetId)) ||
-        (f.target_name && f.target_name.toLowerCase().trim() === targetNameLower)
-      );
-    }
-    if (!currentlyFollowed && selectedUserProfile) {
-      const selId = resolveProfileUUID(selectedUserProfile, allProfiles);
-      if ((selId && finalTargetId && selId === finalTargetId) || selectedUserProfile.name?.toLowerCase().trim() === targetNameLower) {
-        currentlyFollowed = !!selectedUserProfile.isFollowed;
-      }
-    }
-    if (!currentlyFollowed && typeof targetInput === 'object' && targetInput?.followed !== undefined) {
-      currentlyFollowed = !!targetInput.followed;
-    }
-    if (!currentlyFollowed && typeof targetInput === 'object' && targetInput?.isFollowed !== undefined) {
-      currentlyFollowed = !!targetInput.isFollowed;
-    }
-    if (!currentlyFollowed) {
-      const inDiscover = discoverProfiles.find(p => (p.name || '').toLowerCase().trim() === targetNameLower || (finalTargetId && p.id === finalTargetId));
-      if (inDiscover?.followed) currentlyFollowed = true;
-    }
-    if (!currentlyFollowed) {
-      const inReal = realProfiles.find(p => (p.name || '').toLowerCase().trim() === targetNameLower || (finalTargetId && p.id === finalTargetId));
-      if (inReal?.followed) currentlyFollowed = true;
+    if (!currentlyFollowed && targetName) {
+      currentlyFollowed = isProfileFollowedGlobally(targetName, allFollows);
     }
 
     const nextAction = forceAction ? forceAction : (currentlyFollowed ? 'unfollow' : 'follow');

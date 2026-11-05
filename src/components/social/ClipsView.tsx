@@ -485,7 +485,7 @@ const SingleClipPlayerCard: React.FC<{
             </div>
             {(() => {
               const clipTarget = { name: clip.creator, id: (clip as any).creator_id || clip.user_id || clip.profile_id, band_name: clip.bandName || clip.band_name };
-              const isFollowed = isProfileFollowedGlobally(clipTarget) || clip.isFollowed;
+              const isFollowed = isProfileFollowedGlobally(clipTarget);
               return (
                 <button
                   className={`text-[10px] border px-3 py-1 rounded-full font-bold uppercase transition-all ml-1.5 shrink-0 cursor-pointer ${
@@ -495,7 +495,7 @@ const SingleClipPlayerCard: React.FC<{
                     e.stopPropagation();
                     const nextState = !isFollowed;
                     saveFollowStateGlobally(clipTarget, nextState);
-                    triggerNotification?.(nextState ? `Followed ${clip.creator}` : `Unfollowed ${clip.creator}`);
+                    triggerNotification?.(nextState ? `✨ Now following ${clip.creator}!` : `💔 Unfollowed ${clip.creator}`);
                     if (setClips) {
                       setClips((prev) =>
                         prev.map((c) => (c.id === clip.id ? { ...c, isFollowed: nextState } : c))

@@ -206,7 +206,7 @@ export interface TimelineFeedProps {
   onOpenMerchModal?: (merchData: any) => void;
   onTriggerNotification?: (msg: string) => void;
   discoverProfiles?: any[];
-  onFollowProfile?: (profile: any) => void;
+  onFollowProfile?: (profile: any, action?: 'follow' | 'unfollow') => void;
   onNavigateToForum?: (threadId?: string) => void;
 }
 

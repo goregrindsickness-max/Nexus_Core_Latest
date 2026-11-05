@@ -34,7 +34,6 @@ import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 're
 import InteractiveRoutePreview from './components/portals/Band/InteractiveRoutePreview';
 import { inventoryStore, posSalesStore, itinerariesStore, socialFeedStore, reviewsStore, showsStore, registrationStagingStore, venuesStore, offersStore, routingBeaconsStore, creativeNodesStore, expensesStore, profileStore } from './utils/indexedDB';
 import { safeSetLocalStorageItem } from './utils/safeStorage';
-import { wipeAllLocalData } from './utils/resetApp';
 import { registerNotificationsOnStartup } from './services/pushNotificationService';
 import { initializeSonicActivityListeners } from './services/sonicFootprintService';
 import { Capacitor } from '@capacitor/core';
@@ -427,15 +426,11 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (localStorage.getItem('WIPED_ONCE_JULY_16_11_50') !== 'true') {
-       localStorage.setItem('WIPED_ONCE_JULY_16_11_50', 'true');
-       wipeAllLocalData();
-    }
     registerNotificationsOnStartup();
     initializeSonicActivityListeners();
   }, []);
 
-  // Suppress "Invalid Refresh Token" from Supabase and Vite HMR WebSocket errors if they throw unhandled rejections
+  // Suppress "Invalid Refresh Token" from Supabase, Vite HMR WebSocket errors, and benign SW/storage race conditions
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       const msg = String(event.reason?.message || event.reason || '');
@@ -444,6 +439,9 @@ export default function App() {
         msg.includes('Invalid Refresh Token') ||
         msg.includes('WebSocket') ||
         msg.includes('@vite/client') ||
+        msg.includes('registration has been uninstalled') ||
+        msg.includes('dropInstance') ||
+        stack.includes('dropInstance') ||
         stack.includes('@vite/client') ||
         stack.includes('createWebSocketModuleRunnerTransport')
       ) {
