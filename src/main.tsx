@@ -77,7 +77,13 @@ try {
       const val = localStorage.getItem(key); 
       if (val === "undefined" || val === "null") { 
         invalidKeys.push(key); 
-      } 
+      } else if (val && (val.trim().startsWith('[') || val.trim().startsWith('{'))) {
+        try {
+          JSON.parse(val);
+        } catch (err) {
+          invalidKeys.push(key);
+        }
+      }
     } 
   }
   invalidKeys.forEach(k => localStorage.removeItem(k));

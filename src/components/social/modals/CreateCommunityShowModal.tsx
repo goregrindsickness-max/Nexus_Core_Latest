@@ -1025,7 +1025,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
                   <div className="sm:col-span-2">
                     <label className="block font-mono text-[11px] text-zinc-300 uppercase tracking-wider mb-1">
                       City <span className="text-emerald-400">*</span>
@@ -1048,6 +1048,18 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
                       value={stateProvince}
                       onChange={(e) => setStateProvince(e.target.value)}
                       placeholder="e.g. TX, CA"
+                      className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-mono text-[11px] text-zinc-300 uppercase tracking-wider mb-1">
+                      Country
+                    </label>
+                    <input 
+                      type="text"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      placeholder="e.g. United States, UK"
                       className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-400"
                     />
                   </div>
