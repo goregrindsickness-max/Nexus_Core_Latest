@@ -75,27 +75,22 @@ export const CommentMediaPicker: React.FC<CommentMediaPickerProps> = ({
 
   return (
     <div className="relative inline-flex items-center gap-1">
-      {/* File input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="sr-only"
-        onChange={handleImageFileChange}
-      />
-
-      {/* Upload Image Button */}
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => fileInputRef.current?.click()}
-        className={`p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-zinc-800/80 transition-colors cursor-pointer disabled:opacity-40 ${
-          attachedMedia?.type === 'image' ? 'text-rose-400 bg-rose-950/40 border border-rose-800/50' : ''
-        }`}
+      {/* Upload Image Button with direct absolute overlay file input */}
+      <label
+        className={`relative inline-flex items-center justify-center p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-zinc-800/80 transition-colors cursor-pointer ${
+          disabled ? 'opacity-40 cursor-not-allowed' : ''
+        } ${attachedMedia?.type === 'image' ? 'text-rose-400 bg-rose-950/40 border border-rose-800/50' : ''}`}
         title="Attach image"
       >
-        <ImageIcon className="w-4 h-4" />
-      </button>
+        <ImageIcon className="w-4 h-4 pointer-events-none" />
+        <input
+          type="file"
+          accept="image/*"
+          disabled={disabled}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50"
+          onChange={handleImageFileChange}
+        />
+      </label>
 
       {/* Emoji Picker Toggle */}
       <button

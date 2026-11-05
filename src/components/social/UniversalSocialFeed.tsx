@@ -3722,7 +3722,7 @@ const getProfileForUser = (userParam: any) => {
         banner_url: cCover,
         cover_url: cCover,
         creative_banner: cCover,
-        location: resolveCreativeLocation(userProfile) || userProfile?.location || 'Detroit, MI',
+        location: resolveCreativeLocation(userProfile) || userProfile?.location || 'Denison, Texas',
         role: 'Creative',
         account_type: 'creative',
         type: 'creative',

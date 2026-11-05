@@ -702,6 +702,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
   const [mentionSuggestions, setMentionSuggestions] = useState<any[]>([]);
   const [mentionIndex, setMentionIndex] = useState<number>(-1);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [mentionCursorPos, setMentionCursorPos] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => {
@@ -1678,15 +1679,19 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
             </div>
 
             {/* 1. Native file upload for images and audio files (.mp3, .wav) with centered text (Drop Zone First) */}
-            <label className={`flex flex-col items-center justify-center text-center w-full min-h-[85px] border-2 ${theme.inputBorder} border-dashed rounded-xl cursor-pointer ${theme.innerPanelBg} hover:opacity-90 transition-colors p-3`}>
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className={`flex flex-col items-center justify-center text-center w-full min-h-[85px] border-2 ${theme.inputBorder} border-dashed rounded-xl cursor-pointer ${theme.innerPanelBg} hover:opacity-90 transition-colors p-3`}
+            >
               <div className="flex flex-col items-center justify-center text-center">
                 <Upload className={`w-5 h-5 mb-1.5 ${theme.accentText}`} />
                 <p className="text-[10px] font-mono text-zinc-300 font-bold text-center">CLICK OR DRAG NATIVE IMAGES & AUDIO (.MP3, .WAV)</p>
                 <p className="text-[9px] font-mono text-zinc-500 text-center mt-0.5">Supports PNG, JPG, WEBP, MP3, WAV up to 10MB</p>
               </div>
               <input 
+                ref={fileInputRef}
                 type="file" 
-                className="sr-only" 
+                className="hidden" 
                 accept="image/*,audio/*,.mp3,.wav,.flac,.m4a" 
                 multiple 
                 onChange={(e) => {
@@ -1697,9 +1702,11 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                     return;
                   }
                   if (handleMediaUpload) handleMediaUpload(e);
+                  // Reset input value so selecting the same file again triggers change event
+                  if (e.target) e.target.value = '';
                 }} 
               />
-            </label>
+            </div>
 
             {/* 2. Album Organizer Picker (Existing Photo Pit Albums Only) */}
             <div className={`${theme.innerPanelBg} p-2.5 rounded-xl border ${theme.inputBorder} space-y-2`}>

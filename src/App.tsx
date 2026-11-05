@@ -4619,8 +4619,8 @@ list.push({
                     avatar_url: cLogo,
                     banner_url: cCover,
                     bio: cBio,
-                    city: customProfile.creative_metadata?.city || (isOwnerMiguel ? 'Detroit' : 'Detroit'),
-                    state_province: customProfile.creative_metadata?.state_province || (isOwnerMiguel ? 'MI' : 'MI'),
+                    city: customProfile.creative_metadata?.city || 'Denison',
+                    state_province: customProfile.creative_metadata?.state_province || 'TX',
                     country: 'USA'
                   };
 

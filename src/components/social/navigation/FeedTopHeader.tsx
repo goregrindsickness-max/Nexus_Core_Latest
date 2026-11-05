@@ -472,7 +472,7 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                             banner: creativeBanner,
                             banner_url: creativeBanner,
                             cover_url: creativeBanner,
-                            location: creativeLoc || userProfile?.location || 'Detroit, MI',
+                            location: creativeLoc || userProfile?.location || 'Denison, Texas',
                             role: 'Creative',
                             account_type: 'creative',
                             type: 'creative',

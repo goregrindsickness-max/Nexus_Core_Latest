@@ -438,12 +438,12 @@ export const resolveCreativeBio = (userProfile: any): string => {
 
 export const resolveCreativeLocation = (userProfile: any): string => {
   const cm = userProfile?.creative_metadata;
-  const loc = cm?.city || cm?.base_location || userProfile?.creative_city || 'Detroit';
-  const state = cm?.state || cm?.state_province || userProfile?.creative_state || 'MI';
+  const loc = cm?.city || cm?.base_location || userProfile?.creative_city || 'Denison';
+  const state = cm?.state || cm?.state_province || userProfile?.creative_state || 'TX';
 
   const clean = formatCleanLocation(loc, state);
   if (clean) return clean;
-  return 'Detroit, MI';
+  return 'Denison, Texas';
 };
 
 export const resolvePromoterLogo = (userProfile: any, profileAvatarUrl?: string | null): string => {

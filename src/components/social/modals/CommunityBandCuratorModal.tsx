@@ -1380,18 +1380,19 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                         </div>
 
                         <div className="flex-1 flex flex-col gap-1">
-                          <label className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition-colors shadow-sm">
-                            <Upload className="w-3 h-3" />
-                            <span>Upload Avatar</span>
+                          <label className="relative inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition-colors shadow-sm overflow-hidden">
+                            <Upload className="w-3 h-3 pointer-events-none" />
+                            <span className="pointer-events-none">Upload Avatar</span>
                             <input
                               type="file"
                               accept="image/*"
-                              className="sr-only"
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50"
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
                                   handleDeviceFileUpload(file, 'community-bands', 'community-avatar', (url) => setAvatarUrl(url), setIsUploadingAvatar);
                                 }
+                                if (e.target) e.target.value = '';
                               }}
                             />
                           </label>
@@ -1431,18 +1432,19 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                         </div>
 
                         <div className="flex-1 flex flex-col gap-1">
-                          <label className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition-colors shadow-sm">
-                            <Upload className="w-3 h-3" />
-                            <span>Upload Banner</span>
+                          <label className="relative inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition-colors shadow-sm overflow-hidden">
+                            <Upload className="w-3 h-3 pointer-events-none" />
+                            <span className="pointer-events-none">Upload Banner</span>
                             <input
                               type="file"
                               accept="image/*"
-                              className="sr-only"
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50"
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
                                   handleDeviceFileUpload(file, 'community-bands', 'community-banner', (url) => setCoverUrl(url), setIsUploadingCover);
                                 }
+                                if (e.target) e.target.value = '';
                               }}
                             />
                           </label>
