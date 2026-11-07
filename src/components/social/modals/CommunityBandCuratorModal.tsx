@@ -42,12 +42,34 @@ import {
   saveBandDiscographyToCache,
   loadBandDiscographyFromCache,
   deduplicateDiscography,
-  markReleaseDeletedInStorage
+  markReleaseDeletedInStorage,
+  resolveAuthenticReleaseYear
 } from '../../../lib/communityBands';
 import { deleteReleaseFromDatabase } from '../../../services/releasesService';
 import { uploadBase64ToStorage, generateUUID, ensureUUID } from '../../../supabase';
 import { MASTER_GENRES } from '../../../constants/genres';
 import { MetalArchivesImportModal } from './MetalArchivesImportModal';
+
+const getReleaseCoverUrl = (r: any): string => {
+  if (!r) return '';
+  const url =
+    r.cover_url ||
+    r.cover_image ||
+    r.coverUrl ||
+    r.coverImage ||
+    r.image_url ||
+    r.imageUrl ||
+    r.artwork_url ||
+    r.artworkUrl ||
+    r.artwork ||
+    r.cover ||
+    r.image ||
+    '';
+  if (typeof url === 'string' && url.trim().length > 0 && !url.includes('undefined') && !url.includes('null')) {
+    return url.trim();
+  }
+  return '';
+};
 import { resolvePublicBandData, enrichBandMetadataAsync } from '../../../services/bandEnrichmentService';
 import { getSupabase } from '../../../services/clientService';
 import { BandActivityStatus, resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
@@ -311,13 +333,18 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
             const existingIdx = merged.findIndex(
               (m) => m.id === r.id || (m.title && r.title && m.title.toLowerCase().trim() === r.title.toLowerCase().trim())
             );
-            const cover = r.cover_url || r.coverUrl || r.cover_image || r.coverImage || r.image_url || '';
+            const cover = getReleaseCoverUrl(r);
             const newAlb: DiscographyRelease = {
               id: r.id || `rel-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
               title: r.title || 'Untitled',
-              year: r.releaseDate || r.year || String(new Date().getFullYear()),
+              year: resolveAuthenticReleaseYear(r) || String(new Date().getFullYear()),
               type: (['album', 'ep', 'single', 'demo'].includes((r.type || '').toLowerCase()) ? (r.type.toLowerCase() as any) : 'album'),
               image_url: cover,
+              cover_url: cover,
+              cover_image: cover,
+              coverUrl: cover,
+              coverImage: cover,
+              image: cover,
               label: r.label || '',
               release_info: r.label || '',
               catalog_id: r.catalogId || r.catalog_id || '',
@@ -329,10 +356,17 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
               }))
             };
             if (existingIdx >= 0) {
+              const existingCover = getReleaseCoverUrl(merged[existingIdx]);
+              const finalCover = cover || existingCover;
               merged[existingIdx] = {
                 ...merged[existingIdx],
                 ...newAlb,
-                image_url: cover || merged[existingIdx].image_url
+                image_url: finalCover,
+                cover_url: finalCover,
+                cover_image: finalCover,
+                coverUrl: finalCover,
+                coverImage: finalCover,
+                image: finalCover
               };
             } else {
               merged.push(newAlb);
@@ -441,15 +475,35 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
           if (Array.isArray(parsed) && parsed.length > 0) loadedLineup = parsed;
         } catch {}
       }
+      if (loadedLineup.length === 0) {
+        const enriched = resolvePublicBandData(band.name || (band as any).band_name || '');
+        if (Array.isArray(enriched.lineup) && enriched.lineup.length > 0) {
+          loadedLineup = enriched.lineup;
+        }
+      }
     }
     setLineup(loadedLineup);
 
-    let loadedAlbums = (band.discography && band.discography.length > 0) ? band.discography : [];
+    let initialAlbums = (band.discography && band.discography.length > 0) ? band.discography : [];
     const cached = loadBandDiscographyFromCache(band.id, band.name);
-    const combined = deduplicateDiscography([...loadedAlbums, ...(cached || [])]);
+    const enriched = resolvePublicBandData(band.name || (band as any).band_name || '');
+    const combined = deduplicateDiscography([...initialAlbums, ...(cached || []), ...(enriched.discography || [])]);
     if (combined.length > 0) {
-      loadedAlbums = combined;
+      initialAlbums = combined;
     }
+
+    const loadedAlbums = initialAlbums.map((alb: any) => {
+      const cover = getReleaseCoverUrl(alb);
+      return {
+        ...alb,
+        image_url: cover,
+        cover_url: cover,
+        cover_image: cover,
+        coverUrl: cover,
+        coverImage: cover,
+        image: cover
+      };
+    });
 
     setAlbums([...loadedAlbums].sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0')));
     setEditingAlbumIdx(null);
@@ -514,18 +568,25 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
           }
 
           if (liveReleases && Array.isArray(liveReleases) && liveReleases.length > 0) {
-            const mappedReleases: DiscographyRelease[] = liveReleases.map((r: any) => ({
-              id: r.id,
-              title: r.title,
-              year: r.release_date || '',
-              type: r.type || 'album',
-              cover_url: r.cover_image || r.cover_url || '',
-              cover_image: r.cover_image || r.cover_url || '',
-              release_info: r.label || '',
-              catalog_id: r.catalog_id || '',
-              label: r.label || '',
-              tracks: Array.isArray(r.tracks) ? r.tracks : []
-            }));
+            const mappedReleases: DiscographyRelease[] = liveReleases.map((r: any) => {
+              const cover = getReleaseCoverUrl(r);
+              return {
+                id: r.id,
+                title: r.title,
+                year: resolveAuthenticReleaseYear(r) || r.year || '',
+                type: r.type || 'album',
+                image_url: cover,
+                cover_url: cover,
+                cover_image: cover,
+                coverUrl: cover,
+                coverImage: cover,
+                image: cover,
+                release_info: r.label || '',
+                catalog_id: r.catalog_id || '',
+                label: r.label || '',
+                tracks: Array.isArray(r.tracks) ? r.tracks : []
+              };
+            });
             setAlbums(mappedReleases.sort((a: any, b: any) => parseInt(b.year || '0') - parseInt(a.year || '0')));
             if (band.id) saveBandDiscographyToCache(band.id, band.name, mappedReleases);
             if (liveBand?.id) saveBandDiscographyToCache(liveBand.id, liveBand.band_name, mappedReleases);
@@ -685,7 +746,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     setReleaseType((['album', 'ep', 'single', 'demo'].includes((alb.type || '').toLowerCase()) ? (alb.type.toLowerCase() as any) : 'album'));
     setReleaseLabel(alb.label || alb.release_info || '');
     setReleaseCatalogId(alb.catalog_id || '');
-    setReleaseImageUrl(alb.image_url || '');
+    setReleaseImageUrl(getReleaseCoverUrl(alb));
     setReleaseTracks(alb.tracks || []);
     setNewTrackTitle('');
     setNewTrackDuration('');
@@ -698,12 +759,18 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
       ? (albums[editingAlbumIdx]?.id ? ensureUUID(albums[editingAlbumIdx].id) : generateUUID())
       : generateUUID();
 
+    const coverVal = releaseImageUrl.trim() || undefined;
     const releaseData: DiscographyRelease = {
       id: releaseId,
       title: releaseTitle.trim(),
       year: releaseYear.trim() || new Date().getFullYear().toString(),
       type: releaseType,
-      image_url: releaseImageUrl.trim() || undefined,
+      image_url: coverVal,
+      cover_url: coverVal,
+      cover_image: coverVal,
+      coverUrl: coverVal,
+      coverImage: coverVal,
+      image: coverVal,
       label: releaseLabel.trim() || undefined,
       release_info: releaseLabel.trim() || undefined,
       catalog_id: releaseCatalogId.trim() || undefined,
@@ -797,12 +864,18 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
         const releaseId = editingAlbumIdx !== null && albums[editingAlbumIdx]?.id
           ? ensureUUID(albums[editingAlbumIdx].id)
           : generateUUID();
+        const coverVal = releaseImageUrl.trim() || undefined;
         const pendingRelease: DiscographyRelease = {
           id: releaseId,
           title: releaseTitle.trim(),
           year: releaseYear.trim() || new Date().getFullYear().toString(),
           type: releaseType,
-          image_url: releaseImageUrl.trim() || undefined,
+          image_url: coverVal,
+          cover_url: coverVal,
+          cover_image: coverVal,
+          coverUrl: coverVal,
+          coverImage: coverVal,
+          image: coverVal,
           label: releaseLabel.trim() || undefined,
           release_info: releaseLabel.trim() || undefined,
           catalog_id: releaseCatalogId.trim() || undefined,
@@ -827,6 +900,9 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
       const bandId = isCreatingNew
         ? generateUUID()
         : (selectedBand?.id ? ensureUUID(selectedBand.id) : generateUUID());
+
+      const finalLineupToSave = finalLineup.length > 0 ? finalLineup : (lineup.length > 0 ? lineup : (selectedBand?.lineup || []));
+      const finalAlbumsToSave = finalAlbums.length > 0 ? finalAlbums : (albums.length > 0 ? albums : (selectedBand?.discography || []));
 
       const bandPayload: Partial<CommunityBandRecord> & { band_name: string } = {
         id: bandId,
@@ -855,8 +931,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
         metal_archives_url: metalArchivesUrl.trim() || undefined,
         youtube_url: youtubeUrl.trim() || undefined,
         featured_youtube_url: youtubeUrl.trim() || undefined,
-        lineup: finalLineup,
-        discography: finalAlbums,
+        lineup: finalLineupToSave,
+        discography: finalAlbumsToSave,
         creator_id: resolvedCreatorId,
         curated_by: curatorHandle || userProfile?.console_handle || userProfile?.handle || '@fan_archivist',
         curator_name: userProfile?.full_name || userProfile?.name || 'Community Archivist',
@@ -934,8 +1010,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true }));
 
   return (
-    <div className="fixed inset-0 z-[1000005] bg-black/90 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 md:p-6 pb-20 sm:pb-6 overflow-y-auto animate-in fade-in duration-200">
-      <div className="w-full max-w-4xl bg-[#090a0f] border border-zinc-800 rounded-none sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full max-h-[calc(100dvh-4.75rem)] sm:max-h-[88vh] sm:h-[88vh]">
+    <div className="fixed inset-0 z-[1000005] bg-black/90 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 md:p-6 pb-0 sm:pb-6 overflow-y-auto animate-in fade-in duration-200">
+      <div className="w-full max-w-4xl bg-[#090a0f] border border-zinc-800 rounded-none sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full max-h-[100dvh] sm:max-h-[88vh] sm:h-[88vh]">
         
         {/* Global Modal Header - Compact on mobile */}
         <div className="px-3 py-2 sm:px-5 sm:py-3.5 border-b border-zinc-850 bg-gradient-to-r from-zinc-950 via-zinc-900/70 to-zinc-950 flex items-center justify-between shrink-0 gap-2">
@@ -1011,7 +1087,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
 
         {/* PAGE 1: EXISTING ARCHIVES LIST (Explorer) */}
         {activePage === 'list' && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-28 sm:pb-20 space-y-4 bg-zinc-950/40">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-8 sm:pb-6 space-y-4 bg-zinc-950/40">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div>
                 <h4 className="text-sm font-mono font-bold text-white uppercase tracking-wider">
@@ -1232,7 +1308,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
             </div>
 
             {/* Scrollable Editor Content */}
-            <div className="flex-1 overflow-y-auto p-3 sm:p-5 pb-32 sm:pb-24 space-y-3.5">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-5 pb-10 sm:pb-8 space-y-3.5">
               
               {/* TAB 1: OVERVIEW & MEDIA */}
               {activeTab === 'overview' && (
@@ -2091,11 +2167,14 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                           >
                             <div className="flex items-center gap-3.5 min-w-0">
                               <div className="w-12 h-12 rounded-xl bg-black border border-zinc-800 overflow-hidden flex items-center justify-center shrink-0 shadow">
-                                {alb.image_url ? (
-                                  <img src={alb.image_url} alt={alb.title} className="w-full h-full object-cover" />
-                                ) : (
-                                  <Disc className="w-5 h-5 text-zinc-600" />
-                                )}
+                                {(() => {
+                                  const coverSrc = getReleaseCoverUrl(alb);
+                                  return coverSrc ? (
+                                    <img src={coverSrc} alt={alb.title} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <Disc className="w-5 h-5 text-zinc-600" />
+                                  );
+                                })()}
                               </div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">

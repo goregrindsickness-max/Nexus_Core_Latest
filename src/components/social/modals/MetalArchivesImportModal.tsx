@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { scrapeMetalArchivesBand, MetalArchivesScrapeResult, parseMetalArchivesRawText } from '../../../services/metalArchivesScraper';
 import { upsertReleasesBatchToDatabase, CatalogRelease } from '../../../services/releasesService';
-import { communityBandManager, DiscographyRelease } from '../../../lib/communityBands';
+import { communityBandManager, DiscographyRelease, resolveAuthenticReleaseYear } from '../../../lib/communityBands';
 import { ensureUUID } from '../../../services/schemaResilienceService';
 
 interface MetalArchivesImportModalProps {
@@ -221,27 +221,31 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
             const existingDiscography = matchedBand.discography || [];
             const mergedDiscography = [...existingDiscography];
 
-            const newReleases: DiscographyRelease[] = releasesToImport.map((r, idx) => ({
-              id: r.id || ensureUUID(`rel-${bandId}-${idx}-${Date.now()}`),
-              title: r.title || 'Untitled Release',
-              year: r.releaseDate || r.year || String(new Date().getFullYear()),
-              type: (r.type?.toLowerCase() || 'album') as any,
-              cover_url: r.coverUrl || r.coverImage || '',
-              cover_image: r.coverUrl || r.coverImage || '',
-              coverUrl: r.coverUrl || r.coverImage || '',
-              coverImage: r.coverUrl || r.coverImage || '',
-              image_url: r.coverUrl || r.coverImage || '',
-              release_info: r.label || '',
-              catalog_id: r.catalogId || '',
-              label: r.label || '',
-              tracks: (r.tracks || []).map((t: any, tIdx: number) => ({
-                number: typeof t.number === 'number' ? t.number : (parseInt(t.num) || tIdx + 1),
-                title: t.title || `Track ${tIdx + 1}`,
-                duration: t.duration || '3:30',
-                lyrics: t.lyrics || undefined,
-                previewUrl: t.previewUrl || t.preview_url || undefined
-              }))
-            }));
+            const newReleases: DiscographyRelease[] = releasesToImport.map((r, idx) => {
+              const cUrl = r.coverUrl || r.coverImage || r.cover_url || r.cover_image || r.image_url || r.imageUrl || r.artwork || r.image || '';
+              return {
+                id: r.id || ensureUUID(`rel-${bandId}-${idx}-${Date.now()}`),
+                title: r.title || 'Untitled Release',
+                year: resolveAuthenticReleaseYear(r) || String(new Date().getFullYear()),
+                type: (r.type?.toLowerCase() || 'album') as any,
+                cover_url: cUrl,
+                cover_image: cUrl,
+                coverUrl: cUrl,
+                coverImage: cUrl,
+                image_url: cUrl,
+                image: cUrl,
+                release_info: r.label || '',
+                catalog_id: r.catalogId || '',
+                label: r.label || '',
+                tracks: (r.tracks || []).map((t: any, tIdx: number) => ({
+                  number: typeof t.number === 'number' ? t.number : (parseInt(t.num) || tIdx + 1),
+                  title: t.title || `Track ${tIdx + 1}`,
+                  duration: t.duration || '3:30',
+                  lyrics: t.lyrics || undefined,
+                  previewUrl: t.previewUrl || t.preview_url || undefined
+                }))
+              };
+            });
 
             for (const nr of newReleases) {
               const normTitle = nr.title.toLowerCase().trim();

@@ -392,7 +392,7 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
           let displayAvatar = p.avatar_url || p.avatar || '';
           let displayBio = p.bio || '';
 
-          if (p.account_type === 'band' || p.bandName) {
+          if ((p.account_type === 'band' || p.isBandProfile === true) && p.account_type !== 'fan' && p.account_type !== 'fan_only') {
             displayName = p.bandName || displayName;
             role = 'Band';
             cat = 'bands';

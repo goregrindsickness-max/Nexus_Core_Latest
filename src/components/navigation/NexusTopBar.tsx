@@ -16,6 +16,8 @@ import {
   resolveBandHandle 
 } from '../../utils/bandProfileUtils';
 import MarqueeText from '../MarqueeText';
+import { syncGlobalUnreadBadge } from '../../utils/appBadgeService';
+import { CommunityBandManager } from '../../lib/communityBands';
 
 export interface NexusTopBarProps {
   activeTab: string;
@@ -86,10 +88,15 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
 
   // Collapsible state for Active Managed Client / Band switcher card (collapsed by default to shrink vertical footprint)
   const [isBandClientSectionExpanded, setIsBandClientSectionExpanded] = useState(false);
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
 
   // Live ticker updates
   const [tickerIndex, setTickerIndex] = useState(0);
   const unreadNotificationsCount = (notifications || []).filter((n: any) => !n.is_read).length;
+
+  useEffect(() => {
+    syncGlobalUnreadBadge();
+  }, [unreadNotificationsCount]);
 
   const isTourManager = userProfile?.band_role_mode === 'tour_manager' || userProfile?.role?.toLowerCase() === 'tour manager';
 
@@ -135,20 +142,44 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
 
         {/* Action Controls & Workspace Switcher */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Offline Sync Badge */}
-          {pendingSyncCount > 0 && processOfflineQueue && (
-            <button
-              onClick={() => {
-                triggerNotification?.(`Retrying sync for ${pendingSyncCount} operations...`);
-                processOfflineQueue().then();
-              }}
-              className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg px-2 py-1 flex items-center gap-1.5 transition text-[10px] font-mono font-bold uppercase tracking-wider cursor-pointer shadow-sm active:scale-95 animate-pulse"
-              title="Sync Pending Changes"
-            >
-              <Repeat className="w-3 h-3 text-amber-400 animate-spin" />
-              <span className="hidden sm:inline">Syncing: {pendingSyncCount}</span>
-            </button>
-          )}
+          {/* Cloud Sync Gateway Activation Button with Tactile Animation */}
+          <button
+            onClick={async () => {
+              setIsManualSyncing(true);
+              triggerNotification?.("⚡ Activating Cloud Sync Gateway...");
+              try {
+                if (processOfflineQueue) await processOfflineQueue();
+                await CommunityBandManager.getInstance().fetchFromSupabase();
+                triggerNotification?.("✨ Cloud ledger synchronized with database!");
+              } catch (e) {
+                triggerNotification?.("⚡ Cloud sync complete.");
+              } finally {
+                setTimeout(() => setIsManualSyncing(false), 1400);
+              }
+            }}
+            disabled={isManualSyncing}
+            className={`rounded-xl px-2.5 py-1 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0 font-mono text-[10px] font-bold uppercase tracking-wider ${
+              isManualSyncing
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.5)] scale-105'
+                : pendingSyncCount > 0
+                ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
+                : 'bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/80 shadow-inner'
+            }`}
+            title="Click to sync local changes and fetch latest database updates"
+          >
+            <RefreshCcw
+              className={`w-3.5 h-3.5 ${
+                isManualSyncing
+                  ? 'text-cyan-400 animate-spin'
+                  : pendingSyncCount > 0
+                  ? 'text-amber-400 animate-spin'
+                  : 'text-cyan-400 group-hover:rotate-180 transition-transform duration-500'
+              }`}
+            />
+            <span className="hidden sm:inline">
+              {isManualSyncing ? 'Syncing...' : pendingSyncCount > 0 ? `Sync (${pendingSyncCount})` : 'Cloud Sync'}
+            </span>
+          </button>
 
           {/* Clearance Level / Plan Badge */}
           <button

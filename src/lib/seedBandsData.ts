@@ -4321,14 +4321,253 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
             "number": 1,
             "title": "Morbid Realization",
             "duration": "3:20"
-          },
-          {
-            "number": 2,
-            "title": "Cold Slab",
-            "duration": "3:40"
           }
         ]
       }
+    ]
+  },
+  {
+    "id": "cc-cannibal-corpse-official-uuid",
+    "name": "Cannibal Corpse",
+    "band_name": "Cannibal Corpse",
+    "genre": "Death Metal",
+    "subgenres": ["Death Metal", "Brutal Death Metal", "Thrash Metal"],
+    "micro_genres": ["Death Metal", "Brutal Death Metal", "Thrash Metal"],
+    "founded_year": "1988",
+    "city": "Buffalo",
+    "state": "NY",
+    "state_province": "NY",
+    "country": "USA",
+    "record_label": "Metal Blade Records",
+    "bio": "Legendary death metal pioneers formed in Buffalo, New York in 1988. One of the top-selling death metal bands of all time, famous for razor-sharp technical riffs, relentless blast beats, and iconic releases like Tomb of the Mutilated and The Bleeding.",
+    "avatar_url": "https://img.youtube.com/vi/0g863f6H0lE/hqdefault.jpg",
+    "logo_url": "https://img.youtube.com/vi/0g863f6H0lE/hqdefault.jpg",
+    "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=1200",
+    "spotify_url": "https://open.spotify.com/artist/1G14y7G101o0G0K8P",
+    "custom_slug": "cannibal-corpse",
+    "verification_status": "community_archive",
+    "created_at": "1988-01-01T00:00:00Z",
+    "followers_count": 98500,
+    "lineup": [
+      { "id": "cc-1", "name": "George \"Corpsegrinder\" Fisher", "role": "Lead Vocals", "status": "active", "years": "1995–present" },
+      { "id": "cc-2", "name": "Alex Webster", "role": "Bass", "status": "active", "years": "1988–present" },
+      { "id": "cc-3", "name": "Paul Mazurkiewicz", "role": "Drums", "status": "active", "years": "1988–present" },
+      { "id": "cc-4", "name": "Rob Barrett", "role": "Rhythm Guitar", "status": "active", "years": "1993–1997, 2005–present" },
+      { "id": "cc-5", "name": "Erik Rutan", "role": "Lead Guitar", "status": "active", "years": "2021–present" },
+      { "id": "cc-6", "name": "Chris Barnes", "role": "Vocals", "status": "past", "years": "1988–1995" }
+    ],
+    "discography": [
+      { "id": "cc-rel-1", "title": "Eaten Back to Life", "year": "1990", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81A-qC464HL._SL1500_.jpg" },
+      { "id": "cc-rel-2", "title": "Butchered at Birth", "year": "1991", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81S8A1f1yvL._SL1500_.jpg" },
+      { "id": "cc-rel-3", "title": "Tomb of the Mutilated", "year": "1992", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/91eRkL3bNfL._SL1500_.jpg" },
+      { "id": "cc-rel-4", "title": "The Bleeding", "year": "1994", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81M2e8P6zNL._SL1500_.jpg" },
+      { "id": "cc-rel-5", "title": "Vile", "year": "1996", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-6", "title": "Gallery of Suicide", "year": "1998", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-7", "title": "Bloodthirst", "year": "1999", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-8", "title": "Gore Obsessed", "year": "2002", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-9", "title": "The Wretched Spawn", "year": "2004", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-10", "title": "Kill", "year": "2006", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-11", "title": "Evisceration Plague", "year": "2009", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-12", "title": "Torture", "year": "2012", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-13", "title": "A Skeletal Domain", "year": "2014", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-14", "title": "Red Before Black", "year": "2017", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-15", "title": "Violence Unimagined", "year": "2021", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-16", "title": "Chaos Horrific", "year": "2023", "type": "album", "label": "Metal Blade Records" }
+    ]
+  },
+  {
+    "id": "he-hate-eternal-official-uuid",
+    "name": "Hate Eternal",
+    "band_name": "Hate Eternal",
+    "genre": "Death Metal",
+    "subgenres": ["Extreme Metal", "Death Metal", "Tech Death"],
+    "micro_genres": ["Extreme Metal", "Death Metal", "Tech Death"],
+    "founded_year": "1997",
+    "city": "Tampa",
+    "state": "FL",
+    "state_province": "FL",
+    "country": "USA",
+    "record_label": "Season of Mist",
+    "bio": "Formed in St. Petersburg, Florida, in 1997 by legendary guitarist and producer Erik Rutan (Morbid Angel, Cannibal Corpse), Hate Eternal is a relentless hurricane of ferocious, hyper-speed technical death metal.",
+    "custom_slug": "hate-eternal",
+    "verification_status": "community_archive",
+    "created_at": "1997-01-01T00:00:00Z",
+    "followers_count": 34200,
+    "lineup": [
+      { "id": "he-1", "name": "Erik Rutan", "role": "Guitars, Vocals", "status": "active", "years": "1997–present" },
+      { "id": "he-2", "name": "JJ Hrubovcak", "role": "Bass", "status": "active", "years": "2008–present" },
+      { "id": "he-3", "name": "Hannes Grossmann", "role": "Drums", "status": "active", "years": "2018–present" }
+    ],
+    "discography": [
+      { "id": "he-rel-1", "title": "Conquering the Throne", "year": "1999", "type": "album", "label": "Wicked World" },
+      { "id": "he-rel-2", "title": "King of All Kings", "year": "2002", "type": "album", "label": "Earache Records" },
+      { "id": "he-rel-3", "title": "I, Monarch", "year": "2005", "type": "album", "label": "Earache Records" },
+      { "id": "he-rel-4", "title": "Fury & Flames", "year": "2008", "type": "album", "label": "Metal Blade Records" },
+      { "id": "he-rel-5", "title": "Phoenix Amongst the Ashes", "year": "2011", "type": "album", "label": "Metal Blade Records" },
+      { "id": "he-rel-6", "title": "Infernus", "year": "2015", "type": "album", "label": "Season of Mist" },
+      { "id": "he-rel-7", "title": "Upon Desolate Sands", "year": "2018", "type": "album", "label": "Season of Mist" }
+    ]
+  },
+  {
+    "id": "dof-deeds-of-flesh-official-uuid",
+    "name": "Deeds of Flesh",
+    "band_name": "Deeds of Flesh",
+    "genre": "Brutal Death Metal",
+    "subgenres": ["Brutal Death Metal", "Technical Death Metal"],
+    "micro_genres": ["Brutal Death Metal", "Technical Death Metal"],
+    "founded_year": "1993",
+    "city": "Los Osos",
+    "state": "CA",
+    "state_province": "CA",
+    "country": "USA",
+    "record_label": "Unique Leader Records",
+    "bio": "Legendary American brutal technical death metal pioneers formed in 1993 by Erik Lindmark and Jacoby Kingston. Founders of Unique Leader Records.",
+    "custom_slug": "deeds-of-flesh",
+    "verification_status": "community_archive",
+    "created_at": "1993-01-01T00:00:00Z",
+    "followers_count": 28900,
+    "lineup": [
+      { "id": "dof-1", "name": "Jacoby Kingston", "role": "Bass, Vocals", "status": "active", "years": "1993–2007, 2020–present" },
+      { "id": "dof-2", "name": "Craig Peters", "role": "Guitars", "status": "active", "years": "2011–present" },
+      { "id": "dof-3", "name": "Darren Cesca", "role": "Drums", "status": "active", "years": "2016–present" },
+      { "id": "dof-4", "name": "Erik Lindmark", "role": "Guitars, Vocals", "status": "past", "years": "1993–2018 (R.I.P.)" }
+    ],
+    "discography": [
+      { "id": "dof-rel-1", "title": "Gradually Melted", "year": "1995", "type": "ep", "label": "Wild Rags" },
+      { "id": "dof-rel-2", "title": "Trading Pieces", "year": "1996", "type": "album", "label": "Spanish Goblin" },
+      { "id": "dof-rel-3", "title": "Inbreeding the Anthropophagi", "year": "1998", "type": "album", "label": "Decomposed Records" },
+      { "id": "dof-rel-4", "title": "Path of the Totem", "year": "1999", "type": "album", "label": "Unique Leader Records" },
+      { "id": "dof-rel-5", "title": "Mark of the Legion", "year": "2001", "type": "album", "label": "Unique Leader Records" },
+      { "id": "dof-rel-6", "title": "Reduced to Begging", "year": "2003", "type": "album", "label": "Unique Leader Records" },
+      { "id": "dof-rel-7", "title": "Crown of Souls", "year": "2005", "type": "album", "label": "Unique Leader Records" },
+      { "id": "dof-rel-8", "title": "Of What's to Come", "year": "2008", "type": "album", "label": "Unique Leader Records" },
+      { "id": "dof-rel-9", "title": "Portals to Canaan", "year": "2013", "type": "album", "label": "Unique Leader Records" },
+      { "id": "dof-rel-10", "title": "Nucleus", "year": "2020", "type": "album", "label": "Unique Leader Records" }
+    ]
+  },
+  {
+    "id": "bf-birdflesh-official-uuid",
+    "name": "Birdflesh",
+    "band_name": "Birdflesh",
+    "genre": "Grindcore",
+    "subgenres": ["Grindcore", "Deathgrind"],
+    "micro_genres": ["Grindcore", "Deathgrind"],
+    "founded_year": "1992",
+    "city": "Växjö",
+    "state_province": "Kronoberg",
+    "country": "Sweden",
+    "record_label": "Everlasting Spew Records",
+    "bio": "Formed in 1992 in Växjö, Sweden, Birdflesh is a cult underground institution of humorous, high-octane grindcore and deathgrind, known for wearing outlandish stage masks and delivering breakneck blast beats.",
+    "custom_slug": "birdflesh",
+    "verification_status": "community_archive",
+    "created_at": "1992-01-01T00:00:00Z",
+    "followers_count": 18400,
+    "lineup": [
+      { "id": "bf-1", "name": "Smögen", "role": "Bass, Vocals", "status": "active", "years": "1992–present" },
+      { "id": "bf-2", "name": "Elis", "role": "Guitars, Vocals", "status": "active", "years": "2014–present" },
+      { "id": "bf-3", "name": "Barra", "role": "Drums, Vocals", "status": "active", "years": "2021–present" }
+    ],
+    "discography": [
+      { "id": "bf-rel-1", "title": "Born to Decide", "year": "2002", "type": "album", "label": "Obliteration Records" },
+      { "id": "bf-rel-2", "title": "Alive Autopsy", "year": "2004", "type": "album", "label": "Lard Records" },
+      { "id": "bf-rel-3", "title": "Night of the Ultimate Mosh", "year": "2008", "type": "album", "label": "Relapse Records" },
+      { "id": "bf-rel-4", "title": "Satan's Goats", "year": "2018", "type": "album", "label": "Everlasting Spew Records" },
+      { "id": "bf-rel-5", "title": "Extreme Sickness First Class", "year": "2023", "type": "album", "label": "Everlasting Spew Records" }
+    ]
+  },
+  {
+    "id": "sc-scour-official-uuid",
+    "name": "Scour",
+    "band_name": "Scour",
+    "genre": "Extreme Metal",
+    "subgenres": ["Extreme Metal", "Black Metal", "Thrash Metal"],
+    "micro_genres": ["Extreme Metal", "Black Metal", "Thrash Metal"],
+    "founded_year": "2015",
+    "city": "New Orleans",
+    "state": "LA",
+    "state_province": "LA",
+    "country": "USA",
+    "record_label": "Housecore Records / Nuclear Blast",
+    "bio": "Extreme metal supergroup formed in 2015 featuring Philip H. Anselmo (Pantera, Down), Derek Engemann (Cattle Decapitation), John Jarvis (Pig Destroyer), Mark Kloeppel (Misery Index), and Adam Jarvis (Misery Index, Pig Destroyer).",
+    "custom_slug": "scour",
+    "verification_status": "community_archive",
+    "created_at": "2015-01-01T00:00:00Z",
+    "followers_count": 24100,
+    "lineup": [
+      { "id": "sc-1", "name": "Philip H. Anselmo", "role": "Lead Vocals", "status": "active", "years": "2015–present" },
+      { "id": "sc-2", "name": "Derek Engemann", "role": "Guitars, Backing Vocals", "status": "active", "years": "2015–present" },
+      { "id": "sc-3", "name": "Mark Kloeppel", "role": "Guitars, Backing Vocals", "status": "active", "years": "2015–present" },
+      { "id": "sc-4", "name": "John Jarvis", "role": "Bass, Backing Vocals", "status": "active", "years": "2015–present" },
+      { "id": "sc-5", "name": "Adam Jarvis", "role": "Drums", "status": "active", "years": "2015–present" }
+    ],
+    "discography": [
+      { "id": "sc-rel-1", "title": "Grey", "year": "2016", "type": "ep", "label": "Housecore Records" },
+      { "id": "sc-rel-2", "title": "Red", "year": "2017", "type": "ep", "label": "Housecore Records" },
+      { "id": "sc-rel-3", "title": "Black", "year": "2020", "type": "ep", "label": "Housecore Records" },
+      { "id": "sc-rel-4", "title": "Gold", "year": "2024", "type": "album", "label": "Nuclear Blast" }
+    ]
+  },
+  {
+    "id": "sb-squash-bowels-official-uuid",
+    "name": "Squash Bowels",
+    "band_name": "Squash Bowels",
+    "genre": "Goregrind / Deathgrind",
+    "subgenres": ["Goregrind", "Deathgrind", "Grindcore"],
+    "micro_genres": ["Goregrind", "Deathgrind", "Grindcore"],
+    "founded_year": "1994",
+    "city": "Białystok",
+    "state_province": "Podlaskie",
+    "country": "Poland",
+    "record_label": "Willowtip Records / Lard Records",
+    "bio": "Cult Polish goregrind and deathgrind institution formed in Białystok, Poland, in 1994. Known for unrelenting blast beats, pitch-shifted gutturals, and classic albums like Grindvirus and Grindcoholics.",
+    "custom_slug": "squash-bowels",
+    "verification_status": "community_archive",
+    "created_at": "1994-01-01T00:00:00Z",
+    "followers_count": 16800,
+    "lineup": [
+      { "id": "sb-1", "name": "Arthur \"Paluch\" Meinart", "role": "Bass, Vocals", "status": "past", "years": "1994–2016" },
+      { "id": "sb-2", "name": "Andy", "role": "Guitars", "status": "past", "years": "1994–2016" },
+      { "id": "sb-3", "name": "Psycho", "role": "Drums", "status": "past", "years": "2001–2016" }
+    ],
+    "discography": [
+      { "id": "sb-rel-1", "title": "Something Can Be Changed", "year": "1997", "type": "album", "label": "Selfmade God" },
+      { "id": "sb-rel-2", "title": "Tenebris", "year": "1999", "type": "album", "label": "Obscene Productions" },
+      { "id": "sb-rel-3", "title": "The Mass Dead", "year": "2002", "type": "album", "label": "Lard Records" },
+      { "id": "sb-rel-4", "title": "No Mercy", "year": "2004", "type": "album", "label": "Willowtip Records" },
+      { "id": "sb-rel-5", "title": "Love Songs", "year": "2005", "type": "album", "label": "Lard Records" },
+      { "id": "sb-rel-6", "title": "Grindvirus", "year": "2009", "type": "album", "label": "Willowtip Records" },
+      { "id": "sb-rel-7", "title": "Grindcoholics", "year": "2013", "type": "album", "label": "Selfmade God" }
+    ]
+  },
+  {
+    "id": "lod-lust-of-decay-official-uuid",
+    "name": "Lust of Decay",
+    "band_name": "Lust of Decay",
+    "genre": "Brutal Death Metal",
+    "subgenres": ["Brutal Death Metal", "Slam Death Metal"],
+    "micro_genres": ["Brutal Death Metal", "Slam Death Metal"],
+    "founded_year": "1999",
+    "city": "Lexington",
+    "state": "KY",
+    "state_province": "KY",
+    "country": "USA",
+    "record_label": "Comatose Music",
+    "bio": "Brutal death metal powerhouse formed in Lexington, Kentucky in 1999, signed to Comatose Music. Renowned for brutal slam grooves, gut-wrenching gutturals, and classic albums like Infesting the Exhumed and Purity Through Dismemberment.",
+    "custom_slug": "lust-of-decay",
+    "verification_status": "community_archive",
+    "created_at": "1999-01-01T00:00:00Z",
+    "followers_count": 14200,
+    "lineup": [
+      { "id": "lod-1", "name": "Blake Pollard", "role": "Vocals", "status": "active", "years": "1999–present" },
+      { "id": "lod-2", "name": "Mark Rucker", "role": "Guitars", "status": "active", "years": "1999–present" },
+      { "id": "lod-3", "name": "Jason Klumpp", "role": "Bass", "status": "active", "years": "2001–present" },
+      { "id": "lod-4", "name": "Jerome Howard", "role": "Drums", "status": "active", "years": "2003–present" }
+    ],
+    "discography": [
+      { "id": "lod-rel-1", "title": "Infesting the Exhumed", "year": "2002", "type": "album", "label": "Comatose Music" },
+      { "id": "lod-rel-2", "title": "Kingdom of Corpses", "year": "2004", "type": "album", "label": "Comatose Music" },
+      { "id": "lod-rel-3", "title": "Entombed in Sewage", "year": "2008", "type": "album", "label": "Comatose Music" },
+      { "id": "lod-rel-4", "title": "Purity Through Dismemberment", "year": "2014", "type": "album", "label": "Comatose Music" }
     ]
   }
 ];

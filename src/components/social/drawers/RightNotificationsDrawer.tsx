@@ -22,6 +22,7 @@ import {
   Check
 } from 'lucide-react';
 import { pushManager, PushPermissionStatus, isIframeEnvironment } from '../../../lib/pushNotifications';
+import { testAppBadge, clearAppBadge, getStoredBadgeCount, isBadgeEnabled, saveBadgePreference, syncGlobalUnreadBadge } from '../../../utils/appBadgeService';
 
 interface RightNotificationsDrawerProps {
   rightDrawerOpen: boolean;
@@ -58,6 +59,8 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
   const [isRequesting, setIsRequesting] = useState(false);
   const [isTestingPush, setIsTestingPush] = useState(false);
   const [testPushSuccess, setTestPushSuccess] = useState(false);
+  const [badgeCount, setBadgeCount] = useState<number>(() => getStoredBadgeCount());
+  const [badgeEnabled, setBadgeEnabled] = useState<boolean>(() => isBadgeEnabled());
   const inIframe = isIframeEnvironment();
 
   useEffect(() => {
@@ -75,12 +78,22 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
       pushManager.refreshPermissionStatus().then(setPermissionStatus);
     };
 
+    const handleBadgeChange = (e: any) => {
+      if (e.detail && typeof e.detail.count === 'number') {
+        setBadgeCount(e.detail.count);
+      } else {
+        setBadgeCount(getStoredBadgeCount());
+      }
+    };
+
     window.addEventListener('nexus_in_app_notice', handleInAppNotice);
+    window.addEventListener('nexus_app_badge_changed', handleBadgeChange);
     window.addEventListener('focus', handleSyncStatus);
     document.addEventListener('visibilitychange', handleSyncStatus);
 
     return () => {
       window.removeEventListener('nexus_in_app_notice', handleInAppNotice);
+      window.removeEventListener('nexus_app_badge_changed', handleBadgeChange);
       window.removeEventListener('focus', handleSyncStatus);
       document.removeEventListener('visibilitychange', handleSyncStatus);
     };
@@ -273,6 +286,60 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
               </button>
             </div>
           )}
+
+          {/* App Icon Badge Counter Controls (Facebook & Reddit style Home Screen Badging) */}
+          <div className="w-full p-2 rounded-lg bg-zinc-950/90 border border-rose-500/20 flex flex-col gap-1.5 font-mono">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-zinc-300 font-bold flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${badgeCount > 0 ? 'bg-rose-500 animate-pulse' : 'bg-zinc-600'}`} />
+                APP ICON BADGE:
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${badgeCount > 0 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-zinc-800 text-zinc-400'}`}>
+                  {badgeCount > 0 ? `[ ${badgeCount} ] ACTIVE` : 'CLEARED'}
+                </span>
+              </span>
+              <button
+                onClick={() => {
+                  const next = !badgeEnabled;
+                  setBadgeEnabled(next);
+                  saveBadgePreference(next);
+                }}
+                className={`text-[9px] px-2 py-0.5 rounded uppercase font-bold transition-all cursor-pointer ${
+                  badgeEnabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-500'
+                }`}
+              >
+                {badgeEnabled ? 'Enabled' : 'Disabled'}
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5 pt-0.5">
+              <button
+                onClick={() => {
+                  testAppBadge(2);
+                }}
+                className="flex-1 py-1 px-2 rounded bg-rose-600/90 hover:bg-rose-500 text-white font-bold text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer shadow-sm border border-rose-500/40"
+                title="Set home screen icon badge to 2 (like Facebook & Reddit app badges)"
+              >
+                <Sparkles className="w-3 h-3" /> Test Badge (2)
+              </button>
+              <button
+                onClick={() => {
+                  syncGlobalUnreadBadge();
+                }}
+                className="py-1 px-2 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer border border-zinc-700"
+                title="Sync icon badge with unread notifications count"
+              >
+                Sync Unread
+              </button>
+              <button
+                onClick={() => {
+                  clearAppBadge();
+                }}
+                className="py-1 px-2 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer border border-zinc-800"
+                title="Clear home screen app icon badge"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
             {[

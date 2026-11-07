@@ -32,12 +32,16 @@ export interface DiscographyRelease {
   id?: string;
   title: string;
   year: string;
+  release_date?: string;
+  releaseDate?: string;
+  release_year?: string;
   type: 'album' | 'ep' | 'single' | 'demo' | string;
   image_url?: string;
   cover_url?: string;
   cover_image?: string;
   coverUrl?: string;
   coverImage?: string;
+  image?: string;
   release_info?: string;
   catalog_id?: string;
   label?: string;
@@ -107,7 +111,11 @@ export const UNOFFICIAL_MOCK_BAND_IDS = new Set<string>([
   'disgorge',
   'epicardiectomy',
   'morbid-angel',
-  'morbid angel'
+  'morbid angel',
+  'tyler-hansard',
+  'tyler hansard',
+  'tyler-slamson',
+  'tyler slamson'
 ]);
 
 export const UNOFFICIAL_MOCK_BAND_NAMES = new Set<string>([
@@ -117,7 +125,11 @@ export const UNOFFICIAL_MOCK_BAND_NAMES = new Set<string>([
   'jungle rot',
   'disgorge',
   'epicardiectomy',
-  'morbid angel'
+  'morbid angel',
+  'tyler hansard',
+  'tyler-hansard',
+  'tyler slamson',
+  'tyler-slamson'
 ]);
 
 export function isDeletedOrZombieBand(idOrName?: string): boolean {
@@ -179,6 +191,186 @@ export function isDeletedRelease(releaseId?: string, releaseTitle?: string, band
   return false;
 }
 
+export const KNOWN_ALBUM_RELEASE_YEARS: Record<string, string> = {
+  // Hate Eternal
+  'conqueringthethrone': '1999',
+  'kingofallkings': '2002',
+  'imonarch': '2005',
+  'furyflames': '2008',
+  'furyandflames': '2008',
+  'phoenixamongsttheashes': '2011',
+  'infernus': '2015',
+  'upondesolatesands': '2018',
+
+  // Deeds of Flesh
+  'graduallymelted': '1995',
+  'tradingpieces': '1996',
+  'inbreedingtheanthropophagi': '1998',
+  'pathofthetotem': '1999',
+  'markofthelegion': '2001',
+  'reducedtobegging': '2003',
+  'crownofsouls': '2005',
+  'ofwhatstocome': '2008',
+  'portalstocanaan': '2013',
+  'nucleus': '2020',
+
+  // Cannibal Corpse
+  'eatenbacktolife': '1990',
+  'butcheredatbirth': '1991',
+  'tombofthemutilated': '1992',
+  'thebleeding': '1994',
+  'vile': '1996',
+  'galleryofsuicide': '1998',
+  'bloodthirst': '1999',
+  'goreobsessed': '2002',
+  'thewretchedspawn': '2004',
+  'kill': '2006',
+  'eviscerationplague': '2009',
+  'torture': '2012',
+  'askeletaldomain': '2014',
+  'redbeforeblack': '2017',
+  'violenceunimagined': '2021',
+  'chaosporrific': '2023',
+
+  // Aeon
+  'darkwork': '2001',
+  'bleedingthefalse': '2005',
+  'risetodominate': '2007',
+  'pathoffire': '2010',
+  'aeonsblack': '2012',
+  'godendshere': '2021',
+
+  // Birdflesh
+  'borntodecide': '2002',
+  'aliveautopsy': '2004',
+  'nightoftheultimatemosh': '2008',
+  'satansgoats': '2018',
+  'extremesicknessfirstclass': '2023',
+
+  // Scour
+  'grey': '2016',
+  'greyep': '2016',
+  'red': '2017',
+  'redep': '2017',
+  'black': '2020',
+  'blackep': '2020',
+  'gold': '2024',
+
+  // Squash Bowels
+  'somethingcanbechanged': '1997',
+  'tenebris': '1999',
+  'themassdead': '2002',
+  'nomercy': '2004',
+  'lovesongs': '2005',
+  'grindvirus': '2009',
+  'grindcoholics': '2013',
+
+  // Lust of Decay
+  'infestingtheexhumed': '2002',
+  'kingdomofcorpses': '2004',
+  'entombedinsewage': '2008',
+  'puritythroughdismemberment': '2014',
+
+  // Abnormality
+  'contaminatingthemicrocosm': '2010',
+  'mechanismsofomniscience': '2016',
+  'sociopathicconstructs': '2019',
+
+  // Extermination Dismemberment
+  'butchertripleact': '2010',
+  'serialviolence': '2013',
+  'dehumanizationprotocol': '2023',
+
+  // Visceral Disgorge
+  'ingestingputridity': '2011',
+  'slotheringtheidiots': '2019',
+
+  // Suffocation
+  'humanwaste': '1991',
+  'effigyoftheforgotten': '1991',
+  'breedingthespawn': '1993',
+  'piercedfromwithin': '1995',
+  'despisethesun': '1998',
+  'soulstodeny': '2004',
+  'suffocation': '2006',
+  'bloodoath': '2009',
+  'pinnacleofbedlam': '2013',
+  'ofthedarklight': '2017',
+  'hymnsfromtheapocrypha': '2023',
+
+  // Dying Fetus
+  'purificationthroughviolence': '1996',
+  'killingonadrenaline': '1998',
+  'destroytheopposition': '2000',
+  'stopatnothing': '2003',
+  'warofattrition': '2007',
+  'reignsupreme': '2012',
+  'wrongonetofuckwith': '2017',
+  'makethembegfordeath': '2023',
+
+  // Devourment
+  'molestingthedecapitated': '1999',
+  '138': '2000',
+  'butchertheweak': '2005',
+  'unleashthecarnivore': '2009',
+  'conceivedinsewage': '2013',
+  'obscenemajesty': '2019',
+
+  // Carcass
+  'reekofputrefaction': '1988',
+  'symphoniesofsickness': '1989',
+  'necroticismdescantingtheinsalubrious': '1991',
+  'heartwork': '1993',
+  'swansong': '1996',
+  'surgicalsteel': '2013',
+  'tornarteries': '2021',
+
+  // Exhumed
+  'goremetal': '1998',
+  'anatomyisdestiny': '2003',
+  'garbagedayregurgitated': '2005',
+  'allgutsnoglory': '2011',
+  'necrocracy': '2013',
+  'deathrevenge': '2017',
+  'tothedead': '2022',
+
+  // Gorgasm
+  'bleedingprofusely': '2001',
+  'masticatetodominate': '2003',
+  'destinedtoviolate': '2014',
+
+  // Brodequin
+  'instrumentsoftorture': '2000',
+  'festivalofdeath': '2001',
+  'methodsofexecution': '2004',
+  'harbingerofwoe': '2024',
+
+  // Defeated Sanity
+  'preludetotheapocalypse': '2004',
+  'psalmofthemorbid': '2007',
+  'chapterofaccidents': '2010',
+  'passagesintodeformity': '2013',
+  'disposalofthedead': '2016',
+  'thesanguinaryimpetus': '2020',
+  'chroniclesoflunacy': '2024'
+};
+
+export function resolveAuthenticReleaseYear(r: any): string {
+  if (!r) return '';
+  const title = (r.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const knownYear = KNOWN_ALBUM_RELEASE_YEARS[title];
+  if (knownYear) return knownYear;
+  
+  const rawCandidate = r.year || r.release_date || r.releaseDate || r.release_year || r.date || '';
+  const rawStr = String(rawCandidate).trim();
+  const yearMatch = rawStr.match(/\b(19\d\d|20[0-2]\d)\b/);
+  const extractedYear = yearMatch ? yearMatch[1] : (rawStr.length === 4 ? rawStr : '');
+
+  if (extractedYear && extractedYear !== '2025' && extractedYear !== '2026') return extractedYear;
+  if (extractedYear) return extractedYear;
+  return String(rawCandidate).trim();
+}
+
 export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrName?: string): DiscographyRelease[] {
   if (!Array.isArray(releases)) return [];
   const seen = new Map<string, DiscographyRelease>();
@@ -194,12 +386,19 @@ export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrN
   for (const r of releases) {
     if (!r || !r.title) continue;
     if (isDeletedRelease(r.id, r.title, bandIdOrName)) continue;
-    const normKey = getNormKey(r.title, r.year);
+    
+    const finalYear = resolveAuthenticReleaseYear(r);
+    const normKey = getNormKey(r.title, finalYear || r.year);
     if (!normKey) continue;
+
     const rCover = r.cover_url || r.cover_image || r.coverUrl || r.coverImage || r.image_url || '';
     if (!seen.has(normKey)) {
       seen.set(normKey, {
         ...r,
+        year: finalYear || r.year,
+        release_date: finalYear || (r as any).release_date || (r as any).releaseDate,
+        releaseDate: finalYear || (r as any).releaseDate || (r as any).release_date,
+        release_year: finalYear || (r as any).release_year || r.year,
         cover_url: rCover || r.cover_url,
         cover_image: rCover || r.cover_image,
         coverUrl: rCover || r.coverUrl,
@@ -212,14 +411,18 @@ export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrN
       const finalCover = (rCover && !rCover.includes('unsplash') && !rCover.includes('placeholder'))
         ? rCover
         : (existingCover || rCover);
-      const hasBetterCover = (!existingCover || existingCover.includes('unsplash') || existingCover.includes('placeholder')) && (rCover && !rCover.includes('unsplash') && !rCover.includes('placeholder'));
-      const hasMoreTracks = (r.tracks?.length || 0) > (existing.tracks?.length || 0);
       const isExistingGenericTitle = ['split', 'split-ep', 'split ep'].includes(existing.title.toLowerCase().trim());
       const isNewDescriptiveTitle = !['split', 'split-ep', 'split ep'].includes(r.title.toLowerCase().trim());
+
+      const bestYear = finalYear || resolveAuthenticReleaseYear(existing) || existing.year || r.year;
 
       seen.set(normKey, {
         ...existing,
         ...r,
+        year: bestYear,
+        release_date: bestYear,
+        releaseDate: bestYear,
+        release_year: bestYear,
         title: isNewDescriptiveTitle ? r.title : existing.title,
         cover_url: finalCover,
         cover_image: finalCover,
@@ -340,6 +543,8 @@ const safeLocalStorage = {
 
 export function purgeDeletedAndZombieBands(): void {
   try {
+    markBandDeletedInStorage('tyler-hansard', 'tyler hansard');
+    markBandDeletedInStorage('tyler-slamson', 'tyler slamson');
     // Explicitly mark false placeholder releases as deleted
     markReleaseDeletedInStorage('rel-ve-1', 'Degradation of Humanity', 'virulent excision');
     markReleaseDeletedInStorage('rel-ve-2', 'The Excision of Reality', 'virulent excision');
@@ -362,6 +567,51 @@ export function purgeDeletedAndZombieBands(): void {
     markReleaseDeletedInStorage('rel-ngb-2', 'Human Fleshmonger', 'necroticgorebeast');
     markReleaseDeletedInStorage('rel-pf-1', 'Slamaholics Vol. 1', 'peelingflesh');
     markReleaseDeletedInStorage('rel-pp-3', 'Revel in Suffering', 'putrid pile');
+
+    // Ensure legitimate releases for featured community bands are never blacklisted locally
+    try {
+      const deletedReleases = getDeletedReleaseKeys();
+      let releaseBlacklistChanged = false;
+      for (const key of Array.from(deletedReleases)) {
+        const k = key.toLowerCase();
+        if (
+          k.includes('birdflesh') ||
+          k.includes('cannibal') ||
+          k.includes('hate eternal') ||
+          k.includes('scour') ||
+          k.includes('squash') ||
+          k.includes('borntodecide') ||
+          k.includes('satansgoats') ||
+          k.includes('grindvirus') ||
+          k.includes('grey') ||
+          k.includes('red') ||
+          k.includes('black') ||
+          k.includes('gold')
+        ) {
+          deletedReleases.delete(key);
+          releaseBlacklistChanged = true;
+        }
+      }
+      if (releaseBlacklistChanged) {
+        safeLocalStorage.setItem(DELETED_RELEASES_STORAGE_KEY, JSON.stringify(Array.from(deletedReleases)));
+      }
+    } catch (_) {}
+
+    // Ensure protected community bands are never blacklisted locally in DELETED_STORAGE_KEY
+    try {
+      const deletedBands = getDeletedBandIds();
+      let bandBlacklistChanged = false;
+      for (const id of Array.from(deletedBands)) {
+        const clean = id.toLowerCase().trim();
+        if (PROTECTED_COMMUNITY_BANDS.has(clean) || INITIAL_COMMUNITY_BANDS.some(b => b.id === id || ensureUUID(b.id) === id || (b.name || '').toLowerCase().trim() === clean || (b.custom_slug || '').toLowerCase().trim() === clean)) {
+          deletedBands.delete(id);
+          bandBlacklistChanged = true;
+        }
+      }
+      if (bandBlacklistChanged) {
+        safeLocalStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify(Array.from(deletedBands)));
+      }
+    } catch (_) {}
 
     const discKeys = [
       'nexus_core_band_discography_cbddb810-259b-4230-9968-3d402dfdb872',
@@ -481,12 +731,45 @@ export function purgeDeletedAndZombieBands(): void {
 const STORAGE_KEY = 'nexus_community_band_archives';
 const DELETED_STORAGE_KEY = 'nexus_deleted_community_bands';
 
+export const PROTECTED_COMMUNITY_BANDS = new Set<string>([
+  'cannibal corpse', 'cannibal-corpse', 'cc-cannibal-corpse-official-uuid',
+  'hate eternal', 'hate-eternal', 'he-hate-eternal-official-uuid',
+  'birdflesh', 'bf-birdflesh-official-uuid',
+  'scour', 'sc-scour-official-uuid',
+  'squash bowels', 'squash-bowels', 'sb-squash-bowels-official-uuid',
+  'deeds of flesh', 'deeds-of-flesh', 'dof-deeds-of-flesh-official-uuid',
+  'virulent excision', 'virulent-excision', 'cbddb810-259b-4230-9968-3d402dfdb872',
+  'cordyceps',
+  'cranial impalement', 'cranial-impalement',
+  'mortician',
+  'sanguisugabogg',
+  'necrophagist',
+  'dying fetus', 'dying-fetus',
+  'devourment',
+  'origin',
+  'peelingflesh',
+  'putrid pile', 'putrid-pile',
+  'lividity',
+  'suffocation',
+  'stabbing',
+  'exhumed',
+  'incinerate',
+  'kill everything', 'kill-everything',
+  'molested divinity', 'molested-divinity',
+  'mortal torment', 'mortal-torment'
+]);
+
 function getDeletedBandIds(): Set<string> {
   try {
     const raw = safeLocalStorage.getItem(DELETED_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return new Set(parsed.map(String));
+      if (Array.isArray(parsed)) {
+        return new Set(parsed.map(String).filter(id => {
+          const clean = id.toLowerCase().trim();
+          return !PROTECTED_COMMUNITY_BANDS.has(clean);
+        }));
+      }
     }
   } catch {}
   return new Set();
@@ -494,14 +777,18 @@ function getDeletedBandIds(): Set<string> {
 
 function markBandDeletedInStorage(id: string, name?: string): void {
   try {
+    const cleanId = String(id || '').trim().toLowerCase();
+    const cleanName = name ? String(name).trim().toLowerCase() : '';
+    if (PROTECTED_COMMUNITY_BANDS.has(cleanId) || PROTECTED_COMMUNITY_BANDS.has(cleanName)) {
+      return; // Do not allow blacklisting protected community bands
+    }
     const current = getDeletedBandIds();
-    const cleanId = String(id || '').trim();
     if (cleanId) {
       current.add(cleanId);
       current.add(ensureUUID(cleanId));
     }
-    if (name && typeof name === 'string' && name.trim()) {
-      current.add(name.toLowerCase().trim());
+    if (cleanName) {
+      current.add(cleanName);
     }
     safeLocalStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify(Array.from(current)));
   } catch {}
@@ -1022,8 +1309,19 @@ export class CommunityBandManager {
     band: Partial<CommunityBandRecord> & { name?: string; id?: string },
     options?: { isNew?: boolean }
   ): CommunityBandRecord {
-    const all = this.getAll();
     const candidateName = (band.name || (band as any).band_name || '').trim();
+    if (isDeletedOrZombieBand(candidateName) || isDeletedOrZombieBand(band.id)) {
+      console.warn('[communityBands] Blocked upserting deleted or zombie band:', candidateName || band.id);
+      return {
+        id: band.id || generateUUID(),
+        name: candidateName,
+        band_name: candidateName,
+        genre: 'Extreme Metal',
+        created_at: new Date().toISOString(),
+        verification_status: 'community_archive'
+      } as CommunityBandRecord;
+    }
+    const all = this.getAll();
     const isExplicitNew = Boolean(options?.isNew);
     
     // 1. Exact ID lookup (only if not explicitly creating a brand-new band)
@@ -1067,14 +1365,27 @@ export class CommunityBandManager {
         discographyToSave = Array.isArray(cached) ? cached : (band.discography || []);
       }
 
-      // Preserve lineup: if incoming lineup is explicitly passed as an array, use it directly (even if empty)
+      // Preserve lineup: if incoming lineup is explicitly passed as a non-empty array, or if existing lineup exists, use it
       let lineupToSave: LineupMember[];
-      if (Array.isArray(band.lineup)) {
+      if (Array.isArray(band.lineup) && band.lineup.length > 0) {
         lineupToSave = band.lineup;
-      } else if (existing.lineup && Array.isArray(existing.lineup)) {
+      } else if (existing.lineup && Array.isArray(existing.lineup) && existing.lineup.length > 0) {
         lineupToSave = existing.lineup;
       } else {
-        lineupToSave = [];
+        const storedLineup = (existing.id ? safeLocalStorage.getItem(`nexus_core_band_lineup_${existing.id}`) : null) ||
+                             (validName ? safeLocalStorage.getItem(`nexus_core_band_lineup_${validName.toLowerCase().trim()}`) : null) ||
+                             (validName ? safeLocalStorage.getItem(`nexus_core_band_lineup_${validName.toLowerCase().trim().replace(/[^a-z0-9_-]+/g, '-')}`) : null);
+        if (storedLineup) {
+          try {
+            const p = JSON.parse(storedLineup);
+            if (Array.isArray(p) && p.length > 0) lineupToSave = p;
+            else lineupToSave = Array.isArray(band.lineup) ? band.lineup : [];
+          } catch {
+            lineupToSave = Array.isArray(band.lineup) ? band.lineup : [];
+          }
+        } else {
+          lineupToSave = Array.isArray(band.lineup) ? band.lineup : [];
+        }
       }
 
       const updated: CommunityBandRecord = {
@@ -1207,7 +1518,31 @@ export class CommunityBandManager {
     if (idx < 0 && bandId) {
       idx = all.findIndex(b => (b.name || '').toLowerCase().trim() === bandId.toLowerCase().trim() || ((b as any).band_name || '').toLowerCase().trim() === bandId.toLowerCase().trim());
     }
-    if (idx < 0) return { success: false, error: 'Band archive not found.' };
+    // Record in deleted tracking set immediately to prevent resurrection from cached payloads
+    markBandDeletedInStorage(bandId, bandId);
+    markBandDeletedInStorage(targetUUID, bandId);
+    const candidateSlug = bandId ? bandId.toLowerCase().replace(/[^a-z0-9_-]+/g, '-') : '';
+    if (candidateSlug) markBandDeletedInStorage(candidateSlug);
+
+    if (idx < 0) {
+      // Even if not in local array, execute remote delete on Supabase
+      try {
+        const client = getSupabase();
+        if (client && bandId) {
+          const cleanName = bandId.trim();
+          await Promise.allSettled([
+            client.from('bands').delete().ilike('band_name', cleanName),
+            client.from('bands').delete().ilike('custom_slug', candidateSlug),
+            client.from('bands').delete().eq('id', targetUUID)
+          ]);
+        }
+      } catch {}
+      purgeDeletedAndZombieBands();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: { deletedId: bandId } }));
+      }
+      return { success: true };
+    }
 
     const band = all[idx];
     const bName = (band.name || (band as any).band_name || '').trim();
@@ -1326,7 +1661,15 @@ export class CommunityBandManager {
         'origin': 'Origin',
         'peelingflesh': 'PeelingFlesh',
         'putrid-pile': 'Putrid Pile',
-        'lividity': 'Lividity'
+        'lividity': 'Lividity',
+        'cannibal-corpse': 'Cannibal Corpse',
+        'cannibal corpse': 'Cannibal Corpse',
+        'birdflesh': 'Birdflesh',
+        'hate-eternal': 'Hate Eternal',
+        'hate eternal': 'Hate Eternal',
+        'scour': 'Scour',
+        'squash-bowels': 'Squash Bowels',
+        'squash bowels': 'Squash Bowels'
       };
 
       if (!resolvedBandName || resolvedBandName.toLowerCase() === 'nexus artist' || resolvedBandName.toLowerCase() === 'underground label') {
@@ -1613,30 +1956,31 @@ export class CommunityBandManager {
           }
         }
 
-        // Prune any releases from Supabase that are no longer present in band.discography
-        try {
-          const { data: existingRemoteReleases } = await client
-            .from('releases')
-            .select('id, title')
-            .or(`band_id.eq.${bandUUID},band_id.eq.${band.id}`);
-          
-          if (existingRemoteReleases && Array.isArray(existingRemoteReleases)) {
-            const activeIds = new Set(releasePayloads.map(r => r.id));
-            const activeTitles = new Set(releasePayloads.map(r => (r.title || '').toLowerCase().trim()));
-            const toDelete = existingRemoteReleases.filter(r => {
-              const rTitle = (r.title || '').toLowerCase().trim();
-              return !activeIds.has(r.id) && !activeTitles.has(rTitle);
-            });
+        // Only prune remote releases if releasePayloads was non-empty and explicit
+        if (releasePayloads.length > 0) {
+          try {
+            const { data: existingRemoteReleases } = await client
+              .from('releases')
+              .select('id, title')
+              .or(`band_id.eq.${bandUUID},band_id.eq.${band.id}`);
             
-            if (toDelete.length > 0) {
-              const delIds = toDelete.map(r => r.id);
-              dispatchSyncLog(`Pruning ${delIds.length} deleted release(s) from Supabase...`);
-              await client.from('releases').delete().in('id', delIds);
-              toDelete.forEach(r => markReleaseDeletedInStorage(r.id, r.title, bandUUID));
+            if (existingRemoteReleases && Array.isArray(existingRemoteReleases)) {
+              const activeIds = new Set(releasePayloads.map(r => r.id));
+              const activeTitles = new Set(releasePayloads.map(r => (r.title || '').toLowerCase().trim()));
+              const toDelete = existingRemoteReleases.filter(r => {
+                const rTitle = (r.title || '').toLowerCase().trim();
+                return !activeIds.has(r.id) && !activeTitles.has(rTitle);
+              });
+              
+              if (toDelete.length > 0) {
+                const delIds = toDelete.map(r => r.id);
+                dispatchSyncLog(`Pruning ${delIds.length} deleted release(s) from Supabase...`);
+                await client.from('releases').delete().in('id', delIds);
+              }
             }
+          } catch (pruneErr) {
+            console.warn('[communityBands] Release pruning notice:', pruneErr);
           }
-        } catch (pruneErr) {
-          console.warn('[communityBands] Release pruning notice:', pruneErr);
         }
       }
 
@@ -1768,7 +2112,9 @@ export class CommunityBandManager {
           'putrid-pile': 'Putrid Pile',
           'lividity': 'Lividity',
           'suffocation': 'Suffocation',
-          'stabbing': 'Stabbing'
+          'stabbing': 'Stabbing',
+          'cannibal-corpse': 'Cannibal Corpse',
+          'cannibal corpse': 'Cannibal Corpse'
         };
 
         // Match existing band by ID (exact or UUID) or custom_slug or exact canonical name

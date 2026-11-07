@@ -80,6 +80,11 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
     genre: 'Grindcore',
     micro_genres: ['Extreme Metal', 'Deathgrind', 'Grindcore'],
     bio: 'Formed in 1992 in Växjö, Sweden, Birdflesh is a cult underground institution of humorous, high-octane grindcore and deathgrind, known for wearing outlandish stage masks and delivering breakneck blast beats.',
+    lineup: [
+      { id: 'bf-1', name: 'Smögen', role: 'Bass, Vocals', status: 'active', years: '1992–present' },
+      { id: 'bf-2', name: 'Elis', role: 'Guitars, Vocals', status: 'active', years: '2014–present' },
+      { id: 'bf-3', name: 'Barra', role: 'Drums, Vocals', status: 'active', years: '2021–present' }
+    ],
     spotify_url: 'https://open.spotify.com/artist/2v6E8j010yG5tX01',
     metal_archives_url: 'https://www.metal-archives.com/bands/Birdflesh/1376'
   },
@@ -95,6 +100,12 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
     genre: 'Slamming BDM',
     micro_genres: ['Slamming BDM', 'Brutal Deathcore', 'Extreme Metal'],
     bio: 'Formed in Minsk, Belarus, in 2009, Extermination Dismemberment is an internationally renowned pioneer of slamming brutal death metal. Famous for their seismic sub-bass drops, pulverizing slam grooves, and apocalyptic production.',
+    lineup: [
+      { id: 'ed-1', name: 'Arseniy Kovalchuk', role: 'Guitars', status: 'active', years: '2009–present' },
+      { id: 'ed-2', name: 'Vladislav Vislavskiy', role: 'Vocals', status: 'active', years: '2011–present' },
+      { id: 'ed-3', name: 'Viktor Kallas', role: 'Bass', status: 'active', years: '2013–present' },
+      { id: 'ed-4', name: 'Denis Dementev', role: 'Drums', status: 'active', years: '2018–present' }
+    ],
     spotify_url: 'https://open.spotify.com/artist/7v7E8j010yG5tX01',
     metal_archives_url: 'https://www.metal-archives.com/bands/Extermination_Dismemberment/3540318538'
   },
@@ -110,6 +121,11 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
     genre: 'Death Metal',
     micro_genres: ['Extreme Metal', 'Death Metal', 'Tech Death'],
     bio: 'Formed in St. Petersburg, Florida, in 1997 by legendary guitarist and producer Erik Rutan (Morbid Angel, Cannibal Corpse), Hate Eternal is a relentless hurricane of ferocious, hyper-speed technical death metal.',
+    lineup: [
+      { id: 'he-1', name: 'Erik Rutan', role: 'Guitars, Vocals', status: 'active', years: '1997–present' },
+      { id: 'he-2', name: 'JJ Hrubovcak', role: 'Bass', status: 'active', years: '2008–present' },
+      { id: 'he-3', name: 'Hannes Grossmann', role: 'Drums', status: 'active', years: '2018–present' }
+    ],
     spotify_url: 'https://open.spotify.com/artist/1G14y7G101o0G0K8P',
     metal_archives_url: 'https://www.metal-archives.com/bands/Hate_Eternal/478'
   },
@@ -125,6 +141,12 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
     genre: 'Slamming BDM',
     micro_genres: ['Extreme Metal', 'Slamming BDM', 'Brutal Death Metal'],
     bio: 'Formed in Baltimore, Maryland, in 2007, Visceral Disgorge is an undisputed titan of brutal slam death metal, celebrated for grooving guttural slams, ferocious stage presence, and underground classics like Ingesting Putridity.',
+    lineup: [
+      { id: 'vd-1', name: 'Travis Whitman', role: 'Vocals', status: 'active', years: '2007–present' },
+      { id: 'vd-2', name: 'Steve Werigin', role: 'Guitars', status: 'active', years: '2007–present' },
+      { id: 'vd-3', name: 'Eric Little', role: 'Bass', status: 'active', years: '2012–present' },
+      { id: 'vd-4', name: 'Billy K', role: 'Drums', status: 'active', years: '2018–present' }
+    ],
     spotify_url: 'https://open.spotify.com/artist/0UoN7E3p1wG3uLpM',
     metal_archives_url: 'https://www.metal-archives.com/bands/Visceral_Disgorge/3540330953'
   },
@@ -140,6 +162,13 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
     genre: 'Brutal Death Metal',
     micro_genres: ['Brutal Death Metal', 'Technical Death Metal', 'Slam Death Metal'],
     bio: 'Massive brutal technical death metal powerhouse from Boston, Massachusetts, featuring Mallika Sundaramurthy on vocals. Signed to Metal Blade Records with iconic releases including Mechanisms of Omniscience and Sociopathic Constructs.',
+    lineup: [
+      { id: 'abn-1', name: 'Mallika Sundaramurthy', role: 'Vocals', status: 'past', years: '2005–2020' },
+      { id: 'abn-2', name: 'Jay Portnoy', role: 'Guitars', status: 'past', years: '2005–2020' },
+      { id: 'abn-3', name: 'Jeremy Henry', role: 'Guitars', status: 'past', years: '2005–2020' },
+      { id: 'abn-4', name: 'Josh Hawkes', role: 'Bass', status: 'past', years: '2009–2020' },
+      { id: 'abn-5', name: 'Jay Blaisdell', role: 'Drums', status: 'past', years: '2005–2020' }
+    ],
     spotify_url: 'https://open.spotify.com/artist/2v6E8j010yG5tX01',
     metal_archives_url: 'https://www.metal-archives.com/bands/Abnormality/94178'
   },
@@ -177,7 +206,15 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
     genre: 'Death Metal',
     micro_genres: ['Death Metal', 'Brutal Death Metal', 'Thrash Metal'],
     bio: 'Legendary death metal pioneers formed in Buffalo, New York in 1988. One of the top-selling death metal bands of all time.',
-    spotify_url: 'https://open.spotify.com/artist/1G14y7G101o0G0K8P'
+    spotify_url: 'https://open.spotify.com/artist/1G14y7G101o0G0K8P',
+    lineup: [
+      { id: 'cc-1', name: 'George "Corpsegrinder" Fisher', role: 'Lead Vocals', status: 'active', years: '1995–present' },
+      { id: 'cc-2', name: 'Alex Webster', role: 'Bass', status: 'active', years: '1988–present' },
+      { id: 'cc-3', name: 'Paul Mazurkiewicz', role: 'Drums', status: 'active', years: '1988–present' },
+      { id: 'cc-4', name: 'Rob Barrett', role: 'Rhythm Guitar', status: 'active', years: '1993–1997, 2005–present' },
+      { id: 'cc-5', name: 'Erik Rutan', role: 'Lead Guitar', status: 'active', years: '2021–present' },
+      { id: 'cc-6', name: 'Chris Barnes', role: 'Vocals', status: 'past', years: '1988–1995' }
+    ]
   },
   'carcass': {
     founded_year: '1985',
@@ -273,6 +310,48 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
     genre: 'Brutal Death Metal',
     micro_genres: ['Brutal Death Metal', 'Slam Death Metal'],
     bio: 'Crushing Canadian brutal death metal behemoth featuring Michael Chamberland and Alexandre Brochu.'
+  },
+  'scour': {
+    founded_year: '2015',
+    status: 'active',
+    is_split_up: false,
+    record_label: 'Housecore Records / Nuclear Blast',
+    label: 'Housecore Records',
+    city: 'New Orleans',
+    state_province: 'LA',
+    country: 'USA',
+    genre: 'Extreme Metal',
+    micro_genres: ['Extreme Metal', 'Black Metal', 'Thrash Metal'],
+    bio: 'Extreme metal supergroup formed in 2015 featuring Philip H. Anselmo (Pantera, Down), Derek Engemann (Cattle Decapitation), John Jarvis (Pig Destroyer), Mark Kloeppel (Misery Index), and Adam Jarvis (Misery Index, Pig Destroyer).',
+    lineup: [
+      { id: 'sc-1', name: 'Philip H. Anselmo', role: 'Lead Vocals', status: 'active', years: '2015–present' },
+      { id: 'sc-2', name: 'Derek Engemann', role: 'Guitars, Backing Vocals', status: 'active', years: '2015–present' },
+      { id: 'sc-3', name: 'Mark Kloeppel', role: 'Guitars, Backing Vocals', status: 'active', years: '2015–present' },
+      { id: 'sc-4', name: 'John Jarvis', role: 'Bass, Backing Vocals', status: 'active', years: '2015–present' },
+      { id: 'sc-5', name: 'Adam Jarvis', role: 'Drums', status: 'active', years: '2015–present' }
+    ],
+    spotify_url: 'https://open.spotify.com/artist/5s87E8j010yG5tX01',
+    metal_archives_url: 'https://www.metal-archives.com/bands/Scour/3540411855'
+  },
+  'squash bowels': {
+    founded_year: '1994',
+    status: 'split-up',
+    is_split_up: true,
+    record_label: 'Willowtip Records / Lard Records',
+    label: 'Willowtip Records',
+    city: 'Białystok',
+    state_province: 'Podlaskie',
+    country: 'Poland',
+    genre: 'Goregrind / Deathgrind',
+    micro_genres: ['Goregrind', 'Deathgrind', 'Grindcore'],
+    bio: 'Cult Polish goregrind and deathgrind institution formed in Białystok, Poland, in 1994. Known for unrelenting blast beats, pitch-shifted gutturals, and classic albums like Grindvirus and Grindcoholics.',
+    lineup: [
+      { id: 'sb-1', name: 'Arthur "Paluch" Meinart', role: 'Bass, Vocals', status: 'past', years: '1994–2016' },
+      { id: 'sb-2', name: 'Andy', role: 'Guitars', status: 'past', years: '1994–2016' },
+      { id: 'sb-3', name: 'Psycho', role: 'Drums', status: 'past', years: '2001–2016' }
+    ],
+    spotify_url: 'https://open.spotify.com/artist/4u7E8j010yG5tX01',
+    metal_archives_url: 'https://www.metal-archives.com/bands/Squash_Bowels/3358'
   }
 };
 
@@ -371,7 +450,9 @@ export function resolvePublicBandData(bandName: string, activeProfileData?: any)
       state_province: mergedResult.state_province || dictMatch.state_province,
       country: mergedResult.country || dictMatch.country,
       genre: mergedResult.genre || dictMatch.genre,
-      bio: mergedResult.bio || dictMatch.bio
+      bio: mergedResult.bio || dictMatch.bio,
+      lineup: (mergedResult.lineup && mergedResult.lineup.length > 0) ? mergedResult.lineup : dictMatch.lineup,
+      discography: (mergedResult.discography && mergedResult.discography.length > 0) ? mergedResult.discography : dictMatch.discography
     };
   }
 

@@ -672,20 +672,27 @@ export function useSocialFollowsAndProfiles({
       followerId = generateDeterministicUUID(`user-${userSeed}`);
     }
 
-    // 2. Identify if target is a Band
-    const isBand = (
+    // 2. Identify if target is a Band (Guard against fan/personal accounts being misidentified)
+    const isTargetFan = typeof targetInput === 'object' && (
+      targetInput?.account_type === 'fan' ||
+      targetInput?.account_type === 'fan_only' ||
+      targetInput?.role === 'Fan Listener' ||
+      targetInput?.role === 'FAN' ||
+      targetInput?.isPersonal === true
+    ) && !targetInput?.isBandProfile && targetInput?.account_type !== 'band';
+
+    const isBand = !isTargetFan && ((
       typeof targetInput === 'object' && (
-        targetInput?.isBandProfile ||
+        targetInput?.isBandProfile === true ||
         targetInput?.type === 'band' ||
         targetInput?.role === 'Band' ||
         targetInput?.role === 'band' ||
         targetInput?.portalRole === 'band' ||
         targetInput?.account_type === 'band' ||
-        !!targetInput?.band_name ||
-        !!targetInput?.bandName ||
-        !!targetInput?.band_id
+        (!!targetInput?.band_name && targetInput?.account_type === 'band') ||
+        (!!targetInput?.bandName && targetInput?.account_type === 'band')
       )
-    ) || (typeof targetInput === 'string' && targetInput.startsWith('real-b-'));
+    ) || (typeof targetInput === 'string' && targetInput.startsWith('real-b-')));
 
     // 3. Resolve Target ID and Name
     let targetUserId = extractUUID(typeof targetInput === 'object' ? (targetInput?.band_id || targetInput?.raw_id || targetInput?.id || targetInput?.user_id || targetInput?.creator_id || targetInput?.owner_id) : targetInput) || resolveProfileUUID(targetInput, allProfiles);
@@ -723,8 +730,8 @@ export function useSocialFollowsAndProfiles({
           } catch (e) {}
         }
 
-        // If band doesn't exist yet in Supabase bands table, ensure a record is created so the relation is valid
-        if (!targetUserId || !isValidUUID(targetUserId)) {
+        // If band doesn't exist yet in Supabase bands table, ensure a record is created so the relation is valid (only for real band targets)
+        if ((!targetUserId || !isValidUUID(targetUserId)) && isBand) {
           const autoBandId = generateDeterministicUUID(`band-${cleanSearch.toLowerCase()}`);
           const bandPayload = sanitizeBandPayload({
             id: autoBandId,

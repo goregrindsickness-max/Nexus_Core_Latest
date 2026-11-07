@@ -21,6 +21,7 @@ import {
   Share2,
   Sparkles
 } from 'lucide-react';
+import { resolveAuthenticReleaseYear } from '../../../lib/communityBands';
 
 export interface ReleaseTrack {
   id?: string;
@@ -150,8 +151,8 @@ export const ReleaseDetailsModal: React.FC<ReleaseDetailsModalProps> = ({
   const displayArtist = release.artist || release.band_name || bandName || 'Artist';
   const displayTitle = release.title || 'Untitled Release';
   const displayType = (release.type || 'Album').toUpperCase();
-  const displayYear = release.year || (release.release_date ? new Date(release.release_date).getFullYear() : '2026');
-  const displayReleaseDate = release.release_date || release.releaseDate || (release.year ? `${release.year}` : null);
+  const displayYear = resolveAuthenticReleaseYear(release) || release.year || '2026';
+  const displayReleaseDate = displayYear || release.release_date || release.releaseDate || null;
   const displayLabel = release.label || release.record_label || 'Self-Released / Independent';
   const displayCatalog = release.catalog_id || release.catalogId || null;
   const displayGenre = release.genre || (release.subgenres && release.subgenres.join(' • ')) || null;

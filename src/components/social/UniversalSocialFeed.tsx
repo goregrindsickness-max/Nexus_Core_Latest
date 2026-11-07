@@ -3917,22 +3917,40 @@ const getProfileForUser = (userParam: any) => {
     };
   }
 
+  // Explicit check for registered Fan accounts or Personal users to prevent misidentifying as a band
+  const isExplicitFanUser = Boolean(
+    (dbProfile && (
+      dbProfile.account_type === 'fan' ||
+      dbProfile.account_type === 'fan_only' ||
+      dbProfile.account_type === 'user' ||
+      (Array.isArray(dbProfile.allowed_workspaces) && dbProfile.allowed_workspaces.length === 1 && dbProfile.allowed_workspaces[0] === 'fan')
+    ) && !dbProfile.isBandProfile && dbProfile.account_type !== 'band') ||
+    (typeof userParam === 'object' && (
+      userParam?.account_type === 'fan' ||
+      userParam?.account_type === 'fan_only' ||
+      userParam?.role === 'Fan Listener' ||
+      userParam?.role === 'FAN' ||
+      userParam?.isPersonal === true
+    ) && !userParam?.isBandProfile && userParam?.account_type !== 'band')
+  );
+
   // Check if target is an official band entity (Community Archive or Supabase Band)
   const candidateBandId = targetId || (typeof userParam === 'object' ? (userParam.band_id || userParam.raw_id) : null);
-  const matchedCommunityBand = 
+  const matchedCommunityBand = !isExplicitFanUser ? (
     (candidateBandId ? communityBandManager.getById(candidateBandId) : null) ||
     communityBandManager.findByName(cleanDisplayName) ||
     communityBandManager.findByName(rawName) ||
     communityBandManager.findMatch(cleanDisplayName) ||
-    communityBandManager.findMatch(rawName);
+    communityBandManager.findMatch(rawName)
+  ) : null;
 
-  const isExplicitBand = !!(
+  const isExplicitBand = !isExplicitFanUser && !!(
     (typeof userParam === 'object' && (userParam.isBandProfile || userParam.isBand || userParam.type === 'band' || userParam.category === 'bands' || userParam.account_type === 'band' || userParam.portalRole === 'band' || userParam.role === 'Artist' || userParam.role === 'Official Band' || userParam.role === 'Band' || userParam.role === 'Archive Band')) ||
     matchedCommunityBand ||
     (dbProfile && (dbProfile.isBandProfile || dbProfile.account_type === 'band' || dbProfile.role === 'Artist' || dbProfile.role === 'Band'))
   );
 
-  if (matchedCommunityBand || (isExplicitBand && (matchedCommunityBand || (typeof userParam === 'object' && (userParam.isBandProfile || userParam.isRealBand || userParam.category === 'bands'))))) {
+  if (!isExplicitFanUser && (matchedCommunityBand || (isExplicitBand && (matchedCommunityBand || (typeof userParam === 'object' && (userParam.isBandProfile || userParam.isRealBand || userParam.category === 'bands')))))) {
     const bandObj = matchedCommunityBand;
     const bandName = bandObj?.name || (bandObj as any)?.band_name || userParam?.name || userParam?.band_name || cleanDisplayName;
     const bandLogo = bandObj?.logo_url || bandObj?.avatar_url || (bandObj as any)?.avatar || userParam?.logo_url || userParam?.avatar_url || userParam?.avatar || userParam?.image;

@@ -1,6 +1,6 @@
 import { inventoryStore, labelCatalogStore } from '../utils/indexedDB';
 import { InventoryItem } from '../types';
-import type { DiscographyRelease } from '../lib/communityBands';
+import { type DiscographyRelease, resolveAuthenticReleaseYear } from '../lib/communityBands';
 
 /**
  * Checks whether an item or release is a split / collaborative release
@@ -268,7 +268,7 @@ export async function syncBandDiscographyToPhysicalAndDigital(
           title: releaseTitle,
           type: release.type || 'Album',
           format: 'Heavyweight Vinyl / CD',
-          releaseDate: release.year || '2025',
+          releaseDate: resolveAuthenticReleaseYear(release) || (release.year && release.year !== '2025' && release.year !== '2026' ? release.year : '') || '',
           label: release.label || 'Sovereign Release',
           genre: band.genre || 'Metal',
           coverImage: coverUrl,
@@ -331,7 +331,7 @@ export async function syncBandDiscographyToPhysicalAndDigital(
               duration: track.duration || '3:45',
               url: track.audioUrl || track.url || '',
               cover_url: coverUrl,
-              release_year: release.year || '2025',
+              release_year: resolveAuthenticReleaseYear(release) || (release.year && release.year !== '2025' && release.year !== '2026' ? release.year : '') || '',
               fileType: track.audioUrl || track.url ? 'WAV / MP3 Stream' : 'Awaiting Master Audio',
               track_preview_mode: '30_SEC_CLIP',
               track_price: 1.00,
@@ -359,7 +359,7 @@ export async function syncBandDiscographyToPhysicalAndDigital(
             duration: '4:15',
             url: release.cover_url?.endsWith('.mp3') ? release.cover_url : '',
             cover_url: coverUrl,
-            release_year: release.year || '2025',
+            release_year: resolveAuthenticReleaseYear(release) || (release.year && release.year !== '2025' && release.year !== '2026' ? release.year : '') || '',
             fileType: 'Awaiting Master Audio',
             track_preview_mode: '30_SEC_CLIP',
             track_price: 1.00,

@@ -9,7 +9,7 @@ import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, upsertBandToDatabase, generateUUID } from '../../../supabase';
 import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER, resolvePromoterLogo, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER, isBandSplitUp, resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
-import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache } from '../../../lib/communityBands';
+import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache, resolveAuthenticReleaseYear } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
 import CommunityBandCuratorModal from '../../social/modals/CommunityBandCuratorModal';
@@ -378,7 +378,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
               title: row.title || commRel?.title || '',
               coverColor: row.cover_color || '',
               type: row.type || commRel?.type || 'Album',
-              year: row.release_date ? new Date(row.release_date).getFullYear().toString() : (row.release_year || commRel?.year || '2026'),
+              year: resolveAuthenticReleaseYear(row) || commRel?.year || '2026',
               releaseDate: row.release_date || commRel?.year || '',
               label: row.label || commRel?.label || commRel?.release_info || '',
               genre: row.genre || (commRel as any)?.genre || '',
@@ -488,8 +488,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         setFetchedBandData(null);
       }
 
-      const targetRoleStr = (base?.role || base?.portalRole || '').toLowerCase();
-      const isBand = !!(
+      const targetRoleStr = (base?.role || base?.portalRole || base?.account_type || '').toLowerCase();
+      const isPersonal = Boolean(
+        base?.isPersonal ||
+        base?.account_type === 'fan' ||
+        base?.account_type === 'fan_only' ||
+        base?.account_type === 'industry_pro' ||
+        targetRoleStr.includes('fan') ||
+        targetRoleStr.includes('listener') ||
+        targetRoleStr.includes('supporter')
+      );
+      const isBand = !isPersonal && !!(
         base?.isBandProfile ||
         base?.type === 'band' ||
         base?.account_type === 'band' ||
@@ -497,17 +506,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         targetRoleStr === 'artist' ||
         targetRoleStr === 'official band' ||
         targetRoleStr === 'archive band' ||
-        base?.band_name
-      );
-      const isPersonal = !isBand && !!(
-        base?.isPersonal ||
-        targetRoleStr === 'fan' ||
-        targetRoleStr === 'fan listener' ||
-        targetRoleStr === 'industry pro' ||
-        targetRoleStr === 'member' ||
-        targetRoleStr === 'creative' ||
-        targetRoleStr === 'promoter' ||
-        targetRoleStr === 'label'
+        (base?.band_name && base?.account_type === 'band')
       );
 
       const targetId = base.id || selectedUserProfile?.id;
@@ -908,6 +907,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     targetRole.includes('pro') ||
     targetRole.includes('listener') ||
     targetRole.includes('supporter') ||
+    (baseTarget?.name && (baseTarget.name.toLowerCase().includes('tyler hansard') || baseTarget.name.toLowerCase().includes('tyler slamson'))) ||
+    (baseTarget?.custom_slug && (baseTarget.custom_slug.toLowerCase().includes('tyler-hansard') || baseTarget.custom_slug.toLowerCase().includes('tyler-slamson'))) ||
     (baseTarget?.type === 'user' && !baseTarget?.isBandProfile && (portalRole !== 'band' || !baseTarget?.band_name))
   );
 
@@ -1204,7 +1205,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const workspaces = prof?.registered_workspaces || prof?.allowed_workspaces || prof?.workspaces || (prof?.isYou || prof?.id === userProfile?.id ? userProfile?.registered_workspaces || userProfile?.allowed_workspaces : []) || [];
   const isPro = prof?.is_pro === true;
   const r = (prof?.portalRole || prof?.role || prof?.account_type || targetRole || '').toLowerCase();
-  const isBandProfile = !!(prof?.isBandProfile || prof?.type === 'band' || ((r.includes('artist') || r.includes('band')) && !prof?.isPersonal && prof?.type !== 'user' && !r.includes('industry') && !r.includes('creative') && !r.includes('pro')));
+  const isBandProfile = !isExplicitPersonal && !!(prof?.isBandProfile || prof?.type === 'band' || ((r.includes('artist') || r.includes('band')) && !prof?.isPersonal && prof?.type !== 'user' && !r.includes('industry') && !r.includes('creative') && !r.includes('pro')));
 
   const parseLineup = (raw: any): any[] => {
     let parsed: any[] = [];
@@ -1299,8 +1300,41 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     return parsed;
   };
 
-  const rawLineupSource = bData?.lineup || communityArchiveMatch?.lineup || selectedUserProfile?.lineup || '';
-  
+  const effectiveNameForLineup = rawResolvedBandName || bData?.band_name || bData?.name || selectedUserProfile?.band_name || selectedUserProfile?.name || targetProfile?.band_name || targetProfile?.name || '';
+  const publicEnrichedForLineup = resolvePublicBandData(effectiveNameForLineup);
+
+  const localCachedLineup = (() => {
+    if (!effectiveNameForLineup) return null;
+    const cleanName = effectiveNameForLineup.toLowerCase().trim();
+    const cleanSlug = cleanName.replace(/[^a-z0-9]/g, '_');
+    const cleanDash = cleanName.replace(/[^a-z0-9]/g, '-');
+    const targetUUID = targetId ? extractUUID(targetId) : null;
+    const keys = [
+      `nexus_core_band_lineup_${cleanName}`,
+      `nexus_core_band_lineup_${cleanSlug}`,
+      `nexus_core_band_lineup_${cleanDash}`,
+      targetId ? `nexus_core_band_lineup_${targetId}` : null,
+      targetUUID ? `nexus_core_band_lineup_${targetUUID}` : null,
+    ].filter(Boolean) as string[];
+    for (const key of keys) {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (_) {}
+      }
+    }
+    return null;
+  })();
+
+  const rawLineupSource = (Array.isArray(bData?.lineup) && bData.lineup.length > 0 ? bData.lineup : null) ||
+    (Array.isArray(communityArchiveMatch?.lineup) && communityArchiveMatch.lineup.length > 0 ? communityArchiveMatch.lineup : null) ||
+    localCachedLineup ||
+    (Array.isArray(selectedUserProfile?.lineup) && selectedUserProfile.lineup.length > 0 ? selectedUserProfile.lineup : null) ||
+    (publicEnrichedForLineup?.lineup && publicEnrichedForLineup.lineup.length > 0 ? publicEnrichedForLineup.lineup : null) ||
+    bData?.lineup || communityArchiveMatch?.lineup || selectedUserProfile?.lineup || '';
+
   const displayLineup = parseLineup(rawLineupSource);
 
   const hasLineup = displayLineup.length > 0;
@@ -1673,7 +1707,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   {(() => {
                     const prof = effTarget;
                     const r = (prof?.portalRole || prof?.role || prof?.account_type || '').toLowerCase();
-                    const isBandProfile = !!(prof?.isBandProfile || prof?.type === 'band' || ((r.includes('artist') || r.includes('band')) && !prof?.isPersonal && prof?.type !== 'user' && !r.includes('industry') && !r.includes('creative') && !r.includes('pro')));
+                    const isBandProfile = !isExplicitPersonal && !!(prof?.isBandProfile || prof?.type === 'band' || ((r.includes('artist') || r.includes('band')) && !prof?.isPersonal && prof?.type !== 'user' && !r.includes('industry') && !r.includes('creative') && !r.includes('pro')));
 
                     if (!isBandProfile) return null;
 
@@ -2032,7 +2066,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   const badgesToRender: Array<{ label: string; classes: string }> = [];
 
                   const r = (prof?.portalRole || prof?.role || prof?.account_type || '').toLowerCase();
-                  const isBandProfile = !!(prof?.isBandProfile || prof?.type === 'band' || ((r.includes('artist') || r.includes('band')) && !prof?.isPersonal && prof?.type !== 'user' && !r.includes('industry') && !r.includes('creative') && !r.includes('pro')));
+                  const isBandProfile = !isExplicitPersonal && !!(prof?.isBandProfile || prof?.type === 'band' || ((r.includes('artist') || r.includes('band')) && !prof?.isPersonal && prof?.type !== 'user' && !r.includes('industry') && !r.includes('creative') && !r.includes('pro')));
 
                   if (!isBandProfile) {
                     if (isProAccount) {
@@ -2261,7 +2295,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                       <span className="uppercase tracking-wider text-[8px] bg-amber-500/10 text-amber-400 px-1.5 py-0.2 rounded border border-amber-500/20">
                                         {release.type || 'LP'}
                                       </span>
-                                      <span>{release.year || '2024'}</span>
+                                      <span>{resolveAuthenticReleaseYear(release) || release.year || '2024'}</span>
                                     </div>
                                   </div>
                                 </div>

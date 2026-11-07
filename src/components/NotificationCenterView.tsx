@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { getSupabase } from '../supabase';
 import { DbNotification, UserProfile } from '../types';
 import { pushManager } from '../lib/pushNotifications';
+import { syncGlobalUnreadBadge, testAppBadge } from '../utils/appBadgeService';
 import { 
   Bell, 
   X, 
@@ -255,12 +256,17 @@ export default function NotificationCenterView({
     return deduplicatedNotifications.filter(n => !n.is_read).length;
   }, [deduplicatedNotifications]);
 
+  useEffect(() => {
+    syncGlobalUnreadBadge();
+  }, [unreadCount]);
+
   // Handle Mark All as Read
   const handleMarkAllAsRead = () => {
     playBeep(520, 'sine', 0.1);
     deduplicatedNotifications.forEach(n => {
       if (!n.is_read) onMarkAsRead(n.id);
     });
+    setTimeout(syncGlobalUnreadBadge, 50);
     if (triggerNotification) triggerNotification("All alerts logged as read.");
   };
 
@@ -270,6 +276,7 @@ export default function NotificationCenterView({
     if (window.confirm("Are you sure you want to clear all notifications from local list?")) {
       setNotifications([]);
       localStorage.setItem('nexus_core_notifications', JSON.stringify([]));
+      setTimeout(syncGlobalUnreadBadge, 50);
       if (triggerNotification) triggerNotification("Cleared notification console.");
     }
   };

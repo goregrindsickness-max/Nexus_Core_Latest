@@ -243,7 +243,15 @@ export function sanitizeBandPayload(rawPayload: any): Record<string, any> {
     'origin': 'Origin',
     'peelingflesh': 'PeelingFlesh',
     'putrid-pile': 'Putrid Pile',
-    'lividity': 'Lividity'
+    'lividity': 'Lividity',
+    'cannibal-corpse': 'Cannibal Corpse',
+    'cannibal corpse': 'Cannibal Corpse',
+    'birdflesh': 'Birdflesh',
+    'hate-eternal': 'Hate Eternal',
+    'hate eternal': 'Hate Eternal',
+    'scour': 'Scour',
+    'squash-bowels': 'Squash Bowels',
+    'squash bowels': 'Squash Bowels'
   };
 
   let bName = (clean.band_name || clean.name || '').trim();
@@ -533,13 +541,13 @@ export function sanitizeBandPayload(rawPayload: any): Record<string, any> {
         });
         clean.lineup = JSON.stringify(parsedMembers);
       } else {
-        clean.lineup = null;
+        delete clean.lineup;
       }
     } else {
-      clean.lineup = null;
+      delete clean.lineup;
     }
   } else {
-    clean.lineup = null;
+    delete clean.lineup;
   }
 
   // 13. Legal, Verification, & Routing

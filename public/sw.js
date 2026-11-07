@@ -1,4 +1,5 @@
-// Nexus Core Service Worker for Real-Time Device Push Notifications
+// Nexus Core Service Worker for Real-Time Device Push Notifications & App Icon Badging
+
 self.addEventListener('push', function(event) {
   let data = {};
   if (event.data) {
@@ -31,6 +32,12 @@ self.addEventListener('push', function(event) {
       { action: 'dismiss', title: 'Dismiss' }
     ]
   };
+
+  // Update Home Screen App Icon Badge Counter
+  if ('setAppBadge' in navigator) {
+    const unreadCount = data.unreadCount !== undefined ? data.unreadCount : (data.badgeCount || 1);
+    navigator.setAppBadge(unreadCount).catch(function() {});
+  }
 
   event.waitUntil(
     self.registration.showNotification(title, options)
@@ -79,8 +86,28 @@ self.addEventListener('notificationclick', function(event) {
 });
 
 self.addEventListener('notificationclose', function(event) {
-  // Optional telemetry hook on dismiss
   console.log('[SW] Notification closed:', event.notification.tag);
+});
+
+/* ==========================================================================
+   ⚡ APP ICON BADGING EVENT LISTENERS
+   ========================================================================== */
+
+self.addEventListener('message', function(event) {
+  if (event.data?.type === 'SET_APP_BADGE') {
+    if ('setAppBadge' in navigator) {
+      const count = event.data.count !== undefined ? event.data.count : 1;
+      if (count > 0) {
+        navigator.setAppBadge(count).catch(function() {});
+      } else {
+        navigator.clearAppBadge().catch(function() {});
+      }
+    }
+  } else if (event.data?.type === 'CLEAR_APP_BADGE') {
+    if ('clearAppBadge' in navigator) {
+      navigator.clearAppBadge().catch(function() {});
+    }
+  }
 });
 
 /* ==========================================================================

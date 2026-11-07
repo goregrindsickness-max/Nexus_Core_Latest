@@ -1,5 +1,6 @@
 import { CatalogRelease, ReleaseTrack } from './releasesService';
 import { ensureUUID } from './schemaResilienceService';
+import { resolveAuthenticReleaseYear } from '../lib/communityBands';
 
 export interface MetalArchivesScrapeResult {
   bandName: string;
@@ -149,16 +150,19 @@ export async function scrapeMetalArchivesBand(
       if (data && Array.isArray(data.releases) && data.releases.length > 0) {
         const formattedReleases: CatalogRelease[] = data.releases.map((rel: any, idx: number) => {
           const cover = rel.cover_url || rel.cover_image || rel.coverUrl || rel.coverImage || rel.image_url || null;
+          const rYear = resolveAuthenticReleaseYear(rel) || rel.release_date || rel.releaseDate || rel.year || '';
           return {
             id: ensureUUID(rel.id || `rel-${idx}-${Date.now()}`),
             title: rel.title || 'Untitled Release',
             type: normalizeReleaseType(rel.type || 'Full-length'),
-            release_date: rel.release_date || rel.releaseDate || '2024',
-            releaseDate: rel.releaseDate || rel.release_date || '2024',
+            year: rYear,
+            release_date: rYear,
+            releaseDate: rYear,
+            release_year: rYear,
             genre: rel.genre || data.genre || 'Extreme Metal',
             label: rel.label || 'Underground Label',
-            catalog_id: rel.catalog_id || rel.catalogId || `CAT-${rel.release_date || '2024'}-${String(idx + 1).padStart(3, '0')}`,
-            catalogId: rel.catalogId || rel.catalog_id || `CAT-${rel.release_date || '2024'}-${String(idx + 1).padStart(3, '0')}`,
+            catalog_id: rel.catalog_id || rel.catalogId || `CAT-${rYear || 'CAT'}-${String(idx + 1).padStart(3, '0')}`,
+            catalogId: rel.catalogId || rel.catalog_id || `CAT-${rYear || 'CAT'}-${String(idx + 1).padStart(3, '0')}`,
             cover_image: cover,
             cover_url: cover,
             coverImage: cover,
