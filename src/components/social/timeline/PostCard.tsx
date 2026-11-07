@@ -33,7 +33,8 @@ import {
   PollEmbedData,
   REACTION_PALETTE,
 } from './types';
-import { renderPostMessage } from './utils';
+import { renderPostMessage, renderCommentText } from './utils';
+import { CommentMentionInput } from './CommentMentionInput';
 import { formatPostTimestamp } from '../../../utils/socialFeedUtils';
 import {
   LinkPreviewCard,
@@ -155,6 +156,12 @@ const KNOWN_USER_FULL_NAMES: Record<string, string> = {
   'doomguy': 'Doom Guy',
   'blastspeed': 'Brian Blast',
   'nexus promoters': 'Marcus Vance',
+  'bdmceo': 'Miguel Goregrinder Medina',
+  '@bdmceo': 'Miguel Goregrinder Medina',
+  'goregrinder': 'Miguel Goregrinder Medina',
+  '@goregrinder': 'Miguel Goregrinder Medina',
+  'goregrindsickness': 'Miguel Goregrinder Medina',
+  'miguel medina': 'Miguel Goregrinder Medina',
 };
 
 export const PostCard: React.FC<PostCardProps> = ({
@@ -715,14 +722,25 @@ export const PostCard: React.FC<PostCardProps> = ({
   const isAuthorSelf = Boolean(isCurrentUser || isAuthorNameMatchingUser);
   const isRawAvatarKnownFailed = Boolean(validRawPostAvatar && GLOBAL_FAILED_AVATAR_URLS.has(validRawPostAvatar));
 
-  // Determine appropriate live workspace avatar fallback
-  const liveAuthorAvatar = isCreative
-    ? resolveCreativeLogo(userProfile, validRawPostAvatar)
-    : isArtistOrBand
-    ? resolveBandLogo(post, userProfile)
-    : isPromoter
-    ? resolvePromoterLogo(userProfile, validRawPostAvatar)
-    : validLiveSelfAvatar;
+  const isPostAuthorMiguel = Boolean(
+    targetPostAuthorId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+    authorNameLower.includes('bdmceo') ||
+    authorNameLower.includes('goregrinder') ||
+    authorNameLower === 'miguel medina' ||
+    handleDisplay.toLowerCase() === '@bdmceo' ||
+    handleDisplay.toLowerCase() === 'bdmceo'
+  );
+
+  // Determine appropriate live workspace avatar fallback ONLY when the post belongs to the viewer
+  const liveAuthorAvatar = isAuthorSelf ? (
+    isCreative
+      ? resolveCreativeLogo(userProfile, validRawPostAvatar)
+      : isArtistOrBand
+      ? resolveBandLogo(post, userProfile)
+      : isPromoter
+      ? resolvePromoterLogo(userProfile, validRawPostAvatar)
+      : validLiveSelfAvatar
+  ) : null;
 
   const isPersonalAvatarUrl = Boolean(
     validRawPostAvatar && (
@@ -736,14 +754,16 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   // For dedicated workspace posts (Creative Pro, Venue Promoter, Band / Artist), if validRawPostAvatar is missing or is just the author's personal user avatar, force the dedicated workspace logo!
   const isWorkspaceRole = isCreative || isPromoter || isArtistOrBand || isLabel;
-  const useWorkspaceLogo = isWorkspaceRole && (isPersonalAvatarUrl || !validRawPostAvatar || isAuthorSelf);
+  const useWorkspaceLogo = isWorkspaceRole && isAuthorSelf && (isPersonalAvatarUrl || !validRawPostAvatar);
+
+  const fallbackNonSelfAvatar = isPostAuthorMiguel ? MIGUEL_DEFAULT_AVATAR : null;
 
   // Priority: Use workspace logo for workspace posts; otherwise fall back to raw post avatar
   const displayAvatar = (useWorkspaceLogo && liveAuthorAvatar)
     ? liveAuthorAvatar
     : ((!isRawAvatarKnownFailed && validRawPostAvatar)
         ? validRawPostAvatar
-        : (isAuthorSelf ? (liveAuthorAvatar || validLiveSelfAvatar || null) : (isRawAvatarKnownFailed ? null : (validRawPostAvatar || null))));
+        : (isAuthorSelf ? (liveAuthorAvatar || validLiveSelfAvatar || null) : (isRawAvatarKnownFailed ? fallbackNonSelfAvatar : (validRawPostAvatar || fallbackNonSelfAvatar))));
 
   const [avatarImgSrc, setAvatarImgSrc] = useState<string | null>(() => {
     if (displayAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar)) return displayAvatar;
@@ -822,7 +842,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   const fullNameDisplay = isCurrentUser
     ? ((isCreative || isArtistOrBand || isLabel || isPromoter) ? rawPostFullName : (currentProfileFullName || rawPostFullName))
-    : (rawPostFullName || KNOWN_USER_FULL_NAMES[handleDisplay.toLowerCase()] || KNOWN_USER_FULL_NAMES[authorNameLower]);
+    : (rawPostFullName || KNOWN_USER_FULL_NAMES[handleDisplay.toLowerCase()] || KNOWN_USER_FULL_NAMES[authorNameLower] || (isPostAuthorMiguel ? 'Miguel Goregrinder Medina' : undefined));
 
   // Location fallback
   const locationDisplay = post.location || post.venue;
@@ -1815,7 +1835,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                       <>
                         {Boolean(comment.text || (comment as any).content) && (
                           <p className="text-xs text-zinc-200 font-sans leading-relaxed mt-0.5 break-words whitespace-pre-wrap">
-                            {comment.text || (comment as any).content}
+                            {renderCommentText(comment.text || (comment as any).content, onOpenProfile)}
                           </p>
                         )}
                         {Boolean((comment as any).mediaUrl || (comment as any).media_url || (comment as any).image || (comment as any).gif) && (
@@ -1986,7 +2006,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                                   <>
                                     {Boolean(reply.text || (reply as any).content) && (
                                       <p className="text-xs text-zinc-200 font-sans leading-relaxed mt-0.5 break-words whitespace-pre-wrap">
-                                        {reply.text || (reply as any).content}
+                                        {renderCommentText(reply.text || (reply as any).content, onOpenProfile)}
                                       </p>
                                     )}
                                     {Boolean((reply as any).mediaUrl || (reply as any).media_url || (reply as any).image || (reply as any).gif) && (
@@ -2175,12 +2195,19 @@ export const PostCard: React.FC<PostCardProps> = ({
             }}
             className="flex items-center gap-2 pt-1"
           >
-            <div className="flex-1 flex items-center bg-zinc-950 border border-zinc-800 rounded-xl px-2 py-1 focus-within:border-rose-500/60 transition-colors">
-              <input
-                type="text"
-                placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : "Write a comment..."}
+            <div className="flex-1 flex items-center bg-zinc-950 border border-zinc-800 rounded-xl px-2 py-1 focus-within:border-rose-500/60 transition-colors relative">
+              <CommentMentionInput
                 value={commentDraft || ''}
-                onChange={(e) => onCommentDraftChange(e.target.value)}
+                onChange={(val) => onCommentDraftChange(val)}
+                onSubmit={() => {
+                  if (!(commentDraft || '').trim() && !attachedCommentMedia?.url) return;
+                  if (typeof (onCommentSubmit as any) === 'function') {
+                    const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                    (onCommentSubmit as any)(fakeEvent, attachedCommentMedia?.url);
+                  }
+                  setAttachedCommentMedia(null);
+                }}
+                placeholder={replyingTo ? `Reply to @${replyingTo.username}... (type @ to tag)` : "Write a comment... (type @ to tag)"}
                 className="flex-1 bg-transparent text-xs text-white placeholder:text-zinc-600 focus:outline-none font-sans px-1"
               />
 

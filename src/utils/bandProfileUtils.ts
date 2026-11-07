@@ -662,28 +662,50 @@ export const resolveCommentAvatar = (
 
   const isGlenBentonComment = commentText.includes('glen benton') || commentText.includes("that's life, but now you get be");
 
-  // 1. Is this comment written by the current logged-in user, Miguel, or confirmed user comment?
-  const isCurrentUser = Boolean(
+  const isAuthorMiguel = Boolean(
     isGlenBentonComment ||
-    (currentUserId && commentUserId && commentUserId === currentUserId) ||
-    (currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
-    (commentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
-    (userProfile?.id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
-    (userProfile?.email && userProfile.email.toLowerCase() === 'goregrindsickness@gmail.com') ||
-    (currentUserName && commentUsername && commentUsername === currentUserName.toLowerCase()) ||
+    commentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
     commentUsername === 'miguel goregrinder medina' ||
     commentUsername === 'miguel medina' ||
     commentUsername === 'goregrinder' ||
+    commentUsername === 'bdmceo' ||
     isMiguelNameOrProfile(commentUserId) ||
     isMiguelNameOrProfile(commentUsername)
   );
 
-  if (isCurrentUser) {
+  const isViewerMiguel = Boolean(
+    currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+    userProfile?.id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+    (userProfile?.email && userProfile.email.toLowerCase() === 'goregrindsickness@gmail.com') ||
+    isMiguelNameOrProfile(userProfile)
+  );
+
+  // 1. Comment authored by Miguel:
+  if (isAuthorMiguel) {
+    if (isViewerMiguel) {
+      const myLiveAvatar =
+        userProfile?.avatar_url ||
+        userProfile?.avatar ||
+        userProfile?.profile_avatar ||
+        (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null);
+      if (myLiveAvatar && typeof myLiveAvatar === 'string' && myLiveAvatar.trim() && myLiveAvatar !== '👤' && !myLiveAvatar.includes('ui-avatars.com') && !myLiveAvatar.includes('photo-1534528741775-53994a69daeb')) {
+        return myLiveAvatar.trim();
+      }
+    }
+    return MIGUEL_DEFAULT_AVATAR;
+  }
+
+  // 2. Is this comment written strictly by the current logged-in user?
+  const isCurrentUserComment = Boolean(
+    currentUserId && commentUserId && commentUserId === currentUserId
+  );
+
+  if (isCurrentUserComment) {
     const rawCommentAvatar = comment.avatar || comment.user_avatar || comment.userAvatar || comment.authorAvatar;
     const isBadAvatar = !rawCommentAvatar ||
       typeof rawCommentAvatar !== 'string' ||
       rawCommentAvatar.includes('ui-avatars.com') ||
-      rawCommentAvatar.includes('photo-1534528741775-53994a69daeb') || // reject generic stock photo
+      rawCommentAvatar.includes('photo-1534528741775-53994a69daeb') ||
       rawCommentAvatar === '👤' ||
       rawCommentAvatar.includes('undefined') ||
       rawCommentAvatar.includes('null');
@@ -698,18 +720,7 @@ export const resolveCommentAvatar = (
     if (myLiveAvatar && typeof myLiveAvatar === 'string' && myLiveAvatar.trim() && myLiveAvatar !== '👤' && !myLiveAvatar.includes('ui-avatars.com') && !myLiveAvatar.includes('photo-1534528741775-53994a69daeb')) {
       return myLiveAvatar.trim();
     }
-    return MIGUEL_DEFAULT_AVATAR;
-  }
-
-  // 2. Is comment written by the profile/timeline owner being viewed?
-  if (userProfile && (
-    (commentUserId && (commentUserId === userProfile.id || commentUserId === userProfile.user_id)) ||
-    (commentUsername && (commentUsername === String(userProfile.name).toLowerCase() || commentUsername === String(userProfile.username).toLowerCase()))
-  )) {
-    const viewedAvatar = userProfile.avatar_url || userProfile.avatar || userProfile.profile_avatar;
-    if (viewedAvatar && typeof viewedAvatar === 'string' && viewedAvatar.trim() && !viewedAvatar.includes('undefined') && !viewedAvatar.includes('ui-avatars.com')) {
-      return viewedAvatar.trim();
-    }
+    return DEFAULT_PERSONAL_AVATAR;
   }
 
   // 3. Explicit comment avatar if present on the comment object itself
@@ -754,18 +765,42 @@ export const resolveCommentAuthorName = (
 
   const isGlenBentonComment = commentText.includes('glen benton') || commentText.includes("that's life, but now you get be");
 
-  const isOwnerMiguel = Boolean(
+  const isAuthorMiguel = Boolean(
     isGlenBentonComment ||
-    (currentUserId && rawUserId && rawUserId === currentUserId) ||
-    (currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
-    (rawUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
-    (userProfile?.id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80') ||
-    (userProfile?.email && userProfile.email.toLowerCase() === 'goregrindsickness@gmail.com') ||
+    rawUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
     isMiguelNameOrProfile(rawUserId) ||
     isMiguelNameOrProfile(rawUsername) ||
-    (currentUserName && rawUsername && rawUsername.toLowerCase() === currentUserName.toLowerCase())
+    rawUsername.toLowerCase() === 'bdmceo' ||
+    rawUsername.toLowerCase() === 'goregrinder' ||
+    rawUsername.toLowerCase() === 'miguel medina' ||
+    rawUsername.toLowerCase() === 'miguel goregrinder medina'
   );
 
+  const isViewerMiguel = Boolean(
+    currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+    userProfile?.id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+    (userProfile?.email && userProfile.email.toLowerCase() === 'goregrindsickness@gmail.com') ||
+    isMiguelNameOrProfile(userProfile)
+  );
+
+  // 1. Comment authored by Miguel:
+  if (isAuthorMiguel) {
+    if (isViewerMiguel) {
+      return userProfile?.full_name || userProfile?.name || 'Miguel Goregrinder Medina';
+    }
+    return 'Miguel Goregrinder Medina';
+  }
+
+  // 2. Comment authored strictly by current logged-in user:
+  const isCurrentUserComment = Boolean(
+    currentUserId && rawUserId && rawUserId === currentUserId
+  );
+
+  if (isCurrentUserComment) {
+    return userProfile?.full_name || userProfile?.name || currentUserName || (rawUsername && !isUuidString(rawUsername) ? rawUsername : 'You');
+  }
+
+  // 3. Comment authored by another user:
   const cleanUsernameLower = rawUsername.toLowerCase();
   const isGenericPlaceholder = (
     !rawUsername ||
@@ -777,47 +812,13 @@ export const resolveCommentAuthorName = (
     cleanUsernameLower === 'you'
   );
 
-  if (isGlenBentonComment || (isOwnerMiguel && isGenericPlaceholder)) {
-    const liveName =
-      (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_name') || localStorage.getItem('nexus_username') || localStorage.getItem('nexus_full_name')) : null) ||
-      userProfile?.full_name ||
-      userProfile?.name ||
-      currentUserName ||
-      'Miguel Goregrinder Medina';
-
-    if (liveName && typeof liveName === 'string' && liveName.trim() && !isUuidString(liveName)) {
-      return liveName.trim();
-    }
-    return 'Miguel Goregrinder Medina';
-  }
-
-  // 1. Is this comment written by the current logged-in user?
-  if (isOwnerMiguel) {
-    if (rawUsername && !isGenericPlaceholder && !isUuidString(rawUsername)) {
-      return rawUsername;
-    }
-    return userProfile?.full_name || userProfile?.name || currentUserName || 'Miguel Goregrinder Medina';
-  }
-
-  // 2. Is this comment written by the profile being viewed?
-  if (userProfile && (
-    (rawUserId && (rawUserId === userProfile.id || rawUserId === userProfile.user_id)) ||
-    (rawUsername && (rawUsername === userProfile.name || rawUsername === userProfile.username))
-  )) {
-    const viewedName = userProfile.full_name || userProfile.name || userProfile.username || userProfile.band_name;
-    if (viewedName && typeof viewedName === 'string' && viewedName.trim() && !isUuidString(viewedName)) {
-      return viewedName.trim();
-    }
-  }
-
-  // 3. Explicit non-UUID username or author from the comment object itself
   if (rawUsername && !isUuidString(rawUsername) && !isGenericPlaceholder) {
     return rawUsername;
   }
-  if (comment.author && typeof comment.author === 'string' && !isUuidString(comment.author) && comment.author.toLowerCase() !== 'scene member') {
+  if (comment.author && typeof comment.author === 'string' && !isUuidString(comment.author) && comment.author.toLowerCase() !== 'scene member' && comment.author.toLowerCase() !== 'user') {
     return comment.author.trim();
   }
-  if (comment.author_name && typeof comment.author_name === 'string' && !isUuidString(comment.author_name) && comment.author_name.toLowerCase() !== 'scene member') {
+  if (comment.author_name && typeof comment.author_name === 'string' && !isUuidString(comment.author_name) && comment.author_name.toLowerCase() !== 'scene member' && comment.author_name.toLowerCase() !== 'user') {
     return comment.author_name.trim();
   }
   if (comment.full_name && typeof comment.full_name === 'string' && !isUuidString(comment.full_name)) {

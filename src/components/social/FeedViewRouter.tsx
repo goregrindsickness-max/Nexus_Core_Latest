@@ -514,8 +514,6 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                   (authorHandle && authorHandle === userProfile.console_handle.toLowerCase().replace(/^@/, '')) ||
                   (authorName && authorName.includes(userProfile.console_handle.toLowerCase().replace(/^@/, '')))
                 )) ||
-                post.author?.isYou ||
-                post.isYou ||
                 (userProfile?.id && (
                   post.author?.id === userProfile.id || 
                   post.profile_id === userProfile.id || 
@@ -580,11 +578,11 @@ export const FeedViewRouter: React.FC<any> = (props) => {
           let resolvedAuthorAvatar: string | undefined;
 
           if (isCreativePost || (isSelf && portalRole === 'creative' && !isBandPost && !isPromoterPost)) {
-            resolvedAuthorAvatar = resolveCreativeLogo(userProfile, rawAvatar);
+            resolvedAuthorAvatar = isSelf ? resolveCreativeLogo(userProfile, rawAvatar) : (rawAvatar || resolveCreativeLogo(null, rawAvatar));
           } else if (isPromoterPost || (isSelf && portalRole === 'promoter' && !isBandPost && !isCreativePost)) {
-            resolvedAuthorAvatar = resolvePromoterLogo(userProfile, rawAvatar);
+            resolvedAuthorAvatar = isSelf ? resolvePromoterLogo(userProfile, rawAvatar) : (rawAvatar || resolvePromoterLogo(null, rawAvatar));
           } else if (isBandPost || (isSelf && portalRole === 'band')) {
-            resolvedAuthorAvatar = resolveBandLogo(activeBand, userProfile, rawAvatar);
+            resolvedAuthorAvatar = isSelf ? resolveBandLogo(activeBand, userProfile, rawAvatar) : (rawAvatar || resolveBandLogo(p, null, rawAvatar));
           } else {
             resolvedAuthorAvatar = (isSelf && liveUserAvatar)
               ? liveUserAvatar

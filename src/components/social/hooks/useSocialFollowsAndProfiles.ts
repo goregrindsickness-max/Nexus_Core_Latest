@@ -260,11 +260,21 @@ export function useSocialFollowsAndProfiles({
                 profileRole = 'Creative';
                 category = 'creatives';
               } else if (p.account_type === 'promoter') {
-                profileName = p.promoter_name || p.promoter_metadata?.brand_name || profileName;
-                profileAvatar = p.promoter_logo || profileAvatar;
-                profileBanner = p.promoter_cover_image || profileBanner;
-                profileRole = 'Promoter';
-                category = 'venues';
+                const isMiguel = (p.email || '').toLowerCase().includes('goregrind') || (profileName || '').toLowerCase().includes('miguel');
+                if (isMiguel) {
+                  profileRole = 'Member';
+                  category = 'friends';
+                } else {
+                  let brand = p.promoter_name || p.promoter_metadata?.brand_name;
+                  if (brand && brand.toLowerCase().includes('nexus live')) {
+                    brand = `${profileName} Productions`;
+                  }
+                  profileName = brand || `${profileName} Productions`;
+                  profileAvatar = p.promoter_logo || profileAvatar;
+                  profileBanner = p.promoter_cover_image || profileBanner;
+                  profileRole = 'Promoter';
+                  category = 'venues';
+                }
               }
 
               list.push({

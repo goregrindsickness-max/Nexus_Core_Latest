@@ -585,7 +585,6 @@ export const GalleryTab: React.FC<GalleryTabProps> = ({
           // Fan / fallback
           if (pProfId && candidateIds.includes(pProfId)) return true;
           if (pUserId && candidateIds.includes(pUserId)) return true;
-          if (curIsYou && (p.author?.isYou || p.isYou)) return true;
           return false;
         };
 

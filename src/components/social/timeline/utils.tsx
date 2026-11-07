@@ -39,6 +39,96 @@ export const renderPostMessage = (text: string, onOpenProfile?: (authorId: strin
   );
 };
 
+export const renderCommentText = (
+  text: string,
+  onOpenProfile?: (authorId: string, authorName: string) => void
+) => {
+  if (!text) return null;
+
+  // Pattern matches bracketed mentions @[Name](id), multi-word @Name or @handle, and URLs
+  const mentionPattern = /(@\[([^\]]+)\](?:\(([^)]+)\))?)|(@[A-Z][a-zA-Z0-9_\-']*(?:\s+[A-Z][a-zA-Z0-9_\-']*){0,3}(?=[.,!?\s]|$)|@[a-zA-Z0-9_\-]+)|(https?:\/\/[^\s]+)/g;
+
+  const elements: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = mentionPattern.exec(text)) !== null) {
+    const matchIndex = match.index;
+    if (matchIndex > lastIndex) {
+      elements.push(
+        <React.Fragment key={`txt-${lastIndex}`}>
+          {text.slice(lastIndex, matchIndex)}
+        </React.Fragment>
+      );
+    }
+
+    const fullMatch = match[0];
+    if (match[5]) {
+      // URL match
+      const url = match[5];
+      elements.push(
+        <a
+          key={`url-${matchIndex}`}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-sky-400 hover:text-sky-300 underline underline-offset-2 font-mono font-bold inline-flex items-center gap-0.5 break-all"
+        >
+          {url}
+          <ExternalLink className="w-3 h-3 inline shrink-0" />
+        </a>
+      );
+    } else if (match[1]) {
+      // Bracketed mention: @[Name](optional-id)
+      const name = match[2];
+      const targetId = match[3] || name;
+      elements.push(
+        <span
+          key={`mention-bracket-${matchIndex}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenProfile?.('search', targetId || name);
+          }}
+          className="text-emerald-400 hover:text-emerald-300 font-bold bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-500/30 px-1.5 py-0.2 rounded text-[11px] cursor-pointer transition-colors inline-flex items-center gap-0.5 mx-0.5"
+          title={`View profile for ${name}`}
+        >
+          @{name}
+        </span>
+      );
+    } else if (match[4]) {
+      // Standard @Name or @handle mention
+      const mentionStr = match[4];
+      const name = mentionStr.slice(1);
+      elements.push(
+        <span
+          key={`mention-${matchIndex}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenProfile?.('search', name);
+          }}
+          className="text-emerald-400 hover:text-emerald-300 font-bold bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-500/30 px-1.5 py-0.2 rounded text-[11px] cursor-pointer transition-colors inline-flex items-center gap-0.5 mx-0.5"
+          title={`View profile for ${name}`}
+        >
+          {mentionStr}
+        </span>
+      );
+    }
+
+    lastIndex = matchIndex + fullMatch.length;
+  }
+
+  if (lastIndex < text.length) {
+    elements.push(
+      <React.Fragment key={`txt-end-${lastIndex}`}>
+        {text.slice(lastIndex)}
+      </React.Fragment>
+    );
+  }
+
+  return <>{elements}</>;
+};
+
 export const HeaderMarqueeText: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);

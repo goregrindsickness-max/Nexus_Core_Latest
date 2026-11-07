@@ -546,10 +546,8 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         const raw = p as any;
         const postAuthorId = raw.author_id || raw.profile_id || raw.user_id || raw.authorId || p.author?.id;
         const isSelf = Boolean(
-          p.author?.isYou ||
-          raw.isYou ||
-          (selectedUserProfile?.id && postAuthorId === selectedUserProfile.id) ||
-          (detail.id && postAuthorId === detail.id)
+          (detail.id && postAuthorId === detail.id) ||
+          (selectedUserProfile?.id && postAuthorId === selectedUserProfile.id)
         );
         if (isSelf) {
           return {

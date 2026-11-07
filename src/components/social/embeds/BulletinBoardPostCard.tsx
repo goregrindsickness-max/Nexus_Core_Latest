@@ -21,6 +21,8 @@ import {
   X
 } from 'lucide-react';
 import { FeedPost, ClassifiedPostData, REACTION_PALETTE } from '../timeline/types';
+import { renderCommentText } from '../timeline/utils';
+import { CommentMentionInput } from '../timeline/CommentMentionInput';
 
 interface BulletinBoardPostCardProps {
   post: FeedPost;
@@ -465,7 +467,7 @@ export const BulletinBoardPostCard: React.FC<BulletinBoardPostCardProps> = ({
                             <span className="text-zinc-600 font-medium">{comment.time || 'Recently'}</span>
                           </div>
                           <p className="text-xs text-zinc-900 pt-1 leading-relaxed whitespace-pre-wrap select-text font-sans">
-                            {comment.text}
+                            {renderCommentText(comment.text, onOpenProfile)}
                           </p>
                           {onSetReplyingTo && (
                             <div className="flex justify-end pt-1">
@@ -490,7 +492,7 @@ export const BulletinBoardPostCard: React.FC<BulletinBoardPostCardProps> = ({
                                   <span className="text-zinc-600 font-medium">{reply.time || 'Recently'}</span>
                                 </div>
                                 <p className="text-[11px] text-zinc-900 pt-1 leading-relaxed whitespace-pre-wrap select-text font-sans">
-                                  {reply.text}
+                                  {renderCommentText(reply.text, onOpenProfile)}
                                 </p>
                               </div>
                             ))}
@@ -518,18 +520,24 @@ export const BulletinBoardPostCard: React.FC<BulletinBoardPostCardProps> = ({
 
             {/* Submit Note Form */}
             {onCommentSubmit && (
-              <form onSubmit={onCommentSubmit} className="flex gap-2 pt-1">
-                <input
-                  type="text"
-                  placeholder={replyingTo ? `Reply to @${replyingTo.username} on board...` : "Pin a reply note or inquiry..."}
-                  value={commentDraft || ''}
-                  onChange={(e) => onCommentDraftChange?.(e.target.value)}
-                  className="flex-1 bg-[#120c08] border border-[#3d2516] rounded-xl px-3 py-2 text-xs text-amber-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 font-mono transition-colors"
-                />
+              <form onSubmit={onCommentSubmit} className="flex gap-2 pt-1 relative">
+                <div className="flex-1 bg-[#120c08] border border-[#3d2516] rounded-xl px-3 py-2 text-xs text-amber-100 focus-within:border-amber-500 font-mono transition-colors relative flex items-center">
+                  <CommentMentionInput
+                    value={commentDraft || ''}
+                    onChange={(val) => onCommentDraftChange?.(val)}
+                    onSubmit={() => {
+                      if (!(commentDraft || '').trim()) return;
+                      const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                      onCommentSubmit(fakeEvent);
+                    }}
+                    placeholder={replyingTo ? `Reply to @${replyingTo.username} on board... (type @ to tag)` : "Pin a reply note or inquiry... (type @ to tag)"}
+                    className="flex-1 bg-transparent border-none outline-none text-xs text-amber-100 placeholder:text-zinc-600 font-mono"
+                  />
+                </div>
                 <button
                   type="submit"
                   disabled={!(commentDraft || '').trim()}
-                  className="px-3.5 py-2 bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 disabled:from-zinc-800 disabled:to-zinc-800 disabled:text-zinc-600 text-white rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md disabled:cursor-not-allowed"
+                  className="px-3.5 py-2 bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 disabled:from-zinc-800 disabled:to-zinc-800 disabled:text-zinc-600 text-white rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md disabled:cursor-not-allowed shrink-0"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Pin Note</span>

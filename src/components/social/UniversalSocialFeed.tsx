@@ -3574,6 +3574,67 @@ const getProfileForUser = (userParam: any) => {
 
   cleanHandle = (cleanHandle || 'user').replace('@', '').replace(/[\(\)].*/, '').trim();
 
+  // Authoritative resolution for Nexus Live Productions promoter page (never links to Christopher Wirstrom or individual users)
+  const isNexusLiveQuery = Boolean(
+    (typeof userParam === 'string' && (userParam.toLowerCase().includes('nexus live') || userParam === 'promoter-nexus-live-official')) ||
+    (typeof userParam === 'object' && (
+      (userParam?.id === 'promoter-nexus-live-official') ||
+      (userParam?.raw_id === 'promoter-nexus-live-official') ||
+      (userParam?.name && userParam.name.toLowerCase().includes('nexus live')) ||
+      (userParam?.brand_name && userParam.brand_name.toLowerCase().includes('nexus live')) ||
+      (userParam?.agency_name && userParam.agency_name.toLowerCase().includes('nexus live'))
+    ))
+  );
+
+  if (isNexusLiveQuery) {
+    const NEXUS_LIVE_LOGO = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601';
+    const NEXUS_LIVE_COVER = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635';
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+
+    return {
+      id: 'promoter-nexus-live-official',
+      raw_id: 'promoter-nexus-live-official',
+      user_id: '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
+      creator_id: '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
+      owner_id: '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
+      name: 'Nexus Live Productions',
+      brand_name: 'Nexus Live Productions',
+      agency_name: 'Nexus Live Productions',
+      promoter_name: 'Nexus Live Productions',
+      legalName: 'Nexus Live Productions',
+      avatar: NEXUS_LIVE_LOGO,
+      avatar_url: NEXUS_LIVE_LOGO,
+      logo: NEXUS_LIVE_LOGO,
+      logo_url: NEXUS_LIVE_LOGO,
+      promoter_logo: NEXUS_LIVE_LOGO,
+      image: NEXUS_LIVE_COVER,
+      banner: NEXUS_LIVE_COVER,
+      banner_url: NEXUS_LIVE_COVER,
+      cover_url: NEXUS_LIVE_COVER,
+      promoter_cover_image: NEXUS_LIVE_COVER,
+      location: 'Chicago, IL / Texas / National Tour Booking',
+      role: 'Promoter / Venue',
+      account_type: 'promoter',
+      type: 'promoter',
+      portalRole: 'promoter',
+      isPersonal: false,
+      isBandProfile: false,
+      isPromoterProfile: true,
+      is_promoter: true,
+      isYou: isOwnerMiguel,
+      badges: ['🎪 Event Promoter', '⚡ Nexus Live'],
+      customBadges: ['🎪 Event Promoter', '⚡ Nexus Live'],
+      bio: 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. Lengthy history in the underground extreme metal scene with several festivals under our name most notably the Chicago/Texas Domination Fest that ran from 2014-2024.',
+      handle: 'NexusLive',
+      console_handle: '@NexusLive',
+      followersCount: 2900,
+      followingCount: 45,
+      hasProAccess: true,
+      isFollowed: isProfileFollowedGlobally({ id: 'promoter-nexus-live-official', name: 'Nexus Live Productions' }, allFollows),
+      isFollowedByMe: isProfileFollowedGlobally({ id: 'promoter-nexus-live-official', name: 'Nexus Live Productions' }, allFollows)
+    };
+  }
+
   const myId = userProfile?.id;
   const myEmail = userProfile?.email?.toLowerCase()?.trim();
   const targetEmail = typeof userParam === 'object' ? (userParam.email?.toLowerCase()?.trim() || userParam.authorEmail?.toLowerCase()?.trim() || userParam.author_email?.toLowerCase()?.trim()) : null;

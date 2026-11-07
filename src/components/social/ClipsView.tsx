@@ -454,12 +454,17 @@ const SingleClipPlayerCard: React.FC<{
           <div
             className="flex items-center gap-3 mb-2.5 cursor-pointer group/prof"
             onClick={() => {
+              const creatorId = (clip as any).creator_id || clip.user_id || (clip as any).profile_id;
+              const isYouClip = Boolean(
+                (userProfile?.id && creatorId && creatorId === userProfile.id) ||
+                (userProfile?.name && userProfile.name.toLowerCase() !== 'user' && clip.creator && clip.creator.toLowerCase() === userProfile.name.toLowerCase())
+              );
               const profilePayload = {
-                id: (clip as any).creator_id || clip.user_id || (clip as any).profile_id,
+                id: creatorId,
                 name: clip.creator,
                 avatar: clip?.avatar,
                 role: clip?.role || "Member",
-                isYou: clip.creator === userProfile?.name,
+                isYou: isYouClip,
               };
               if (onSelectProfile) {
                 onSelectProfile(profilePayload);

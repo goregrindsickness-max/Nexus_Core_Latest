@@ -270,17 +270,8 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
       if (pProfileId && pProfileId === currentUserId) return true;
       if (pUserId && pUserId === currentUserId) return true;
       if (pAuthorId && pAuthorId === currentUserId) return true;
-
-      // If explicit other user IDs are attached, reject
-      if (pProfileId && pProfileId !== currentUserId) return false;
-      if (pUserId && pUserId !== currentUserId) return false;
-      if (pAuthorId && pAuthorId !== currentUserId) return false;
-
-      // Author marked isYou
-      if (post.author?.isYou === true || post.isYou === true) return true;
       return false;
     } else {
-      if (post.author?.isYou === true || post.isYou === true) return true;
       return false;
     }
   }, [currentUserId]);
@@ -365,7 +356,7 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
 
               const pProfileId = post.profile_id || post.data?.profile_id || post.data?.postedBy || post.author?.id;
               const pUserId = post.user_id || post.data?.user_id;
-              const isMatch = pProfileId === currentUserId || pUserId === currentUserId || post.author?.isYou === true || post.isYou === true;
+              const isMatch = Boolean((pProfileId && pProfileId === currentUserId) || (pUserId && pUserId === currentUserId));
 
               if (isMatch) {
                 const media = post.media_url || post.image || (post.images && post.images[0]);

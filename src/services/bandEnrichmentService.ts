@@ -209,11 +209,10 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
     spotify_url: 'https://open.spotify.com/artist/1G14y7G101o0G0K8P',
     lineup: [
       { id: 'cc-1', name: 'George "Corpsegrinder" Fisher', role: 'Lead Vocals', status: 'active', years: '1995–present' },
-      { id: 'cc-2', name: 'Alex Webster', role: 'Bass', status: 'active', years: '1988–present' },
+      { id: 'cc-2', name: 'Alex Webster', role: 'Bass', status: 'active', year: '1988–present', years: '1988–present' },
       { id: 'cc-3', name: 'Paul Mazurkiewicz', role: 'Drums', status: 'active', years: '1988–present' },
       { id: 'cc-4', name: 'Rob Barrett', role: 'Rhythm Guitar', status: 'active', years: '1993–1997, 2005–present' },
-      { id: 'cc-5', name: 'Erik Rutan', role: 'Lead Guitar', status: 'active', years: '2021–present' },
-      { id: 'cc-6', name: 'Chris Barnes', role: 'Vocals', status: 'past', years: '1988–1995' }
+      { id: 'cc-5', name: 'Erik Rutan', role: 'Lead Guitar', status: 'active', years: '2021–present' }
     ]
   },
   'carcass': {

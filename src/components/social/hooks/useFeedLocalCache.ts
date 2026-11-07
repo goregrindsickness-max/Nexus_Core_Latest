@@ -6,6 +6,7 @@ import { extractYouTubeId } from '../utils/postSyncUtils';
 import { mergePostWithReactions } from '../utils/reactionStore';
 import { isMiguelNameOrProfile } from '../utils/profileUtils';
 import { fetchGlobalInteractions } from '../../../services/postInteractionsService';
+import { MIGUEL_DEFAULT_AVATAR, DEFAULT_PERSONAL_AVATAR } from '../../../utils/bandProfileUtils';
 
 interface UseFeedLocalCacheOptions {
   portalRole: string;
@@ -51,11 +52,12 @@ export function useFeedLocalCache({
         let finalFeed = (storedFeed || []).map(post => {
           const rawPost = post as any;
           const isPostSelf = Boolean(
-            post.author?.isYou ||
-            rawPost.isYou ||
-            (userProfile?.id && (post.author?.id === userProfile.id || rawPost.profile_id === userProfile.id || rawPost.user_id === userProfile.id)) ||
-            (userProfile?.console_handle && post.author?.name && post.author.name.toLowerCase().includes(userProfile.console_handle.toLowerCase().replace(/^@/, ''))) ||
-            (userProfile?.name && post.author?.name && post.author.name.toLowerCase().includes(userProfile.name.toLowerCase()))
+            (userProfile?.id && (post.author?.id === userProfile.id || rawPost.profile_id === userProfile.id || rawPost.user_id === userProfile.id || rawPost.author_id === userProfile.id)) ||
+            (userProfile?.console_handle && userProfile.console_handle !== '@user' && userProfile.console_handle !== 'user' && post.author?.name && (
+              post.author.name.toLowerCase() === userProfile.console_handle.toLowerCase().replace(/^@/, '') ||
+              post.author.name.toLowerCase() === userProfile.console_handle.toLowerCase()
+            )) ||
+            (userProfile?.name && userProfile.name !== 'User' && userProfile.name !== 'New User' && userProfile.name !== 'Nexus Member' && post.author?.name && post.author.name.toLowerCase() === userProfile.name.toLowerCase())
           );
           const postWorkspace = (rawPost.workspace_type || rawPost.workspaceType || post.author?.workspace_type || post.author?.workspaceType || '').toLowerCase();
           const isEntityPost = postWorkspace === 'band' || postWorkspace === 'creative' || postWorkspace === 'promoter' || postWorkspace === 'label' ||
@@ -381,13 +383,19 @@ export function useFeedLocalCache({
                     commentsRows.forEach((c: any) => {
                       if (!c.post_id) return;
                       if (!commentsByPost[c.post_id]) commentsByPost[c.post_id] = [];
+                      const isMiguel = c.user_id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+                      const isCurrentViewer = Boolean(userProfile?.id && c.user_id === userProfile.id);
+                      const commAuthor = isMiguel ? 'Miguel Goregrinder Medina' : (isCurrentViewer ? (userProfile?.full_name || userProfile?.name || 'You') : 'Scene Member');
+                      const commAvatar = isMiguel ? MIGUEL_DEFAULT_AVATAR : (isCurrentViewer ? (userProfile?.avatar_url || userProfile?.avatar || DEFAULT_PERSONAL_AVATAR) : DEFAULT_PERSONAL_AVATAR);
                       commentsByPost[c.post_id].push({
                         id: c.id,
                         post_id: c.post_id,
                         user_id: c.user_id,
                         parent_comment_id: c.parent_comment_id || null,
-                        username: c.user_id || 'Fan',
-                        author: c.user_id || 'Fan',
+                        username: commAuthor,
+                        author: commAuthor,
+                        avatar: commAvatar,
+                        userAvatar: commAvatar,
                         text: c.content,
                         content: c.content,
                         time: c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
@@ -730,13 +738,19 @@ export function useFeedLocalCache({
         if (!c.post_id) return;
         setFeed(prev => prev.map(post => {
           if (post.id === c.post_id || post.id === `nexus_post_${c.post_id}`) {
+            const isMiguel = c.user_id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+            const isCurrentViewer = Boolean(userProfile?.id && c.user_id === userProfile.id);
+            const commAuthor = isMiguel ? 'Miguel Goregrinder Medina' : (isCurrentViewer ? (userProfile?.full_name || userProfile?.name || 'You') : 'Scene Member');
+            const commAvatar = isMiguel ? MIGUEL_DEFAULT_AVATAR : (isCurrentViewer ? (userProfile?.avatar_url || userProfile?.avatar || DEFAULT_PERSONAL_AVATAR) : DEFAULT_PERSONAL_AVATAR);
             const newComm = {
               id: c.id,
               post_id: c.post_id,
               user_id: c.user_id,
               parent_comment_id: c.parent_comment_id || null,
-              username: c.user_id || 'Fan',
-              author: c.user_id || 'Fan',
+              username: commAuthor,
+              author: commAuthor,
+              avatar: commAvatar,
+              userAvatar: commAvatar,
               text: c.content,
               content: c.content,
               time: c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
@@ -804,15 +818,11 @@ export function useFeedLocalCache({
 
         const isMatch = Boolean(
           (targetId && postAuthorId === targetId) ||
-          (targetName && (
+          (targetName && targetName !== 'user' && targetName !== 'anonymous' && (
             postAuthorName === targetName ||
-            postAuthorName.includes(targetName) ||
-            targetName.includes(postAuthorName) ||
             (targetName.includes('miguel') && postAuthorName.includes('bdmceo')) ||
             (targetName.includes('bdmceo') && postAuthorName.includes('miguel'))
-          )) ||
-          post.author?.isYou ||
-          rawPost.isYou
+          ))
         );
 
         // Update post avatar for all matching author posts (skip purely band posts only if this update is not for a band)

@@ -18,6 +18,8 @@ import {
   Minimize2
 } from 'lucide-react';
 import { usePinchZoom } from '../../../../hooks/usePinchZoom';
+import { renderCommentText } from '../utils';
+import { CommentMentionInput } from '../CommentMentionInput';
 
 interface FeedMediaLightboxModalProps {
   lightbox: { images: string[]; index: number };
@@ -331,24 +333,32 @@ export const FeedMediaLightboxModal: React.FC<FeedMediaLightboxModalProps> = ({
                     <span className="text-white text-xs font-bold">{c.user}</span>
                     <span className="text-zinc-500 text-[10px] font-mono">{c.time}</span>
                   </div>
-                  <p className="text-zinc-300 text-xs mt-0.5 leading-relaxed font-sans">{c.text}</p>
+                  <p className="text-zinc-300 text-xs mt-0.5 leading-relaxed font-sans">{renderCommentText(c.text)}</p>
                 </div>
               </div>
             ))}
           </div>
 
           <form onSubmit={handleAddComment} className="p-3 border-t border-white/10 bg-zinc-900/40">
-            <div className="flex items-center gap-2 bg-black/70 rounded-xl border border-white/10 p-1.5 focus-within:border-rose-500/60 transition-colors">
-              <input 
-                type="text" 
+            <div className="flex items-center gap-2 bg-black/70 rounded-xl border border-white/10 p-1.5 focus-within:border-rose-500/60 transition-colors relative">
+              <CommentMentionInput
                 value={commentInput}
-                onChange={(e) => setCommentInput(e.target.value)}
-                placeholder="Comment on framing or lighting..." 
-                className="flex-1 bg-transparent border-none outline-none text-white text-xs placeholder-zinc-500 px-2 font-sans" 
+                onChange={(val) => setCommentInput(val)}
+                onSubmit={() => {
+                  if (!commentInput.trim()) return;
+                  setComments(prev => [
+                    ...prev,
+                    { user: 'You', avatarChar: 'Y', roleColor: 'text-rose-400', time: 'Just now', text: commentInput.trim() }
+                  ]);
+                  setCommentInput('');
+                }}
+                placeholder="Comment on framing or lighting... (type @ to tag)"
+                className="flex-1 bg-transparent border-none outline-none text-white text-xs placeholder-zinc-500 px-2 font-sans"
               />
               <button 
                 type="submit" 
-                className="text-rose-500 hover:text-rose-400 p-1.5 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                disabled={!commentInput.trim()}
+                className="text-rose-500 hover:text-rose-400 p-1.5 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer disabled:opacity-40"
                 title="Post Comment"
               >
                 <Send className="w-3.5 h-3.5" />

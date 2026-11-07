@@ -9,7 +9,7 @@ import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, upsertBandToDatabase, generateUUID } from '../../../supabase';
 import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER, resolvePromoterLogo, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER, isBandSplitUp, resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
-import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache, resolveAuthenticReleaseYear } from '../../../lib/communityBands';
+import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache, resolveAuthenticReleaseYear, deduplicateDiscography } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
 import CommunityBandCuratorModal from '../../social/modals/CommunityBandCuratorModal';
@@ -334,24 +334,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           })));
         }
 
-        // Deduplicate releases by title to prevent duplicate entries while retaining richest artwork
-        const seenReleaseTitles = new Map<string, any>();
-        for (const rel of allCandidates) {
-          if (!rel || !rel.title) continue;
-          const norm = rel.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (!norm) continue;
-          if (!seenReleaseTitles.has(norm)) {
-            seenReleaseTitles.set(norm, rel);
-          } else {
-            const existing = seenReleaseTitles.get(norm)!;
-            const existingCover = existing.cover_url || existing.cover_image || existing.coverUrl;
-            const newCover = rel.cover_url || rel.cover_image || rel.coverUrl;
-            if (!existingCover && newCover) {
-              seenReleaseTitles.set(norm, { ...existing, cover_url: newCover, cover_image: newCover, coverUrl: newCover, coverImage: newCover });
-            }
-          }
-        }
-        const finalReleases = Array.from(seenReleaseTitles.values());
+        // Deduplicate releases using deduplicateDiscography to purge 0-track placeholders and retain richest tracklists/artwork
+        const finalReleases = deduplicateDiscography(allCandidates, bandName || selectedUserProfile?.name);
 
         if (isMounted && finalReleases.length > 0) {
           const mapped = finalReleases.map((row: any) => {
@@ -378,7 +362,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
               title: row.title || commRel?.title || '',
               coverColor: row.cover_color || '',
               type: row.type || commRel?.type || 'Album',
-              year: resolveAuthenticReleaseYear(row) || commRel?.year || '2026',
+              year: resolveAuthenticReleaseYear(row) || commRel?.year || row.year || '2023',
               releaseDate: row.release_date || commRel?.year || '',
               label: row.label || commRel?.label || commRel?.release_info || '',
               genre: row.genre || (commRel as any)?.genre || '',

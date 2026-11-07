@@ -263,7 +263,7 @@ export async function purgeStaleIndexedDBPhotos(
           // If checking user's posts against authoritative DB list
           const pProfId = p.profile_id || p.data?.profile_id || p.data?.postedBy || p.author?.id;
           const pUserId = p.user_id || p.data?.user_id;
-          const isThisUser = (pProfId === userId || pUserId === userId || p.author?.isYou === true || p.isYou === true);
+          const isThisUser = Boolean((pProfId && pProfId === userId) || (pUserId && pUserId === userId));
 
           if (isThisUser && validIds && validIds.size > 0 && !validIds.has(pid)) {
             // Post exists in IDB but is no longer in Supabase DB -> remove stale post

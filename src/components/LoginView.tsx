@@ -842,7 +842,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
       banner_url: labelBannerUrl || labelBanner || undefined
     } : undefined;
 
-    const promoterAgencyName = promoterAgency.trim() || 'Nexus Live Productions';
+    const isOwnerMiguel = (userProfile?.email || signupEmail || '').toLowerCase().trim() === 'goregrindsickness@gmail.com' || (userProfile?.name || fullName || '').toLowerCase().includes('miguel');
+    const promoterAgencyName = promoterAgency.trim() || (isOwnerMiguel ? 'Nexus Live Productions' : (fullName ? `${fullName} Productions` : 'Promoter Operations'));
     const promoterMetadata = hasPromoter ? {
       ...(userProfile?.promoter_metadata || {}),
       agency_name: promoterAgencyName,
@@ -1202,7 +1203,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
     if (!hasPromoter) return undefined;
     const finalProfileId = explicitUserId || ((isUpgradeMode && userProfile?.id) ? userProfile.id : (newUserId || generateUUID()));
     const idToUse = explicitPromoterId || registeredPromoterId || (userProfile?.promoter_id) || generateUUID();
-    const pName = promoterAgency.trim() || 'Nexus Live Productions';
+    const isOwnerMiguel = (userProfile?.email || signupEmail || '').toLowerCase().trim() === 'goregrindsickness@gmail.com' || (userProfile?.name || fullName || '').toLowerCase().includes('miguel');
+    const pName = promoterAgency.trim() || (isOwnerMiguel ? 'Nexus Live Productions' : (userProfile?.name || fullName ? `${userProfile?.name || fullName} Productions` : 'Promoter Operations'));
     const resolvedLogo = logoUrlOverride || promoterLogo || (userProfile?.promoter_logo) || (userProfile?.promoter_metadata as any)?.logo_url || undefined;
     const resolvedBanner = bannerUrlOverride || promoterCoverImage || (userProfile?.promoter_cover_image) || (userProfile?.promoter_metadata as any)?.cover_url || undefined;
 
@@ -1845,7 +1847,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
       if (hasPromoter) {
         const activePromoterId = registeredPromoterId || profileToUse.promoter_id || newUserId;
         profileToUse.promoter_id = activePromoterId;
-        const pName = promoterAgency.trim() || profileToUse.promoter_agency || profileToUse.promoter_brand || profileToUse.promoter_name || 'Nexus Live Productions';
+        const isOwnerMiguel = (profileToUse.email || userProfile?.email || '').toLowerCase().trim() === 'goregrindsickness@gmail.com' || (profileToUse.name || userProfile?.name || '').toLowerCase().includes('miguel');
+        const pName = promoterAgency.trim() || profileToUse.promoter_agency || profileToUse.promoter_brand || profileToUse.promoter_name || (isOwnerMiguel ? 'Nexus Live Productions' : (profileToUse.name ? `${profileToUse.name} Productions` : 'Promoter Operations'));
         profileToUse.promoter_agency = pName;
         profileToUse.promoter_brand = pName;
         profileToUse.promoter_name = pName;

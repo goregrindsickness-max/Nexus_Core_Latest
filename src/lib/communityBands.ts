@@ -367,12 +367,21 @@ export function resolveAuthenticReleaseYear(r: any): string {
   const extractedYear = yearMatch ? yearMatch[1] : (rawStr.length === 4 ? rawStr : '');
 
   if (extractedYear && extractedYear !== '2025' && extractedYear !== '2026') return extractedYear;
-  if (extractedYear) return extractedYear;
-  return String(rawCandidate).trim();
+  return '';
 }
 
 export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrName?: string): DiscographyRelease[] {
   if (!Array.isArray(releases)) return [];
+  
+  const sorted = [...releases].sort((a, b) => {
+    const tracksA = Array.isArray(a.tracks) ? a.tracks.length : 0;
+    const tracksB = Array.isArray(b.tracks) ? b.tracks.length : 0;
+    if (tracksB !== tracksA) return tracksB - tracksA;
+    const coverA = (a.cover_url || a.cover_image || a.coverUrl || '') ? 1 : 0;
+    const coverB = (b.cover_url || b.cover_image || b.coverUrl || '') ? 1 : 0;
+    return coverB - coverA;
+  });
+
   const seen = new Map<string, DiscographyRelease>();
   
   function getNormKey(title: string, year?: string): string {
@@ -383,15 +392,18 @@ export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrN
     return clean.replace(/[^a-z0-9]/g, '');
   }
 
-  for (const r of releases) {
-    if (!r || !r.title) continue;
+  for (const r of sorted) {
+    if (!r || !r.title || String(r.title).trim() === '') continue;
     if (isDeletedRelease(r.id, r.title, bandIdOrName)) continue;
     
+    // Skip 0-track placeholder if we already have a version with tracks for this album
     const finalYear = resolveAuthenticReleaseYear(r);
     const normKey = getNormKey(r.title, finalYear || r.year);
     if (!normKey) continue;
 
+    const rTracksCount = Array.isArray(r.tracks) ? r.tracks.length : 0;
     const rCover = r.cover_url || r.cover_image || r.coverUrl || r.coverImage || r.image_url || '';
+
     if (!seen.has(normKey)) {
       seen.set(normKey, {
         ...r,
@@ -407,6 +419,7 @@ export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrN
       });
     } else {
       const existing = seen.get(normKey)!;
+      const existingTracksCount = Array.isArray(existing.tracks) ? existing.tracks.length : 0;
       const existingCover = existing.cover_url || existing.cover_image || existing.coverUrl || existing.coverImage || existing.image_url || '';
       const finalCover = (rCover && !rCover.includes('unsplash') && !rCover.includes('placeholder'))
         ? rCover
@@ -429,7 +442,7 @@ export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrN
         coverUrl: finalCover,
         coverImage: finalCover,
         image_url: finalCover,
-        tracks: (r.tracks?.length || 0) >= (existing.tracks?.length || 0) ? r.tracks : existing.tracks
+        tracks: rTracksCount >= existingTracksCount ? r.tracks : existing.tracks
       });
     }
   }
@@ -929,11 +942,24 @@ export class CommunityBandManager {
                 saveBandDiscographyToCache(initBand.id, initName, bestDiscography);
               }
 
-              const bestLineup = deduplicateLineup(
-                (updated[idx].lineup && updated[idx].lineup.length > 0)
-                  ? updated[idx].lineup
-                  : (initBand.lineup || [])
-              );
+               const storedLineup = safeLocalStorage.getItem(`nexus_core_band_lineup_${initBand.id}`) ||
+                                  safeLocalStorage.getItem(`nexus_core_band_lineup_${initName}`) ||
+                                  safeLocalStorage.getItem(`nexus_core_band_lineup_${initName.replace(/[^a-z0-9_-]+/g, '-')}`);
+               let cachedLineupForSeed: LineupMember[] = [];
+               if (storedLineup) {
+                 try {
+                   const p = JSON.parse(storedLineup);
+                   if (Array.isArray(p) && p.length > 0) cachedLineupForSeed = p;
+                 } catch {}
+               }
+
+               const bestLineup = deduplicateLineup(
+                 (cachedLineupForSeed && cachedLineupForSeed.length > 0)
+                   ? cachedLineupForSeed
+                   : ((updated[idx].lineup && updated[idx].lineup.length > 0)
+                       ? updated[idx].lineup
+                       : (initBand.lineup || []))
+               );
 
               // Upgrade with user edits taking absolute precedence over pre-seeded master
               updated[idx] = {

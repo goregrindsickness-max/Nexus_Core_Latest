@@ -586,17 +586,17 @@ export const ForumView: React.FC<ForumViewProps> = ({
   const isUserOwner = (authorName?: string) => {
     if (!authorName) return false;
     const currentUserName = userProfile?.name || '';
-    const myHandle = (userProfile?.console_handle || profileHandle || userProfile?.handle || '').replace('@', '').toLowerCase();
-    const cleanAuthor = authorName.replace('@', '').toLowerCase();
-    if (myHandle && (cleanAuthor === myHandle || cleanAuthor.includes(myHandle))) return true;
-    if (currentUserName && authorName.toLowerCase() === currentUserName.toLowerCase()) return true;
-    if (cleanAuthor === 'fan' || cleanAuthor === '@fan' || cleanAuthor === 'scene member') return true;
+    const myHandle = (userProfile?.console_handle || profileHandle || userProfile?.handle || '').replace('@', '').toLowerCase().trim();
+    const cleanAuthor = authorName.replace('@', '').toLowerCase().trim();
+    if (cleanAuthor === 'fan' || cleanAuthor === 'scene member' || cleanAuthor === 'user' || cleanAuthor === 'anonymous') return false;
+    if (myHandle && myHandle !== 'user' && myHandle !== 'fan' && cleanAuthor === myHandle) return true;
+    if (currentUserName && currentUserName.toLowerCase() !== 'user' && cleanAuthor === currentUserName.toLowerCase()) return true;
     return false;
   };
 
   // Format any author display into their console handle
   const formatForumAuthor = (authorName?: string) => {
-    if (!authorName) return getEffectiveUserHandle();
+    if (!authorName) return '@scene_member';
     if (isUserOwner(authorName)) {
       return getEffectiveUserHandle();
     }
