@@ -4356,22 +4356,22 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       { "id": "cc-5", "name": "Erik Rutan", "role": "Lead Guitar", "status": "active", "years": "2021–present" }
     ],
     "discography": [
-      { "id": "cc-rel-1", "title": "Eaten Back to Life", "year": "1990", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81A-qC464HL._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81A-qC464HL._SL1500_.jpg" },
-      { "id": "cc-rel-2", "title": "Butchered at Birth", "year": "1991", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81S8A1f1yvL._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81S8A1f1yvL._SL1500_.jpg" },
-      { "id": "cc-rel-3", "title": "Tomb of the Mutilated", "year": "1992", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/91eRkL3bNfL._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/91eRkL3bNfL._SL1500_.jpg" },
-      { "id": "cc-rel-4", "title": "The Bleeding", "year": "1994", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81M2e8P6zNL._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81M2e8P6zNL._SL1500_.jpg" },
-      { "id": "cc-rel-5", "title": "Vile", "year": "1996", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81F5b9vK0JL._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81F5b9vK0JL._SL1500_.jpg" },
-      { "id": "cc-rel-6", "title": "Gallery of Suicide", "year": "1998", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81bN8WzN6FL._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81bN8WzN6FL._SL1500_.jpg" },
-      { "id": "cc-rel-7", "title": "Bloodthirst", "year": "1999", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81xZ9yN20-L._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81xZ9yN20-L._SL1500_.jpg" },
-      { "id": "cc-rel-8", "title": "Gore Obsessed", "year": "2002", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81D2Xn9WzIL._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81D2Xn9WzIL._SL1500_.jpg" },
-      { "id": "cc-rel-9", "title": "The Wretched Spawn", "year": "2004", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81c8y5w2Z2L._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81c8y5w2Z2L._SL1500_.jpg" },
-      { "id": "cc-rel-10", "title": "Kill", "year": "2006", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81uN0pZ822L._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81uN0pZ822L._SL1500_.jpg" },
-      { "id": "cc-rel-11", "title": "Evisceration Plague", "year": "2009", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81W7x7V9-2L._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81W7x7V9-2L._SL1500_.jpg" },
-      { "id": "cc-rel-12", "title": "Torture", "year": "2012", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81w3n10-q6L._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81w3n10-q6L._SL1500_.jpg" },
-      { "id": "cc-rel-13", "title": "A Skeletal Domain", "year": "2014", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81HqQz5Fv+L._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81HqQz5Fv+L._SL1500_.jpg" },
-      { "id": "cc-rel-14", "title": "Red Before Black", "year": "2017", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81k3y2v3vYL._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81k3y2v3vYL._SL1500_.jpg" },
-      { "id": "cc-rel-15", "title": "Violence Unimagined", "year": "2021", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81dG22r7N3L._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81dG22r7N3L._SL1500_.jpg" },
-      { "id": "cc-rel-16", "title": "Chaos Horrific", "year": "2023", "type": "album", "label": "Metal Blade Records", "cover_url": "https://m.media-amazon.com/images/I/81k3y2v3vYL._SL1500_.jpg", "cover_image": "https://m.media-amazon.com/images/I/81k3y2v3vYL._SL1500_.jpg" }
+      { "id": "cc-rel-1", "title": "Eaten Back to Life", "year": "1990", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-2", "title": "Butchered at Birth", "year": "1991", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-3", "title": "Tomb of the Mutilated", "year": "1992", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-4", "title": "The Bleeding", "year": "1994", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-5", "title": "Vile", "year": "1996", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-6", "title": "Gallery of Suicide", "year": "1998", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-7", "title": "Bloodthirst", "year": "1999", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-8", "title": "Gore Obsessed", "year": "2002", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-9", "title": "The Wretched Spawn", "year": "2004", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-10", "title": "Kill", "year": "2006", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-11", "title": "Evisceration Plague", "year": "2009", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-12", "title": "Torture", "year": "2012", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-13", "title": "A Skeletal Domain", "year": "2014", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-14", "title": "Red Before Black", "year": "2017", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-15", "title": "Violence Unimagined", "year": "2021", "type": "album", "label": "Metal Blade Records" },
+      { "id": "cc-rel-16", "title": "Chaos Horrific", "year": "2023", "type": "album", "label": "Metal Blade Records" }
     ]
   },
   {

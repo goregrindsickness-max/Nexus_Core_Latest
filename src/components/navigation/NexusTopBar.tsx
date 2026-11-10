@@ -18,6 +18,7 @@ import {
 import MarqueeText from '../MarqueeText';
 import { syncGlobalUnreadBadge } from '../../utils/appBadgeService';
 import { CommunityBandManager } from '../../lib/communityBands';
+import { handleImageErrorWithCache } from '../../services/profileImageCacheService';
 
 export interface NexusTopBarProps {
   activeTab: string;
@@ -136,7 +137,20 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
               alt="Nexus Core" 
               className="object-contain w-32 sm:w-36 h-auto"
               referrerPolicy="no-referrer"
+              onError={(e) => {
+                handleImageErrorWithCache(e, "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Nexus%20Core%20Long%20Logo%20copy.png").catch(() => {});
+                e.currentTarget.onerror = null;
+                e.currentTarget.style.display = 'none';
+                if (e.currentTarget.nextElementSibling) {
+                  (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
+                }
+              }}
             />
+            <div className="hidden items-center gap-1.5 px-1 py-0.5">
+              <span className="font-black tracking-wider text-base sm:text-lg bg-gradient-to-r from-purple-400 via-rose-500 to-amber-400 bg-clip-text text-transparent font-display">
+                NEXUS CORE
+              </span>
+            </div>
           </button>
         </div>
 
@@ -420,7 +434,16 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div className="w-7 h-7 rounded-full overflow-hidden border border-[#00ffcc]/30 bg-zinc-950 shrink-0">
                               {activeBand?.logo_url ? (
-                                <img src={activeBand.logo_url} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                                <img
+                                  src={activeBand.logo_url}
+                                  className="w-full h-full object-cover"
+                                  alt=""
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    e.currentTarget.onerror = null;
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-[#00ffcc] font-mono text-xs font-bold">
                                   {activeBand?.name?.charAt(0).toUpperCase() || 'B'}

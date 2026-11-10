@@ -5,6 +5,7 @@ import { getValidUserId, sendDirectMessage, openFloatingChat } from '../../store
 import { markChatAsRead } from '../../lib/chat';
 import { useChats } from '../../hooks/useChats';
 import { presenceManager } from '../../lib/presence';
+import { pushManager } from '../../lib/pushNotifications';
 
 export type MessageType = {
   id: string;
@@ -481,6 +482,22 @@ export function useNexusMessaging({ userProfile, setAllProfiles, setAllFollows }
                 created_at: new Date().toISOString()
               }]);
           }
+
+          // Trigger real-time device push notification to the recipient
+          const senderDisplayName = userProfile?.name || userProfile?.full_name || userProfile?.console_handle || 'Nexus Contact';
+          pushManager.sendPushToServer({
+            userId: receiverUUID || recipientEmail,
+            userEmail: recipientEmail,
+            title: `💬 Direct Message from ${senderDisplayName}`,
+            body: (newMessage.text || 'Sent an attachment').substring(0, 120),
+            category: 'direct_messages',
+            targetTab: 'messages',
+            priority: 'P1',
+            data: {
+              senderId: senderId,
+              senderName: senderDisplayName
+            }
+          }).catch(pErr => console.warn('[Messaging] Push send notice:', pErr));
         }
       } catch (err) {
         console.warn("Failed to sync message to recipient relationally:", err);

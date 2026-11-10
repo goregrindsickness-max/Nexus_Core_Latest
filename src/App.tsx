@@ -1,4 +1,5 @@
 import { syncPromoterProfileToSupabase } from './services/promoterService';
+import { cacheProfileMetadata, cacheProfileImage, hydrateProfileWithCache } from './services/profileImageCacheService';
 import { usePromoterOffers } from './hooks/usePromoterOffers';
 import { useTourNotes } from './hooks/useTourNotes';
 import { useGlobalDataSync } from './hooks/useGlobalDataSync';
@@ -35,6 +36,7 @@ import InteractiveRoutePreview from './components/portals/Band/InteractiveRouteP
 import { inventoryStore, posSalesStore, itinerariesStore, socialFeedStore, reviewsStore, showsStore, registrationStagingStore, venuesStore, offersStore, routingBeaconsStore, creativeNodesStore, expensesStore, profileStore } from './utils/indexedDB';
 import { safeSetLocalStorageItem } from './utils/safeStorage';
 import { registerNotificationsOnStartup } from './services/pushNotificationService';
+import { pushManager } from './lib/pushNotifications';
 import { initializeSonicActivityListeners } from './services/sonicFootprintService';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -428,6 +430,7 @@ export default function App() {
   useEffect(() => {
     registerNotificationsOnStartup();
     initializeSonicActivityListeners();
+    pushManager.requestPermission().catch(() => {});
   }, []);
 
   // Suppress "Invalid Refresh Token" from Supabase, Vite HMR WebSocket errors, and benign SW/storage race conditions
@@ -1335,12 +1338,20 @@ export default function App() {
 
   const [showNotification, setShowNotification] = useState<string | null>(null);
 
-  // Trigger temporary floating notification
+  // Trigger temporary floating notification + OS/Browser push notification
   const triggerNotification = React.useCallback((msg: string) => {
     setShowNotification(msg);
     setTimeout(() => {
       setShowNotification(null);
     }, 2000);
+
+    pushManager.notify({
+      title: '⚡ Nexus Alert',
+      body: msg,
+      category: 'general',
+      targetTab: 'social',
+      priority: 'P1'
+    }).catch(() => {});
   }, []);
 
 
@@ -1455,6 +1466,15 @@ export default function App() {
         
         const bp = localStorage.getItem('nexus_core_blocked_promoters');
         if (bp) setBlockedPromoters(JSON.parse(bp));
+
+        const prof = await profileStore.getItem('nexus_core_user_profile');
+        if (prof) {
+          const parsed = typeof prof === 'string' ? JSON.parse(prof) : prof;
+          if (parsed?.id) {
+            const hydrated = await hydrateProfileWithCache(parsed.id, parsed);
+            setUserProfile(hydrated);
+          }
+        }
 
         setIsHydrated(true);
 
@@ -1696,13 +1716,21 @@ export default function App() {
             try {
               profileStore.setItem('nexus_core_user_profile', merged);
               safeSetLocalStorageItem('nexus_core_user_profile', merged);
+              if (merged.id) {
+                cacheProfileMetadata(merged.id, merged).catch(() => {});
+              }
+              if (merged.console_handle || merged.username) {
+                cacheProfileMetadata(merged.console_handle || merged.username, merged).catch(() => {});
+              }
               if (merged.avatar_url) {
                 localStorage.setItem('nexus_user_avatar', merged.avatar_url);
                 localStorage.setItem('nexus_avatar', merged.avatar_url);
+                cacheProfileImage(merged.avatar_url, merged.avatar_url).catch(() => {});
               }
               if (merged.banner_url) {
                 localStorage.setItem('nexus_user_banner', merged.banner_url);
                 localStorage.setItem('nexus_banner', merged.banner_url);
+                cacheProfileImage(merged.banner_url, merged.banner_url).catch(() => {});
               }
               if (merged.bio) {
                 localStorage.setItem('nexus_user_bio', merged.bio);

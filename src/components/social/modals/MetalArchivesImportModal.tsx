@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { scrapeMetalArchivesBand, MetalArchivesScrapeResult, parseMetalArchivesRawText } from '../../../services/metalArchivesScraper';
 import { upsertReleasesBatchToDatabase, CatalogRelease } from '../../../services/releasesService';
-import { communityBandManager, DiscographyRelease, resolveAuthenticReleaseYear } from '../../../lib/communityBands';
+import { communityBandManager, DiscographyRelease, resolveAuthenticReleaseYear, findMasterReleaseCover, deduplicateDiscography } from '../../../lib/communityBands';
 import { ensureUUID } from '../../../services/schemaResilienceService';
 
 interface MetalArchivesImportModalProps {
@@ -222,7 +222,7 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
             const mergedDiscography = [...existingDiscography];
 
             const newReleases: DiscographyRelease[] = releasesToImport.map((r, idx) => {
-              const cUrl = r.coverUrl || r.coverImage || r.cover_url || r.cover_image || r.image_url || r.imageUrl || r.artwork || r.image || '';
+              const cUrl = r.coverUrl || r.coverImage || r.cover_url || r.cover_image || r.image_url || r.imageUrl || r.artwork || r.image || findMasterReleaseCover(r.title, bandName || bandId) || '';
               return {
                 id: r.id || ensureUUID(`rel-${bandId}-${idx}-${Date.now()}`),
                 title: r.title || 'Untitled Release',
@@ -234,6 +234,7 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
                 coverImage: cUrl,
                 image_url: cUrl,
                 image: cUrl,
+                artwork: cUrl,
                 release_info: r.label || '',
                 catalog_id: r.catalogId || '',
                 label: r.label || '',
@@ -256,16 +257,18 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
                 mergedDiscography[existingIdx] = {
                   ...mergedDiscography[existingIdx],
                   ...nr,
-                  tracks: (nr.tracks && nr.tracks.length > 0) ? nr.tracks : mergedDiscography[existingIdx].tracks
+                  tracks: (nr.tracks && nr.tracks.length > 0 && nr.tracks.length >= (mergedDiscography[existingIdx].tracks?.length || 0)) ? nr.tracks : mergedDiscography[existingIdx].tracks
                 };
               } else {
                 mergedDiscography.push(nr);
               }
             }
 
+            const deduplicatedFinal = deduplicateDiscography(mergedDiscography, bandName || bandId);
+
             communityBandManager.upsertCommunityBand({
               ...matchedBand,
-              discography: mergedDiscography
+              discography: deduplicatedFinal
             });
           }
         } catch (commErr) {

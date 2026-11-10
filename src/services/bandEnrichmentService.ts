@@ -51,7 +51,19 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
     micro_genres: ['Extreme Metal', 'Technical BDM', 'Brutal Death Metal'],
     bio: 'Formed in 1993 on the Central Coast of California by guitarist/vocalist Erik Lindmark, Deeds of Flesh is a foundational pillar of modern technical and brutal death metal. The band pioneered the iconic California sound—marked by relentless blast beats, intricate shifting time signatures, and deep guttural vocals.',
     spotify_url: 'https://open.spotify.com/artist/5CgVbL1lV6u5v3t8Z3k8qG',
-    metal_archives_url: 'https://www.metal-archives.com/bands/Deeds_of_Flesh/293'
+    metal_archives_url: 'https://www.metal-archives.com/bands/Deeds_of_Flesh/293',
+    discography: [
+      { id: 'dof-rel-1', title: 'Gradually Melted', year: '1995', type: 'ep', label: 'Wild Rags', cover_url: '', cover_image: '' },
+      { id: 'dof-rel-2', title: 'Trading Pieces', year: '1996', type: 'album', label: 'Spanish Goblin', cover_url: '', cover_image: '' },
+      { id: 'dof-rel-3', title: 'Inbreeding the Anthropophagi', year: '1998', type: 'album', label: 'Decomposed Records', cover_url: '', cover_image: '' },
+      { id: 'dof-rel-4', title: 'Path of the Totem', year: '1999', type: 'album', label: 'Unique Leader Records', cover_url: '', cover_image: '' },
+      { id: 'dof-rel-5', title: 'Mark of the Legion', year: '2001', type: 'album', label: 'Unique Leader Records', cover_url: '', cover_image: '' },
+      { id: 'dof-rel-6', title: 'Reduced to Begging', year: '2003', type: 'album', label: 'Unique Leader Records', cover_url: '', cover_image: '' },
+      { id: 'dof-rel-7', title: 'Crown of Souls', year: '2005', type: 'album', label: 'Unique Leader Records', cover_url: '', cover_image: '' },
+      { id: 'dof-rel-8', title: "Of What's to Come", year: '2008', type: 'album', label: 'Unique Leader Records', cover_url: '', cover_image: '' },
+      { id: 'dof-rel-9', title: 'Portals to Canaan', year: '2013', type: 'album', label: 'Unique Leader Records', cover_url: '', cover_image: '' },
+      { id: 'dof-rel-10', title: 'Nucleus', year: '2020', type: 'album', label: 'Unique Leader Records', cover_url: '', cover_image: '' }
+    ]
   },
   'aeon': {
     founded_year: '1999',
@@ -213,6 +225,24 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
       { id: 'cc-3', name: 'Paul Mazurkiewicz', role: 'Drums', status: 'active', years: '1988–present' },
       { id: 'cc-4', name: 'Rob Barrett', role: 'Rhythm Guitar', status: 'active', years: '1993–1997, 2005–present' },
       { id: 'cc-5', name: 'Erik Rutan', role: 'Lead Guitar', status: 'active', years: '2021–present' }
+    ],
+    discography: [
+      { id: 'cc-rel-1', title: 'Eaten Back to Life', year: '1990', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-2', title: 'Butchered at Birth', year: '1991', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-3', title: 'Tomb of the Mutilated', year: '1992', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-4', title: 'The Bleeding', year: '1994', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-5', title: 'Vile', year: '1996', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-6', title: 'Gallery of Suicide', year: '1998', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-7', title: 'Bloodthirst', year: '1999', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-8', title: 'Gore Obsessed', year: '2002', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-9', title: 'The Wretched Spawn', year: '2004', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-10', title: 'Kill', year: '2006', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-11', title: 'Evisceration Plague', year: '2009', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-12', title: 'Torture', year: '2012', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-13', title: 'A Skeletal Domain', year: '2014', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-14', title: 'Red Before Black', year: '2017', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-15', title: 'Violence Unimagined', year: '2021', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' },
+      { id: 'cc-rel-16', title: 'Chaos Horrific', year: '2023', type: 'album', label: 'Metal Blade Records', cover_url: '', cover_image: '' }
     ]
   },
   'carcass': {

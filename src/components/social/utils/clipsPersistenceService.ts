@@ -464,3 +464,26 @@ export async function resolveValidClipUserId(supabaseClient: any, userProfile: a
   }
   return uniqueUserUuid;
 }
+
+/**
+ * Feature flag & bucket empty/disabled guard for clips manifest lookups.
+ * Prevents querying clips/clips_manifest.json if the bucket or feature is disabled or empty.
+ */
+export const IS_CLIPS_MANIFEST_ENABLED = false;
+
+export async function fetchClipsManifest(): Promise<any[]> {
+  if (!IS_CLIPS_MANIFEST_ENABLED) {
+    // Bucket/feature is disabled or empty; return empty array immediately without egress/network requests
+    return [];
+  }
+  const client = getSupabase();
+  if (!client) return [];
+  try {
+    const { data, error } = await client.storage.from('clips').download('clips_manifest.json');
+    if (error || !data) return [];
+    const text = await data.text();
+    return JSON.parse(text);
+  } catch (_) {
+    return [];
+  }
+}

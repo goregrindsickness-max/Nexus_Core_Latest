@@ -9,7 +9,7 @@ import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, upsertBandToDatabase, generateUUID } from '../../../supabase';
 import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER, resolvePromoterLogo, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER, isBandSplitUp, resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
-import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache, resolveAuthenticReleaseYear, deduplicateDiscography } from '../../../lib/communityBands';
+import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache, resolveAuthenticReleaseYear, deduplicateDiscography, extractReleaseCover, findMasterReleaseCover } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
 import CommunityBandCuratorModal from '../../social/modals/CommunityBandCuratorModal';
@@ -343,17 +343,9 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
               (cd: any) => cd.id === row.id || (cd.title && row.title && cd.title.toLowerCase().trim() === row.title.toLowerCase().trim())
             );
             const resolvedCover =
-              row.cover_url ||
-              row.cover_image ||
-              row.coverUrl ||
-              row.coverImage ||
-              row.image_url ||
-              commRel?.cover_url ||
-              commRel?.cover_image ||
-              commRel?.coverUrl ||
-              commRel?.coverImage ||
-              commRel?.image_url ||
-              '';
+              extractReleaseCover(row, bandName) ||
+              extractReleaseCover(commRel, bandName) ||
+              findMasterReleaseCover(row.title || commRel?.title || '', bandName);
 
             return {
               id: row.id,
@@ -2264,7 +2256,14 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                         referrerPolicy="no-referrer"
                                         onError={(e) => {
-                                          (e.target as HTMLElement).style.display = 'none';
+                                          const target = e.currentTarget;
+                                          const master = findMasterReleaseCover(release.title, fetchedBandData?.name || targetProfile?.name);
+                                          if (master && target.src !== master) {
+                                            target.src = master;
+                                            target.style.display = 'block';
+                                          } else {
+                                            target.style.display = 'none';
+                                          }
                                         }}
                                       />
                                     ) : (
@@ -2327,7 +2326,16 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                     isActive ? 'border-emerald-500/40 text-emerald-400 group-hover:border-emerald-400' : 'border-zinc-800 text-zinc-600'
                                   }`}>
                                     {avatarUrl && (avatarUrl.startsWith('http') || avatarUrl.startsWith('data:') || avatarUrl.startsWith('/')) ? (
-                                      <img src={avatarUrl} alt={mem.name} className="w-full h-full object-cover rounded-md sm:rounded-lg" referrerPolicy="no-referrer" />
+                                      <img
+                                        src={avatarUrl}
+                                        alt={mem.name}
+                                        className="w-full h-full object-cover rounded-md sm:rounded-lg"
+                                        referrerPolicy="no-referrer"
+                                        onError={(e) => {
+                                          e.currentTarget.onerror = null;
+                                          e.currentTarget.style.display = 'none';
+                                        }}
+                                      />
                                     ) : (
                                       initials
                                     )}
@@ -4572,7 +4580,16 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                         isActive ? 'border-emerald-500/40 text-emerald-400 group-hover:border-emerald-400' : 'border-zinc-800 text-zinc-600'
                                       }`}>
                                         {avatarUrl && (avatarUrl.startsWith('http') || avatarUrl.startsWith('data:') || avatarUrl.startsWith('/')) ? (
-                                          <img src={avatarUrl} alt={mem.name} className="w-full h-full object-cover rounded-md sm:rounded-lg" referrerPolicy="no-referrer" />
+                                          <img
+                                            src={avatarUrl}
+                                            alt={mem.name}
+                                            className="w-full h-full object-cover rounded-md sm:rounded-lg"
+                                            referrerPolicy="no-referrer"
+                                            onError={(e) => {
+                                              e.currentTarget.onerror = null;
+                                              e.currentTarget.style.display = 'none';
+                                            }}
+                                          />
                                         ) : (
                                           initials
                                         )}
@@ -4724,7 +4741,14 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                               className="w-full h-full object-cover transition-all duration-500 group-hover:scale-105" 
                                               referrerPolicy="no-referrer"
                                               onError={(e) => {
-                                                (e.target as HTMLElement).style.display = 'none';
+                                                const target = e.currentTarget;
+                                                const master = findMasterReleaseCover(release.title || fullRel.title, fetchedBandData?.name || targetProfile?.name);
+                                                if (master && target.src !== master) {
+                                                  target.src = master;
+                                                  target.style.display = 'block';
+                                                } else {
+                                                  target.style.display = 'none';
+                                                }
                                               }}
                                             />
                                           ) : (

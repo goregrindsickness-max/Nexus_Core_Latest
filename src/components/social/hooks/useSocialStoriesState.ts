@@ -36,13 +36,13 @@ export function useSocialStoriesState() {
   }, [stories]);
 
   // Comprehensive cloud sync and loading
-  const refreshStories = useCallback(async () => {
+  const refreshStories = useCallback(async (force = false) => {
     try {
       // 1. First sync any phone-saved local stories up to the cloud
       await syncLocalStoriesToCloud();
 
-      // 2. Fetch all authoritative cloud stories
-      const cloudStories = await fetchAuthoritativeStories();
+      // 2. Fetch all authoritative cloud stories (cached for 10 min unless force=true)
+      const cloudStories = await fetchAuthoritativeStories(force);
 
       if (cloudStories && cloudStories.length > 0) {
         setStories((prev) => {
@@ -88,7 +88,7 @@ export function useSocialStoriesState() {
             { event: '*', schema: 'public', table: 'nexus_stories' },
             () => {
               console.log('[useSocialStoriesState] Realtime story change detected. Refreshing...');
-              refreshStories();
+              refreshStories(true);
             }
           )
           .subscribe();
@@ -97,14 +97,8 @@ export function useSocialStoriesState() {
       }
     }
 
-    // Periodic cloud poll every 20 seconds to guarantee cross-device sync
-    const pollInterval = setInterval(() => {
-      refreshStories();
-    }, 20000);
-
     return () => {
       window.removeEventListener('nexus_story_published', handleStoryPublished);
-      clearInterval(pollInterval);
       if (channel && supabaseClient) {
         supabaseClient.removeChannel(channel);
       }

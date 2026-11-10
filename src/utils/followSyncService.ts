@@ -1,5 +1,7 @@
 // Universal Global Follow State Synchronization Service for Nexus Core Network
 
+import { pushManager } from '../lib/pushNotifications';
+
 export const FOLLOW_CACHE_KEY = 'nexus_local_follows_v1';
 export const FOLLOW_EVENT_NAME = 'nexus_follow_updated';
 
@@ -269,6 +271,22 @@ export function saveFollowStateGlobally(target: any, isFollowed: boolean, follow
         timestamp: Date.now()
       }
     }));
+
+    // Trigger push notification to target profile when followed
+    if (isFollowed) {
+      const targetId = typeof target === 'object' ? (target.id || target.user_id || target.author_id) : target;
+      const targetName = typeof target === 'object' ? (target.name || target.band_name || target.title) : 'Artist';
+      if (targetId) {
+        pushManager.sendPushToServer({
+          userId: String(targetId),
+          title: '🤘 New Fan Alliance!',
+          body: `A scene member started following ${targetName || 'your profile'} on Nexus Core!`,
+          category: 'new_follower',
+          targetTab: 'social',
+          priority: 'P1'
+        }).catch(() => {});
+      }
+    }
   } catch (err) {
     console.warn('[followSyncService] Save follow state error:', err);
   }

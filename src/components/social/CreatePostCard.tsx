@@ -43,6 +43,7 @@ import { BandcampSearchHelper } from './embeds/BandcampSearchHelper';
 import { VenueAutocompleteInput } from './VenueAutocompleteInput';
 import { BandTagAutocomplete } from './BandTagAutocomplete';
 import { BUILT_IN_BLACK_BOOK_VENUES } from '../../services/venueSearchService';
+import { handleImageErrorWithCache } from '../../services/profileImageCacheService';
 import { getAllRealBandProfiles } from '../../services/bandProfileSearchService';
 import { 
   DEFAULT_PERSONAL_AVATAR, 
@@ -1255,16 +1256,28 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
         {/* Left Side: Avatar + Posting as Dropdown */}
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <div 
-            className="w-9 h-9 rounded-full border p-0.5 bg-black/60 shrink-0 overflow-hidden transition-all"
+            className="w-9 h-9 rounded-full border p-0.5 bg-black/60 shrink-0 overflow-hidden transition-all relative flex items-center justify-center"
             style={{ borderColor: `${theme.glowHex}80`, boxShadow: `0 0 10px ${theme.glowHex}40` }}
           >
-            {avatarUrl ? (
-              <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover rounded-full" referrerPolicy="no-referrer" />
-            ) : (
-              <div className="w-full h-full rounded-full bg-zinc-900 flex items-center justify-center font-black text-xs" style={{ color: theme.glowHex }}>
-                {(displayName || 'U').charAt(0).toUpperCase()}
-              </div>
+            {avatarUrl && (
+              <img 
+                src={avatarUrl} 
+                alt={displayName} 
+                className="w-full h-full object-cover rounded-full" 
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  handleImageErrorWithCache(e, avatarUrl, undefined).catch(() => {});
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextElementSibling) {
+                    (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
+                  }
+                }}
+              />
             )}
+            <div className={`w-full h-full rounded-full bg-zinc-900 flex items-center justify-center font-black text-xs ${avatarUrl ? 'hidden' : ''}`} style={{ color: theme.glowHex }}>
+              {(displayName || 'U').charAt(0).toUpperCase()}
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 min-w-0 flex-1">

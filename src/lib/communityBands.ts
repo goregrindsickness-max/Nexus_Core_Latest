@@ -42,6 +42,9 @@ export interface DiscographyRelease {
   coverUrl?: string;
   coverImage?: string;
   image?: string;
+  cover?: string;
+  artwork?: string;
+  imageUrl?: string;
   release_info?: string;
   catalog_id?: string;
   label?: string;
@@ -370,6 +373,110 @@ export function resolveAuthenticReleaseYear(r: any): string {
   return '';
 }
 
+export function isValidCoverUrl(url?: string | null): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const u = url.trim();
+  if (!u) return false;
+  if (u.includes('m.media-amazon.com') || u.includes('amazon.com/images')) return false;
+  if (u.includes('placeholder') || u.includes('unsplash.com')) return false;
+  return u.startsWith('http://') || u.startsWith('https://') || u.startsWith('data:image/');
+}
+
+export function generateMetalAlbumSvg(title: string, year?: string, bandName?: string): string {
+  const cleanTitle = (title || 'Catalog Release').trim();
+  const cleanYear = (year || '').trim();
+  const cleanBand = (bandName || 'Artist').trim();
+
+  let hash = 0;
+  for (let i = 0; i < cleanTitle.length; i++) {
+    hash = (hash << 5) - hash + cleanTitle.charCodeAt(i);
+    hash |= 0;
+  }
+  const hues = ['#990000', '#7a001e', '#4a0e4e', '#1a365d', '#744210', '#1a202c'];
+  const primaryColor = hues[Math.abs(hash) % hues.length];
+
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='600' viewBox='0 0 600 600'>
+    <defs>
+      <linearGradient id='bg' x1='0%' y1='0%' x2='100%' y2='100%'>
+        <stop offset='0%' stop-color='${primaryColor}'/>
+        <stop offset='60%' stop-color='#09090b'/>
+        <stop offset='100%' stop-color='#000000'/>
+      </linearGradient>
+      <radialGradient id='glow' cx='50%' cy='40%' r='60%'>
+        <stop offset='0%' stop-color='${primaryColor}' stop-opacity='0.6'/>
+        <stop offset='100%' stop-color='#000000' stop-opacity='0'/>
+      </radialGradient>
+    </defs>
+    <rect width='600' height='600' fill='url(#bg)'/>
+    <rect width='600' height='600' fill='url(#glow)'/>
+    <circle cx='300' cy='250' r='180' fill='none' stroke='${primaryColor}' stroke-width='2' opacity='0.4'/>
+    <circle cx='300' cy='250' r='140' fill='none' stroke='#ffffff' stroke-width='1.5' opacity='0.2'/>
+    <path d='M300 80 L340 210 L470 250 L340 290 L300 420 L260 290 L130 250 L260 210 Z' fill='none' stroke='${primaryColor}' stroke-width='2' opacity='0.7'/>
+    <text x='300' y='470' text-anchor='middle' fill='#ffffff' font-family='sans-serif' font-weight='900' font-size='32' letter-spacing='2'>${cleanTitle.toUpperCase()}</text>
+    <text x='300' y='515' text-anchor='middle' fill='#d4d4d8' font-family='monospace' font-weight='700' font-size='18' letter-spacing='4'>${cleanBand.toUpperCase()}${cleanYear ? ' • ' + cleanYear : ''}</text>
+  </svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+export function findMasterReleaseCover(title: string, bandIdOrName?: string): string {
+  if (!title || typeof title !== 'string') return '';
+  const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!cleanTitle) return '';
+
+  let resolvedName = '';
+  if (bandIdOrName) {
+    const raw = bandIdOrName.trim();
+    const matchedBand = INITIAL_COMMUNITY_BANDS.find(s => s.id === raw || (s as any).uuid === raw || (s.name || '').toLowerCase() === raw.toLowerCase() || (s.custom_slug || '') === raw.toLowerCase());
+    if (matchedBand) {
+      resolvedName = matchedBand.name || (matchedBand as any).band_name || '';
+    } else {
+      resolvedName = raw;
+    }
+  }
+
+  const cleanBand = resolvedName ? resolvedName.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  const isUUID = cleanBand.length > 20 || /^[0-9a-f-]{30,}/i.test(cleanBand);
+
+  for (const seed of INITIAL_COMMUNITY_BANDS) {
+    if (!seed || !Array.isArray(seed.discography)) continue;
+    const seedBandClean = (seed.name || seed.band_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const seedSlugClean = (seed.custom_slug || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    if (cleanBand && !isUUID && seedBandClean && !seedBandClean.includes(cleanBand) && !cleanBand.includes(seedBandClean) && !seedSlugClean.includes(cleanBand)) {
+      continue;
+    }
+
+    for (const rel of seed.discography) {
+      if (!rel || !rel.title) continue;
+      const relTitleClean = rel.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (relTitleClean === cleanTitle || (relTitleClean.length > 3 && cleanTitle.length > 3 && (relTitleClean.includes(cleanTitle) || cleanTitle.includes(relTitleClean)))) {
+        const cover = rel.cover_url || rel.cover_image || (rel as any).coverUrl || (rel as any).coverImage || (rel as any).image_url;
+        if (cover && isValidCoverUrl(cover)) return cover;
+      }
+    }
+  }
+
+  return '';
+}
+
+export function extractReleaseCover(r: any, bandIdOrName?: string): string {
+  if (!r || typeof r !== 'object') return '';
+  const candidateKeys = [
+    'cover_url', 'cover_image', 'coverUrl', 'coverImage',
+    'image_url', 'image', 'cover', 'artwork', 'imageUrl'
+  ];
+  for (const k of candidateKeys) {
+    if (isValidCoverUrl(r[k])) {
+      return String(r[k]).trim();
+    }
+  }
+  if (r.title) {
+    const fallback = findMasterReleaseCover(r.title, bandIdOrName);
+    if (fallback) return fallback;
+  }
+  return '';
+}
+
 export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrName?: string): DiscographyRelease[] {
   if (!Array.isArray(releases)) return [];
   
@@ -377,8 +484,8 @@ export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrN
     const tracksA = Array.isArray(a.tracks) ? a.tracks.length : 0;
     const tracksB = Array.isArray(b.tracks) ? b.tracks.length : 0;
     if (tracksB !== tracksA) return tracksB - tracksA;
-    const coverA = (a.cover_url || a.cover_image || a.coverUrl || '') ? 1 : 0;
-    const coverB = (b.cover_url || b.cover_image || b.coverUrl || '') ? 1 : 0;
+    const coverA = extractReleaseCover(a, bandIdOrName) ? 1 : 0;
+    const coverB = extractReleaseCover(b, bandIdOrName) ? 1 : 0;
     return coverB - coverA;
   });
 
@@ -396,42 +503,47 @@ export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrN
     if (!r || !r.title || String(r.title).trim() === '') continue;
     if (isDeletedRelease(r.id, r.title, bandIdOrName)) continue;
     
-    // Skip 0-track placeholder if we already have a version with tracks for this album
     const finalYear = resolveAuthenticReleaseYear(r);
     const normKey = getNormKey(r.title, finalYear || r.year);
     if (!normKey) continue;
 
     const rTracksCount = Array.isArray(r.tracks) ? r.tracks.length : 0;
-    const rCover = r.cover_url || r.cover_image || r.coverUrl || r.coverImage || r.image_url || '';
+    const rCover = extractReleaseCover(r, bandIdOrName);
 
     if (!seen.has(normKey)) {
+      const bestCover = rCover || findMasterReleaseCover(r.title, bandIdOrName) || '';
       seen.set(normKey, {
         ...r,
         year: finalYear || r.year,
         release_date: finalYear || (r as any).release_date || (r as any).releaseDate,
         releaseDate: finalYear || (r as any).releaseDate || (r as any).release_date,
         release_year: finalYear || (r as any).release_year || r.year,
-        cover_url: rCover || r.cover_url,
-        cover_image: rCover || r.cover_image,
-        coverUrl: rCover || r.coverUrl,
-        coverImage: rCover || r.coverImage,
-        image_url: rCover || r.image_url
+        cover_url: bestCover,
+        cover_image: bestCover,
+        coverUrl: bestCover,
+        coverImage: bestCover,
+        image_url: bestCover,
+        image: bestCover,
+        cover: bestCover,
+        artwork: bestCover,
+        imageUrl: bestCover
       });
     } else {
       const existing = seen.get(normKey)!;
       const existingTracksCount = Array.isArray(existing.tracks) ? existing.tracks.length : 0;
-      const existingCover = existing.cover_url || existing.cover_image || existing.coverUrl || existing.coverImage || existing.image_url || '';
-      const finalCover = (rCover && !rCover.includes('unsplash') && !rCover.includes('placeholder'))
-        ? rCover
-        : (existingCover || rCover);
+      const existingCover = extractReleaseCover(existing, bandIdOrName);
+      const finalCover = rCover || existingCover || findMasterReleaseCover(r.title, bandIdOrName) || findMasterReleaseCover(existing.title, bandIdOrName) || (existing.cover_url && isValidCoverUrl(existing.cover_url) ? existing.cover_url : '');
       const isExistingGenericTitle = ['split', 'split-ep', 'split ep'].includes(existing.title.toLowerCase().trim());
       const isNewDescriptiveTitle = !['split', 'split-ep', 'split ep'].includes(r.title.toLowerCase().trim());
 
       const bestYear = finalYear || resolveAuthenticReleaseYear(existing) || existing.year || r.year;
+      const mergedTracks = (rTracksCount > 0 && rTracksCount >= existingTracksCount) ? r.tracks : (existingTracksCount > 0 ? existing.tracks : (r.tracks || []));
+      const bestId = (existingTracksCount > 0 && rTracksCount === 0) ? existing.id : (r.id || existing.id);
 
       seen.set(normKey, {
         ...existing,
         ...r,
+        id: bestId,
         year: bestYear,
         release_date: bestYear,
         releaseDate: bestYear,
@@ -442,7 +554,11 @@ export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrN
         coverUrl: finalCover,
         coverImage: finalCover,
         image_url: finalCover,
-        tracks: rTracksCount >= existingTracksCount ? r.tracks : existing.tracks
+        image: finalCover,
+        cover: finalCover,
+        artwork: finalCover,
+        imageUrl: finalCover,
+        tracks: mergedTracks
       });
     }
   }
@@ -1944,7 +2060,7 @@ export class CommunityBandManager {
             }
             seenReleaseIds.add(releaseId);
 
-            let albumCoverUrl = album.cover_url || album.cover_image || album.coverUrl || album.coverImage || album.image_url || null;
+            let albumCoverUrl = extractReleaseCover(album, resolvedBandName) || findMasterReleaseCover(album.title, resolvedBandName) || album.cover_url || album.cover_image || album.coverUrl || album.coverImage || album.image_url || null;
             if (albumCoverUrl && albumCoverUrl.startsWith('data:image')) {
               try {
                 const uploaded = await uploadBase64ToStorage(albumCoverUrl, 'community-bands', `${bandUUID}-${idx}`, 'cover');
@@ -1985,22 +2101,32 @@ export class CommunityBandManager {
         // Only prune remote releases if releasePayloads was non-empty and explicit
         if (releasePayloads.length > 0) {
           try {
-            const { data: existingRemoteReleases } = await client
+            const { data: allRemoteReleases } = await client
               .from('releases')
-              .select('id, title')
-              .or(`band_id.eq.${bandUUID},band_id.eq.${band.id}`);
+              .select('id, title, band_id, band_name, artist');
             
-            if (existingRemoteReleases && Array.isArray(existingRemoteReleases)) {
+            if (allRemoteReleases && Array.isArray(allRemoteReleases)) {
               const activeIds = new Set(releasePayloads.map(r => r.id));
               const activeTitles = new Set(releasePayloads.map(r => (r.title || '').toLowerCase().trim()));
-              const toDelete = existingRemoteReleases.filter(r => {
+              const normBandName = resolvedBandName.toLowerCase().trim();
+
+              const toDelete = allRemoteReleases.filter(r => {
+                if (!r) return false;
+                const rBandId = String(r.band_id || '').toLowerCase().trim();
+                const rBandName = String(r.band_name || r.artist || '').toLowerCase().trim();
+                const matchesBand = (
+                  rBandId === bandUUID.toLowerCase() ||
+                  rBandId === String(band.id || '').toLowerCase() ||
+                  (normBandName && rBandName === normBandName)
+                );
+                if (!matchesBand) return false;
                 const rTitle = (r.title || '').toLowerCase().trim();
                 return !activeIds.has(r.id) && !activeTitles.has(rTitle);
               });
               
               if (toDelete.length > 0) {
                 const delIds = toDelete.map(r => r.id);
-                dispatchSyncLog(`Pruning ${delIds.length} deleted release(s) from Supabase...`);
+                dispatchSyncLog(`Pruning ${delIds.length} obsolete release(s) from Supabase...`);
                 await client.from('releases').delete().in('id', delIds);
               }
             }
@@ -2258,20 +2384,26 @@ export class CommunityBandManager {
         // Intelligently merge discography: prioritize Supabase remoteDiscography, local edits, existing item, and seed master
         const cachedDiscography = loadBandDiscographyFromCache(bId, cleanBandName);
         const mergedDiscography: DiscographyRelease[] = (() => {
+          const primarySource = (cachedDiscography && cachedDiscography.length > 0)
+            ? cachedDiscography
+            : ((existingItem?.discography && existingItem.discography.length > 0)
+                ? existingItem.discography
+                : null);
+
+          if (primarySource) {
+            const activeTitles = new Set(primarySource.map(r => r.title.toLowerCase().trim()));
+            const validRemote = (remoteDiscography || []).filter(r => activeTitles.has(r.title.toLowerCase().trim()));
+            return deduplicateDiscography([...primarySource, ...validRemote], cleanBandName);
+          }
+
           let list: DiscographyRelease[] = [];
           if (remoteDiscography && remoteDiscography.length > 0) {
             list.push(...remoteDiscography);
           }
-          if (cachedDiscography && cachedDiscography.length > 0) {
-            list.push(...cachedDiscography);
-          }
-          if (existingItem?.discography && existingItem.discography.length > 0) {
-            list.push(...existingItem.discography);
-          }
           if (seedMatch?.discography && seedMatch.discography.length > 0) {
             list.push(...seedMatch.discography);
           }
-          return deduplicateDiscography(list);
+          return deduplicateDiscography(list, cleanBandName);
         })();
 
         if (mergedDiscography.length > 0) {

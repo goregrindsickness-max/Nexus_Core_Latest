@@ -40,6 +40,7 @@ import { isMiguelNameOrProfile } from "../utils/profileUtils";
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from "../../../utils/followSyncService";
 import { bugMonitor } from "../../../services/bugMonitorService";
 import { useModalStore } from "../../../store/useModalStore";
+import { handleImageErrorWithCache } from "../../../services/profileImageCacheService";
 import {
   X, Check, User, Shield, ShieldAlert, Key, Sparkles, MapPin, Calendar, Building,
   Camera, Globe, Instagram, Music2, Mail, Lock, Settings, LogOut, ChevronRight,
@@ -446,7 +447,16 @@ if (!leftDrawerOpen) return null;
                 {(() => {
                   const effectiveCover = resolveEffectiveCover(portalRole || 'industry_pro', activeBand, userProfile, profileCoverUrl);
                   return effectiveCover ? (
-                    <img src={effectiveCover} className="w-full h-full object-cover opacity-20 blur-[1px]" alt="" />
+                    <img 
+                      src={effectiveCover} 
+                      className="w-full h-full object-cover opacity-20 blur-[1px]" 
+                      alt="" 
+                      onError={(e) => {
+                        handleImageErrorWithCache(e, effectiveCover, undefined).catch(() => {});
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-b from-rose-950/15 via-transparent to-transparent" />
                   );
@@ -463,11 +473,26 @@ if (!leftDrawerOpen) return null;
                     : portalRole === 'promoter' 
                     ? resolvePromoterName(userProfile) 
                     : ((portalRole as any) === 'label' ? (userProfile?.label_company_name || 'Pro Label') : (profileFullLegalName || 'User'));
-                  return effectiveAvatar ? (
-                    <img src={effectiveAvatar} className="w-14 h-14 rounded-full object-cover border border-rose-500/40 shrink-0 shadow-lg" alt="Profile" />
-                  ) : (
-                    <div className="w-14 h-14 rounded-full bg-rose-950/40 border border-rose-500/50 flex items-center justify-center font-black text-rose-400 text-xl shrink-0">
-                      {effectiveName.replace(/^@+/, '').charAt(0).toUpperCase()}
+                  return (
+                    <div className="relative shrink-0">
+                      {effectiveAvatar && (
+                        <img 
+                          src={effectiveAvatar} 
+                          className="w-14 h-14 rounded-full object-cover border border-rose-500/40 shrink-0 shadow-lg" 
+                          alt="Profile" 
+                          onError={(e) => {
+                            handleImageErrorWithCache(e, effectiveAvatar, undefined).catch(() => {});
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.style.display = 'none';
+                            if (e.currentTarget.nextElementSibling) {
+                              (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
+                            }
+                          }}
+                        />
+                      )}
+                      <div className={`w-14 h-14 rounded-full bg-rose-950/40 border border-rose-500/50 flex items-center justify-center font-black text-rose-400 text-xl shrink-0 ${effectiveAvatar ? 'hidden' : ''}`}>
+                        {effectiveName.replace(/^@+/, '').charAt(0).toUpperCase()}
+                      </div>
                     </div>
                   );
                 })()}

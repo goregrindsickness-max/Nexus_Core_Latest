@@ -100,7 +100,15 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onActionClick
           >
             <div className="w-20 h-20 rounded-full bg-zinc-950 overflow-hidden flex items-center justify-center border border-zinc-950">
               {typeof avatar === 'string' && (avatar.startsWith('http') || avatar.startsWith('data:')) ? (
-                <img src={avatar} alt={name} className="w-full h-full object-cover" />
+                <img
+                  src={avatar}
+                  alt={name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
               ) : (
                 <div className="w-full h-full bg-zinc-900 flex items-center justify-center font-mono font-black text-xl" style={{ color: roleColorHex }}>
                   {avatar || (name ? name.slice(0, 2).toUpperCase() : 'U')}

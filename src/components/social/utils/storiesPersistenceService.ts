@@ -57,6 +57,12 @@ const MANIFEST_URL = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object
 const STORAGE_BUCKET = 'photo-pit';
 const MANIFEST_PATH = 'stories/stories_manifest.json';
 
+// In-memory cache to enforce a 10-minute staleTime and eliminate storage egress drain
+const STALE_TIME_MS = 10 * 60 * 1000; // 10 minutes
+let cachedStories: StoryItem[] | null = null;
+let lastStoriesFetch = 0;
+let inFlightStoriesPromise: Promise<StoryItem[]> | null = null;
+
 /**
  * Standardize and clean any raw story object from DB, Storage, or LocalStorage
  */
@@ -122,70 +128,86 @@ export function normalizeStory(raw: any, idx = 0): StoryItem {
 }
 
 /**
- * Fetch authoritative stories from Cloud:
+ * Fetch authoritative stories from Cloud with 10-minute caching & request deduplication:
  * 1. Express API (/api/stories)
  * 2. Supabase Storage manifest (photo-pit/stories/stories_manifest.json)
  * 3. Supabase nexus_stories table
  */
-export async function fetchAuthoritativeStories(): Promise<StoryItem[]> {
-  const storiesMap = new Map<string, StoryItem>();
-
-  // 1. Try Express backend endpoint
-  try {
-    const res = await fetch(`/api/stories?t=${Date.now()}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        data.forEach((s: any, idx: number) => {
-          const norm = normalizeStory(s, idx);
-          if (norm.id) storiesMap.set(norm.id, norm);
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('[StoriesService] Express /api/stories fetch error:', err);
+export async function fetchAuthoritativeStories(force = false): Promise<StoryItem[]> {
+  const now = Date.now();
+  if (!force && cachedStories && now - lastStoriesFetch < STALE_TIME_MS) {
+    return cachedStories;
+  }
+  if (inFlightStoriesPromise) {
+    return inFlightStoriesPromise;
   }
 
-  // 2. Try Supabase CDN storage manifest directly
-  try {
-    const res = await fetch(`${MANIFEST_URL}?t=${Date.now()}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        data.forEach((s: any, idx: number) => {
-          const norm = normalizeStory(s, idx);
-          if (norm.id && !storiesMap.has(norm.id)) {
-            storiesMap.set(norm.id, norm);
-          }
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('[StoriesService] Manifest CDN fetch error:', err);
-  }
+  inFlightStoriesPromise = (async () => {
+    const storiesMap = new Map<string, StoryItem>();
 
-  // 3. Try Supabase Postgres table (nexus_stories)
-  const client = getSupabase();
-  if (client) {
+    // 1. Try Express backend endpoint
     try {
-      const { data, error } = await client
-        .from('nexus_stories')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && Array.isArray(data)) {
-        data.forEach((s: any, idx: number) => {
-          const norm = normalizeStory(s, idx);
-          if (norm.id && !storiesMap.has(norm.id)) {
-            storiesMap.set(norm.id, norm);
-          }
-        });
+      const res = await fetch('/api/stories');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          data.forEach((s: any, idx: number) => {
+            const norm = normalizeStory(s, idx);
+            if (norm.id) storiesMap.set(norm.id, norm);
+          });
+        }
       }
     } catch (err) {
-      console.warn('[StoriesService] nexus_stories table fetch error:', err);
+      console.warn('[StoriesService] Express /api/stories fetch error:', err);
     }
-  }
 
-  return Array.from(storiesMap.values());
+    // 2. Try Supabase CDN storage manifest directly (cached by browser without ?t= timestamp cache-busting)
+    try {
+      const res = await fetch(MANIFEST_URL);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          data.forEach((s: any, idx: number) => {
+            const norm = normalizeStory(s, idx);
+            if (norm.id && !storiesMap.has(norm.id)) {
+              storiesMap.set(norm.id, norm);
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[StoriesService] Manifest CDN fetch error:', err);
+    }
+
+    // 3. Try Supabase Postgres table (nexus_stories)
+    const client = getSupabase();
+    if (client) {
+      try {
+        const { data, error } = await client
+          .from('nexus_stories')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error && Array.isArray(data)) {
+          data.forEach((s: any, idx: number) => {
+            const norm = normalizeStory(s, idx);
+            if (norm.id && !storiesMap.has(norm.id)) {
+              storiesMap.set(norm.id, norm);
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[StoriesService] nexus_stories table fetch error:', err);
+      }
+    }
+
+    const result = Array.from(storiesMap.values());
+    cachedStories = result;
+    lastStoriesFetch = Date.now();
+    inFlightStoriesPromise = null;
+    return result;
+  })();
+
+  return inFlightStoriesPromise;
 }
 
 /**

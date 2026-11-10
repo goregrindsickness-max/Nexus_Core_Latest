@@ -4807,24 +4807,56 @@ Required schema:
   const primaryReleasesFile = path.join(process.cwd(), 'data', 'releases_cache.json');
   const uploadsReleasesFile = path.join(uploadsDir, 'releases_cache.json');
 
+  async function atomicWriteJsonFile(targetPath: string, data: any): Promise<void> {
+    const dir = path.dirname(targetPath);
+    if (!fs.existsSync(dir)) {
+      await fs.promises.mkdir(dir, { recursive: true });
+    }
+    const tmpPath = `${targetPath}.${Date.now()}.${Math.random().toString(36).substring(2, 7)}.tmp`;
+    const serialized = JSON.stringify(data, null, 2);
+    await fs.promises.writeFile(tmpPath, serialized, 'utf8');
+    await fs.promises.rename(tmpPath, targetPath);
+  }
+
   async function loadCachedReleases(): Promise<any[]> {
-    try {
-      if (fs.existsSync(primaryReleasesFile)) {
+    let primaryData: any[] | null = null;
+    let uploadsData: any[] | null = null;
+
+    if (fs.existsSync(primaryReleasesFile)) {
+      try {
         const content = await fs.promises.readFile(primaryReleasesFile, 'utf8');
         if (content && content.trim()) {
           const parsed = JSON.parse(content);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            primaryData = parsed;
+          }
         }
+      } catch (e) {
+        console.warn('[SERVER RELEASES] Primary cache read warning:', e);
       }
-      if (fs.existsSync(uploadsReleasesFile)) {
+    }
+
+    if (fs.existsSync(uploadsReleasesFile)) {
+      try {
         const content = await fs.promises.readFile(uploadsReleasesFile, 'utf8');
         if (content && content.trim()) {
           const parsed = JSON.parse(content);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            uploadsData = parsed;
+          }
         }
+      } catch (e) {
+        console.warn('[SERVER RELEASES] Uploads cache read warning:', e);
       }
-    } catch (e) {
-      console.warn('[SERVER RELEASES] Local cache read warning:', e);
+    }
+
+    if (primaryData) {
+      return primaryData;
+    }
+    if (uploadsData) {
+      // Auto-heal primary cache from backup if primary was unreadable or empty
+      atomicWriteJsonFile(primaryReleasesFile, uploadsData).catch(() => {});
+      return uploadsData;
     }
     return [];
   }
@@ -4842,16 +4874,9 @@ Required schema:
         }
       });
       const merged = Array.from(map.values());
-      const serialized = JSON.stringify(merged, null, 2);
 
-      // Save to primary data directory
-      const dataDir = path.dirname(primaryReleasesFile);
-      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-      await fs.promises.writeFile(primaryReleasesFile, serialized, 'utf8');
-
-      // Save to uploads directory as backup
-      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-      await fs.promises.writeFile(uploadsReleasesFile, serialized, 'utf8');
+      await atomicWriteJsonFile(primaryReleasesFile, merged);
+      await atomicWriteJsonFile(uploadsReleasesFile, merged);
     } catch (e) {
       console.warn('[SERVER RELEASES] Local cache write warning:', e);
     }
@@ -4964,13 +4989,8 @@ Required schema:
       const releaseId = req.params.id;
       const existing = await loadCachedReleases();
       const filtered = existing.filter((r: any) => r && r.id !== releaseId);
-      const serialized = JSON.stringify(filtered, null, 2);
-      if (fs.existsSync(path.dirname(primaryReleasesFile))) {
-        await fs.promises.writeFile(primaryReleasesFile, serialized, 'utf8');
-      }
-      if (fs.existsSync(uploadsDir)) {
-        await fs.promises.writeFile(uploadsReleasesFile, serialized, 'utf8');
-      }
+      await atomicWriteJsonFile(primaryReleasesFile, filtered);
+      await atomicWriteJsonFile(uploadsReleasesFile, filtered);
 
       const supabase = getSupabaseService();
       if (supabase) {
@@ -5013,13 +5033,8 @@ Required schema:
         return true;
       });
 
-      const serialized = JSON.stringify(filtered, null, 2);
-      if (fs.existsSync(path.dirname(primaryReleasesFile))) {
-        await fs.promises.writeFile(primaryReleasesFile, serialized, 'utf8');
-      }
-      if (fs.existsSync(uploadsDir)) {
-        await fs.promises.writeFile(uploadsReleasesFile, serialized, 'utf8');
-      }
+      await atomicWriteJsonFile(primaryReleasesFile, filtered);
+      await atomicWriteJsonFile(uploadsReleasesFile, filtered);
 
       const supabase = getSupabaseService();
       if (supabase) {

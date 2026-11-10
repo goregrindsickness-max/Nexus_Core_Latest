@@ -42,6 +42,7 @@ import {
 import { BandWorkspaceNavBanner } from './BandWorkspaceNavBanner';
 import { PromoterWorkspaceNavBanner } from './PromoterWorkspaceNavBanner';
 import { isMiguelNameOrProfile } from '../utils/profileUtils';
+import { handleImageErrorWithCache, getCachedProfileImage } from '../../../services/profileImageCacheService';
 
 const HeaderAvatarImage: React.FC<{
   src?: string | null;
@@ -63,7 +64,15 @@ const HeaderAvatarImage: React.FC<{
         src={src}
         alt={alt}
         className={className}
-        onError={() => setHasError(true)}
+        onError={(e) => {
+          handleImageErrorWithCache(e, src, undefined)
+            .then(() => {
+              if (e.currentTarget.style.display === 'none') {
+                setHasError(true);
+              }
+            })
+            .catch(() => setHasError(true));
+        }}
       />
     );
   }
@@ -1255,13 +1264,12 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                                 className="flex items-center justify-between p-2 rounded-xl hover:bg-zinc-900 transition-all cursor-pointer group"
                               >
                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                  <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-xs text-white overflow-hidden shrink-0 border border-zinc-800">
-                                    {displayAvatar ? (
-                                      <img referrerPolicy="no-referrer" src={displayAvatar} className="w-full h-full object-cover" alt="" />
-                                    ) : (
-                                      displayName.slice(0, 2).toUpperCase()
-                                    )}
-                                  </div>
+                                    <HeaderAvatarImage
+                                      src={displayAvatar}
+                                      alt={displayName}
+                                      initials={displayName.slice(0, 2).toUpperCase()}
+                                      className="w-full h-full object-cover"
+                                    />
                                   <div className="min-w-0 flex-1">
                                     <p className="text-xs font-bold text-white group-hover:text-rose-400 transition-colors truncate leading-tight">
                                       {displayName}

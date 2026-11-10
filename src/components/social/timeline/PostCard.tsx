@@ -1845,6 +1845,11 @@ export const PostCard: React.FC<PostCardProps> = ({
                               alt="Comment attachment"
                               className="w-full max-h-56 object-cover cursor-pointer hover:opacity-95 transition-opacity"
                               onClick={() => onOpenLightbox?.([(comment as any).mediaUrl || (comment as any).media_url || (comment as any).image || (comment as any).gif], 0)}
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.parentElement?.classList.add('hidden');
+                              }}
                             />
                           </div>
                         )}

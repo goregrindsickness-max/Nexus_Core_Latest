@@ -43,30 +43,33 @@ import {
   loadBandDiscographyFromCache,
   deduplicateDiscography,
   markReleaseDeletedInStorage,
-  resolveAuthenticReleaseYear
+  resolveAuthenticReleaseYear,
+  findMasterReleaseCover,
+  isValidCoverUrl
 } from '../../../lib/communityBands';
 import { deleteReleaseFromDatabase } from '../../../services/releasesService';
 import { uploadBase64ToStorage, generateUUID, ensureUUID } from '../../../supabase';
 import { MASTER_GENRES } from '../../../constants/genres';
 import { MetalArchivesImportModal } from './MetalArchivesImportModal';
 
-const getReleaseCoverUrl = (r: any): string => {
+const getReleaseCoverUrl = (r: any, bandName?: string): string => {
   if (!r) return '';
-  const url =
-    r.cover_url ||
-    r.cover_image ||
-    r.coverUrl ||
-    r.coverImage ||
-    r.image_url ||
-    r.imageUrl ||
-    r.artwork_url ||
-    r.artworkUrl ||
-    r.artwork ||
-    r.cover ||
-    r.image ||
-    '';
-  if (typeof url === 'string' && url.trim().length > 0 && !url.includes('undefined') && !url.includes('null')) {
-    return url.trim();
+  const candidateKeys = [
+    'cover_url', 'cover_image', 'coverUrl', 'coverImage',
+    'image_url', 'imageUrl', 'artwork_url', 'artworkUrl',
+    'artwork', 'cover', 'image'
+  ];
+  for (const k of candidateKeys) {
+    const val = r[k];
+    if (typeof val === 'string' && val.trim().length > 0 && !val.includes('undefined') && !val.includes('null')) {
+      if (isValidCoverUrl(val)) {
+        return val.trim();
+      }
+    }
+  }
+  if (r.title) {
+    const fallback = findMasterReleaseCover(r.title, bandName || r.artist || r.band_name);
+    if (fallback) return fallback;
   }
   return '';
 };
@@ -587,9 +590,10 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                 tracks: Array.isArray(r.tracks) ? r.tracks : []
               };
             });
-            setAlbums(mappedReleases.sort((a: any, b: any) => parseInt(b.year || '0') - parseInt(a.year || '0')));
-            if (band.id) saveBandDiscographyToCache(band.id, band.name, mappedReleases);
-            if (liveBand?.id) saveBandDiscographyToCache(liveBand.id, liveBand.band_name, mappedReleases);
+            const mergedReleases = deduplicateDiscography([...initialAlbums, ...mappedReleases], bandName);
+            setAlbums(mergedReleases.sort((a: any, b: any) => parseInt(b.year || '0') - parseInt(a.year || '0')));
+            if (band.id) saveBandDiscographyToCache(band.id, band.name, mergedReleases);
+            if (liveBand?.id) saveBandDiscographyToCache(liveBand.id, liveBand.band_name, mergedReleases);
           }
 
           if (liveBand) {
@@ -599,7 +603,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
               name: liveBand.band_name || liveBand.name || band.name,
               band_name: liveBand.band_name || liveBand.name || band.name,
               status: liveBand.status || ((liveBand as any).is_split_up ? 'split-up' : band.status),
-              discography: (liveReleases && liveReleases.length > 0) ? liveReleases : band.discography
+              discography: (liveReleases && liveReleases.length > 0) ? deduplicateDiscography([...initialAlbums, ...liveReleases], bandName) : band.discography
             };
             communityBandManager.upsertBand(refreshedBand);
             setSelectedBand(refreshedBand);
@@ -901,8 +905,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
         ? generateUUID()
         : (selectedBand?.id ? ensureUUID(selectedBand.id) : generateUUID());
 
-      const finalLineupToSave = finalLineup.length > 0 ? finalLineup : (lineup.length > 0 ? lineup : (selectedBand?.lineup || []));
-      const finalAlbumsToSave = finalAlbums.length > 0 ? finalAlbums : (albums.length > 0 ? albums : (selectedBand?.discography || []));
+      const finalLineupToSave = finalLineup;
+      const finalAlbumsToSave = finalAlbums;
 
       const bandPayload: Partial<CommunityBandRecord> & { band_name: string } = {
         id: bandId,
@@ -1554,7 +1558,15 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                       <div className="flex items-center gap-2.5">
                         <div className="w-10 h-10 rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 shadow-inner">
                           {avatarUrl ? (
-                            <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                            <img
+                              src={avatarUrl}
+                              alt="Avatar"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
                           ) : (
                             <span className="text-zinc-600 font-mono text-[9px]">NO IMG</span>
                           )}
@@ -2168,13 +2180,26 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                             <div className="flex items-center gap-3.5 min-w-0">
                               <div className="w-12 h-12 rounded-xl bg-black border border-zinc-800 overflow-hidden flex items-center justify-center shrink-0 shadow">
                                 {(() => {
-                                  const coverSrc = getReleaseCoverUrl(alb);
+                                  const coverSrc = getReleaseCoverUrl(alb, name || selectedBand?.name);
                                   return coverSrc ? (
-                                    <img src={coverSrc} alt={alb.title} className="w-full h-full object-cover" />
-                                  ) : (
-                                    <Disc className="w-5 h-5 text-zinc-600" />
-                                  );
+                                    <img
+                                      src={coverSrc}
+                                      alt={alb.title}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        const target = e.currentTarget;
+                                        const fallback = findMasterReleaseCover(alb.title, name || selectedBand?.name);
+                                        if (fallback && target.src !== fallback) {
+                                          target.src = fallback;
+                                          target.style.display = 'block';
+                                        } else {
+                                          target.style.display = 'none';
+                                        }
+                                      }}
+                                    />
+                                  ) : null;
                                 })()}
+                                <Disc className="fallback-disc-icon w-5 h-5 text-zinc-600 hidden" />
                               </div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">

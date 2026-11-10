@@ -383,7 +383,16 @@ export const ArtistManagementModal: React.FC<ArtistManagementModalProps> = ({
                     <div className="bg-[#13161d] border border-[#00ffcc]/35 p-3 rounded-lg flex items-center justify-between shadow-md">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full overflow-hidden border border-[#00ffcc] bg-zinc-800 shrink-0">
-                          <img src={bandLogoUrl || activeBand?.logo_url} alt={activeBand?.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          <img
+                            src={bandLogoUrl || activeBand?.logo_url}
+                            alt={activeBand?.name}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
                         </div>
                         <div>
                           <h4 className="text-xs font-bold font-display text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -464,7 +473,16 @@ export const ArtistManagementModal: React.FC<ArtistManagementModalProps> = ({
                             className="flex items-center gap-3 text-left flex-grow min-w-0 cursor-pointer text-white hover:text-[#00ffcc] group"
                           >
                             <div className="w-8 h-8 rounded-full overflow-hidden border border-zinc-800 bg-zinc-900 shrink-0">
-                              <img src={b?.logo_url} alt={b?.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <img
+                                src={b?.logo_url}
+                                alt={b?.name}
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  e.currentTarget.onerror = null;
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
                             </div>
                             <div className="flex-grow min-w-0">
                               <div className="flex justify-between items-center pr-1">

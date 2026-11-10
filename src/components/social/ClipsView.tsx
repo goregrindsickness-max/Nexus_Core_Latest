@@ -479,7 +479,15 @@ const SingleClipPlayerCard: React.FC<{
           >
             <div className="w-10 h-10 rounded-full bg-zinc-800 border-2 border-rose-500 overflow-hidden flex items-center justify-center shadow-[0_0_12px_rgba(244,63,94,0.5)] shrink-0 group-hover/prof:scale-105 transition-transform">
               {clip?.avatar ? (
-                <img src={clip?.avatar} className="w-full h-full object-cover" alt="" />
+                <img
+                  src={clip?.avatar}
+                  className="w-full h-full object-cover"
+                  alt=""
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
               ) : (
                 <User className="w-5 h-5 text-zinc-400" />
               )}

@@ -3,6 +3,7 @@ import { executeWithSchemaResilience, registerSchemaSanitizers } from './schemaR
 import { isMiguelNameOrProfile } from '../components/social/utils/profileUtils';
 import { isCommunityBandRecord } from '../lib/seedBandsData';
 import { isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER } from '../utils/bandProfileUtils';
+import { cacheProfileImage, cacheProfileMetadata, hydrateProfileWithCache } from './profileImageCacheService';
 
 export const PROFILES_COLUMNS = [
   'id',
@@ -935,8 +936,29 @@ export async function executeSanitizedProfileUpsert(
     sanitizedPayload?.name ||
     (Array.isArray(sanitizedPayload) ? sanitizedPayload[0]?.name : null);
 
-  if (userId && (newAvatarUrl || newBannerUrl) && supabaseClient) {
-    autoArchiveProfileAssets(supabaseClient, userId, newAvatarUrl, newBannerUrl, userProfileName).catch(() => {});
+  if (userId && sanitizedPayload) {
+    const payloadToCache = Array.isArray(sanitizedPayload) ? sanitizedPayload[0] : sanitizedPayload;
+    if (payloadToCache) {
+      cacheProfileMetadata(userId, payloadToCache).catch(() => {});
+      const handle = payloadToCache.console_handle || payloadToCache.username;
+      if (handle) {
+        cacheProfileMetadata(handle, payloadToCache).catch(() => {});
+      }
+    }
+  }
+
+  if (userId && (newAvatarUrl || newBannerUrl)) {
+    if (newAvatarUrl) {
+      cacheProfileImage(newAvatarUrl, newAvatarUrl).catch(() => {});
+      cacheProfileImage(`profile_avatar_${userId}`, newAvatarUrl).catch(() => {});
+    }
+    if (newBannerUrl) {
+      cacheProfileImage(newBannerUrl, newBannerUrl).catch(() => {});
+      cacheProfileImage(`profile_banner_${userId}`, newBannerUrl).catch(() => {});
+    }
+    if (supabaseClient) {
+      autoArchiveProfileAssets(supabaseClient, userId, newAvatarUrl, newBannerUrl, userProfileName).catch(() => {});
+    }
   }
 
   // If updating a single user profile record, attempt targeted UPDATE first to protect un-passed fields
