@@ -615,6 +615,28 @@ export function loadBandDiscographyFromCache(bandId: string, bandName?: string):
   return [];
 }
 
+/**
+ * Clears a band's cached discography from all dedicated localStorage keys.
+ */
+export function clearBandDiscographyFromCache(bandId: string, bandName?: string): void {
+  try {
+    const cleanId = String(bandId || '').trim();
+    const cleanName = bandName ? bandName.trim().toLowerCase() : '';
+    const keys = [
+      cleanId ? `nexus_core_band_discography_${cleanId}` : null,
+      cleanId ? `nexus_core_band_discography_${ensureUUID(cleanId)}` : null,
+      cleanName ? `nexus_core_band_discography_${cleanName}` : null,
+      cleanName ? `nexus_core_band_discography_${cleanName.replace(/[^a-z0-9]/g, '-')}` : null,
+    ].filter(Boolean) as string[];
+
+    for (const k of keys) {
+      safeLocalStorage.removeItem(k);
+    }
+  } catch (e) {
+    console.warn('[communityBands] Failed to clear band discography from cache:', e);
+  }
+}
+
 export function deduplicateLineup(members: LineupMember[]): LineupMember[] {
   if (!Array.isArray(members)) return [];
   const seen = new Map<string, LineupMember>();
@@ -861,7 +883,7 @@ const STORAGE_KEY = 'nexus_community_band_archives';
 const DELETED_STORAGE_KEY = 'nexus_deleted_community_bands';
 
 export const PROTECTED_COMMUNITY_BANDS = new Set<string>([
-  'cannibal corpse', 'cannibal-corpse', 'cc-cannibal-corpse-official-uuid',
+  'cannibal corpse', 'cannibal-corpse', 'cc-cannibal-corpse-official-uuid', 'def01697-734a-43fa-8b88-66166b28f743',
   'hate eternal', 'hate-eternal', 'he-hate-eternal-official-uuid',
   'birdflesh', 'bf-birdflesh-official-uuid',
   'scour', 'sc-scour-official-uuid',
@@ -984,6 +1006,139 @@ export class CommunityBandManager {
 
   private initStorage(): void {
     try {
+      // Clean slate migration for Cannibal Corpse discography to wipe ghost/corrupt releases
+      try {
+        const CC_WIPED_KEY = 'nexus_cc_discography_wiped_v4';
+        if (!safeLocalStorage.getItem(CC_WIPED_KEY)) {
+          clearBandDiscographyFromCache('def01697-734a-43fa-8b88-66166b28f743', 'cannibal corpse');
+          clearBandDiscographyFromCache('cc-cannibal-corpse-official-uuid', 'cannibal corpse');
+          safeLocalStorage.removeItem('nexus_core_band_discography_cannibal corpse');
+          safeLocalStorage.removeItem('nexus_core_band_discography_cannibal-corpse');
+          safeLocalStorage.removeItem('nexus_core_band_discography_def01697-734a-43fa-8b88-66166b28f743');
+          safeLocalStorage.removeItem('nexus_core_band_discography_7808e9e0-73d2-4286-af0b-a21487090b73');
+          
+          const rawArchives = safeLocalStorage.getItem(STORAGE_KEY);
+          if (rawArchives) {
+            const parsedArchives = JSON.parse(rawArchives);
+            if (Array.isArray(parsedArchives)) {
+              const cleaned = parsedArchives.map((b: any) => {
+                const bName = (b.name || b.band_name || '').toLowerCase().trim();
+                const bId = String(b.id || '').toLowerCase().trim();
+                if (bName.includes('cannibal corpse') || bId === 'def01697-734a-43fa-8b88-66166b28f743' || bId === 'cc-cannibal-corpse-official-uuid' || bId === '7808e9e0-73d2-4286-af0b-a21487090b73') {
+                  return { ...b, id: 'def01697-734a-43fa-8b88-66166b28f743', discography: [] };
+                }
+                return b;
+              });
+              safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+            }
+          }
+          safeLocalStorage.setItem(CC_WIPED_KEY, 'true');
+        }
+      } catch (_) {}
+
+      // Clean slate migration for bands affected by 0-track / empty-cover placeholder discographies
+      try {
+        const PLACEHOLDER_WIPED_KEY = 'nexus_placeholder_discographies_wiped_v2';
+        if (!safeLocalStorage.getItem(PLACEHOLDER_WIPED_KEY)) {
+          const targetBands = [
+            { id: 'dof-deeds-of-flesh-official-uuid', name: 'deeds of flesh' },
+            { id: 'he-hate-eternal-official-uuid', name: 'hate eternal' },
+            { id: 'bf-birdflesh-official-uuid', name: 'birdflesh' },
+            { id: 'sc-scour-official-uuid', name: 'scour' },
+            { id: 'sb-squash-bowels-official-uuid', name: 'squash bowels' },
+            { id: 'lod-lust-of-decay-official-uuid', name: 'lust of decay' },
+            { id: '48ef20cc-0954-4a94-868e-0783699ec6ff', name: 'lust of decay' },
+            { id: '7ab93a9c-2446-4e8d-9d68-b4a596726630', name: 'scour' },
+            { id: 'f2f4b355-6c3b-4850-8603-191567f7a9db', name: 'hate eternal' },
+            { id: '92b270b9-828b-4da1-a3b9-078753fb7dc2', name: 'birdflesh' }
+          ];
+          
+          for (const tb of targetBands) {
+            clearBandDiscographyFromCache(tb.id, tb.name);
+            clearBandDiscographyFromCache(ensureUUID(tb.id), tb.name);
+            safeLocalStorage.removeItem(`nexus_core_band_discography_${tb.name}`);
+            safeLocalStorage.removeItem(`nexus_core_band_discography_${tb.name.replace(/[^a-z0-9]/g, '-')}`);
+            safeLocalStorage.removeItem(`nexus_core_band_discography_${tb.id}`);
+            safeLocalStorage.removeItem(`nexus_core_band_discography_${ensureUUID(tb.id)}`);
+          }
+
+          const rawArchives = safeLocalStorage.getItem(STORAGE_KEY);
+          if (rawArchives) {
+            const parsedArchives = JSON.parse(rawArchives);
+            if (Array.isArray(parsedArchives)) {
+              const cleaned = parsedArchives.map((b: any) => {
+                const bName = (b.name || b.band_name || '').toLowerCase().trim();
+                const bId = String(b.id || '').toLowerCase().trim();
+                const match = targetBands.find(tb => 
+                  bName === tb.name || bId === tb.id || bId === ensureUUID(tb.id)
+                );
+                if (match && Array.isArray(b.discography)) {
+                  const hasBadReleases = b.discography.some((d: any) => 
+                    (!d.cover_url && !d.cover_image) || (!d.tracks || d.tracks.length === 0)
+                  );
+                  if (hasBadReleases) {
+                    return { ...b, discography: [] };
+                  }
+                }
+                return b;
+              });
+              safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+            }
+          }
+          safeLocalStorage.setItem(PLACEHOLDER_WIPED_KEY, 'true');
+        }
+      } catch (_) {}
+
+      // Migration to fix Aeon release count (flush stale 4-release cache so all 5 Supabase releases load)
+      // and Cannibal Corpse avatar (flush Unsplash neon sign placeholder to authentic uploaded avatar)
+      try {
+        const AEON_CC_FIX_KEY = 'nexus_aeon_cc_avatar_fix_v3';
+        if (!safeLocalStorage.getItem(AEON_CC_FIX_KEY)) {
+          // Clear cached discography for Aeon to force full re-fetch of all 5 albums from Supabase
+          clearBandDiscographyFromCache('0f365267-3742-4ddb-a853-ad458a233c62', 'aeon');
+          safeLocalStorage.removeItem('nexus_core_band_discography_aeon');
+          safeLocalStorage.removeItem('nexus_core_band_discography_0f365267-3742-4ddb-a853-ad458a233c62');
+
+          // Set Cannibal Corpse authentic image URLs
+          const CC_REAL_AVATAR = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1793953372064_1793953372104.jpg';
+          const CC_REAL_BANNER = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1793953524744_1793953524750.jpg';
+          
+          safeLocalStorage.setItem('nexus_core_band_logo_def01697-734a-43fa-8b88-66166b28f743', CC_REAL_AVATAR);
+          safeLocalStorage.setItem('nexus_core_band_cover_def01697-734a-43fa-8b88-66166b28f743', CC_REAL_BANNER);
+
+          const rawArchives = safeLocalStorage.getItem(STORAGE_KEY);
+          if (rawArchives) {
+            const parsedArchives = JSON.parse(rawArchives);
+            if (Array.isArray(parsedArchives)) {
+              const cleaned = parsedArchives.map((b: any) => {
+                const bName = (b.name || b.band_name || '').toLowerCase().trim();
+                const bId = String(b.id || '').toLowerCase().trim();
+                if (bName.includes('cannibal corpse') || bId === 'def01697-734a-43fa-8b88-66166b28f743') {
+                  return {
+                    ...b,
+                    avatar: CC_REAL_AVATAR,
+                    avatar_url: CC_REAL_AVATAR,
+                    logo_url: CC_REAL_AVATAR,
+                    image: CC_REAL_AVATAR,
+                    cover_url: CC_REAL_BANNER,
+                    banner_url: CC_REAL_BANNER
+                  };
+                }
+                if (bName === 'aeon' || bId === '0f365267-3742-4ddb-a853-ad458a233c62') {
+                  return {
+                    ...b,
+                    discography: []
+                  };
+                }
+                return b;
+              });
+              safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+            }
+          }
+          safeLocalStorage.setItem(AEON_CC_FIX_KEY, 'true');
+        }
+      } catch (_) {}
+
       const deletedIds = getDeletedBandIds();
 
       const stored = safeLocalStorage.getItem(STORAGE_KEY);
@@ -2098,30 +2253,40 @@ export class CommunityBandManager {
           }
         }
 
-        // Only prune remote releases if releasePayloads was non-empty and explicit
-        if (releasePayloads.length > 0) {
+        if (band.discography.length === 0) {
+          // Explicit wipe / clean slate: delete all releases in Supabase for this band
+          try {
+            dispatchSyncLog(`Wiping all remote releases for "${resolvedBandName}" from Supabase...`);
+            if (bandUUID) {
+              await client.from('releases').delete().eq('band_id', bandUUID);
+            }
+            if (band.id && band.id !== bandUUID) {
+              await client.from('releases').delete().eq('band_id', band.id);
+            }
+            dispatchSyncLog(`All remote releases for "${resolvedBandName}" wiped from Supabase.`);
+          } catch (wipeErr) {
+            console.warn('[communityBands] Release wipe notice:', wipeErr);
+          }
+        } else if (releasePayloads.length > 0) {
           try {
             const { data: allRemoteReleases } = await client
               .from('releases')
-              .select('id, title, band_id, band_name, artist');
+              .select('id, title, band_id');
             
             if (allRemoteReleases && Array.isArray(allRemoteReleases)) {
               const activeIds = new Set(releasePayloads.map(r => r.id));
-              const activeTitles = new Set(releasePayloads.map(r => (r.title || '').toLowerCase().trim()));
-              const normBandName = resolvedBandName.toLowerCase().trim();
+              const activeTitles = new Set(releasePayloads.map(r => (r.title || '').toLowerCase().replace(/[^a-z0-9]/g, '')));
 
               const toDelete = allRemoteReleases.filter(r => {
                 if (!r) return false;
                 const rBandId = String(r.band_id || '').toLowerCase().trim();
-                const rBandName = String(r.band_name || r.artist || '').toLowerCase().trim();
                 const matchesBand = (
                   rBandId === bandUUID.toLowerCase() ||
-                  rBandId === String(band.id || '').toLowerCase() ||
-                  (normBandName && rBandName === normBandName)
+                  rBandId === String(band.id || '').toLowerCase()
                 );
                 if (!matchesBand) return false;
-                const rTitle = (r.title || '').toLowerCase().trim();
-                return !activeIds.has(r.id) && !activeTitles.has(rTitle);
+                const rNormTitle = (r.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                return !activeIds.has(r.id) && !activeTitles.has(rNormTitle);
               });
               
               if (toDelete.length > 0) {
@@ -2367,19 +2532,41 @@ export class CommunityBandManager {
                            (bUUIDKey ? safeLocalStorage.getItem(`nexus_core_band_cover_${bUUIDKey}`) : null) ||
                            (existingItem?.id ? safeLocalStorage.getItem(`nexus_core_band_cover_${existingItem.id}`) : null);
 
-        const resolvedAvatar = 
-          (b.logo_url && !b.logo_url.includes('unsplash') && !b.logo_url.includes('placeholder')) ? b.logo_url :
-          (b.avatar_url && !b.avatar_url.includes('unsplash') && !b.avatar_url.includes('placeholder')) ? b.avatar_url :
-          (seedMatch?.logo_url && !seedMatch.logo_url.includes('unsplash')) ? seedMatch.logo_url :
-          (savedLogo && !savedLogo.includes('unsplash')) ? savedLogo :
-          existingItem?.logo_url || existingItem?.avatar_url || b.logo_url || b.avatar_url || '';
+        const pickBestImage = (...urls: (string | undefined | null)[]): string => {
+          for (const u of urls) {
+            if (u && typeof u === 'string' && u.trim() && (u.includes('supabase.co') || (!u.includes('unsplash') && !u.includes('placeholder')))) {
+              return u.trim();
+            }
+          }
+          for (const u of urls) {
+            if (u && typeof u === 'string' && u.trim()) return u.trim();
+          }
+          return '';
+        };
 
-        const resolvedCover = 
-          (b.cover_url && !b.cover_url.includes('unsplash') && !b.cover_url.includes('placeholder')) ? b.cover_url :
-          (b.banner_url && !b.banner_url.includes('unsplash') && !b.banner_url.includes('placeholder')) ? b.banner_url :
-          (seedMatch?.cover_url && !seedMatch.cover_url.includes('unsplash')) ? seedMatch.cover_url :
-          (savedCover && !savedCover.includes('unsplash')) ? savedCover :
-          existingItem?.cover_url || existingItem?.banner_url || b.cover_url || b.banner_url || '';
+        const resolvedAvatar = pickBestImage(
+          b.avatar_url,
+          b.logo_url,
+          seedMatch?.avatar_url,
+          seedMatch?.logo_url,
+          (seedMatch as any)?.avatar,
+          (seedMatch as any)?.image,
+          savedLogo,
+          existingItem?.avatar_url,
+          existingItem?.logo_url,
+          (existingItem as any)?.avatar,
+          (existingItem as any)?.image
+        );
+
+        const resolvedCover = pickBestImage(
+          b.cover_url,
+          b.banner_url,
+          seedMatch?.cover_url,
+          seedMatch?.banner_url,
+          savedCover,
+          existingItem?.cover_url,
+          existingItem?.banner_url
+        );
 
         // Intelligently merge discography: prioritize Supabase remoteDiscography, local edits, existing item, and seed master
         const cachedDiscography = loadBandDiscographyFromCache(bId, cleanBandName);
@@ -2391,8 +2578,8 @@ export class CommunityBandManager {
                 : null);
 
           if (primarySource) {
-            const activeTitles = new Set(primarySource.map(r => r.title.toLowerCase().trim()));
-            const validRemote = (remoteDiscography || []).filter(r => activeTitles.has(r.title.toLowerCase().trim()));
+            // Keep user local edits, but also include all undeleted remote releases from Supabase so imported albums are never locked out!
+            const validRemote = (remoteDiscography || []).filter(r => !isDeletedRelease(r.id, r.title, cleanBandName));
             return deduplicateDiscography([...primarySource, ...validRemote], cleanBandName);
           }
 
@@ -2618,6 +2805,62 @@ export class CommunityBandManager {
   // Quick helper to update avatar/logo artwork
   public async updateAvatar(bandId: string, avatarUrl: string): Promise<CommunityBandRecord> {
     return this.updateBand(bandId, { avatar_url: avatarUrl });
+  }
+
+  // Wipes all albums for a band from localStorage, in-memory records, and Supabase releases table for a fresh start
+  public async wipeBandDiscography(bandId: string, bandName?: string): Promise<boolean> {
+    const cleanId = String(bandId || '').trim();
+    const bandUUID = ensureUUID(cleanId);
+    const resolvedName = bandName || cleanId;
+
+    // 1. Clear all localStorage discography cache keys
+    clearBandDiscographyFromCache(cleanId, resolvedName);
+    if (bandUUID !== cleanId) clearBandDiscographyFromCache(bandUUID, resolvedName);
+
+    // 2. Clear discography in community band archives
+    const stored = safeLocalStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try {
+        const bands = JSON.parse(stored);
+        if (Array.isArray(bands)) {
+          const updated = bands.map((b: CommunityBandRecord) => {
+            const matches = b.id === cleanId || ensureUUID(b.id) === bandUUID || (resolvedName && (b.name || '').toLowerCase() === resolvedName.toLowerCase());
+            if (matches) {
+              return { ...b, discography: [] };
+            }
+            return b;
+          });
+          safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        }
+      } catch {}
+    }
+
+    // 3. Clear from Supabase releases table
+    try {
+      const client = getSupabase();
+      if (client) {
+        if (bandUUID) {
+          await client.from('releases').delete().eq('band_id', bandUUID);
+        }
+        if (cleanId && cleanId !== bandUUID) {
+          await client.from('releases').delete().eq('band_id', cleanId);
+        }
+      }
+    } catch (e) {
+      console.warn('[communityBands] Wipe Supabase releases warning:', e);
+    }
+
+    // 4. Dispatch update events
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', {
+        detail: { id: cleanId, name: resolvedName, discography: [] }
+      }));
+      window.dispatchEvent(new CustomEvent('nexus_community_releases_updated', {
+        detail: { band_id: cleanId, releases: [] }
+      }));
+    }
+
+    return true;
   }
 
   // Push all local community bands and discographies to Supabase tables with unique UUIDs

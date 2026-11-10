@@ -230,7 +230,7 @@ export default function SettingsWorkspace(props: any) {
       console.warn("Error syncing band info to Supabase:", err);
     }
 
-    if (props.triggerNotification) props.triggerNotification('✨ Band profile saved & synced successfully!');
+    if (props.triggerNotification) props.triggerNotification('✨ Band profile saved!');
   };
 
   const handleReviewSubmit = () => {

@@ -1244,8 +1244,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "United Guttural Records",
         "catalog_id": "UGR-018",
-        "cover_url": "",
-        "cover_image": "",
+        "cover_url": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
+        "cover_image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
         "tracks": [
           {
             "number": 1,
@@ -4327,7 +4327,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     ]
   },
   {
-    "id": "cc-cannibal-corpse-official-uuid",
+    "id": "def01697-734a-43fa-8b88-66166b28f743",
     "name": "Cannibal Corpse",
     "band_name": "Cannibal Corpse",
     "genre": "Death Metal",
@@ -4340,9 +4340,12 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "country": "USA",
     "record_label": "Metal Blade Records",
     "bio": "Legendary death metal pioneers formed in Buffalo, New York in 1988. One of the top-selling death metal bands of all time, famous for razor-sharp technical riffs, relentless blast beats, and iconic releases like Tomb of the Mutilated and The Bleeding.",
-    "avatar_url": "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&q=80&w=800",
-    "logo_url": "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&q=80&w=800",
-    "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=1200",
+    "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1793953372064_1793953372104.jpg",
+    "avatar_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1793953372064_1793953372104.jpg",
+    "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1793953372064_1793953372104.jpg",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1793953372064_1793953372104.jpg",
+    "cover_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1793953524744_1793953524750.jpg",
+    "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1793953524744_1793953524750.jpg",
     "spotify_url": "https://open.spotify.com/artist/1G14y7G101o0G0K8P",
     "custom_slug": "cannibal-corpse",
     "verification_status": "community_archive",
@@ -4355,24 +4358,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       { "id": "cc-4", "name": "Rob Barrett", "role": "Rhythm Guitar", "status": "active", "years": "1993–1997, 2005–present" },
       { "id": "cc-5", "name": "Erik Rutan", "role": "Lead Guitar", "status": "active", "years": "2021–present" }
     ],
-    "discography": [
-      { "id": "cc-rel-1", "title": "Eaten Back to Life", "year": "1990", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-2", "title": "Butchered at Birth", "year": "1991", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-3", "title": "Tomb of the Mutilated", "year": "1992", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-4", "title": "The Bleeding", "year": "1994", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-5", "title": "Vile", "year": "1996", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-6", "title": "Gallery of Suicide", "year": "1998", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-7", "title": "Bloodthirst", "year": "1999", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-8", "title": "Gore Obsessed", "year": "2002", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-9", "title": "The Wretched Spawn", "year": "2004", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-10", "title": "Kill", "year": "2006", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-11", "title": "Evisceration Plague", "year": "2009", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-12", "title": "Torture", "year": "2012", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-13", "title": "A Skeletal Domain", "year": "2014", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-14", "title": "Red Before Black", "year": "2017", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-15", "title": "Violence Unimagined", "year": "2021", "type": "album", "label": "Metal Blade Records" },
-      { "id": "cc-rel-16", "title": "Chaos Horrific", "year": "2023", "type": "album", "label": "Metal Blade Records" }
-    ]
+    "discography": []
   },
   {
     "id": "he-hate-eternal-official-uuid",
@@ -4397,15 +4383,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       { "id": "he-2", "name": "JJ Hrubovcak", "role": "Bass", "status": "active", "years": "2008–present" },
       { "id": "he-3", "name": "Hannes Grossmann", "role": "Drums", "status": "active", "years": "2018–present" }
     ],
-    "discography": [
-      { "id": "he-rel-1", "title": "Conquering the Throne", "year": "1999", "type": "album", "label": "Wicked World" },
-      { "id": "he-rel-2", "title": "King of All Kings", "year": "2002", "type": "album", "label": "Earache Records" },
-      { "id": "he-rel-3", "title": "I, Monarch", "year": "2005", "type": "album", "label": "Earache Records" },
-      { "id": "he-rel-4", "title": "Fury & Flames", "year": "2008", "type": "album", "label": "Metal Blade Records" },
-      { "id": "he-rel-5", "title": "Phoenix Amongst the Ashes", "year": "2011", "type": "album", "label": "Metal Blade Records" },
-      { "id": "he-rel-6", "title": "Infernus", "year": "2015", "type": "album", "label": "Season of Mist" },
-      { "id": "he-rel-7", "title": "Upon Desolate Sands", "year": "2018", "type": "album", "label": "Season of Mist" }
-    ]
+    "discography": []
   },
   {
     "id": "dof-deeds-of-flesh-official-uuid",
@@ -4431,18 +4409,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       { "id": "dof-3", "name": "Darren Cesca", "role": "Drums", "status": "active", "years": "2016–present" },
       { "id": "dof-4", "name": "Erik Lindmark", "role": "Guitars, Vocals", "status": "past", "years": "1993–2018 (R.I.P.)" }
     ],
-    "discography": [
-      { "id": "dof-rel-1", "title": "Gradually Melted", "year": "1995", "type": "ep", "label": "Wild Rags" },
-      { "id": "dof-rel-2", "title": "Trading Pieces", "year": "1996", "type": "album", "label": "Spanish Goblin" },
-      { "id": "dof-rel-3", "title": "Inbreeding the Anthropophagi", "year": "1998", "type": "album", "label": "Decomposed Records" },
-      { "id": "dof-rel-4", "title": "Path of the Totem", "year": "1999", "type": "album", "label": "Unique Leader Records" },
-      { "id": "dof-rel-5", "title": "Mark of the Legion", "year": "2001", "type": "album", "label": "Unique Leader Records" },
-      { "id": "dof-rel-6", "title": "Reduced to Begging", "year": "2003", "type": "album", "label": "Unique Leader Records" },
-      { "id": "dof-rel-7", "title": "Crown of Souls", "year": "2005", "type": "album", "label": "Unique Leader Records" },
-      { "id": "dof-rel-8", "title": "Of What's to Come", "year": "2008", "type": "album", "label": "Unique Leader Records" },
-      { "id": "dof-rel-9", "title": "Portals to Canaan", "year": "2013", "type": "album", "label": "Unique Leader Records" },
-      { "id": "dof-rel-10", "title": "Nucleus", "year": "2020", "type": "album", "label": "Unique Leader Records" }
-    ]
+    "discography": []
   },
   {
     "id": "bf-birdflesh-official-uuid",
@@ -4466,13 +4433,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       { "id": "bf-2", "name": "Elis", "role": "Guitars, Vocals", "status": "active", "years": "2014–present" },
       { "id": "bf-3", "name": "Barra", "role": "Drums, Vocals", "status": "active", "years": "2021–present" }
     ],
-    "discography": [
-      { "id": "bf-rel-1", "title": "Born to Decide", "year": "2002", "type": "album", "label": "Obliteration Records" },
-      { "id": "bf-rel-2", "title": "Alive Autopsy", "year": "2004", "type": "album", "label": "Lard Records" },
-      { "id": "bf-rel-3", "title": "Night of the Ultimate Mosh", "year": "2008", "type": "album", "label": "Relapse Records" },
-      { "id": "bf-rel-4", "title": "Satan's Goats", "year": "2018", "type": "album", "label": "Everlasting Spew Records" },
-      { "id": "bf-rel-5", "title": "Extreme Sickness First Class", "year": "2023", "type": "album", "label": "Everlasting Spew Records" }
-    ]
+    "discography": []
   },
   {
     "id": "sc-scour-official-uuid",
@@ -4499,12 +4460,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       { "id": "sc-4", "name": "John Jarvis", "role": "Bass, Backing Vocals", "status": "active", "years": "2015–present" },
       { "id": "sc-5", "name": "Adam Jarvis", "role": "Drums", "status": "active", "years": "2015–present" }
     ],
-    "discography": [
-      { "id": "sc-rel-1", "title": "Grey", "year": "2016", "type": "ep", "label": "Housecore Records" },
-      { "id": "sc-rel-2", "title": "Red", "year": "2017", "type": "ep", "label": "Housecore Records" },
-      { "id": "sc-rel-3", "title": "Black", "year": "2020", "type": "ep", "label": "Housecore Records" },
-      { "id": "sc-rel-4", "title": "Gold", "year": "2024", "type": "album", "label": "Nuclear Blast" }
-    ]
+    "discography": []
   },
   {
     "id": "sb-squash-bowels-official-uuid",
@@ -4528,15 +4484,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       { "id": "sb-2", "name": "Andy", "role": "Guitars", "status": "past", "years": "1994–2016" },
       { "id": "sb-3", "name": "Psycho", "role": "Drums", "status": "past", "years": "2001–2016" }
     ],
-    "discography": [
-      { "id": "sb-rel-1", "title": "Something Can Be Changed", "year": "1997", "type": "album", "label": "Selfmade God" },
-      { "id": "sb-rel-2", "title": "Tenebris", "year": "1999", "type": "album", "label": "Obscene Productions" },
-      { "id": "sb-rel-3", "title": "The Mass Dead", "year": "2002", "type": "album", "label": "Lard Records" },
-      { "id": "sb-rel-4", "title": "No Mercy", "year": "2004", "type": "album", "label": "Willowtip Records" },
-      { "id": "sb-rel-5", "title": "Love Songs", "year": "2005", "type": "album", "label": "Lard Records" },
-      { "id": "sb-rel-6", "title": "Grindvirus", "year": "2009", "type": "album", "label": "Willowtip Records" },
-      { "id": "sb-rel-7", "title": "Grindcoholics", "year": "2013", "type": "album", "label": "Selfmade God" }
-    ]
+    "discography": []
   },
   {
     "id": "lod-lust-of-decay-official-uuid",
@@ -4562,12 +4510,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       { "id": "lod-3", "name": "Jason Klumpp", "role": "Bass", "status": "active", "years": "2001–present" },
       { "id": "lod-4", "name": "Jerome Howard", "role": "Drums", "status": "active", "years": "2003–present" }
     ],
-    "discography": [
-      { "id": "lod-rel-1", "title": "Infesting the Exhumed", "year": "2002", "type": "album", "label": "Comatose Music" },
-      { "id": "lod-rel-2", "title": "Kingdom of Corpses", "year": "2004", "type": "album", "label": "Comatose Music" },
-      { "id": "lod-rel-3", "title": "Entombed in Sewage", "year": "2008", "type": "album", "label": "Comatose Music" },
-      { "id": "lod-rel-4", "title": "Purity Through Dismemberment", "year": "2014", "type": "album", "label": "Comatose Music" }
-    ]
+    "discography": []
   }
 ];
 

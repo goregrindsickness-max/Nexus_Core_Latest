@@ -1028,9 +1028,6 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     setScrapedLocation(fullLoc);
     setIsScrapingLocation(false);
     setIncludeAutoLocation(true);
-    if (triggerNotification) {
-      triggerNotification(`📍 Location detected: ${fullLoc}`);
-    }
   };
 
   useEffect(() => {

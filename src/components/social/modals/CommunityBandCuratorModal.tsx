@@ -41,6 +41,7 @@ import {
   DiscographyTrack,
   saveBandDiscographyToCache,
   loadBandDiscographyFromCache,
+  clearBandDiscographyFromCache,
   deduplicateDiscography,
   markReleaseDeletedInStorage,
   resolveAuthenticReleaseYear,
@@ -412,6 +413,14 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     const isUserBio = Boolean(userBio && (rawBio === userBio || rawBio === (userProfile as any)?.profileBlurb));
     const validBio = (rawBio && !isUserBio && !rawBio.startsWith('Community-curated archive')) ? rawBio : 'Not written yet.';
     setBio(validBio);
+    const resolvedAvatar = [
+      band.avatar_url,
+      band.logo_url,
+      (band as any).avatar,
+      (band as any).image
+    ].find(u => u && typeof u === 'string' && (u.includes('supabase.co') || (!u.includes('unsplash') && !u.includes('placeholder')))) ||
+    band.avatar_url || band.logo_url || (band as any).avatar || (band as any).image || '';
+    setAvatarUrl(resolvedAvatar);
     setCoverUrl(band.cover_url || band.banner_url || (band as any).cover || (band as any).banner || '');
     setSpotifyUrl(band.spotify_url || publicDetails.spotify_url || '');
     setBandcampUrl(band.bandcamp_url || '');
@@ -1173,14 +1182,22 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                   onClick={() => populateForm(band)}
                   className="w-full text-left p-3.5 sm:p-4 rounded-xl border bg-zinc-900/60 border-zinc-800/80 hover:border-amber-500/50 hover:bg-zinc-900 transition-all flex items-center gap-3.5 cursor-pointer shadow-sm group"
                 >
-                  <img
-                    src={band.avatar_url || band.logo_url || (band as any).avatar || (band as any).image || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=120'}
-                    alt={band.name}
-                    className="w-14 h-14 rounded-xl object-cover border border-zinc-750 shrink-0 group-hover:scale-105 transition-transform"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=120';
-                    }}
-                  />
+                  {(() => {
+                    const avatarCandidates = [band.avatar_url, band.logo_url, (band as any).avatar, (band as any).image];
+                    const bestAvatar = avatarCandidates.find(u => u && typeof u === 'string' && (u.includes('supabase.co') || (!u.includes('unsplash') && !u.includes('placeholder')))) ||
+                      band.avatar_url || band.logo_url || (band as any).avatar || (band as any).image ||
+                      'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=120';
+                    return (
+                      <img
+                        src={bestAvatar}
+                        alt={band.name}
+                        className="w-14 h-14 rounded-xl object-cover border border-zinc-750 shrink-0 group-hover:scale-105 transition-transform"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=120';
+                        }}
+                      />
+                    );
+                  })()}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-bold text-white truncate font-display group-hover:text-amber-300 transition-colors">
@@ -1215,9 +1232,10 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                     <div className="text-[10px] text-zinc-500 font-mono mt-1.5 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-3">
                         {(() => {
-                          const discoCount = (band.discography && band.discography.length > 0)
-                            ? band.discography.length
-                            : (loadBandDiscographyFromCache(band.id, band.name)?.length || 0);
+                          const cached = loadBandDiscographyFromCache(band.id, band.name) || [];
+                          const direct = band.discography || [];
+                          const combined = deduplicateDiscography([...direct, ...cached], band.name);
+                          const discoCount = combined.length;
                           return <span>💿 {discoCount} {discoCount === 1 ? 'release' : 'releases'}</span>;
                         })()}
                         <span>👥 {band.lineup?.length || 0} members</span>
@@ -2141,14 +2159,21 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                         {albums.length > 0 && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setAlbums([]);
-                              resetReleaseInputs();
-                              triggerNotification?.('Cleared all releases from form.');
+                            onClick={async () => {
+                              if (window.confirm(`Wipe all ${albums.length} albums for ${name || 'this band'} from local cache and database to get a clean start?`)) {
+                                setAlbums([]);
+                                resetReleaseInputs();
+                                const targetId = selectedBand?.id;
+                                if (targetId) {
+                                  await communityBandManager.wipeBandDiscography(targetId, name);
+                                }
+                                triggerNotification?.(`Wiped all releases for ${name || 'band'}! Ready for fresh import.`);
+                              }
                             }}
                             className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-500/40 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                            title="Wipe all albums from local storage and database for a clean start"
                           >
-                            <Trash2 className="w-3.5 h-3.5" /> Clear All Releases
+                            <Trash2 className="w-3.5 h-3.5" /> Wipe All Albums (Fresh Start)
                           </button>
                         )}
                         <button

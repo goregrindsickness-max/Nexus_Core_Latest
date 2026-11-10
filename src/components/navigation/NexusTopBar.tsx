@@ -160,13 +160,11 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
           <button
             onClick={async () => {
               setIsManualSyncing(true);
-              triggerNotification?.("⚡ Activating Cloud Sync Gateway...");
               try {
                 if (processOfflineQueue) await processOfflineQueue();
                 await CommunityBandManager.getInstance().fetchFromSupabase();
-                triggerNotification?.("✨ Cloud ledger synchronized with database!");
               } catch (e) {
-                triggerNotification?.("⚡ Cloud sync complete.");
+                // Silent
               } finally {
                 setTimeout(() => setIsManualSyncing(false), 1400);
               }

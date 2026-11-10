@@ -43,7 +43,7 @@ export function getStoredBadgeCount(): number {
 }
 
 /**
- * Sets the home screen application icon badge counter (e.g. badge "2" like Facebook or Reddit)
+ * Sets the home screen application icon badge counter silently without emitting in-app notification popups.
  */
 export async function setAppBadge(count: number): Promise<boolean> {
   if (typeof window === 'undefined') return false;
@@ -69,7 +69,7 @@ export async function setAppBadge(count: number): Promise<boolean> {
       }
       success = true;
     } catch (err) {
-      console.warn('[AppBadge] setAppBadge warning:', err);
+      // Silent error handling
     }
   }
 
@@ -83,7 +83,7 @@ export async function setAppBadge(count: number): Promise<boolean> {
     } catch {}
   }
 
-  // 3. Dispatch global browser event for UI badging components
+  // 3. Dispatch global browser event for UI badging components (internal state only)
   window.dispatchEvent(
     new CustomEvent('nexus_app_badge_changed', {
       detail: { count: targetCount }
@@ -110,7 +110,7 @@ export async function clearAppBadge(): Promise<boolean> {
       await (navigator as any).clearAppBadge();
       success = true;
     } catch (err) {
-      console.warn('[AppBadge] clearAppBadge warning:', err);
+      // Silent
     }
   }
 
@@ -152,7 +152,7 @@ export async function decrementAppBadge(amount: number = 1): Promise<number> {
 }
 
 /**
- * Calculates total unread items across notifications and chat messages, then updates the home screen app icon badge
+ * Calculates total unread items across notifications and chat messages, then updates the home screen app icon badge silently.
  */
 export function syncGlobalUnreadBadge(): void {
   if (typeof window === 'undefined') return;
@@ -180,7 +180,7 @@ export function syncGlobalUnreadBadge(): void {
     const totalUnread = unreadNotifs + unreadMsgs;
     setAppBadge(totalUnread);
   } catch (e) {
-    console.warn('[AppBadge] syncGlobalUnreadBadge error:', e);
+    // Silent catch
   }
 }
 
@@ -192,33 +192,14 @@ export async function syncAppBadgeFromUnread(unreadCount: number): Promise<boole
 }
 
 /**
- * Simulates setting a badge (e.g. 2 like Facebook/Reddit) for user testing and verification
+ * Simulates setting a badge for testing without creating in-app notification toasts.
  */
 export async function testAppBadge(testCount: number = 2): Promise<boolean> {
-  const result = await setAppBadge(testCount);
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(
-      new CustomEvent('nexus_in_app_notice', {
-        detail: {
-          id: 'badge-test-' + Date.now(),
-          title: '🔴 App Icon Badge Counter Activated',
-          message: `Home screen app icon badge counter set to ${testCount} (matching Facebook & Reddit app badges).`,
-          time: 'Just now',
-          type: 'system',
-          read: false,
-          avatar: '/icon-192.png'
-        }
-      })
-    );
-  }
-  return result;
+  return setAppBadge(testCount);
 }
 
 // Auto-subscribe listeners on module load
 if (typeof window !== 'undefined') {
-  window.addEventListener('nexus_in_app_notice', () => {
-    setTimeout(syncGlobalUnreadBadge, 100);
-  });
   window.addEventListener('storage', (e) => {
     if (e.key === 'nexus_core_notifications' || e.key === 'nexus_messaging_conversations') {
       syncGlobalUnreadBadge();

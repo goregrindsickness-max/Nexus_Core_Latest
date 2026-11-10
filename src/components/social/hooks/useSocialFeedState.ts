@@ -247,11 +247,9 @@ export function useSocialFeedState({
 
   const handleDetectLocation = async () => {
     setIsDetectingLocation(true);
-    triggerNotification?.("🛰️ Querying satellite GPS coordinates...");
 
     const coords = await getCurrentCoordinates({ enableHighAccuracy: true, timeout: 10000 });
     if (!coords) {
-      triggerNotification?.("⚠️ GPS coordinate retrieval failed or permission denied. Enter manually.");
       setIsDetectingLocation(false);
       return;
     }
@@ -270,22 +268,17 @@ export function useSocialFeedState({
 
         if (city && state) {
           setTaggedVenue(`${city}, ${state}`);
-          triggerNotification?.(`📍 Location resolved: ${city}, ${state}`);
         } else if (city) {
           setTaggedVenue(`${city}, ${country}`);
-          triggerNotification?.(`📍 Location resolved: ${city}, ${country}`);
         } else {
           setTaggedVenue(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
-          triggerNotification?.(`📍 Coordinates captured: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
         }
       } else {
         setTaggedVenue(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
-        triggerNotification?.(`📍 Coordinates captured: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
       }
     } catch (err) {
       console.warn("Reverse geocoding failed, using coordinates:", err);
       setTaggedVenue(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
-      triggerNotification?.(`📍 Captured location coordinates.`);
     } finally {
       setIsDetectingLocation(false);
     }

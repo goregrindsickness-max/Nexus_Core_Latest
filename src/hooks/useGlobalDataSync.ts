@@ -132,7 +132,6 @@ export function useGlobalDataSync({
 
       localStorage.removeItem('nexus_core_offline_queue');
       addLog(`[SYNC COMPLETE] Successfully synced ${successCount} operation(s) to live schema.`);
-      triggerNotification(`📊 Offline recovery synced ${successCount} items with database.`);
     } catch (err) {
       console.warn('Offline queue reconciliation failed:', err);
     }
