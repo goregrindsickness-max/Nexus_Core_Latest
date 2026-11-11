@@ -4856,12 +4856,86 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "created_at": "1999-01-01T00:00:00Z",
     "followers_count": 14200,
     "lineup": [
-      { "id": "lod-1", "name": "Blake Pollard", "role": "Vocals", "status": "active", "years": "1999–present" },
-      { "id": "lod-2", "name": "Mark Rucker", "role": "Guitars", "status": "active", "years": "1999–present" },
-      { "id": "lod-3", "name": "Jason Klumpp", "role": "Bass", "status": "active", "years": "2001–present" },
-      { "id": "lod-4", "name": "Jerome Howard", "role": "Drums", "status": "active", "years": "2003–present" }
+      { "id": "lod-1", "name": "Steve Green", "role": "Guitar", "status": "active", "years": "2000–present" },
+      { "id": "lod-2", "name": "Jay Barnes", "role": "Vocals", "status": "active", "years": "2000–present" },
+      { "id": "lod-3", "name": "Jordan Varella", "role": "Drums", "status": "active", "years": "2002–2007, 2020–present" },
+      { "id": "lod-4", "name": "Ryan Coulter", "role": "Bass", "status": "active", "years": "2014–present" }
     ],
-    "discography": []
+    "discography": [
+      {
+        "id": "85296868-a0e5-4a6f-ac6a-5aec1fe8f519",
+        "title": "Infesting the Exhumed",
+        "year": "2002",
+        "type": "album",
+        "label": "Comatose Music",
+        "catalog_id": "LOD-01",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/74/81/fa/7481fafc-0ae1-f38b-8a0c-dba455f96c3f/191773824112.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/74/81/fa/7481fafc-0ae1-f38b-8a0c-dba455f96c3f/191773824112.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Infesting the Exhumed", "duration": "3:20" },
+          { "number": 2, "title": "Carnal Devourment", "duration": "2:55" },
+          { "number": 3, "title": "Putrid Putrescence", "duration": "3:10" },
+          { "number": 4, "title": "Vaginal Necrosis", "duration": "2:45" }
+        ]
+      },
+      {
+        "id": "3656bc7a-b8e2-4239-ac6a-5aecd58afebd",
+        "title": "Kingdom of Corpses",
+        "year": "2004",
+        "type": "album",
+        "label": "Comatose Music",
+        "catalog_id": "LOD-02",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/9e/e2/ff/9ee2ffca-634b-4dc7-eacb-c6acdd77ac35/191773824174.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/9e/e2/ff/9ee2ffca-634b-4dc7-eacb-c6acdd77ac35/191773824174.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Kingdom of Corpses", "duration": "3:40" },
+          { "number": 2, "title": "Decimated", "duration": "3:05" },
+          { "number": 3, "title": "Mutilated Remains", "duration": "3:15" }
+        ]
+      },
+      {
+        "id": "ad9f691b-a06e-4cf2-964e-efa9101865d5",
+        "title": "Despise / Lust of Decay",
+        "year": "2004",
+        "type": "album",
+        "label": "Comatose Music",
+        "catalog_id": "LOD-03",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/29/19/b5/2919b538-9fb1-e6d5-bb84-e5fe37978aa4/191773824129.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/29/19/b5/2919b538-9fb1-e6d5-bb84-e5fe37978aa4/191773824129.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Despise", "duration": "3:30" },
+          { "number": 2, "title": "Lust of Decay", "duration": "3:12" }
+        ]
+      },
+      {
+        "id": "681813f7-5dca-4f7b-910f-19a8f4b3070a",
+        "title": "Entombed in Sewage",
+        "year": "2008",
+        "type": "album",
+        "label": "Comatose Music",
+        "catalog_id": "LOD-04",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/0c/a0/22/0ca02233-ad39-7c2c-270a-aaaf7b20fba8/191773824150.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/0c/a0/22/0ca02233-ad39-7c2c-270a-aaaf7b20fba8/191773824150.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Entombed in Sewage", "duration": "3:50" },
+          { "number": 2, "title": "Swamped in Gore", "duration": "3:25" }
+        ]
+      },
+      {
+        "id": "8d1b782b-7755-4383-8a50-24877daf8d79",
+        "title": "Purity Through Dismemberment",
+        "year": "2014",
+        "type": "album",
+        "label": "Comatose Music",
+        "catalog_id": "LOD-05",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/8a/63/f5/8a63f52f-fb64-39ff-1c28-4ec5f2b02458/191773824136.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/8a/63/f5/8a63f52f-fb64-39ff-1c28-4ec5f2b02458/191773824136.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Purity Through Dismemberment", "duration": "4:02" },
+          { "number": 2, "title": "Surgical Abomination", "duration": "3:45" }
+        ]
+      }
+    ]
   },
   {
     "id": "0f365267-3742-4ddb-a853-ad458a233c62",
