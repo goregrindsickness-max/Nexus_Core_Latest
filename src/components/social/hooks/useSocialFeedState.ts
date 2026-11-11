@@ -12,6 +12,7 @@ import { savePostReaction } from '../utils/reactionStore';
 import { getCurrentCoordinates } from '../../../services/locationService';
 import { submitGlobalReaction } from '../../../services/postInteractionsService';
 import { pushManager } from '../../../lib/pushNotifications';
+import { detectGroundedVenue } from '../../../services/venueGroundingService';
 
 export function getYouTubeId(url: string): string {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -1029,6 +1030,36 @@ export function useSocialFeedState({
         }
       }
 
+      // Auto-Ground Venue via Google Maps API before publishing if text or venue input mentions a venue
+      let resolvedGroundedVenue: any = undefined;
+      const textToScan = [newPostText, taggedVenue, eventDataValue?.locationName, eventDataValue?.title].filter(Boolean).join(' ');
+      const lowerScan = textToScan.toLowerCase();
+      const mentionsVenueKeyword = (
+        lowerScan.includes('at ') ||
+        lowerScan.includes('venue') ||
+        lowerScan.includes('theater') ||
+        lowerScan.includes('theatre') ||
+        lowerScan.includes('hall') ||
+        lowerScan.includes('club') ||
+        lowerScan.includes('bar') ||
+        lowerScan.includes('stage') ||
+        lowerScan.includes('live at') ||
+        lowerScan.includes('fest') ||
+        lowerScan.includes('playing') ||
+        lowerScan.includes('@')
+      );
+
+      if (textToScan.trim() && mentionsVenueKeyword) {
+        try {
+          const groundedRes = await detectGroundedVenue(textToScan);
+          if (groundedRes && groundedRes.hasVenue) {
+            resolvedGroundedVenue = groundedRes;
+          }
+        } catch (gErr) {
+          console.warn('Auto-grounding venue error in handleCreatePost:', gErr);
+        }
+      }
+
       const newPost: any = {
         id: postUuid,
         type: classifiedDataValue ? classifiedType : merchDataValue ? 'merch_drop' : tapeDataValue ? 'tape_share' : pollDataValue ? 'poll' : eventDataValue ? 'event' : 'post',
@@ -1071,6 +1102,8 @@ export function useSocialFeedState({
         youtubeUrl: ytUrl,
         youtube_url: ytUrl,
         location: taggedVenue || (eventDataValue ? eventDataValue.locationName : undefined),
+        groundedVenue: resolvedGroundedVenue,
+        grounded_venue: resolvedGroundedVenue,
         reactions: [{ type: 'flame', count: 0, active: false }],
         comments: [],
         topComment: undefined,

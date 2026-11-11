@@ -235,36 +235,28 @@ class PersistentAudioService {
 
   /**
    * Communicates with native Android BackgroundAudioService via MainActivity's JavascriptInterface
+   * Ensures native OS MediaSession is primary while suppressing redundant custom notification cards.
    */
   private notifyNativeBridge(action: 'start' | 'update' | 'pause' | 'stop'): void {
     try {
       const nativeBridge = (window as any).NexusNativeAudio;
       if (!nativeBridge) return;
 
-      const title = this.currentTrack?.title || 'Scene Radio';
-      const artist = this.currentTrack?.artist || 'Nexus Underground';
-      const genre = this.currentTrack?.genre || 'Brutal Death';
-
-      if (action === 'start') {
+      if (action === 'start' || action === 'update') {
         if (typeof nativeBridge.setAudioActive === 'function') {
           nativeBridge.setAudioActive(true);
         }
-        nativeBridge.startForegroundAudio(title, artist, genre);
-      } else if (action === 'update') {
-        if (typeof nativeBridge.setAudioActive === 'function') {
-          nativeBridge.setAudioActive(true);
+        // Suppress custom foreground notification card so OS native Media Player handles controls natively
+        if (typeof nativeBridge.stopForegroundAudio === 'function') {
+          nativeBridge.stopForegroundAudio();
         }
-        nativeBridge.updateMetadata(title, artist);
-      } else if (action === 'pause') {
+      } else if (action === 'pause' || action === 'stop') {
         if (typeof nativeBridge.setAudioActive === 'function') {
           nativeBridge.setAudioActive(false);
         }
-        nativeBridge.pauseForegroundAudio();
-      } else if (action === 'stop') {
-        if (typeof nativeBridge.setAudioActive === 'function') {
-          nativeBridge.setAudioActive(false);
+        if (typeof nativeBridge.stopForegroundAudio === 'function') {
+          nativeBridge.stopForegroundAudio();
         }
-        nativeBridge.stopForegroundAudio();
       }
     } catch (e) {
       console.warn('[PersistentAudioService] Native audio bridge notification notice:', e);

@@ -15397,15 +15397,15 @@
     "title": "Protonemesis - Single",
     "catalog_id": "IT-1586842140",
     "type": "single",
-    "release_date": "2026",
+    "release_date": "2021",
     "label": "Unique Leader Records",
     "genre": "Extreme Metal",
     "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/23/58/d3/2358d36d-1ad6-c105-7769-44c2ed69e5a6/196292517484.jpg/600x600bb.jpg",
     "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/23/58/d3/2358d36d-1ad6-c105-7769-44c2ed69e5a6/196292517484.jpg/600x600bb.jpg",
     "tracks": [
       {
+        "number": 1,
         "title": "Protonemesis",
-        "number": "1",
         "duration": "4:09"
       }
     ],
@@ -15414,7 +15414,8 @@
     "audio_vault_path": null,
     "status": "active",
     "created_by": null,
-    "cover_color": null
+    "cover_color": null,
+    "band": "Extermination Dismemberment"
   },
   {
     "id": "3c9457a5-1d6a-431e-9fb5-2304bce9a9b1",
@@ -16364,75 +16365,75 @@
     "title": "Butcher Basement",
     "catalog_id": "IT-1231149286",
     "type": "album",
-    "release_date": "2026",
+    "release_date": "2010",
     "label": "Imbecil Entertainment Records / Morbid Generation Records",
-    "genre": "Extreme Metal",
+    "genre": "Slamming BDM",
     "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music117/v4/27/26/65/2726650c-d059-548c-1b3b-8e2e04146bcf/artwork.jpg/600x600bb.jpg",
     "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music117/v4/27/26/65/2726650c-d059-548c-1b3b-8e2e04146bcf/artwork.jpg/600x600bb.jpg",
     "tracks": [
       {
+        "number": 1,
         "title": "Commencement of End",
-        "number": "1",
         "duration": "1:21"
       },
       {
+        "number": 2,
         "title": "Slaughterer Chainsaw",
-        "number": "2",
         "duration": "3:41"
       },
       {
+        "number": 3,
         "title": "Resurrectionist Blasphemous",
-        "number": "3",
         "duration": "2:58"
       },
       {
+        "number": 4,
         "title": "Merciless Infanticide",
-        "number": "4",
         "duration": "3:18"
       },
       {
+        "number": 5,
         "title": "Brutality Great Battle",
-        "number": "5",
         "duration": "2:31"
       },
       {
+        "number": 6,
         "title": "Rotten Entrails",
-        "number": "6",
         "duration": "2:10"
       },
       {
+        "number": 7,
         "title": "Butcher Basement",
-        "number": "7",
         "duration": "4:17"
       },
       {
+        "number": 8,
         "title": "Gastrointestinal Rupture",
-        "number": "8",
         "duration": "2:57"
       },
       {
+        "number": 9,
         "title": "Bulldozer Massacre",
-        "number": "9",
         "duration": "6:31"
       },
       {
+        "number": 10,
         "title": "My Bloody Show",
-        "number": "10",
         "duration": "2:29"
       },
       {
+        "number": 11,
         "title": "Omnivorous Sanctum",
-        "number": "11",
         "duration": "2:56"
       },
       {
+        "number": 12,
         "title": "Ogre Orchardman",
-        "number": "12",
         "duration": "3:20"
       },
       {
+        "number": 13,
         "title": "Ophthalmic Eyeing",
-        "number": "13",
         "duration": "2:45"
       }
     ],
@@ -16441,7 +16442,8 @@
     "audio_vault_path": null,
     "status": "active",
     "created_by": null,
-    "cover_color": null
+    "cover_color": null,
+    "band": "Extermination Dismemberment"
   },
   {
     "id": "d2b3b955-d788-414a-9157-21c389f41823",
@@ -17209,140 +17211,6 @@
     "cover_color": null
   },
   {
-    "id": "e74f0c3e-43d8-42b3-9203-b9e13c3181da",
-    "created_at": "2026-11-10T08:07:46.477684+00:00",
-    "updated_at": "2026-11-10T08:09:03.618+00:00",
-    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
-    "label_id": null,
-    "title": "Path of the Weakening",
-    "catalog_id": "IT-1298813639",
-    "type": "album",
-    "release_date": "1999",
-    "label": "Unique Leader Records",
-    "genre": "Extreme Metal",
-    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/0c/a0/22/0ca02233-ad39-7c2c-270a-aaaf7b20fba8/191773824150.jpg/600x600bb.jpg",
-    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/0c/a0/22/0ca02233-ad39-7c2c-270a-aaaf7b20fba8/191773824150.jpg/600x600bb.jpg",
-    "tracks": [
-      {
-        "title": "Indigenous to the Appalling",
-        "number": "1",
-        "duration": "3:49"
-      },
-      {
-        "title": "Lustmord",
-        "number": "2",
-        "duration": "2:41"
-      },
-      {
-        "title": "Path of the Weakening",
-        "number": "3",
-        "duration": "4:50"
-      },
-      {
-        "title": "Summarily Killed",
-        "number": "4",
-        "duration": "3:31"
-      },
-      {
-        "title": "Sounds of Loud Reigns",
-        "number": "5",
-        "duration": "3:26"
-      },
-      {
-        "title": "Execute the Anthropophagi",
-        "number": "6",
-        "duration": "3:59"
-      },
-      {
-        "title": "I Die on My Own Terms",
-        "number": "7",
-        "duration": "2:36"
-      },
-      {
-        "title": "Sense of the Diabolic",
-        "number": "8",
-        "duration": "3:18"
-      },
-      {
-        "title": "A Violent God",
-        "number": "9",
-        "duration": "3:29"
-      }
-    ],
-    "formats": {},
-    "digital": [],
-    "audio_vault_path": null,
-    "status": "active",
-    "created_by": null,
-    "cover_color": null
-  },
-  {
-    "id": "9104d34c-7576-44df-ab7d-0beaa7fed3bd",
-    "created_at": "2026-11-07T06:10:43.915278+00:00",
-    "updated_at": "2026-11-08T08:53:55.881+00:00",
-    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
-    "label_id": null,
-    "title": "Trading Pieces",
-    "catalog_id": null,
-    "type": "album",
-    "release_date": "2026",
-    "label": "Spanish Goblin",
-    "genre": "Extreme Metal",
-    "cover_image": null,
-    "cover_url": null,
-    "tracks": [],
-    "formats": {},
-    "digital": [],
-    "audio_vault_path": null,
-    "status": "active",
-    "created_by": null,
-    "cover_color": null
-  },
-  {
-    "id": "c0f0e880-e41e-4e3e-ab7d-0bea07ad1465",
-    "created_at": "2026-11-07T06:10:43.915278+00:00",
-    "updated_at": "2026-11-08T08:53:55.881+00:00",
-    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
-    "label_id": null,
-    "title": "Mark of the Legion",
-    "catalog_id": null,
-    "type": "album",
-    "release_date": "2026",
-    "label": "Unique Leader Records",
-    "genre": "Extreme Metal",
-    "cover_image": null,
-    "cover_url": null,
-    "tracks": [],
-    "formats": {},
-    "digital": [],
-    "audio_vault_path": null,
-    "status": "active",
-    "created_by": null,
-    "cover_color": null
-  },
-  {
-    "id": "0674c998-5c86-499d-a141-1744bf42f855",
-    "created_at": "2026-11-07T06:10:43.915278+00:00",
-    "updated_at": "2026-11-08T08:53:55.881+00:00",
-    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
-    "label_id": null,
-    "title": "Nucleus",
-    "catalog_id": null,
-    "type": "album",
-    "release_date": "2026",
-    "label": "Unique Leader Records",
-    "genre": "Extreme Metal",
-    "cover_image": null,
-    "cover_url": null,
-    "tracks": [],
-    "formats": {},
-    "digital": [],
-    "audio_vault_path": null,
-    "status": "active",
-    "created_by": null,
-    "cover_color": null
-  },
-  {
     "id": "d4139d33-f1c9-44f7-b659-a4f43021e28a",
     "created_at": "2026-11-10T06:54:06.67754+00:00",
     "updated_at": "2026-11-10T06:59:57.974+00:00",
@@ -17411,49 +17279,6 @@
         "title": "God of War",
         "number": 11,
         "duration": "5;56"
-      }
-    ],
-    "formats": {},
-    "digital": [],
-    "audio_vault_path": null,
-    "status": "active",
-    "created_by": null,
-    "cover_color": null
-  },
-  {
-    "id": "2b6d0a99-67bc-4d96-9c86-b27204130a48",
-    "created_at": "2026-11-10T08:07:46.477684+00:00",
-    "updated_at": "2026-11-10T08:09:03.618+00:00",
-    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
-    "label_id": null,
-    "title": "Gradually Melted (Re-Issue) - EP",
-    "catalog_id": "IT-1298807875",
-    "type": "ep",
-    "release_date": "2026",
-    "label": "Unique Leader Records",
-    "genre": "Extreme Metal",
-    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/11/2b/80/112b807a-7763-16e3-0d13-28d090a9f59d/191773824105.jpg/600x600bb.jpg",
-    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/11/2b/80/112b807a-7763-16e3-0d13-28d090a9f59d/191773824105.jpg/600x600bb.jpg",
-    "tracks": [
-      {
-        "title": "Three Minute Crawlspace",
-        "number": "1",
-        "duration": "2:49"
-      },
-      {
-        "title": "Gradually Melted",
-        "number": "2",
-        "duration": "3:57"
-      },
-      {
-        "title": "Human Sandbags",
-        "number": "3",
-        "duration": "3:44"
-      },
-      {
-        "title": "Feeling of Metal Through Flesh",
-        "number": "4",
-        "duration": "3:23"
       }
     ],
     "formats": {},
@@ -17557,379 +17382,6 @@
         "title": "Queen of Lies",
         "number": 16,
         "duration": "6:02"
-      }
-    ],
-    "formats": {},
-    "digital": [],
-    "audio_vault_path": null,
-    "status": "active",
-    "created_by": null,
-    "cover_color": null
-  },
-  {
-    "id": "0f39c852-5634-4fc2-8d6a-470b7b1e1674",
-    "created_at": "2026-11-10T08:07:46.477684+00:00",
-    "updated_at": "2026-11-10T08:09:03.618+00:00",
-    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
-    "label_id": null,
-    "title": "Portals to Canaan",
-    "catalog_id": null,
-    "type": "album",
-    "release_date": "2013",
-    "label": "Unique Leader Records",
-    "genre": "Extreme Metal",
-    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/1f/0b/e3/1f0be348-a44e-55e0-10f9-13bb836c47a5/191773824167.jpg/600x600bb.jpg",
-    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/1f/0b/e3/1f0be348-a44e-55e0-10f9-13bb836c47a5/191773824167.jpg/600x600bb.jpg",
-    "tracks": [
-      {
-        "title": "Amidst the Ruins",
-        "number": "1",
-        "duration": "4:31"
-      },
-      {
-        "title": "Entranced in Decades of Psychedelic Sleep",
-        "number": "2",
-        "duration": "6:38"
-      },
-      {
-        "title": "Rise of the Virvum Juggernaut",
-        "number": "3",
-        "duration": "4:12"
-      },
-      {
-        "title": "Celestial Serpents",
-        "number": "4",
-        "duration": "5:36"
-      },
-      {
-        "title": "Caelum Hirundines Terra / The Sky Swallows the Earth",
-        "number": "5",
-        "duration": "1:47"
-      },
-      {
-        "title": "Xeno-Virus",
-        "number": "6",
-        "duration": "5:30"
-      },
-      {
-        "title": "Hollow Human Husks",
-        "number": "7",
-        "duration": "4:08"
-      },
-      {
-        "title": "Portals to Canaan",
-        "number": "8",
-        "duration": "4:35"
-      },
-      {
-        "title": "Orphans of Sickness",
-        "number": "9",
-        "duration": "5:26"
-      }
-    ],
-    "formats": {},
-    "digital": [],
-    "audio_vault_path": null,
-    "status": "active",
-    "created_by": null,
-    "cover_color": null
-  },
-  {
-    "id": "d3d1bf4c-2164-43da-96b1-d4c43a4feb94",
-    "created_at": "2026-11-10T08:07:46.477684+00:00",
-    "updated_at": "2026-11-10T08:09:03.618+00:00",
-    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
-    "label_id": null,
-    "title": "Of What's to Come",
-    "catalog_id": null,
-    "type": "album",
-    "release_date": "2008",
-    "label": "Unique Leader Records",
-    "genre": "Extreme Metal",
-    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/fe/cb/11/fecb118d-dfd2-bc22-2969-0b46d0c7657e/191773824143.jpg/600x600bb.jpg",
-    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/fe/cb/11/fecb118d-dfd2-bc22-2969-0b46d0c7657e/191773824143.jpg/600x600bb.jpg",
-    "tracks": [
-      {
-        "title": "Waters of Space",
-        "number": "1",
-        "duration": "5:29"
-      },
-      {
-        "title": "Eradication Pods",
-        "number": "2",
-        "duration": "3:32"
-      },
-      {
-        "title": "Unearthly Invent",
-        "number": "3",
-        "duration": "3:30"
-      },
-      {
-        "title": "Of What's to Come",
-        "number": "4",
-        "duration": "5:55"
-      },
-      {
-        "title": "Virvum",
-        "number": "5",
-        "duration": "3:15"
-      },
-      {
-        "title": "Century of the Vital",
-        "number": "6",
-        "duration": "4:59"
-      },
-      {
-        "title": "Harvest Temples",
-        "number": "7",
-        "duration": "4:04"
-      },
-      {
-        "title": "Dawn of the Next",
-        "number": "8",
-        "duration": "4:04"
-      },
-      {
-        "title": "Infecting Them with Falsehood",
-        "number": "9",
-        "duration": "4:26"
-      }
-    ],
-    "formats": {},
-    "digital": [],
-    "audio_vault_path": null,
-    "status": "active",
-    "created_by": null,
-    "cover_color": null
-  },
-  {
-    "id": "37990ab9-cdc5-40a9-85f9-dd4ec697160a",
-    "created_at": "2026-11-10T08:07:46.477684+00:00",
-    "updated_at": "2026-11-10T08:09:03.618+00:00",
-    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
-    "label_id": null,
-    "title": "Gradually Melted - EP",
-    "catalog_id": "IT-1298819656",
-    "type": "ep",
-    "release_date": "1995",
-    "label": "Unique Leader Records",
-    "genre": "Extreme Metal",
-    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/74/81/fa/7481fafc-0ae1-f38b-8a0c-dba455f96c3f/191773824112.jpg/600x600bb.jpg",
-    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/74/81/fa/7481fafc-0ae1-f38b-8a0c-dba455f96c3f/191773824112.jpg/600x600bb.jpg",
-    "tracks": [
-      {
-        "title": "Three Minute Crawlspace",
-        "number": "1",
-        "duration": "2:49"
-      },
-      {
-        "title": "Gradually Melted",
-        "number": "2",
-        "duration": "3:57"
-      },
-      {
-        "title": "Human Sandbags",
-        "number": "3",
-        "duration": "3:44"
-      },
-      {
-        "title": "Feelings of Metal Through Flesh",
-        "number": "4",
-        "duration": "3:23"
-      }
-    ],
-    "formats": {},
-    "digital": [],
-    "audio_vault_path": null,
-    "status": "active",
-    "created_by": null,
-    "cover_color": null
-  },
-  {
-    "id": "e5923113-d25d-45cb-be71-807700279cd3",
-    "created_at": "2026-11-10T08:07:46.477684+00:00",
-    "updated_at": "2026-11-10T08:09:03.618+00:00",
-    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
-    "label_id": null,
-    "title": "Reduced to Ashes",
-    "catalog_id": "IT-1478917744",
-    "type": "album",
-    "release_date": "2003",
-    "label": "Unique Leader Records",
-    "genre": "Extreme Metal",
-    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/b2/da/c9/b2dac96a-03b5-ef9d-d15c-1e859af9732d/194491307509.jpg/600x600bb.jpg",
-    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/b2/da/c9/b2dac96a-03b5-ef9d-d15c-1e859af9732d/194491307509.jpg/600x600bb.jpg",
-    "tracks": [
-      {
-        "title": "Reduced to Ashes",
-        "number": "1",
-        "duration": "5:59"
-      },
-      {
-        "title": "Infested Beneath the Earth",
-        "number": "2",
-        "duration": "4:13"
-      },
-      {
-        "title": "Avowed Depraved",
-        "number": "3",
-        "duration": "5:11"
-      },
-      {
-        "title": "Empyrean",
-        "number": "4",
-        "duration": "5:45"
-      },
-      {
-        "title": "Human Trophies",
-        "number": "5",
-        "duration": "4:49"
-      },
-      {
-        "title": "Banished",
-        "number": "6",
-        "duration": "4:41"
-      },
-      {
-        "title": "Disnintered Archaic Heap",
-        "number": "7",
-        "duration": "4:07"
-      },
-      {
-        "title": "The Endurance",
-        "number": "8",
-        "duration": "11:48"
-      }
-    ],
-    "formats": {},
-    "digital": [],
-    "audio_vault_path": null,
-    "status": "active",
-    "created_by": null,
-    "cover_color": null
-  },
-  {
-    "id": "fac4dfb9-7288-43ae-ba66-55bc45f53022",
-    "created_at": "2026-11-10T08:07:46.477684+00:00",
-    "updated_at": "2026-11-10T08:09:03.618+00:00",
-    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
-    "label_id": null,
-    "title": "Inbreeding the Anthropophagi",
-    "catalog_id": null,
-    "type": "album",
-    "release_date": "1998",
-    "label": "Decomposed Records",
-    "genre": "Extreme Metal",
-    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/29/19/b5/2919b538-9fb1-e6d5-bb84-e5fe37978aa4/191773824129.jpg/600x600bb.jpg",
-    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/29/19/b5/2919b538-9fb1-e6d5-bb84-e5fe37978aa4/191773824129.jpg/600x600bb.jpg",
-    "tracks": [
-      {
-        "title": "End of All",
-        "number": "1",
-        "duration": "1:21"
-      },
-      {
-        "title": "Feeding Time",
-        "number": "2",
-        "duration": "4:24"
-      },
-      {
-        "title": "Inbreeding the Anthropophagi",
-        "number": "3",
-        "duration": "4:46"
-      },
-      {
-        "title": "Infecting Them with Falsehood",
-        "number": "4",
-        "duration": "4:54"
-      },
-      {
-        "title": "Canvass of Flesh",
-        "number": "5",
-        "duration": "3:04"
-      },
-      {
-        "title": "Ritual of Battle",
-        "number": "6",
-        "duration": "3:35"
-      },
-      {
-        "title": "Fly Shrine",
-        "number": "7",
-        "duration": "4:12"
-      },
-      {
-        "title": "Gradually Melted",
-        "number": "8",
-        "duration": "4:21"
-      }
-    ],
-    "formats": {},
-    "digital": [],
-    "audio_vault_path": null,
-    "status": "active",
-    "created_by": null,
-    "cover_color": null
-  },
-  {
-    "id": "d7f00d03-89a9-4593-9c86-b272ed48a465",
-    "created_at": "2026-11-10T08:07:46.477684+00:00",
-    "updated_at": "2026-11-10T08:09:03.618+00:00",
-    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
-    "label_id": null,
-    "title": "Crown of Souls",
-    "catalog_id": null,
-    "type": "album",
-    "release_date": "2005",
-    "label": "Unique Leader Records",
-    "genre": "Extreme Metal",
-    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/11/86/89/11868930-a62e-35d4-8d96-9586f153cba5/191773824099.jpg/600x600bb.jpg",
-    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/11/86/89/11868930-a62e-35d4-8d96-9586f153cba5/191773824099.jpg/600x600bb.jpg",
-    "tracks": [
-      {
-        "title": "Crown of Souls",
-        "number": "1",
-        "duration": "5:20"
-      },
-      {
-        "title": "Medical Murder",
-        "number": "2",
-        "duration": "4:42"
-      },
-      {
-        "title": "Hammer Forged Blade",
-        "number": "3",
-        "duration": "5:12"
-      },
-      {
-        "title": "Forced Attrition",
-        "number": "4",
-        "duration": "4:01"
-      },
-      {
-        "title": "This Macabre Fetish",
-        "number": "5",
-        "duration": "3:58"
-      },
-      {
-        "title": "The Resurrected",
-        "number": "6",
-        "duration": "5:15"
-      },
-      {
-        "title": "Incontestably Evil",
-        "number": "7",
-        "duration": "4:03"
-      },
-      {
-        "title": "Crimson Offering",
-        "number": "8",
-        "duration": "5:20"
-      },
-      {
-        "title": "Caught Devouring",
-        "number": "9",
-        "duration": "4:25"
       }
     ],
     "formats": {},
@@ -18048,5 +17500,1234 @@
     "status": "active",
     "created_by": null,
     "cover_color": null
+  },
+  {
+    "id": "681813f7-5dca-4f7b-910f-19a8f4b3070a",
+    "title": "Entombed in Sewage",
+    "type": "Full-length",
+    "year": "2008",
+    "release_date": "2008",
+    "releaseDate": "2008",
+    "release_year": "2008",
+    "genre": "Metal",
+    "label": "Comatose Music",
+    "catalog_id": "IT-1844419620",
+    "catalogId": "IT-1844419620",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/e8/e9/be/e8e9be4a-ed72-6e22-4aa4-d86fcc97600f/827166538525.png/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/e8/e9/be/e8e9be4a-ed72-6e22-4aa4-d86fcc97600f/827166538525.png/600x600bb.jpg",
+    "coverImage": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/e8/e9/be/e8e9be4a-ed72-6e22-4aa4-d86fcc97600f/827166538525.png/600x600bb.jpg",
+    "coverUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/e8/e9/be/e8e9be4a-ed72-6e22-4aa4-d86fcc97600f/827166538525.png/600x600bb.jpg",
+    "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/e8/e9/be/e8e9be4a-ed72-6e22-4aa4-d86fcc97600f/827166538525.png/600x600bb.jpg",
+    "source": "Apple Music",
+    "tracks": [
+      {
+        "id": "s-1844419621",
+        "num": "1",
+        "title": "Parasitic Exsanguination",
+        "duration": "4:26",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/d9/50/0d/d9500d26-75a8-9cbc-1f34-36d5927c7f5e/mzaf_4125932023103408023.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1844419922",
+        "num": "2",
+        "title": "Hallucinations of the Decrepit",
+        "duration": "4:01",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/e0/98/17/e0981743-c5f1-037d-93e5-83a83b8a4377/mzaf_10361804852988661628.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1844419923",
+        "num": "3",
+        "title": "Nourishing the Swine",
+        "duration": "4:29",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/cb/86/df/cb86df26-452b-4d2e-832e-5d313fb3f60f/mzaf_17853617278049320758.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1844419924",
+        "num": "4",
+        "title": "Fetal Contamination Process",
+        "duration": "3:58",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/c0/9b/fa/c09bfa11-2ee1-d49a-3d0a-5f3488ff182b/mzaf_7616787382277655347.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1844419925",
+        "num": "5",
+        "title": "Rusty Razor R****b",
+        "duration": "3:45",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/fc/3a/4d/fc3a4dc7-c9b5-0f98-2571-8f2599872c49/mzaf_1123724513494659845.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1844419926",
+        "num": "6",
+        "title": "Order 66",
+        "duration": "3:41",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/61/33/83/6133835c-1e6b-4ee1-1593-e7d8bc9208e0/mzaf_8035989826538902028.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1844419927",
+        "num": "7",
+        "title": "Desiccate the Epithelium",
+        "duration": "3:45",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/be/26/d4/be26d4b1-7581-8c8f-97c4-f32c1f6844f7/mzaf_12492680786108966002.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1844419928",
+        "num": "8",
+        "title": "Entombed in Sewage",
+        "duration": "5:18",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/85/0a/18/850a1846-21b2-263c-71cb-e8b943e59066/mzaf_15823111406336590373.plus.aac.p.m4a"
+      }
+    ],
+    "band_id": "48ef20cc-0954-4a94-868e-0783699ec6ff",
+    "band_name": "Lust of Decay",
+    "artist": "Lust of Decay",
+    "updated_at": "2026-11-10T21:26:15.721Z",
+    "band": "Lust of Decay"
+  },
+  {
+    "id": "85296868-a0e5-4a6f-ac6a-5aec1fe8f519",
+    "title": "Infesting the Exhumed",
+    "type": "Full-length",
+    "year": "2002",
+    "release_date": "2002",
+    "releaseDate": "2002",
+    "release_year": "2002",
+    "genre": "Metal",
+    "label": "COMATOSE MUSIC",
+    "catalog_id": "IT-1728455354",
+    "catalogId": "IT-1728455354",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/28/d3/52/28d3523d-0d1d-b0a6-dd90-521baf6dd9e4/827166266923.png/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/28/d3/52/28d3523d-0d1d-b0a6-dd90-521baf6dd9e4/827166266923.png/600x600bb.jpg",
+    "coverImage": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/28/d3/52/28d3523d-0d1d-b0a6-dd90-521baf6dd9e4/827166266923.png/600x600bb.jpg",
+    "coverUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/28/d3/52/28d3523d-0d1d-b0a6-dd90-521baf6dd9e4/827166266923.png/600x600bb.jpg",
+    "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/28/d3/52/28d3523d-0d1d-b0a6-dd90-521baf6dd9e4/827166266923.png/600x600bb.jpg",
+    "source": "Apple Music",
+    "tracks": [
+      {
+        "id": "s-1728455355",
+        "num": "1",
+        "title": "Festering Anal Vomit",
+        "duration": "2:55",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/0a/74/d1/0a74d143-cfb4-a5cb-09a7-3b2af1819822/mzaf_3840267327143378977.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455356",
+        "num": "2",
+        "title": "Head in a Crock Pot",
+        "duration": "3:27",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/10/5c/9d/105c9da9-19cf-39bd-3ed6-17cf19b1e2f0/mzaf_13688599895455898075.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455447",
+        "num": "3",
+        "title": "Engorging the Vaginal Cavity",
+        "duration": "2:33",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/ad/1f/3e/ad1f3e6a-9a6f-aef1-b396-a4dd7fc5e3e0/mzaf_3055477733471914581.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455448",
+        "num": "4",
+        "title": "Erased from Existence",
+        "duration": "2:46",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/44/24/df/4424dff2-78e4-ee8d-76cf-ee9d68b7b7ec/mzaf_13308084542666175244.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455449",
+        "num": "5",
+        "title": "Draped in White",
+        "duration": "1:00",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/f2/ae/da/f2aeda19-d0a5-ef75-c74e-b2bf994654ea/mzaf_3772466744729189358.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455450",
+        "num": "6",
+        "title": "Bloodart",
+        "duration": "4:23",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/a2/01/3c/a2013c2a-6c96-fbcc-c234-6b0519ed94e5/mzaf_17511763655005739441.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455451",
+        "num": "7",
+        "title": "Abscence of Light",
+        "duration": "3:00",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/cd/07/f6/cd07f65d-028b-9dab-ed04-17da37f611fe/mzaf_11581495713753880012.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455452",
+        "num": "8",
+        "title": "Stricken with Disease",
+        "duration": "2:40",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/04/31/51/043151e6-05d5-c997-9d75-c71e5a49cc11/mzaf_14055304507895520966.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455453",
+        "num": "9",
+        "title": "Mutilation Tool",
+        "duration": "3:26",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/6e/8c/59/6e8c5934-5cbf-16a2-9219-c56c67c07fbe/mzaf_6477528155442111225.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455454",
+        "num": "10",
+        "title": "Infesting the Exhumed",
+        "duration": "2:58",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/ef/95/5e/ef955e77-0a22-b8f4-c885-7152badb9d76/mzaf_1018591404434007801.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455455",
+        "num": "11",
+        "title": "Pure Hate (Demo)",
+        "duration": "6:13",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/ce/ad/fc/ceadfc33-27d2-579e-99ec-626ff42c2e86/mzaf_13900924001618553502.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455456",
+        "num": "12",
+        "title": "Mindkill (Demo)",
+        "duration": "5:26",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/f9/14/4a/f9144a1e-a2a1-639f-4896-28d916a53c8d/mzaf_5654076148726116688.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455457",
+        "num": "13",
+        "title": "Holy Lies (Demo)",
+        "duration": "3:05",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/29/de/57/29de57b6-a8c4-21bc-7006-09404db54d7b/mzaf_1259712449233624855.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455458",
+        "num": "14",
+        "title": "Insane Anger (Demo)",
+        "duration": "5:09",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/5a/69/e4/5a69e4ff-61be-062d-40e3-826badd9bb92/mzaf_17766999765281580376.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728455459",
+        "num": "15",
+        "title": "Unearthed (Demo)",
+        "duration": "5:44",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/76/d0/da/76d0da01-90fb-e450-82c3-7f4a002e0954/mzaf_2833338395733318914.plus.aac.p.m4a"
+      }
+    ],
+    "band_id": "48ef20cc-0954-4a94-868e-0783699ec6ff",
+    "band_name": "Lust of Decay",
+    "artist": "Lust of Decay",
+    "updated_at": "2026-11-10T21:26:15.721Z",
+    "band": "Lust of Decay"
+  },
+  {
+    "id": "8d1b782b-7755-4383-8a50-24877daf8d79",
+    "title": "Purity Through Dismemberment",
+    "type": "Full-length",
+    "year": "2014",
+    "release_date": "2014",
+    "releaseDate": "2014",
+    "release_year": "2014",
+    "genre": "Metal",
+    "label": "Comatose Music",
+    "catalog_id": "IT-1727405220",
+    "catalogId": "IT-1727405220",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/66/f6/b4/66f6b495-45e2-3deb-65ff-d20b7c626eb9/827166114927.png/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/66/f6/b4/66f6b495-45e2-3deb-65ff-d20b7c626eb9/827166114927.png/600x600bb.jpg",
+    "coverImage": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/66/f6/b4/66f6b495-45e2-3deb-65ff-d20b7c626eb9/827166114927.png/600x600bb.jpg",
+    "coverUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/66/f6/b4/66f6b495-45e2-3deb-65ff-d20b7c626eb9/827166114927.png/600x600bb.jpg",
+    "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/66/f6/b4/66f6b495-45e2-3deb-65ff-d20b7c626eb9/827166114927.png/600x600bb.jpg",
+    "source": "Apple Music",
+    "tracks": [
+      {
+        "id": "s-1727405221",
+        "num": "1",
+        "title": "Exchanging Perversities",
+        "duration": "3:43",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/3f/e9/75/3fe975d5-9ff9-6e4a-5b97-6be3d7d9919b/mzaf_15834785684320621683.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1727405223",
+        "num": "2",
+        "title": "Scarification",
+        "duration": "3:07",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/bf/72/47/bf7247f6-a402-d035-2b4e-5fb42e28c81c/mzaf_2647526767811608835.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1727405224",
+        "num": "3",
+        "title": "Intolerable Cruelty",
+        "duration": "4:48",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/c7/7b/4f/c77b4f3e-da5a-0100-5f2b-978fb01790bb/mzaf_12521910262508305653.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1727405225",
+        "num": "4",
+        "title": "Licking Bacterial Ecstasy",
+        "duration": "2:44",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/5e/ac/f0/5eacf09e-a448-9d1f-2cc0-ab952796c7be/mzaf_7702669808667550356.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1727405226",
+        "num": "5",
+        "title": "When Anesthesia Fails",
+        "duration": "3:23",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/e2/9f/8c/e29f8cd1-9b3d-4cd4-4fab-ce534c5f3222/mzaf_3399318244483470722.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1727405227",
+        "num": "6",
+        "title": "Embryonic Breeding for Cannibalistic Devourment",
+        "duration": "1:40",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/c4/c8/8c/c4c88cfd-d9f3-d655-7400-b8aa7dad4f26/mzaf_5786935217618890295.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1727405229",
+        "num": "7",
+        "title": "Raging Swarm",
+        "duration": "2:23",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/cc/a6/2b/cca62b66-2da4-2cf6-1724-4bea9f3f2c6f/mzaf_4533758636735662466.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1727405231",
+        "num": "8",
+        "title": "Ejaculation Extermination",
+        "duration": "2:36",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/a3/20/76/a3207645-1ffb-eae6-4ef4-cad65e76f2fc/mzaf_2816057062849953085.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1727405233",
+        "num": "9",
+        "title": "Purity Through Dismemberment",
+        "duration": "5:09",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview126/v4/e1/97/c0/e197c052-f3f0-4cb5-9e12-2ffabf982ea0/mzaf_1829970680094585459.plus.aac.p.m4a"
+      }
+    ],
+    "band_id": "48ef20cc-0954-4a94-868e-0783699ec6ff",
+    "band_name": "Lust of Decay",
+    "artist": "Lust of Decay",
+    "updated_at": "2026-11-10T21:26:15.721Z",
+    "band": "Lust of Decay"
+  },
+  {
+    "id": "3656bc7a-b8e2-4239-ac6a-5aecd58afebd",
+    "title": "Kingdom of Corpses",
+    "type": "Full-length",
+    "year": "2004",
+    "release_date": "2004",
+    "releaseDate": "2004",
+    "release_year": "2004",
+    "genre": "Metal",
+    "label": "Comatose Music",
+    "catalog_id": "IT-1728454120",
+    "catalogId": "IT-1728454120",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/57/cd/9e/57cd9e5f-0efc-28c8-e30e-3b39505fb629/827166103020.png/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/57/cd/9e/57cd9e5f-0efc-28c8-e30e-3b39505fb629/827166103020.png/600x600bb.jpg",
+    "coverImage": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/57/cd/9e/57cd9e5f-0efc-28c8-e30e-3b39505fb629/827166103020.png/600x600bb.jpg",
+    "coverUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/57/cd/9e/57cd9e5f-0efc-28c8-e30e-3b39505fb629/827166103020.png/600x600bb.jpg",
+    "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/57/cd/9e/57cd9e5f-0efc-28c8-e30e-3b39505fb629/827166103020.png/600x600bb.jpg",
+    "source": "Apple Music",
+    "tracks": [
+      {
+        "id": "s-1728454121",
+        "num": "1",
+        "title": "Arachnid Anal Infestation",
+        "duration": "4:25",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/be/1d/fc/be1dfca2-a23d-56c5-b70a-04403f9379ba/mzaf_4024135311197022563.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728454122",
+        "num": "2",
+        "title": "Cranial Incubation",
+        "duration": "3:24",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/52/5a/6a/525a6a08-7bab-582b-dbde-dff9db335102/mzaf_3191379637840227561.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728454123",
+        "num": "3",
+        "title": "Septic Tank Abortion",
+        "duration": "4:09",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/64/00/cd/6400cd4d-84a8-6fcb-8a7c-bf0c1a074156/mzaf_723963336569781426.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728454124",
+        "num": "4",
+        "title": "Crustacean Masturbation",
+        "duration": "3:48",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/b6/97/31/b6973169-350b-927a-28ea-6522ccd9be3a/mzaf_11655665910095868052.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728454125",
+        "num": "5",
+        "title": "Predatory Instincts",
+        "duration": "3:07",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/5a/04/26/5a0426ad-c324-845f-1e26-4faed7b34941/mzaf_9078459424646385225.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728454126",
+        "num": "6",
+        "title": "Lunatic of God's Creation (Deicide Cover)",
+        "duration": "2:22",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/a5/f4/26/a5f426fc-05cc-a75c-28f3-2a3632a3f503/mzaf_12404143628668947358.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728454367",
+        "num": "7",
+        "title": "Cognitive Decimation",
+        "duration": "3:40",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/f2/cd/57/f2cd57d0-5bbd-009e-0503-fb2f4e018cee/mzaf_13081366219603299637.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728454368",
+        "num": "8",
+        "title": "Kingdom of Corpses",
+        "duration": "3:21",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/de/3a/70/de3a7003-a25c-90ae-2340-760280d9936d/mzaf_6337323074207094233.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728454369",
+        "num": "9",
+        "title": "Twelve Gauge Intercourse",
+        "duration": "2:56",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/4c/60/f4/4c60f4ee-9fcf-b512-9aba-64f03f890bc5/mzaf_14360335454547116838.plus.aac.p.m4a"
+      },
+      {
+        "id": "s-1728454370",
+        "num": "10",
+        "title": "Oral Asphyxiation",
+        "duration": "3:43",
+        "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/6d/c7/c6/6dc7c65f-6843-34da-6634-8829641e24be/mzaf_1027292094248966610.plus.aac.p.m4a"
+      }
+    ],
+    "band_id": "48ef20cc-0954-4a94-868e-0783699ec6ff",
+    "band_name": "Lust of Decay",
+    "artist": "Lust of Decay",
+    "updated_at": "2026-11-10T21:26:15.721Z",
+    "band": "Lust of Decay"
+  },
+  {
+    "id": "ad9f691b-a06e-4cf2-964e-efa9101865d5",
+    "title": "Despise / Lust of Decay",
+    "type": "EP",
+    "year": "2004",
+    "release_date": "2004",
+    "releaseDate": "2004",
+    "release_year": "2004",
+    "genre": "Metal / Heavy Underground",
+    "label": "Catalog Records",
+    "catalog_id": "MB-8c1e6985",
+    "catalogId": "MB-8c1e6985",
+    "cover_image": "https://coverartarchive.org/release-group/8c1e6985-f4ee-44b3-aa15-4f77b03e375d/front-500",
+    "cover_url": "https://coverartarchive.org/release-group/8c1e6985-f4ee-44b3-aa15-4f77b03e375d/front-500",
+    "coverImage": "https://coverartarchive.org/release-group/8c1e6985-f4ee-44b3-aa15-4f77b03e375d/front-500",
+    "coverUrl": "https://coverartarchive.org/release-group/8c1e6985-f4ee-44b3-aa15-4f77b03e375d/front-500",
+    "image_url": "https://coverartarchive.org/release-group/8c1e6985-f4ee-44b3-aa15-4f77b03e375d/front-500",
+    "source": "MusicBrainz",
+    "tracks": [
+      {
+        "id": "t1",
+        "num": "1",
+        "title": "Despise / Lust of Decay",
+        "duration": "3:30"
+      }
+    ],
+    "band_id": "48ef20cc-0954-4a94-868e-0783699ec6ff",
+    "band_name": "Lust of Decay",
+    "artist": "Lust of Decay",
+    "updated_at": "2026-11-10T21:26:15.721Z",
+    "band": "Lust of Decay"
+  },
+  {
+    "id": "9d376484-5401-421b-96fe-8f82b30dfc16",
+    "band_id": "2e4753ed-3af6-454d-912a-0512c544fb12",
+    "band": "Extermination Dismemberment",
+    "title": "Serial Urbicide",
+    "type": "album",
+    "release_date": "2013",
+    "label": "Amputated Vein Records",
+    "catalog_id": "IT-702880999",
+    "genre": "Slamming BDM",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/c4/98/90/c49890e7-d2cf-eb38-76aa-815ecba69809/AVR043.jpg/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/c4/98/90/c49890e7-d2cf-eb38-76aa-815ecba69809/AVR043.jpg/600x600bb.jpg",
+    "tracks": [
+      {
+        "number": 1,
+        "title": "Evisceration Conceiving",
+        "duration": "1:11"
+      },
+      {
+        "number": 2,
+        "title": "Disemboweled Engorgement",
+        "duration": "4:01"
+      },
+      {
+        "number": 3,
+        "title": "Gutted Face",
+        "duration": "3:08"
+      },
+      {
+        "number": 4,
+        "title": "Serial Urbicide",
+        "duration": "3:59"
+      },
+      {
+        "number": 5,
+        "title": "Deconstructive Parasite",
+        "duration": "5:16"
+      },
+      {
+        "number": 6,
+        "title": "Survival",
+        "duration": "3:32"
+      },
+      {
+        "number": 7,
+        "title": "Devastation Squad",
+        "duration": "3:22"
+      },
+      {
+        "number": 8,
+        "title": "Carnivore Outraged",
+        "duration": "3:37"
+      },
+      {
+        "number": 9,
+        "title": "Bloodbath Religion",
+        "duration": "3:50"
+      },
+      {
+        "number": 10,
+        "title": "Human Holocaust",
+        "duration": "6:20"
+      }
+    ]
+  },
+  {
+    "id": "41cd1513-405d-4527-bc06-9e9d5f3d62d8",
+    "band_id": "2e4753ed-3af6-454d-912a-0512c544fb12",
+    "band": "Extermination Dismemberment",
+    "title": "Dehumanization Protocol",
+    "type": "album",
+    "release_date": "2023",
+    "label": "Unique Leader Records",
+    "catalog_id": "ULR-310",
+    "genre": "Slamming BDM",
+    "cover_image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/release-art_1793819265919_1793819265938.jpg",
+    "cover_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/release-art_1793819265919_1793819265938.jpg",
+    "tracks": [
+      {
+        "number": 1,
+        "title": "God Help Us",
+        "duration": "1:00"
+      },
+      {
+        "number": 2,
+        "title": "Dehumanization Protocol",
+        "duration": "4:21"
+      },
+      {
+        "number": 3,
+        "title": "Terror Domination",
+        "duration": "4:55"
+      },
+      {
+        "number": 4,
+        "title": "Protonemesis",
+        "duration": "4:10"
+      },
+      {
+        "number": 5,
+        "title": "Plague in the Guise of Flesh",
+        "duration": "4:55"
+      },
+      {
+        "number": 6,
+        "title": "Omnivore",
+        "duration": "3:00"
+      },
+      {
+        "number": 7,
+        "title": "Extermination Factory",
+        "duration": "5:52"
+      },
+      {
+        "number": 8,
+        "title": "Agony Incarnate",
+        "duration": "4:19"
+      },
+      {
+        "number": 9,
+        "title": "Humanity's Last Grief",
+        "duration": "1:30"
+      },
+      {
+        "number": 10,
+        "title": "Sentenced to Extinction",
+        "duration": "6:33"
+      },
+      {
+        "number": 11,
+        "title": "Ruins of Armageddon",
+        "duration": "8:06"
+      },
+      {
+        "number": 12,
+        "title": "Corpsepit",
+        "duration": "4:39"
+      },
+      {
+        "number": 13,
+        "title": "Protonemesis (2021 Version)",
+        "duration": "4:09"
+      }
+    ]
+  },
+  {
+    "id": "0c9e8a05-f982-473a-a9d7-d72c81513de6",
+    "band_id": "2e4753ed-3af6-454d-912a-0512c544fb12",
+    "band": "Extermination Dismemberment",
+    "title": "Enslaver of the Continents",
+    "type": "single",
+    "release_date": "2024",
+    "label": "Unique Leader Records",
+    "genre": "Extreme Metal",
+    "cover_image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/release-art_1794344665875_1794344665891.jpg",
+    "cover_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/release-art_1794344665875_1794344665891.jpg",
+    "tracks": [
+      {
+        "number": 1,
+        "title": "Enslaver of the Continents",
+        "duration": "4:12"
+      }
+    ]
+  },
+  {
+    "id": "37990ab9-cdc5-40a9-85f9-dd4ec697160a",
+    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
+    "band": "Deeds of Flesh",
+    "band_name": "Deeds of Flesh",
+    "title": "Gradually Melted - EP",
+    "catalog_id": "DOF-GRAD",
+    "type": "ep",
+    "release_date": "1995",
+    "label": "Unique Leader Records",
+    "genre": "Technical Death Metal",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/74/81/fa/7481fafc-0ae1-f38b-8a0c-dba455f96c3f/191773824112.jpg/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/74/81/fa/7481fafc-0ae1-f38b-8a0c-dba455f96c3f/191773824112.jpg/600x600bb.jpg",
+    "tracks": [
+      {
+        "number": "1",
+        "title": "Three Abreast",
+        "duration": "3:43"
+      },
+      {
+        "number": "2",
+        "title": "Gradually Melted",
+        "duration": "4:23"
+      },
+      {
+        "number": "3",
+        "title": "Human Mutilation",
+        "duration": "4:42"
+      },
+      {
+        "number": "4",
+        "title": "Blood Splattered Embryo",
+        "duration": "3:02"
+      }
+    ],
+    "formats": {},
+    "digital": [],
+    "status": "active",
+    "created_at": "2026-11-10T21:54:47.707Z",
+    "updated_at": "2026-11-10T21:54:47.707Z"
+  },
+  {
+    "id": "9104d34c-7576-44df-ab7d-0beaa7fed3bd",
+    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
+    "band": "Deeds of Flesh",
+    "band_name": "Deeds of Flesh",
+    "title": "Trading Pieces",
+    "catalog_id": "DOF-TRAD",
+    "type": "album",
+    "release_date": "1996",
+    "label": "Unique Leader Records",
+    "genre": "Technical Death Metal",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/9e/e2/ff/9ee2ffca-634b-4dc7-eacb-c6acdd77ac35/191773824174.jpg/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/9e/e2/ff/9ee2ffca-634b-4dc7-eacb-c6acdd77ac35/191773824174.jpg/600x600bb.jpg",
+    "tracks": [
+      {
+        "number": "1",
+        "title": "Carnivorous Ways",
+        "duration": "3:34"
+      },
+      {
+        "number": "2",
+        "title": "Born Then Torn Apart",
+        "duration": "2:07"
+      },
+      {
+        "number": "3",
+        "title": "Trading Pieces",
+        "duration": "2:45"
+      },
+      {
+        "number": "4",
+        "title": "Hunting Humans",
+        "duration": "2:39"
+      },
+      {
+        "number": "5",
+        "title": "Impious Offerings",
+        "duration": "3:00"
+      },
+      {
+        "number": "6",
+        "title": "Acid Troops",
+        "duration": "3:36"
+      },
+      {
+        "number": "7",
+        "title": "Deeds of Flesh",
+        "duration": "2:57"
+      },
+      {
+        "number": "8",
+        "title": "Erected on Stakes",
+        "duration": "1:55"
+      },
+      {
+        "number": "9",
+        "title": "Chunks in the Shower",
+        "duration": "2:28"
+      },
+      {
+        "number": "10",
+        "title": "Blasted",
+        "duration": "2:09"
+      },
+      {
+        "number": "11",
+        "title": "Outro",
+        "duration": "2:33"
+      }
+    ],
+    "formats": {},
+    "digital": [],
+    "status": "active",
+    "created_at": "2026-11-10T21:54:47.707Z",
+    "updated_at": "2026-11-10T21:54:47.707Z"
+  },
+  {
+    "id": "fac4dfb9-7288-43ae-ba66-55bc45f53022",
+    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
+    "band": "Deeds of Flesh",
+    "band_name": "Deeds of Flesh",
+    "title": "Inbreeding the Anthropophagi",
+    "catalog_id": "DOF-INBR",
+    "type": "album",
+    "release_date": "1998",
+    "label": "Unique Leader Records",
+    "genre": "Technical Death Metal",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/29/19/b5/2919b538-9fb1-e6d5-bb84-e5fe37978aa4/191773824129.jpg/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/29/19/b5/2919b538-9fb1-e6d5-bb84-e5fe37978aa4/191773824129.jpg/600x600bb.jpg",
+    "tracks": [
+      {
+        "number": "1",
+        "title": "End of All",
+        "duration": "1:21"
+      },
+      {
+        "number": "2",
+        "title": "Feeding on the Deceased",
+        "duration": "3:59"
+      },
+      {
+        "number": "3",
+        "title": "Inbreeding the Anthropophagi",
+        "duration": "4:46"
+      },
+      {
+        "number": "4",
+        "title": "Infectious One",
+        "duration": "4:18"
+      },
+      {
+        "number": "5",
+        "title": "Ritual of Violence",
+        "duration": "3:50"
+      },
+      {
+        "number": "6",
+        "title": "Canvas of Flesh",
+        "duration": "3:04"
+      },
+      {
+        "number": "7",
+        "title": "Folded into Beast",
+        "duration": "3:37"
+      },
+      {
+        "number": "8",
+        "title": "Gradually Melted",
+        "duration": "4:23"
+      }
+    ],
+    "formats": {},
+    "digital": [],
+    "status": "active",
+    "created_at": "2026-11-10T21:54:47.707Z",
+    "updated_at": "2026-11-10T21:54:47.707Z"
+  },
+  {
+    "id": "e74f0c3e-43d8-42b3-9203-b9e13c3181da",
+    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
+    "band": "Deeds of Flesh",
+    "band_name": "Deeds of Flesh",
+    "title": "Path of the Weakening",
+    "catalog_id": "DOF-PATH",
+    "type": "album",
+    "release_date": "1999",
+    "label": "Unique Leader Records",
+    "genre": "Technical Death Metal",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/0c/a0/22/0ca02233-ad39-7c2c-270a-aaaf7b20fba8/191773824150.jpg/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/0c/a0/22/0ca02233-ad39-7c2c-270a-aaaf7b20fba8/191773824150.jpg/600x600bb.jpg",
+    "tracks": [
+      {
+        "number": "1",
+        "title": "Indigenous to the Appalling",
+        "duration": "3:49"
+      },
+      {
+        "number": "2",
+        "title": "Lustmord",
+        "duration": "2:41"
+      },
+      {
+        "number": "3",
+        "title": "Path of the Weakening",
+        "duration": "4:50"
+      },
+      {
+        "number": "4",
+        "title": "Summarily Killed",
+        "duration": "3:31"
+      },
+      {
+        "number": "5",
+        "title": "Sounds of Loud Reigns",
+        "duration": "3:26"
+      },
+      {
+        "number": "6",
+        "title": "Execute the Anthropophagi",
+        "duration": "3:59"
+      },
+      {
+        "number": "7",
+        "title": "I Die on My Own Terms",
+        "duration": "2:36"
+      },
+      {
+        "number": "8",
+        "title": "Sense of the Diabolic",
+        "duration": "3:18"
+      },
+      {
+        "number": "9",
+        "title": "A Violent God",
+        "duration": "3:29"
+      }
+    ],
+    "formats": {},
+    "digital": [],
+    "status": "active",
+    "created_at": "2026-11-10T21:54:47.707Z",
+    "updated_at": "2026-11-10T21:54:47.707Z"
+  },
+  {
+    "id": "c0f0e880-e41e-4e3e-ab7d-0bea07ad1465",
+    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
+    "band": "Deeds of Flesh",
+    "band_name": "Deeds of Flesh",
+    "title": "Mark of the Legion",
+    "catalog_id": "DOF-MARK",
+    "type": "album",
+    "release_date": "2001",
+    "label": "Unique Leader Records",
+    "genre": "Technical Death Metal",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/8a/63/f5/8a63f52f-fb64-39ff-1c28-4ec5f2b02458/191773824136.jpg/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/8a/63/f5/8a63f52f-fb64-39ff-1c28-4ec5f2b02458/191773824136.jpg/600x600bb.jpg",
+    "tracks": [
+      {
+        "number": "1",
+        "title": "Cleansed by Fire",
+        "duration": "4:29"
+      },
+      {
+        "number": "2",
+        "title": "An Eternity of Feasting and Brawling",
+        "duration": "4:19"
+      },
+      {
+        "number": "3",
+        "title": "Mark of the Legion",
+        "duration": "5:22"
+      },
+      {
+        "number": "4",
+        "title": "Spewing Profligacy",
+        "duration": "4:39"
+      },
+      {
+        "number": "5",
+        "title": "Fullfilled in Warfare",
+        "duration": "3:33"
+      },
+      {
+        "number": "6",
+        "title": "Contest of Wills",
+        "duration": "3:50"
+      },
+      {
+        "number": "7",
+        "title": "Master of Murder",
+        "duration": "4:22"
+      },
+      {
+        "number": "8",
+        "title": "Ideal Genocide",
+        "duration": "5:37"
+      },
+      {
+        "number": "9",
+        "title": "Drink the Blood",
+        "duration": "5:23"
+      }
+    ],
+    "formats": {},
+    "digital": [],
+    "status": "active",
+    "created_at": "2026-11-10T21:54:47.707Z",
+    "updated_at": "2026-11-10T21:54:47.707Z"
+  },
+  {
+    "id": "e5923113-d25d-45cb-be71-807700279cd3",
+    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
+    "band": "Deeds of Flesh",
+    "band_name": "Deeds of Flesh",
+    "title": "Reduced to Ashes",
+    "catalog_id": "DOF-REDU",
+    "type": "album",
+    "release_date": "2003",
+    "label": "Unique Leader Records",
+    "genre": "Technical Death Metal",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/b2/da/c9/b2dac96a-03b5-ef9d-d15c-1e859af9732d/194491307509.jpg/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/b2/da/c9/b2dac96a-03b5-ef9d-d15c-1e859af9732d/194491307509.jpg/600x600bb.jpg",
+    "tracks": [
+      {
+        "number": "1",
+        "title": "Reduced to Ashes",
+        "duration": "3:26"
+      },
+      {
+        "number": "2",
+        "title": "Infested",
+        "duration": "3:39"
+      },
+      {
+        "number": "3",
+        "title": "The Human Affliction",
+        "duration": "3:45"
+      },
+      {
+        "number": "4",
+        "title": "Emaciated",
+        "duration": "4:18"
+      },
+      {
+        "number": "5",
+        "title": "Banished",
+        "duration": "3:39"
+      },
+      {
+        "number": "6",
+        "title": "Disfigured",
+        "duration": "3:05"
+      },
+      {
+        "number": "7",
+        "title": "In The Shadow of The Earth",
+        "duration": "4:22"
+      },
+      {
+        "number": "8",
+        "title": "The Curse of The Gods",
+        "duration": "3:56"
+      }
+    ],
+    "formats": {},
+    "digital": [],
+    "status": "active",
+    "created_at": "2026-11-10T21:54:47.707Z",
+    "updated_at": "2026-11-10T21:54:47.707Z"
+  },
+  {
+    "id": "d7f00d03-89a9-4593-9c86-b272ed48a465",
+    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
+    "band": "Deeds of Flesh",
+    "band_name": "Deeds of Flesh",
+    "title": "Crown of Souls",
+    "catalog_id": "DOF-CROW",
+    "type": "album",
+    "release_date": "2005",
+    "label": "Unique Leader Records",
+    "genre": "Technical Death Metal",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/11/86/89/11868930-a62e-35d4-8d96-9586f153cba5/191773824099.jpg/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/11/86/89/11868930-a62e-35d4-8d96-9586f153cba5/191773824099.jpg/600x600bb.jpg",
+    "tracks": [
+      {
+        "number": "1",
+        "title": "Introduction",
+        "duration": "0:30"
+      },
+      {
+        "number": "2",
+        "title": "Crown of Souls",
+        "duration": "3:40"
+      },
+      {
+        "number": "3",
+        "title": "Medical Murder",
+        "duration": "4:42"
+      },
+      {
+        "number": "4",
+        "title": "Hunter's Moon",
+        "duration": "4:36"
+      },
+      {
+        "number": "5",
+        "title": "'Til The Morning",
+        "duration": "4:34"
+      },
+      {
+        "number": "6",
+        "title": "The Incestuous God",
+        "duration": "4:08"
+      },
+      {
+        "number": "7",
+        "title": "The Beast of Cañada De Diablo",
+        "duration": "4:24"
+      },
+      {
+        "number": "8",
+        "title": "The Poisoning",
+        "duration": "3:38"
+      },
+      {
+        "number": "9",
+        "title": "The Gathering of Ghouls",
+        "duration": "4:39"
+      }
+    ],
+    "formats": {},
+    "digital": [],
+    "status": "active",
+    "created_at": "2026-11-10T21:54:47.707Z",
+    "updated_at": "2026-11-10T21:54:47.707Z"
+  },
+  {
+    "id": "d3d1bf4c-2164-43da-96b1-d4c43a4feb94",
+    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
+    "band": "Deeds of Flesh",
+    "band_name": "Deeds of Flesh",
+    "title": "Of What's to Come",
+    "catalog_id": "DOF-OF W",
+    "type": "album",
+    "release_date": "2008",
+    "label": "Unique Leader Records",
+    "genre": "Technical Death Metal",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/fe/cb/11/fecb118d-dfd2-bc22-2969-0b46d0c7657e/191773824143.jpg/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/fe/cb/11/fecb118d-dfd2-bc22-2969-0b46d0c7657e/191773824143.jpg/600x600bb.jpg",
+    "tracks": [
+      {
+        "number": "1",
+        "title": "Waters of Space",
+        "duration": "0:32"
+      },
+      {
+        "number": "2",
+        "title": "Eradication Pods",
+        "duration": "4:01"
+      },
+      {
+        "number": "3",
+        "title": "Unearthly Invent",
+        "duration": "3:55"
+      },
+      {
+        "number": "4",
+        "title": "Of What's to Come",
+        "duration": "5:16"
+      },
+      {
+        "number": "5",
+        "title": "Virulent Seed",
+        "duration": "4:49"
+      },
+      {
+        "number": "6",
+        "title": "Referencing the Unknown",
+        "duration": "4:54"
+      },
+      {
+        "number": "7",
+        "title": "Hands of the Conqueror",
+        "duration": "4:36"
+      },
+      {
+        "number": "8",
+        "title": "Harvest Temples",
+        "duration": "4:19"
+      },
+      {
+        "number": "9",
+        "title": "Dawn of the Next",
+        "duration": "4:03"
+      }
+    ],
+    "formats": {},
+    "digital": [],
+    "status": "active",
+    "created_at": "2026-11-10T21:54:47.707Z",
+    "updated_at": "2026-11-10T21:54:47.707Z"
+  },
+  {
+    "id": "0f39c852-5634-4fc2-8d6a-470b7b1e1674",
+    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
+    "band": "Deeds of Flesh",
+    "band_name": "Deeds of Flesh",
+    "title": "Portals to Canaan",
+    "catalog_id": "DOF-PORT",
+    "type": "album",
+    "release_date": "2013",
+    "label": "Unique Leader Records",
+    "genre": "Technical Death Metal",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/1f/0b/e3/1f0be348-a44e-55e0-10f9-13bb836c47a5/191773824167.jpg/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/1f/0b/e3/1f0be348-a44e-55e0-10f9-13bb836c47a5/191773824167.jpg/600x600bb.jpg",
+    "tracks": [
+      {
+        "number": "1",
+        "title": "Amidst the Ruins",
+        "duration": "1:18"
+      },
+      {
+        "number": "2",
+        "title": "Entranced in Decades of Silence",
+        "duration": "6:38"
+      },
+      {
+        "number": "3",
+        "title": "Rise of the Ancients",
+        "duration": "4:48"
+      },
+      {
+        "number": "4",
+        "title": "Celestial Voices",
+        "duration": "1:45"
+      },
+      {
+        "number": "5",
+        "title": "Caelum Hirundines Carina / The Orbit of Chunk",
+        "duration": "5:10"
+      },
+      {
+        "number": "6",
+        "title": "Portals to Canaan",
+        "duration": "5:26"
+      },
+      {
+        "number": "7",
+        "title": "Hollow Human Husks",
+        "duration": "4:12"
+      },
+      {
+        "number": "8",
+        "title": "Astronautics",
+        "duration": "4:44"
+      },
+      {
+        "number": "9",
+        "title": "Perpetual Regicide",
+        "duration": "4:03"
+      }
+    ],
+    "formats": {},
+    "digital": [],
+    "status": "active",
+    "created_at": "2026-11-10T21:54:47.707Z",
+    "updated_at": "2026-11-10T21:54:47.707Z"
+  },
+  {
+    "id": "0674c998-5c86-499d-a141-1744bf42f855",
+    "band_id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
+    "band": "Deeds of Flesh",
+    "band_name": "Deeds of Flesh",
+    "title": "Nucleus",
+    "catalog_id": "DOF-NUCL",
+    "type": "album",
+    "release_date": "2020",
+    "label": "Unique Leader Records",
+    "genre": "Technical Death Metal",
+    "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/92/74/6c/92746cd1-b21d-6cbc-05f8-c9773ce4e4fb/195497182664.jpg/600x600bb.jpg",
+    "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/92/74/6c/92746cd1-b21d-6cbc-05f8-c9773ce4e4fb/195497182664.jpg/600x600bb.jpg",
+    "tracks": [
+      {
+        "number": "1",
+        "title": "Odyssey",
+        "duration": "3:27"
+      },
+      {
+        "number": "2",
+        "title": "Alyen Scourge",
+        "duration": "5:05"
+      },
+      {
+        "number": "3",
+        "title": "Ascension Vortex (feat. Decrepit Bill, Obie Flett & Anthony Trapani)",
+        "duration": "4:29"
+      },
+      {
+        "number": "4",
+        "title": "Catacombs of the Monolith (feat. Luc Lemay)",
+        "duration": "5:08"
+      },
+      {
+        "number": "5",
+        "title": "Ethereal Ancestors (feat. George \"Corpsegrinder\" Fisher)",
+        "duration": "4:28"
+      },
+      {
+        "number": "6",
+        "title": "Nucleus (feat. John Gallagher)",
+        "duration": "4:56"
+      },
+      {
+        "number": "7",
+        "title": "Races Conjoined (feat. Matti Way & Jon Zig)",
+        "duration": "5:17"
+      },
+      {
+        "number": "8",
+        "title": "Terror (feat. Dusty Boisjolie & Robbe Kok)",
+        "duration": "6:00"
+      },
+      {
+        "number": "9",
+        "title": "Onward",
+        "duration": "1:44"
+      }
+    ],
+    "formats": {},
+    "digital": [],
+    "status": "active",
+    "created_at": "2026-11-10T21:54:47.707Z",
+    "updated_at": "2026-11-10T21:54:47.707Z"
   }
 ]

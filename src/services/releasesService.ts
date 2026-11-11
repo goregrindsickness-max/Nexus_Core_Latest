@@ -85,9 +85,11 @@ export function sanitizeReleaseForDb(release: any): any {
   if (clean.year && !clean.release_date) {
     clean.release_date = String(clean.year);
   }
-  if (clean.release_info && !clean.label) {
-    clean.label = clean.release_info;
-  }
+  if (clean.band_name && !clean.band) clean.band = clean.band_name;
+  if (clean.artist && !clean.band) clean.band = clean.artist;
+  if (clean.artist_name && !clean.band) clean.band = clean.artist_name;
+  if (clean.band && !clean.band_name) clean.band_name = clean.band;
+  if (clean.band && !clean.artist) clean.artist = clean.band;
 
   // Strip client-side-only metadata properties and obsolete/unsupported schema columns
   delete clean.catalogId;
@@ -105,6 +107,10 @@ export function sanitizeReleaseForDb(release: any): any {
   const allowedColumns = new Set([
     'id',
     'band_id',
+    'band',
+    'band_name',
+    'artist',
+    'artist_name',
     'label_id',
     'title',
     'catalog_id',
@@ -224,9 +230,10 @@ function mapDbRowToRelease(row: any): CatalogRelease {
     digital: Array.isArray(row.digital) ? row.digital : (typeof row.digital === 'string' ? JSON.parse(row.digital) : []),
     audio_vault_path: row.audio_vault_path,
     band_id: row.band_id,
-    band_name: row.band_name || row.artist || row.artist_name || '',
-    artist: row.artist || row.band_name || row.artist_name || '',
-    artist_name: row.artist_name || row.band_name || row.artist || '',
+    band: row.band || row.band_name || row.artist || row.artist_name || '',
+    band_name: row.band_name || row.band || row.artist || row.artist_name || '',
+    artist: row.artist || row.band || row.band_name || row.artist_name || '',
+    artist_name: row.artist_name || row.band || row.band_name || row.artist || '',
     label_id: row.label_id,
     status: row.status || 'active',
     created_at: row.created_at,
@@ -336,9 +343,10 @@ export async function upsertReleaseToDatabase(
     const rawPayload: Record<string, any> = {
       id: release.id ? ensureUUID(release.id) : ensureUUID(`rel-${targetBandId}-${Date.now()}`),
       band_id: targetBandId,
-      band_name: release.band_name || release.artist || (release as any).artist_name || null,
-      artist: release.artist || release.band_name || (release as any).artist_name || null,
-      artist_name: release.artist_name || release.artist || release.band_name || null,
+      band: release.band || release.band_name || release.artist || (release as any).artist_name || null,
+      band_name: release.band_name || release.band || release.artist || (release as any).artist_name || null,
+      artist: release.artist || release.band || release.band_name || (release as any).artist_name || null,
+      artist_name: release.artist_name || release.band || release.artist || release.band_name || null,
       label_id: isValidUUID(release.label_id) ? release.label_id : null,
       title: release.title,
       catalog_id: release.catalogId || (release as any).catalog_id || null,
@@ -575,6 +583,7 @@ export async function upsertReleasesBatchToDatabase(
       const rawPayload: Record<string, any> = {
         id: releaseId,
         band_id: targetBandId,
+        band: resolvedBandName,
         band_name: resolvedBandName,
         artist: resolvedBandName,
         artist_name: resolvedBandName,

@@ -928,6 +928,11 @@ export function UniversalSocialFeed({
 
 
 
+  // Dispatch feed loaded event for Scene Radio coordination
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('nexus_feed_loaded'));
+  }, []);
+
   // Global Notification Listener
   useEffect(() => {
     const handleAddNotification = (e: any) => {

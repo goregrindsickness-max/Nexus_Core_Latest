@@ -69,6 +69,36 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
     spotify_url: 'https://open.spotify.com/artist/3o6G0K4vW01kL0pM',
     metal_archives_url: 'https://www.metal-archives.com/bands/Aeon/3887'
   },
+  'benediction': {
+    founded_year: '1989',
+    status: 'active',
+    is_split_up: false,
+    record_label: 'Nuclear Blast Records',
+    label: 'Nuclear Blast Records',
+    city: 'Birmingham',
+    state_province: 'West Midlands',
+    country: 'United Kingdom',
+    genre: 'Old School Death Metal',
+    micro_genres: ['Old School Death Metal', 'Death Metal', 'Extreme Metal'],
+    bio: 'Formed in Birmingham, England, in 1989, Benediction is one of the foundational pillars of British Old School Death Metal. Signed to Nuclear Blast Records, Benediction deliver neck-snapping riffage, relentless groove, and crushing vocal intensity across 10 seminal releases.',
+    spotify_url: 'https://open.spotify.com/artist/6P27kFvVp0U3a5k8Q5w18b',
+    metal_archives_url: 'https://www.metal-archives.com/bands/Benediction/610'
+  },
+  'hypocrisy': {
+    founded_year: '1991',
+    status: 'active',
+    is_split_up: false,
+    record_label: 'Nuclear Blast Records',
+    label: 'Nuclear Blast Records',
+    city: 'Ludvika',
+    state_province: 'Dalarna',
+    country: 'Sweden',
+    genre: 'Melodic Death Metal',
+    micro_genres: ['Melodic Death Metal', 'Death Metal', 'Extreme Metal'],
+    bio: 'Formed in Ludvika, Sweden, in 1991 by visionary frontman and producer Peter Tägtgren, Hypocrisy is a world-renowned pioneer of Swedish Melodic Death Metal. Famous for iconic masterpieces like Abducted, The Final Chapter, and Roswell 47.',
+    spotify_url: 'https://open.spotify.com/artist/1G14y7G101o0G0K8P',
+    metal_archives_url: 'https://www.metal-archives.com/bands/Hypocrisy/349'
+  },
   'birdflesh': {
     founded_year: '1992',
     status: 'active',

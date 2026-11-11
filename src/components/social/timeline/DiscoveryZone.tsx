@@ -1468,7 +1468,7 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
         <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent" />
 
         {/* Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3.5 relative z-10">
+        <div className="flex items-center justify-between gap-3 mb-3.5 relative z-10">
           {/* Title */}
           <div className="flex items-center gap-2.5">
             <motion.div 
@@ -1481,66 +1481,6 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
             <h3 className="text-[17px] sm:text-[18px] font-extrabold text-zinc-100 tracking-tight font-sans">
               Suggested Pages for you
             </h3>
-          </div>
-
-          {/* Centered Action Controls */}
-          <div className="flex items-center justify-center gap-1.5 self-center shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setShuffleSeed(prev => prev + 1);
-                onTriggerNotification?.("🔀 Reshuffled suggestions!");
-              }}
-              className="w-8 h-8 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-purple-400 border border-zinc-800 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-              title="Reshuffle & Mix Profiles"
-            >
-              <Shuffle className="w-4 h-4 text-purple-400" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsAutoScrolling(prev => !prev)}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                isAutoScrolling 
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.25)]' 
-                  : 'bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-              }`}
-              title={isAutoScrolling ? 'Autoplay: ON (Click to Pause)' : 'Autoplay: OFF (Click to Resume)'}
-            >
-              {isAutoScrolling ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            </button>
-            <button
-              type="button"
-              onClick={handleManualRefresh}
-              disabled={isRefreshing}
-              className="w-8 h-8 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-emerald-400 border border-zinc-800 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-              title="Sync Live Profiles from Supabase"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleScroll('left')}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
-                canScrollLeft 
-                  ? 'bg-zinc-850 text-zinc-100 hover:bg-zinc-750 border border-zinc-700 shadow-sm' 
-                  : 'bg-zinc-900/70 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-zinc-800'
-              }`}
-              title="Previous Cards"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleScroll('right')}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
-                canScrollRight 
-                  ? 'bg-zinc-850 text-zinc-100 hover:bg-zinc-750 border border-zinc-700 shadow-sm' 
-                  : 'bg-zinc-900/70 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-zinc-800'
-              }`}
-              title="Next Cards"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
           </div>
         </div>
 

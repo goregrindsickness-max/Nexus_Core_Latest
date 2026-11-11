@@ -11,3 +11,5 @@ export * from './MediaGalleryGrid';
 export * from './BandcampEmbedCard';
 export * from './BandcampSearchHelper';
 export * from './BulletinBoardPostCard';
+export * from './GroundedVenueBadge';
+

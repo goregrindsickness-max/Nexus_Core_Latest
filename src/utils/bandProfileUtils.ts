@@ -673,24 +673,27 @@ export const resolveCommentAvatar = (
     isMiguelNameOrProfile(commentUsername)
   );
 
-  const isViewerMiguel = Boolean(
-    currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-    userProfile?.id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-    (userProfile?.email && userProfile.email.toLowerCase() === 'goregrindsickness@gmail.com') ||
-    isMiguelNameOrProfile(userProfile)
-  );
-
   // 1. Comment authored by Miguel:
   if (isAuthorMiguel) {
-    if (isViewerMiguel) {
+    const isUserProfileMiguel = Boolean(
+      userProfile?.id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+      (userProfile?.email && userProfile.email.toLowerCase() === 'goregrindsickness@gmail.com') ||
+      isMiguelNameOrProfile(userProfile)
+    );
+
+    if (isUserProfileMiguel) {
       const myLiveAvatar =
         userProfile?.avatar_url ||
         userProfile?.avatar ||
-        userProfile?.profile_avatar ||
-        (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null);
+        userProfile?.profile_avatar;
       if (myLiveAvatar && typeof myLiveAvatar === 'string' && myLiveAvatar.trim() && myLiveAvatar !== '👤' && !myLiveAvatar.includes('ui-avatars.com') && !myLiveAvatar.includes('photo-1534528741775-53994a69daeb')) {
         return myLiveAvatar.trim();
       }
+    }
+
+    const localMiguelAvatar = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null;
+    if (localMiguelAvatar && typeof localMiguelAvatar === 'string' && localMiguelAvatar.trim() && localMiguelAvatar !== '👤' && !localMiguelAvatar.includes('ui-avatars.com') && !localMiguelAvatar.includes('photo-1534528741775-53994a69daeb')) {
+      return localMiguelAvatar.trim();
     }
     return MIGUEL_DEFAULT_AVATAR;
   }
@@ -710,10 +713,9 @@ export const resolveCommentAvatar = (
       rawCommentAvatar.includes('undefined') ||
       rawCommentAvatar.includes('null');
 
+    const isUserProfileCurrentUser = Boolean(userProfile?.id && userProfile.id === currentUserId);
     const myLiveAvatar =
-      userProfile?.avatar_url ||
-      userProfile?.avatar ||
-      userProfile?.profile_avatar ||
+      (isUserProfileCurrentUser ? (userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar) : null) ||
       (typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null) ||
       (!isBadAvatar ? rawCommentAvatar : null);
 
@@ -723,7 +725,18 @@ export const resolveCommentAvatar = (
     return DEFAULT_PERSONAL_AVATAR;
   }
 
-  // 3. Explicit comment avatar if present on the comment object itself
+  // 3. Comment authored by target profile owner (userProfile)?
+  const isUserProfileAuthor = Boolean(
+    commentUserId && userProfile?.id && commentUserId === userProfile.id
+  );
+  if (isUserProfileAuthor) {
+    const targetAvatar = userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar;
+    if (targetAvatar && typeof targetAvatar === 'string' && targetAvatar.trim() && targetAvatar !== '👤' && !targetAvatar.includes('ui-avatars.com') && !targetAvatar.includes('photo-1534528741775-53994a69daeb')) {
+      return targetAvatar.trim();
+    }
+  }
+
+  // 4. Explicit comment avatar if present on the comment object itself
   const explicitAvatar = comment.avatar || comment.userAvatar || comment.user_avatar || comment.authorAvatar;
   if (
     explicitAvatar &&
@@ -738,7 +751,7 @@ export const resolveCommentAvatar = (
     return explicitAvatar.trim();
   }
 
-  // 4. Check known user avatar registry
+  // 5. Check known user avatar registry
   if (commentUsername && KNOWN_USER_AVATARS[commentUsername]) {
     return KNOWN_USER_AVATARS[commentUsername];
   }
@@ -776,16 +789,14 @@ export const resolveCommentAuthorName = (
     rawUsername.toLowerCase() === 'miguel goregrinder medina'
   );
 
-  const isViewerMiguel = Boolean(
-    currentUserId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-    userProfile?.id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
-    (userProfile?.email && userProfile.email.toLowerCase() === 'goregrindsickness@gmail.com') ||
-    isMiguelNameOrProfile(userProfile)
-  );
-
   // 1. Comment authored by Miguel:
   if (isAuthorMiguel) {
-    if (isViewerMiguel) {
+    const isUserProfileMiguel = Boolean(
+      userProfile?.id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+      (userProfile?.email && userProfile.email.toLowerCase() === 'goregrindsickness@gmail.com') ||
+      isMiguelNameOrProfile(userProfile)
+    );
+    if (isUserProfileMiguel) {
       return userProfile?.full_name || userProfile?.name || 'Miguel Goregrinder Medina';
     }
     return 'Miguel Goregrinder Medina';
@@ -797,10 +808,28 @@ export const resolveCommentAuthorName = (
   );
 
   if (isCurrentUserComment) {
-    return userProfile?.full_name || userProfile?.name || currentUserName || (rawUsername && !isUuidString(rawUsername) ? rawUsername : 'You');
+    const isUserProfileCurrentUser = Boolean(userProfile?.id && userProfile.id === currentUserId);
+    if (isUserProfileCurrentUser && (userProfile?.full_name || userProfile?.name)) {
+      return userProfile.full_name || userProfile.name;
+    }
+    if (currentUserName && currentUserName.toLowerCase() !== 'you' && currentUserName.toLowerCase() !== 'user') {
+      return currentUserName;
+    }
+    if (rawUsername && !isUuidString(rawUsername) && rawUsername.toLowerCase() !== 'you' && rawUsername.toLowerCase() !== 'user') {
+      return rawUsername;
+    }
+    return 'You';
   }
 
-  // 3. Comment authored by another user:
+  // 3. Comment authored by target profile owner (userProfile)?
+  const isUserProfileAuthor = Boolean(
+    rawUserId && userProfile?.id && rawUserId === userProfile.id
+  );
+  if (isUserProfileAuthor && (userProfile?.full_name || userProfile?.name)) {
+    return userProfile.full_name || userProfile.name;
+  }
+
+  // 4. Comment authored by another user:
   const cleanUsernameLower = rawUsername.toLowerCase();
   const isGenericPlaceholder = (
     !rawUsername ||

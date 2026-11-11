@@ -11,8 +11,21 @@ interface FirstTimeTooltipProps {
   position?: 'top' | 'bottom' | 'left' | 'right';
   accentColor?: 'violet' | 'amber' | 'cyan' | 'rose' | 'emerald';
   triggerOn?: 'click' | 'hover';
+  autoShow?: boolean;
+  autoShowDelay?: number;
   className?: string;
 }
+
+const isDismissed = (id: string): boolean => {
+  if (typeof window === 'undefined') return true;
+  try {
+    const v1 = localStorage.getItem(`ft_tip_${id}`);
+    const v2 = localStorage.getItem(`nexus_tooltip_dismissed_${id}`);
+    return v1 === 'true' || v2 === 'true';
+  } catch {
+    return false;
+  }
+};
 
 export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
   id,
@@ -22,50 +35,80 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
   position = 'top',
   accentColor = 'violet',
   triggerOn = 'hover',
+  autoShow = true,
+  autoShowDelay = 1500,
   className = '',
 }) => {
-  const [hasSeen, setHasSeen] = useState<boolean>(true); // Default true until checked in client
+  const [hasSeen, setHasSeen] = useState<boolean>(() => isDismissed(id));
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const storageKey = `ft_tip_${id}`;
-
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const seen = localStorage.getItem(storageKey);
-        setHasSeen(seen === 'true');
-      } catch {
-        setHasSeen(false);
-      }
+    if (isDismissed(id)) {
+      setHasSeen(true);
+      setIsOpen(false);
+      return;
     }
-  }, [storageKey]);
 
-  const dismiss = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+    if (autoShow) {
+      const timer = setTimeout(() => {
+        if (!isDismissed(id)) {
+          setIsOpen(true);
+        }
+      }, autoShowDelay);
+      return () => clearTimeout(timer);
+    }
+  }, [id, autoShow, autoShowDelay]);
+
+  // Synchronize across components or tabs if dismissed
+  useEffect(() => {
+    const handleRemoteDismiss = (e: any) => {
+      if (e?.detail?.id === id) {
+        setHasSeen(true);
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('nexus_tooltip_dismissed', handleRemoteDismiss as EventListener);
+    return () => window.removeEventListener('nexus_tooltip_dismissed', handleRemoteDismiss as EventListener);
+  }, [id]);
+
+  const dismiss = (e?: React.MouseEvent | React.SyntheticEvent | Event) => {
+    if (e && typeof (e as any).stopPropagation === 'function') {
+      (e as any).stopPropagation();
+    }
     setHasSeen(true);
     setIsOpen(false);
     if (typeof window !== 'undefined') {
-      safeSetLocalStorageItem(storageKey, 'true');
+      try {
+        localStorage.setItem(`ft_tip_${id}`, 'true');
+        localStorage.setItem(`nexus_tooltip_dismissed_${id}`, 'true');
+      } catch (_) {}
+      safeSetLocalStorageItem(`ft_tip_${id}`, 'true');
+      safeSetLocalStorageItem(`nexus_tooltip_dismissed_${id}`, 'true');
+      window.dispatchEvent(new CustomEvent('nexus_tooltip_dismissed', { detail: { id } }));
     }
   };
 
   const handleTrigger = () => {
-    if (!hasSeen) {
+    if (!hasSeen && !isDismissed(id)) {
       setIsOpen(true);
     }
   };
 
-  // Close when clicking outside if open
+  // Close when clicking or tapping outside if open
   useEffect(() => {
     if (!isOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         dismiss();
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, [isOpen]);
 
   const accentStyles = {
@@ -112,8 +155,8 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
   }[accentColor];
 
   const posClasses = {
-    top: 'bottom-full mb-2 left-1/2 -translate-x-1/2',
-    bottom: 'top-full mt-2 left-1/2 -translate-x-1/2',
+    top: 'bottom-full mb-3 right-0 sm:left-1/2 sm:-translate-x-1/2',
+    bottom: 'top-full mt-3 right-0 sm:left-1/2 sm:-translate-x-1/2',
     left: 'right-full mr-2 top-1/2 -translate-y-1/2',
     right: 'left-full ml-2 top-1/2 -translate-y-1/2',
   }[position];
@@ -122,8 +165,14 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
     <div
       ref={containerRef}
       className={`relative inline-block ${className}`}
-      onMouseEnter={triggerOn === 'hover' ? handleTrigger : undefined}
-      onClick={triggerOn === 'click' ? handleTrigger : undefined}
+      onMouseEnter={triggerOn === 'hover' && !hasSeen ? handleTrigger : undefined}
+      onClick={triggerOn === 'click' && !hasSeen ? handleTrigger : undefined}
+      onClickCapture={() => {
+        // Any click on the target element or its children permanently dismisses the tip
+        if (isOpen) {
+          dismiss();
+        }
+      }}
     >
       {children}
 
@@ -145,9 +194,10 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
                 </span>
               </div>
               <button
+                type="button"
                 onClick={dismiss}
-                className="text-zinc-500 hover:text-white p-0.5 rounded-md hover:bg-white/10 transition-colors"
-                title="Dismiss tip"
+                className="text-zinc-400 hover:text-white p-1 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
+                title="Dismiss permanently"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -161,6 +211,7 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
 
             <div className="flex justify-end">
               <button
+                type="button"
                 onClick={dismiss}
                 className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 ${accentStyles.btn}`}
               >

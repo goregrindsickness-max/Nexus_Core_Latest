@@ -49,6 +49,7 @@ import {
   MerchEmbedCard,
   BandcampEmbedCard,
   BulletinBoardPostCard,
+  GroundedVenueBadge,
 } from '../embeds';
 import { GigProximityPill } from './GigProximityPill';
 import { isMiguelNameOrProfile } from '../utils/profileUtils';
@@ -1506,6 +1507,12 @@ export const PostCard: React.FC<PostCardProps> = ({
 
             {/* RICH EMBED 0: AUTO LINK PREVIEW CARD */}
             <LinkPreviewCard message={post.message} />
+
+            {/* GOOGLE MAPS GROUNDED VENUE BADGE */}
+            <GroundedVenueBadge
+              postText={post.message}
+              initialVenueData={(post as any).groundedVenue || (post as any).grounded_venue}
+            />
           </div>
         )}
       </div>

@@ -5412,6 +5412,119 @@ Required schema:
   });
 
   // ==========================================
+  // GEMINI GOOGLE MAPS GROUNDED VENUE DETECTION API
+  // ==========================================
+  app.post("/api/venue-grounding", async (req: express.Request, res: express.Response) => {
+    const { text, lat, lng } = req.body || {};
+    if (!text || typeof text !== "string" || !text.trim()) {
+      return res.status(400).json({ error: "Text content is required for venue grounding" });
+    }
+
+    // Helper for offline / resource exhausted fallback venue matching
+    const getFallbackVenue = (inputText: string) => {
+      const clean = inputText.toLowerCase();
+      // 1. Try matching against built-in Black Book venues
+      const match = BUILT_IN_BLACK_BOOK_VENUES.find(v => 
+        clean.includes(v.name.toLowerCase()) || 
+        (v.name.length > 4 && clean.includes(v.name.toLowerCase()))
+      );
+      if (match) {
+        return {
+          hasVenue: true,
+          responseText: `Verified Music Venue: ${match.name} (${match.city}, ${match.state}). ${match.fullAddress || ''}`,
+          mapsSources: [{
+            title: match.name,
+            uri: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${match.name} ${match.city || ''} ${match.state || ''}`)}`
+          }],
+          groundingChunks: []
+        };
+      }
+
+      // 2. Try extracting @mentions or phrases like "@Venue Name" or "at <Venue>"
+      const venueTagMatch = inputText.match(/@([A-Z][a-zA-Z0-9_\-']*(?:\s+[A-Z][a-zA-Z0-9_\-']*)*)/);
+      if (venueTagMatch && venueTagMatch[1]) {
+        const vName = venueTagMatch[1].trim();
+        return {
+          hasVenue: true,
+          responseText: `Identified Venue: ${vName}`,
+          mapsSources: [{
+            title: vName,
+            uri: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(vName)}`
+          }],
+          groundingChunks: []
+        };
+      }
+
+      return {
+        hasVenue: false,
+        responseText: "No venue detected.",
+        mapsSources: [],
+        groundingChunks: []
+      };
+    };
+
+    try {
+      const ai = getGemini();
+      if (!ai) {
+        const fallback = getFallbackVenue(text);
+        return res.json({ success: true, ...fallback, note: "Using local Black Book fallback" });
+      }
+
+      const toolConfig: any = {};
+      if (typeof lat === "number" && typeof lng === "number") {
+        toolConfig.retrievalConfig = {
+          latLng: {
+            latitude: lat,
+            longitude: lng
+          }
+        };
+      }
+
+      const prompt = `Analyze this underground metal social post for any music venues, concert halls, rock/metal bars, clubs, or live event locations mentioned: "${text.trim()}". Identify the venue name, city, state/country, and concise location details. If no real music venue or location is mentioned, explicitly state 'NO_VENUE_DETECTED'.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: prompt,
+        config: {
+          tools: [{ googleMaps: {} }],
+          toolConfig: Object.keys(toolConfig).length > 0 ? toolConfig : undefined
+        }
+      });
+
+      const responseText = response.text || "";
+      const candidate = response.candidates?.[0];
+      const groundingChunks = candidate?.groundingMetadata?.groundingChunks || [];
+
+      const isNoVenue = responseText.includes("NO_VENUE_DETECTED") || responseText.toLowerCase().includes("no music venue detected");
+
+      // Extract Maps URIs and titles from groundingChunks
+      const mapsSources = groundingChunks
+        .filter((chunk: any) => chunk.maps)
+        .map((chunk: any) => ({
+          title: chunk.maps.title || "Music Venue",
+          uri: chunk.maps.uri || (chunk.maps.placeAnswerSources?.[0]?.reviewSnippets?.[0]?.uri || null),
+          placeAnswerSources: chunk.maps.placeAnswerSources || null
+        }));
+
+      return res.json({
+        success: true,
+        hasVenue: !isNoVenue && (mapsSources.length > 0 || groundingChunks.length > 0),
+        responseText,
+        mapsSources,
+        groundingChunks
+      });
+    } catch (err: any) {
+      console.warn("Venue Grounding AI Notice (falling back to Black Book directory):", err.message || err);
+      const fallback = getFallbackVenue(text);
+      return res.json({
+        success: true,
+        ...fallback,
+        note: "Fallback to Black Book directory due to quota/network state"
+      });
+    }
+  });
+
+  // ==========================================
   // SHAKE / INSTABUG AUTOMATED BUG REPORTS API
   // ==========================================
   const primaryBugReportsFile = path.join(process.cwd(), 'data', 'bug_reports.json');

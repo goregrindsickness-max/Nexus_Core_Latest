@@ -839,7 +839,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           ''
         ).trim();
 
-        if (creativeBrand && creativeBrand.toLowerCase() !== fullName.toLowerCase()) {
+        if (creativeBrand) {
           const crNameLower = creativeBrand.toLowerCase();
           const crMatches = !q ||
             crNameLower.includes(q) ||
@@ -873,7 +873,11 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           return;
         }
 
-        if (accType === 'promoter' && !fullName && promoterBrand) {
+        if ((accType === 'promoter' || promoterBrand) && (!fullName || promoterBrand.toLowerCase() === (fullName || p.name || '').toLowerCase())) {
+          return;
+        }
+
+        if ((accType === 'creative' || creativeBrand) && (!fullName || creativeBrand.toLowerCase() === (fullName || p.name || '').toLowerCase())) {
           return;
         }
 
@@ -881,6 +885,10 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
         const nameLower = displayName.toLowerCase().trim();
         const handleLower = handle.toLowerCase();
         const fullLower = fullName.toLowerCase();
+
+        if (seenUserNames.has(`creative_${nameLower}`) || seenUserNames.has(`promoter_${nameLower}`) || seenUserNames.has(`band_${nameLower}`)) {
+          return;
+        }
 
         const matches = !q ||
           nameLower.includes(q) ||

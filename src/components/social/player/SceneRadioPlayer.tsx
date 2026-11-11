@@ -463,7 +463,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     return () => {
       active = false;
     };
-  }, [currentVideoIndex, playlistVideos, selectedRadioGenre]);
+  }, [currentVideoIndex, selectedRadioGenre]);
 
   const [showFollowBandPopup, setShowFollowBandPopup] = useState<boolean>(false);
 
@@ -953,6 +953,11 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
 
   const togglePlayPause = () => {
     hasUserInteractedWithRadio.current = true;
+    try {
+      localStorage.setItem('ft_tip_scene_radio_play', 'true');
+      localStorage.setItem('nexus_tooltip_dismissed_scene_radio_play', 'true');
+    } catch (_) {}
+    window.dispatchEvent(new CustomEvent('nexus_tooltip_dismissed', { detail: { id: 'scene_radio_play' } }));
     if (!sceneRadioPlaying) {
       markSceneRadioUserActive(3000);
     }
@@ -1282,42 +1287,101 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     }
   };
 
-  // Auto-play random track 3 seconds after feed opens only
+  // Auto-play random track within 3 seconds of the feed loading
   useEffect(() => {
-    // Do not start on app mount; only wait until 3 seconds after the feed opens
-    if (activeTab !== 'feed') return;
+    const isFeed = activeTab === 'feed' || activeTab === 'social';
+    if (!isFeed) return;
 
-    const autoPlayTimer = setTimeout(() => {
-      if (!hasUserInteractedWithRadio.current) {
-        console.log("[RADIO PLAYER] Auto-playing random track 3 seconds after feed opened...");
+    let isDisposed = false;
+    console.log("[RADIO PLAYER] Feed loaded — scheduled Scene Radio autoplay within 3 seconds...");
+
+    const executeAutoPlay = () => {
+      if (isDisposed) return;
+      if (!hasUserInteractedWithRadio.current && !sceneRadioPlayingRef.current) {
+        console.log("[RADIO PLAYER] 3 seconds elapsed since feed loading — auto-playing Scene Radio...");
+        markSceneRadioUserActive(5000);
         setSceneRadioPlaying(true);
         sceneRadioPlayingRef.current = true;
-        if (ytPlayerRef.current) {
-          try {
-            if (typeof ytPlayerRef.current.getPlaylist === 'function') {
-              const ids = ytPlayerRef.current.getPlaylist() || [];
-              if (ids.length > 0 && typeof ytPlayerRef.current.playVideoAt === 'function') {
+
+        const startAutoPlayback = () => {
+          if (ytPlayerRef.current) {
+            try {
+              if (typeof ytPlayerRef.current.unMute === 'function') {
+                ytPlayerRef.current.unMute();
+              }
+              if (typeof ytPlayerRef.current.setVolume === 'function') {
+                ytPlayerRef.current.setVolume(radioVolume);
+              }
+              if (typeof ytPlayerRef.current.getPlaylist === 'function') {
+                const ids = ytPlayerRef.current.getPlaylist() || [];
+                if (ids.length > 0 && typeof ytPlayerRef.current.playVideoAt === 'function') {
                   const targetIdx = !userSelectedTrackRef.current
                     ? (currentVideoIndexRef.current >= 0 && currentVideoIndexRef.current < ids.length ? currentVideoIndexRef.current : getRandomTrackIndex(ids.length))
                     : 0;
                   ytPlayerRef.current.playVideoAt(targetIdx);
-              } else if (typeof ytPlayerRef.current.playVideo === 'function') {
-                  ytPlayerRef.current.playVideo();
+                  return;
+                }
               }
-            } else if (typeof ytPlayerRef.current.playVideo === 'function') {
-              ytPlayerRef.current.playVideo();
+              if (typeof ytPlayerRef.current.playVideo === 'function') {
+                ytPlayerRef.current.playVideo();
+                return;
+              }
+            } catch (e) {
+              console.warn("[RADIO PLAYER] Auto-play call error:", e);
             }
-          } catch (e) {
-            console.warn("[RADIO PLAYER] Auto-play call error:", e);
           }
-        }
+
+          // If YT player is still bootstrapping, initialize it with current playlist and random track
+          const playlistId = RADIO_PLAYLISTS[selectedRadioGenre]?.playlistId;
+          if (playlistId) {
+            initYoutubePlayer(playlistId, currentVideoIndexRef.current);
+          }
+        };
+
+        startAutoPlayback();
+
+        // Browser Autoplay Resilience:
+        // If unmuted playback is blocked before the user's first document gesture,
+        // trigger playback on the very first gesture (touch, scroll, click, keydown)
+        const handleFirstUserGesture = () => {
+          if (sceneRadioPlayingRef.current && ytPlayerRef.current) {
+            try {
+              if (typeof ytPlayerRef.current.unMute === 'function') ytPlayerRef.current.unMute();
+              if (typeof ytPlayerRef.current.playVideo === 'function') ytPlayerRef.current.playVideo();
+            } catch (_) {}
+          }
+          cleanupGestureListeners();
+        };
+
+        const cleanupGestureListeners = () => {
+          window.removeEventListener('pointerdown', handleFirstUserGesture);
+          window.removeEventListener('keydown', handleFirstUserGesture);
+          window.removeEventListener('touchstart', handleFirstUserGesture);
+        };
+
+        window.addEventListener('pointerdown', handleFirstUserGesture, { passive: true, once: true });
+        window.addEventListener('keydown', handleFirstUserGesture, { passive: true, once: true });
+        window.addEventListener('touchstart', handleFirstUserGesture, { passive: true, once: true });
       }
-    }, 3000);
+    };
+
+    const autoPlayTimer = setTimeout(executeAutoPlay, 3000);
+
+    const handleFeedLoaded = () => {
+      // Fast-path if feed explicitly signals loaded
+      if (!hasUserInteractedWithRadio.current && !sceneRadioPlayingRef.current) {
+        clearTimeout(autoPlayTimer);
+        setTimeout(executeAutoPlay, 3000);
+      }
+    };
+    window.addEventListener('nexus_feed_loaded', handleFeedLoaded);
 
     return () => {
+      isDisposed = true;
       clearTimeout(autoPlayTimer);
+      window.removeEventListener('nexus_feed_loaded', handleFeedLoaded);
     };
-  }, [activeTab]);
+  }, [activeTab, selectedRadioGenre]);
 
   useEffect(() => {
     let active = true;
@@ -2065,7 +2129,8 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                 tip="Play heavy underground metal streams that continue in the background while you browse."
                 position="top"
                 accentColor="rose"
-                triggerOn="hover"
+                autoShow={true}
+                autoShowDelay={1800}
               >
                 <button
                   onClick={(e) => {

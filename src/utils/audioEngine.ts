@@ -600,15 +600,10 @@ class UniversalAudioPlayer {
     try {
       const nativeBridge = (window as any).NexusNativeAudio;
       if (!nativeBridge) return;
-      if (action === 'start') {
-        nativeBridge.startForegroundAudio(
-          this.activeTrack?.title || 'Catalog Master',
-          this.activeTrack?.artist || 'Nexus Artist',
-          this.activeTrack?.album || 'Nexus Core'
-        );
-      } else if (action === 'pause') {
-        nativeBridge.pauseForegroundAudio();
-      } else if (action === 'stop') {
+      if (typeof nativeBridge.setAudioActive === 'function') {
+        nativeBridge.setAudioActive(action === 'start' || action === 'update');
+      }
+      if (typeof nativeBridge.stopForegroundAudio === 'function') {
         nativeBridge.stopForegroundAudio();
       }
     } catch (_) {}

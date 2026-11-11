@@ -4358,7 +4358,152 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       { "id": "cc-4", "name": "Rob Barrett", "role": "Rhythm Guitar", "status": "active", "years": "1993–1997, 2005–present" },
       { "id": "cc-5", "name": "Erik Rutan", "role": "Lead Guitar", "status": "active", "years": "2021–present" }
     ],
-    "discography": []
+    "discography": [
+      {
+        "id": "cc-rel-1",
+        "title": "Eaten Back to Life",
+        "year": "1990",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14032"
+      },
+      {
+        "id": "cc-rel-2",
+        "title": "Butchered at Birth",
+        "year": "1991",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14050"
+      },
+      {
+        "id": "cc-rel-3",
+        "title": "Tomb of the Mutilated",
+        "year": "1992",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14068"
+      },
+      {
+        "id": "cc-rel-4",
+        "title": "Hammer Smashed Face",
+        "year": "1993",
+        "type": "ep",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14072"
+      },
+      {
+        "id": "cc-rel-5",
+        "title": "The Bleeding",
+        "year": "1994",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14088"
+      },
+      {
+        "id": "cc-rel-6",
+        "title": "Vile",
+        "year": "1996",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14112"
+      },
+      {
+        "id": "cc-rel-7",
+        "title": "Gallery of Suicide",
+        "year": "1998",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14164"
+      },
+      {
+        "id": "cc-rel-8",
+        "title": "Bloodthirst",
+        "year": "1999",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14240"
+      },
+      {
+        "id": "cc-rel-9",
+        "title": "Gore Obsessed",
+        "year": "2002",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14382"
+      },
+      {
+        "id": "cc-rel-10",
+        "title": "Worm Infested",
+        "year": "2003",
+        "type": "ep",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14420"
+      },
+      {
+        "id": "cc-rel-11",
+        "title": "The Wretched Spawn",
+        "year": "2004",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14456"
+      },
+      {
+        "id": "cc-rel-12",
+        "title": "Kill",
+        "year": "2006",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14562"
+      },
+      {
+        "id": "cc-rel-13",
+        "title": "Evisceration Plague",
+        "year": "2009",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14710"
+      },
+      {
+        "id": "cc-rel-14",
+        "title": "Torture",
+        "year": "2012",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-15082"
+      },
+      {
+        "id": "cc-rel-15",
+        "title": "A Skeletal Domain",
+        "year": "2014",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-15340"
+      },
+      {
+        "id": "cc-rel-16",
+        "title": "Red Before Black",
+        "year": "2017",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-15542"
+      },
+      {
+        "id": "cc-rel-17",
+        "title": "Violence Unimagined",
+        "year": "2021",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-15760"
+      },
+      {
+        "id": "cc-rel-18",
+        "title": "Chaos Horrific",
+        "year": "2023",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-16014"
+      }
+    ]
   },
   {
     "id": "he-hate-eternal-official-uuid",
@@ -4386,7 +4531,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "discography": []
   },
   {
-    "id": "dof-deeds-of-flesh-official-uuid",
+    "id": "831ed6bc-e039-45d3-84cd-0a508fa18f57",
     "name": "Deeds of Flesh",
     "band_name": "Deeds of Flesh",
     "genre": "Brutal Death Metal",
@@ -4409,7 +4554,213 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       { "id": "dof-3", "name": "Darren Cesca", "role": "Drums", "status": "active", "years": "2016–present" },
       { "id": "dof-4", "name": "Erik Lindmark", "role": "Guitars, Vocals", "status": "past", "years": "1993–2018 (R.I.P.)" }
     ],
-    "discography": []
+    "discography": [
+      {
+        "id": "37990ab9-cdc5-40a9-85f9-dd4ec697160a",
+        "title": "Gradually Melted - EP",
+        "year": "1995",
+        "type": "ep",
+        "label": "Unique Leader Records",
+        "catalog_id": "IT-1298813635",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/74/81/fa/7481fafc-0ae1-f38b-8a0c-dba455f96c3f/191773824112.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/74/81/fa/7481fafc-0ae1-f38b-8a0c-dba455f96c3f/191773824112.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Three Abreast", "duration": "3:43" },
+          { "number": 2, "title": "Gradually Melted", "duration": "4:23" },
+          { "number": 3, "title": "Human Mutilation", "duration": "4:42" },
+          { "number": 4, "title": "Blood Splattered Embryo", "duration": "3:02" }
+        ]
+      },
+      {
+        "id": "9104d34c-7576-44df-ab7d-0beaa7fed3bd",
+        "title": "Trading Pieces",
+        "year": "1996",
+        "type": "album",
+        "label": "Unique Leader Records",
+        "catalog_id": "IT-1298813636",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/9e/e2/ff/9ee2ffca-634b-4dc7-eacb-c6acdd77ac35/191773824174.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/9e/e2/ff/9ee2ffca-634b-4dc7-eacb-c6acdd77ac35/191773824174.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Carnivorous Ways", "duration": "3:34" },
+          { "number": 2, "title": "Born Then Torn Apart", "duration": "2:07" },
+          { "number": 3, "title": "Trading Pieces", "duration": "2:45" },
+          { "number": 4, "title": "Hunting Humans", "duration": "2:39" },
+          { "number": 5, "title": "Impious Offerings", "duration": "3:00" },
+          { "number": 6, "title": "Acid Troops", "duration": "3:36" },
+          { "number": 7, "title": "Deeds of Flesh", "duration": "2:57" },
+          { "number": 8, "title": "Erected on Stakes", "duration": "1:55" },
+          { "number": 9, "title": "Chunks in the Shower", "duration": "2:28" },
+          { "number": 10, "title": "Blasted", "duration": "2:09" },
+          { "number": 11, "title": "Outro", "duration": "2:33" }
+        ]
+      },
+      {
+        "id": "fac4dfb9-7288-43ae-ba66-55bc45f53022",
+        "title": "Inbreeding the Anthropophagi",
+        "year": "1998",
+        "type": "album",
+        "label": "Unique Leader Records",
+        "catalog_id": "IT-1298813637",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/29/19/b5/2919b538-9fb1-e6d5-bb84-e5fe37978aa4/191773824129.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/29/19/b5/2919b538-9fb1-e6d5-bb84-e5fe37978aa4/191773824129.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "End of All", "duration": "1:21" },
+          { "number": 2, "title": "Feeding on the Deceased", "duration": "3:59" },
+          { "number": 3, "title": "Inbreeding the Anthropophagi", "duration": "4:46" },
+          { "number": 4, "title": "Infectious One", "duration": "4:18" },
+          { "number": 5, "title": "Ritual of Violence", "duration": "3:50" },
+          { "number": 6, "title": "Canvas of Flesh", "duration": "3:04" },
+          { "number": 7, "title": "Folded into Beast", "duration": "3:37" },
+          { "number": 8, "title": "Gradually Melted", "duration": "4:23" }
+        ]
+      },
+      {
+        "id": "e74f0c3e-43d8-42b3-9203-b9e13c3181da",
+        "title": "Path of the Weakening",
+        "year": "1999",
+        "type": "album",
+        "label": "Unique Leader Records",
+        "catalog_id": "IT-1298813639",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/0c/a0/22/0ca02233-ad39-7c2c-270a-aaaf7b20fba8/191773824150.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/0c/a0/22/0ca02233-ad39-7c2c-270a-aaaf7b20fba8/191773824150.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Indigenous to the Appalling", "duration": "3:49" },
+          { "number": 2, "title": "Lustmord", "duration": "2:41" },
+          { "number": 3, "title": "Path of the Weakening", "duration": "4:50" },
+          { "number": 4, "title": "Summarily Killed", "duration": "3:31" },
+          { "number": 5, "title": "Sounds of Loud Reigns", "duration": "3:26" },
+          { "number": 6, "title": "Execute the Anthropophagi", "duration": "3:59" },
+          { "number": 7, "title": "I Die on My Own Terms", "duration": "2:36" },
+          { "number": 8, "title": "Sense of the Diabolic", "duration": "3:18" },
+          { "number": 9, "title": "A Violent God", "duration": "3:29" }
+        ]
+      },
+      {
+        "id": "c0f0e880-e41e-4e3e-ab7d-0bea07ad1465",
+        "title": "Mark of the Legion",
+        "year": "2001",
+        "type": "album",
+        "label": "Unique Leader Records",
+        "catalog_id": "IT-1298813640",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/8a/63/f5/8a63f52f-fb64-39ff-1c28-4ec5f2b02458/191773824136.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/8a/63/f5/8a63f52f-fb64-39ff-1c28-4ec5f2b02458/191773824136.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Cleansed by Fire", "duration": "4:29" },
+          { "number": 2, "title": "An Eternity of Feasting and Brawling", "duration": "4:19" },
+          { "number": 3, "title": "Mark of the Legion", "duration": "5:22" },
+          { "number": 4, "title": "Spewing Profligacy", "duration": "4:39" },
+          { "number": 5, "title": "Fullfilled in Warfare", "duration": "3:33" },
+          { "number": 6, "title": "Contest of Wills", "duration": "3:50" },
+          { "number": 7, "title": "Master of Murder", "duration": "4:22" },
+          { "number": 8, "title": "Ideal Genocide", "duration": "5:37" },
+          { "number": 9, "title": "Drink the Blood", "duration": "5:23" }
+        ]
+      },
+      {
+        "id": "e5923113-d25d-45cb-be71-807700279cd3",
+        "title": "Reduced to Ashes",
+        "year": "2003",
+        "type": "album",
+        "label": "Unique Leader Records",
+        "catalog_id": "IT-1298813641",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/b2/da/c9/b2dac96a-03b5-ef9d-d15c-1e859af9732d/194491307509.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/b2/da/c9/b2dac96a-03b5-ef9d-d15c-1e859af9732d/194491307509.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Reduced to Ashes", "duration": "3:26" },
+          { "number": 2, "title": "Infested", "duration": "3:39" },
+          { "number": 3, "title": "The Human Affliction", "duration": "3:45" },
+          { "number": 4, "title": "Emaciated", "duration": "4:18" },
+          { "number": 5, "title": "Banished", "duration": "3:39" },
+          { "number": 6, "title": "Disfigured", "duration": "3:05" },
+          { "number": 7, "title": "In The Shadow of The Earth", "duration": "4:22" },
+          { "number": 8, "title": "The Curse of The Gods", "duration": "3:56" }
+        ]
+      },
+      {
+        "id": "d7f00d03-89a9-4593-9c86-b272ed48a465",
+        "title": "Crown of Souls",
+        "year": "2005",
+        "type": "album",
+        "label": "Unique Leader Records",
+        "catalog_id": "IT-1298813642",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/11/86/89/11868930-a62e-35d4-8d96-9586f153cba5/191773824099.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/11/86/89/11868930-a62e-35d4-8d96-9586f153cba5/191773824099.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Introduction", "duration": "0:30" },
+          { "number": 2, "title": "Crown of Souls", "duration": "3:40" },
+          { "number": 3, "title": "Medical Murder", "duration": "4:42" },
+          { "number": 4, "title": "Hunter's Moon", "duration": "4:36" },
+          { "number": 5, "title": "'Til The Morning", "duration": "4:34" },
+          { "number": 6, "title": "The Incestuous God", "duration": "4:08" },
+          { "number": 7, "title": "The Beast of Cañada De Diablo", "duration": "4:24" },
+          { "number": 8, "title": "The Poisoning", "duration": "3:38" },
+          { "number": 9, "title": "The Gathering of Ghouls", "duration": "4:39" }
+        ]
+      },
+      {
+        "id": "d3d1bf4c-2164-43da-96b1-d4c43a4feb94",
+        "title": "Of What's to Come",
+        "year": "2008",
+        "type": "album",
+        "label": "Unique Leader Records",
+        "catalog_id": "IT-1298813643",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/fe/cb/11/fecb118d-dfd2-bc22-2969-0b46d0c7657e/191773824143.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/fe/cb/11/fecb118d-dfd2-bc22-2969-0b46d0c7657e/191773824143.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Waters of Space", "duration": "0:32" },
+          { "number": 2, "title": "Eradication Pods", "duration": "4:01" },
+          { "number": 3, "title": "Unearthly Invent", "duration": "3:55" },
+          { "number": 4, "title": "Of What's to Come", "duration": "5:16" },
+          { "number": 5, "title": "Virulent Seed", "duration": "4:49" },
+          { "number": 6, "title": "Referencing the Unknown", "duration": "4:54" },
+          { "number": 7, "title": "Hands of the Conqueror", "duration": "4:36" },
+          { "number": 8, "title": "Harvest Temples", "duration": "4:19" },
+          { "number": 9, "title": "Dawn of the Next", "duration": "4:03" }
+        ]
+      },
+      {
+        "id": "0f39c852-5634-4fc2-8d6a-470b7b1e1674",
+        "title": "Portals to Canaan",
+        "year": "2013",
+        "type": "album",
+        "label": "Unique Leader Records",
+        "catalog_id": "IT-1298813644",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/1f/0b/e3/1f0be348-a44e-55e0-10f9-13bb836c47a5/191773824167.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/1f/0b/e3/1f0be348-a44e-55e0-10f9-13bb836c47a5/191773824167.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Amidst the Ruins", "duration": "1:18" },
+          { "number": 2, "title": "Entranced in Decades of Silence", "duration": "6:38" },
+          { "number": 3, "title": "Rise of the Ancients", "duration": "4:48" },
+          { "number": 4, "title": "Celestial Voices", "duration": "1:45" },
+          { "number": 5, "title": "Caelum Hirundines Carina / The Orbit of Chunk", "duration": "5:10" },
+          { "number": 6, "title": "Portals to Canaan", "duration": "5:26" },
+          { "number": 7, "title": "Hollow Human Husks", "duration": "4:12" },
+          { "number": 8, "title": "Astronautics", "duration": "4:44" },
+          { "number": 9, "title": "Perpetual Regicide", "duration": "4:03" }
+        ]
+      },
+      {
+        "id": "0674c998-5c86-499d-a141-1744bf42f855",
+        "title": "Nucleus",
+        "year": "2020",
+        "type": "album",
+        "label": "Unique Leader Records",
+        "catalog_id": "IT-1298813645",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/92/74/6c/92746cd1-b21d-6cbc-05f8-c9773ce4e4fb/195497182664.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/92/74/6c/92746cd1-b21d-6cbc-05f8-c9773ce4e4fb/195497182664.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Odyssey", "duration": "3:27" },
+          { "number": 2, "title": "Alyen Scourge", "duration": "5:05" },
+          { "number": 3, "title": "Ascension Vortex (feat. Decrepit Bill, Obie Flett & Anthony Trapani)", "duration": "4:29" },
+          { "number": 4, "title": "Catacombs of the Monolith (feat. Luc Lemay)", "duration": "5:08" },
+          { "number": 5, "title": "Ethereal Ancestors (feat. George \"Corpsegrinder\" Fisher)", "duration": "4:28" },
+          { "number": 6, "title": "Nucleus (feat. John Gallagher)", "duration": "4:56" },
+          { "number": 7, "title": "Races Conjoined (feat. Matti Way & Jon Zig)", "duration": "5:17" },
+          { "number": 8, "title": "Terror (feat. Dusty Boisjolie & Robbe Kok)", "duration": "6:00" },
+          { "number": 9, "title": "Onward", "duration": "1:44" }
+        ]
+      }
+    ]
   },
   {
     "id": "bf-birdflesh-official-uuid",
@@ -4511,6 +4862,500 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       { "id": "lod-4", "name": "Jerome Howard", "role": "Drums", "status": "active", "years": "2003–present" }
     ],
     "discography": []
+  },
+  {
+    "id": "0f365267-3742-4ddb-a853-ad458a233c62",
+    "name": "Aeon",
+    "band_name": "Aeon",
+    "genre": "Death Metal",
+    "subgenres": [
+      "Death Metal",
+      "Brutal Death Metal",
+      "Extreme Metal"
+    ],
+    "founded_year": "1999",
+    "city": "Östersund",
+    "state": "Jämtland",
+    "country": "Sweden",
+    "record_label": "Metal Blade Records",
+    "bio": "Formed in Östersund, Sweden, in 1999 by vocalist Tommy Dahlström and guitarist Zeb Nilsson following the demise of Defaced Creation. Renowned for their unapologetically blasphemous themes, razor-sharp technical precision, and crushing blast beats, Aeon stands as one of the heaviest death metal exports from Scandinavia.",
+    "avatar_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Aeon_Logo.jpg",
+    "cover_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Aeon_Banner.jpg",
+    "spotify_url": "https://open.spotify.com/artist/3o6G0K4vW01kL0pM",
+    "metal_archives_url": "https://www.metal-archives.com/bands/Aeon/3887",
+    "custom_slug": "aeon",
+    "verification_status": "community_archive",
+    "curated_by": "@deathmetal_archivist",
+    "curator_name": "Swedish Death Metal Vault",
+    "created_at": "1999-01-01T00:00:00Z",
+    "followers_count": 8900,
+    "lineup": [
+      { "id": "aeon-1", "name": "Tommy Dahlström", "role": "Vocals", "status": "active", "years": "1999–present" },
+      { "id": "aeon-2", "name": "Zeb Nilsson", "role": "Guitars", "status": "active", "years": "1999–present" },
+      { "id": "aeon-3", "name": "Tony Östman", "role": "Bass", "status": "active", "years": "2013–present" },
+      { "id": "aeon-4", "name": "Jonas Wallren", "role": "Drums", "status": "active", "years": "2020–present" }
+    ],
+    "discography": [
+      {
+        "id": "aeon-rel-1",
+        "title": "Bleeding the False",
+        "year": "2005",
+        "type": "album",
+        "label": "Unique Leader Records",
+        "catalog_id": "ULR-005"
+      },
+      {
+        "id": "aeon-rel-2",
+        "title": "Rise to Dominate",
+        "year": "2007",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14638"
+      },
+      {
+        "id": "aeon-rel-3",
+        "title": "Path of Fire",
+        "year": "2010",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-14902"
+      },
+      {
+        "id": "aeon-rel-4",
+        "title": "Aeons Black",
+        "year": "2012",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-15152"
+      },
+      {
+        "id": "aeon-rel-5",
+        "title": "God Ends Here",
+        "year": "2021",
+        "type": "album",
+        "label": "Metal Blade Records",
+        "catalog_id": "MB-15793"
+      }
+    ]
+  },
+  {
+    "id": "benediction-official-uuid",
+    "name": "Benediction",
+    "band_name": "Benediction",
+    "genre": "Old School Death Metal",
+    "subgenres": [
+      "Old School Death Metal",
+      "Death Metal",
+      "Extreme Metal"
+    ],
+    "founded_year": "1989",
+    "city": "Birmingham",
+    "state": "West Midlands",
+    "country": "United Kingdom",
+    "record_label": "Nuclear Blast Records",
+    "bio": "Formed in Birmingham, England, in 1989, Benediction is one of the foundational pillars of British Old School Death Metal. Signed to Nuclear Blast Records, Benediction deliver neck-snapping riffage, relentless groove, and crushing vocal intensity across 10 seminal releases.",
+    "avatar_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Benediction_Logo.jpg",
+    "cover_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Benediction_Banner.jpg",
+    "spotify_url": "https://open.spotify.com/artist/6P27kFvVp0U3a5k8Q5w18b",
+    "metal_archives_url": "https://www.metal-archives.com/bands/Benediction/610",
+    "custom_slug": "benediction",
+    "verification_status": "community_archive",
+    "curated_by": "@ukdm_archivist",
+    "curator_name": "UK Death Metal Archives",
+    "created_at": "1989-01-01T00:00:00Z",
+    "followers_count": 12500,
+    "lineup": [
+      { "id": "ben-1", "name": "Dave Ingram", "role": "Vocals", "status": "active", "years": "1990–1998, 2019–present" },
+      { "id": "ben-2", "name": "Darren Brookes", "role": "Guitars", "status": "active", "years": "1989–present" },
+      { "id": "ben-3", "name": "Peter Rew", "role": "Guitars", "status": "active", "years": "1989–present" },
+      { "id": "ben-4", "name": "Nik Sampson", "role": "Bass", "status": "active", "years": "2020–present" },
+      { "id": "ben-5", "name": "Giovanni Durst", "role": "Drums", "status": "active", "years": "2019–present" }
+    ],
+    "discography": [
+      {
+        "id": "ben-rel-1",
+        "title": "Subconscious Terror",
+        "year": "1990",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-033"
+      },
+      {
+        "id": "ben-rel-2",
+        "title": "The Grand Leveller",
+        "year": "1991",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-050"
+      },
+      {
+        "id": "ben-rel-3",
+        "title": "Dark Is the Season",
+        "year": "1992",
+        "type": "ep",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-061"
+      },
+      {
+        "id": "ben-rel-4",
+        "title": "Transcend the Rubicon",
+        "year": "1993",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-076"
+      },
+      {
+        "id": "ben-rel-5",
+        "title": "The Grotesque / Asymmetry",
+        "year": "1994",
+        "type": "ep",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-103"
+      },
+      {
+        "id": "ben-rel-6",
+        "title": "The Dreams You Dread",
+        "year": "1995",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-122"
+      },
+      {
+        "id": "ben-rel-7",
+        "title": "Grind Bastard",
+        "year": "1998",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-304"
+      },
+      {
+        "id": "ben-rel-8",
+        "title": "Organised Chaos",
+        "year": "2001",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-657"
+      },
+      {
+        "id": "ben-rel-9",
+        "title": "Killing Music",
+        "year": "2008",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-2150"
+      },
+      {
+        "id": "ben-rel-10",
+        "title": "Scriptures",
+        "year": "2020",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-5339"
+      }
+    ]
+  },
+  {
+    "id": "hypocrisy-official-uuid",
+    "name": "Hypocrisy",
+    "band_name": "Hypocrisy",
+    "genre": "Melodic Death Metal",
+    "subgenres": [
+      "Melodic Death Metal",
+      "Death Metal",
+      "Extreme Metal"
+    ],
+    "founded_year": "1991",
+    "city": "Ludvika",
+    "state": "Dalarna",
+    "country": "Sweden",
+    "record_label": "Nuclear Blast Records",
+    "bio": "Formed in Ludvika, Sweden, in 1991 by visionary frontman and producer Peter Tägtgren, Hypocrisy is a world-renowned pioneer of Swedish Melodic Death Metal. Famous for iconic masterpieces like Abducted, The Final Chapter, and Roswell 47.",
+    "avatar_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Hypocrisy_Logo.jpg",
+    "cover_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Hypocrisy_Banner.jpg",
+    "spotify_url": "https://open.spotify.com/artist/1G14y7G101o0G0K8P",
+    "metal_archives_url": "https://www.metal-archives.com/bands/Hypocrisy/349",
+    "custom_slug": "hypocrisy",
+    "verification_status": "community_archive",
+    "curated_by": "@melodeath_archivist",
+    "curator_name": "Swedish Death Metal Vault",
+    "created_at": "1991-01-01T00:00:00Z",
+    "followers_count": 28400,
+    "lineup": [
+      { "id": "hyp-1", "name": "Peter Tägtgren", "role": "Vocals, Guitars", "status": "active", "years": "1991–present" },
+      { "id": "hyp-2", "name": "Mikael Hedlund", "role": "Bass", "status": "active", "years": "1991–present" },
+      { "id": "hyp-3", "name": "Thomas Elofsson", "role": "Guitars", "status": "active", "years": "2010–present" },
+      { "id": "hyp-4", "name": "Henrik Axenrot", "role": "Drums", "status": "active", "years": "2022–present" }
+    ],
+    "discography": [
+      {
+        "id": "hyp-rel-1",
+        "title": "Penetralia",
+        "year": "1992",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-067"
+      },
+      {
+        "id": "hyp-rel-2",
+        "title": "Pleasure of Molestation",
+        "year": "1993",
+        "type": "ep",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-078"
+      },
+      {
+        "id": "hyp-rel-3",
+        "title": "Osculum Obscenum",
+        "year": "1993",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-081"
+      },
+      {
+        "id": "hyp-rel-4",
+        "title": "Inferior Devoties",
+        "year": "1994",
+        "type": "ep",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-095"
+      },
+      {
+        "id": "hyp-rel-5",
+        "title": "The Fourth Dimension",
+        "year": "1994",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-106"
+      },
+      {
+        "id": "hyp-rel-6",
+        "title": "Abducted",
+        "year": "1996",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-148"
+      },
+      {
+        "id": "hyp-rel-7",
+        "title": "Maximum Abduction",
+        "year": "1997",
+        "type": "ep",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-224"
+      },
+      {
+        "id": "hyp-rel-8",
+        "title": "The Final Chapter",
+        "year": "1997",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-278"
+      },
+      {
+        "id": "hyp-rel-9",
+        "title": "Hypocrisy Destroys Wacken",
+        "year": "1999",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-372"
+      },
+      {
+        "id": "hyp-rel-10",
+        "title": "Hypocrisy",
+        "year": "1999",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-396"
+      },
+      {
+        "id": "hyp-rel-11",
+        "title": "Into the Abyss",
+        "year": "2000",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-490"
+      },
+      {
+        "id": "hyp-rel-12",
+        "title": "Catch 22",
+        "year": "2002",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-648"
+      },
+      {
+        "id": "hyp-rel-13",
+        "title": "The Arrival",
+        "year": "2004",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-1218"
+      },
+      {
+        "id": "hyp-rel-14",
+        "title": "Virus",
+        "year": "2005",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-1488"
+      },
+      {
+        "id": "hyp-rel-15",
+        "title": "Catch 22 V2.0.08",
+        "year": "2008",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-2082"
+      },
+      {
+        "id": "hyp-rel-16",
+        "title": "A Taste of Extreme Divinity",
+        "year": "2009",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-2290"
+      },
+      {
+        "id": "hyp-rel-17",
+        "title": "Worship",
+        "year": "2021",
+        "type": "album",
+        "label": "Nuclear Blast Records",
+        "catalog_id": "NB-5820"
+      }
+    ]
+  },
+  {
+    "id": "2e4753ed-3af6-454d-912a-0512c544fb12",
+    "name": "Extermination Dismemberment",
+    "band_name": "Extermination Dismemberment",
+    "genre": "Slamming BDM",
+    "subgenres": [
+      "Slamming BDM",
+      "Brutal Deathcore",
+      "Extreme Metal"
+    ],
+    "founded_year": "2009",
+    "city": "Minsk",
+    "state": "Minsk",
+    "country": "Belarus",
+    "record_label": "Unique Leader Records",
+    "bio": "Formed in Minsk, Belarus, in 2009, Extermination Dismemberment is an internationally renowned pioneer of slamming brutal death metal. Famous for their seismic sub-bass drops, pulverizing slam grooves, and apocalyptic production across 5 crushing releases.",
+    "avatar_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1793920761905_1793920761932.jpg",
+    "cover_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1793818748983_1793818748994.jpg",
+    "spotify_url": "https://open.spotify.com/artist/7v7E8j010yG5tX01",
+    "metal_archives_url": "https://www.metal-archives.com/bands/Extermination_Dismemberment/3540318825",
+    "custom_slug": "extermination-dismemberment",
+    "verification_status": "community_archive",
+    "curated_by": "@slam_archivist",
+    "curator_name": "Slam Metal Vault",
+    "created_at": "2009-01-01T00:00:00Z",
+    "followers_count": 18200,
+    "lineup": [
+      { "id": "ed-1", "name": "Arseniy Kovalchuk", "role": "Guitars", "status": "active", "years": "2009–present" },
+      { "id": "ed-2", "name": "Vladislav Vislavskiy", "role": "Vocals", "status": "active", "years": "2011–present" },
+      { "id": "ed-3", "name": "Viktor Kallas", "role": "Bass", "status": "active", "years": "2013–present" },
+      { "id": "ed-4", "name": "Denis Dementev", "role": "Drums", "status": "active", "years": "2018–present" }
+    ],
+    "discography": [
+      {
+        "id": "0dc9774a-ed9d-44ed-a7e7-db5f424f518f",
+        "title": "Butcher Basement",
+        "year": "2010",
+        "type": "album",
+        "label": "Imbecil Entertainment Records / Morbid Generation Records",
+        "catalog_id": "IT-1231149286",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music117/v4/27/26/65/2726650c-d059-548c-1b3b-8e2e04146bcf/artwork.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music117/v4/27/26/65/2726650c-d059-548c-1b3b-8e2e04146bcf/artwork.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Commencement of End", "duration": "1:21" },
+          { "number": 2, "title": "Slaughterer Chainsaw", "duration": "3:41" },
+          { "number": 3, "title": "Resurrectionist Blasphemous", "duration": "2:58" },
+          { "number": 4, "title": "Merciless Infanticide", "duration": "3:18" },
+          { "number": 5, "title": "Brutality Great Battle", "duration": "2:31" },
+          { "number": 6, "title": "Rotten Entrails", "duration": "2:10" },
+          { "number": 7, "title": "Butcher Basement", "duration": "4:17" },
+          { "number": 8, "title": "Gastrointestinal Rupture", "duration": "2:57" },
+          { "number": 9, "title": "Bulldozer Massacre", "duration": "6:31" },
+          { "number": 10, "title": "My Bloody Show", "duration": "2:29" },
+          { "number": 11, "title": "Omnivorous Sanctum", "duration": "2:56" },
+          { "number": 12, "title": "Ogre Orchardman", "duration": "3:20" },
+          { "number": 13, "title": "Ophthalmic Eyeing", "duration": "2:45" }
+        ]
+      },
+      {
+        "id": "9d376484-5401-421b-96fe-8f82b30dfc16",
+        "title": "Serial Urbicide",
+        "year": "2013",
+        "type": "album",
+        "label": "Amputated Vein Records",
+        "catalog_id": "IT-702880999",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/c4/98/90/c49890e7-d2cf-eb38-76aa-815ecba69809/AVR043.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/c4/98/90/c49890e7-d2cf-eb38-76aa-815ecba69809/AVR043.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Evisceration Conceiving", "duration": "1:11" },
+          { "number": 2, "title": "Disemboweled Engorgement", "duration": "4:01" },
+          { "number": 3, "title": "Gutted Face", "duration": "3:08" },
+          { "number": 4, "title": "Serial Urbicide", "duration": "3:59" },
+          { "number": 5, "title": "Deconstructive Parasite", "duration": "5:16" },
+          { "number": 6, "title": "Survival", "duration": "3:32" },
+          { "number": 7, "title": "Devastation Squad", "duration": "3:22" },
+          { "number": 8, "title": "Carnivore Outraged", "duration": "3:37" },
+          { "number": 9, "title": "Bloodbath Religion", "duration": "3:50" },
+          { "number": 10, "title": "Human Holocaust", "duration": "6:20" }
+        ]
+      },
+      {
+        "id": "84984e44-2640-413f-88b9-50619fa1f384",
+        "title": "Protonemesis - Single",
+        "year": "2021",
+        "type": "single",
+        "label": "Unique Leader Records",
+        "catalog_id": "IT-1586842140",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/23/58/d3/2358d36d-1ad6-c105-7769-44c2ed69e5a6/196292517484.jpg/600x600bb.jpg",
+        "cover_image": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/23/58/d3/2358d36d-1ad6-c105-7769-44c2ed69e5a6/196292517484.jpg/600x600bb.jpg",
+        "tracks": [
+          { "number": 1, "title": "Protonemesis", "duration": "4:09" }
+        ]
+      },
+      {
+        "id": "41cd1513-405d-4527-bc06-9e9d5f3d62d8",
+        "title": "Dehumanization Protocol",
+        "year": "2023",
+        "type": "album",
+        "label": "Unique Leader Records",
+        "catalog_id": "ULR-310",
+        "cover_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/release-art_1793819265919_1793819265938.jpg",
+        "cover_image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/release-art_1793819265919_1793819265938.jpg",
+        "tracks": [
+          { "number": 1, "title": "God Help Us", "duration": "1:00" },
+          { "number": 2, "title": "Dehumanization Protocol", "duration": "4:21" },
+          { "number": 3, "title": "Terror Domination", "duration": "4:55" },
+          { "number": 4, "title": "Protonemesis", "duration": "4:10" },
+          { "number": 5, "title": "Plague in the Guise of Flesh", "duration": "4:55" },
+          { "number": 6, "title": "Omnivore", "duration": "3:00" },
+          { "number": 7, "title": "Extermination Factory", "duration": "5:52" },
+          { "number": 8, "title": "Agony Incarnate", "duration": "4:19" },
+          { "number": 9, "title": "Humanity's Last Grief", "duration": "1:30" },
+          { "number": 10, "title": "Sentenced to Extinction", "duration": "6:33" },
+          { "number": 11, "title": "Ruins of Armageddon", "duration": "8:06" },
+          { "number": 12, "title": "Corpsepit", "duration": "4:39" },
+          { "number": 13, "title": "Protonemesis (2021 Version)", "duration": "4:09" }
+        ]
+      },
+      {
+        "id": "0c9e8a05-f982-473a-a9d7-d72c81513de6",
+        "title": "Enslaver of the Continents",
+        "year": "2024",
+        "type": "single",
+        "label": "Unique Leader Records",
+        "cover_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/release-art_1794344665875_1794344665891.jpg",
+        "cover_image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/release-art_1794344665875_1794344665891.jpg",
+        "tracks": [
+          { "number": 1, "title": "Enslaver of the Continents", "duration": "4:12" }
+        ]
+      }
+    ]
   }
 ];
 

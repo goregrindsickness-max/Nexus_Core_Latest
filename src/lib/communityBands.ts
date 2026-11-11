@@ -207,10 +207,13 @@ export const KNOWN_ALBUM_RELEASE_YEARS: Record<string, string> = {
 
   // Deeds of Flesh
   'graduallymelted': '1995',
+  'graduallymeltedep': '1995',
   'tradingpieces': '1996',
   'inbreedingtheanthropophagi': '1998',
+  'pathoftheweakening': '1999',
   'pathofthetotem': '1999',
   'markofthelegion': '2001',
+  'reducedtoashes': '2003',
   'reducedtobegging': '2003',
   'crownofsouls': '2005',
   'ofwhatstocome': '2008',
@@ -242,6 +245,37 @@ export const KNOWN_ALBUM_RELEASE_YEARS: Record<string, string> = {
   'pathoffire': '2010',
   'aeonsblack': '2012',
   'godendshere': '2021',
+
+  // Benediction
+  'subconsciousterror': '1990',
+  'thegrandleveller': '1991',
+  'darkistheseason': '1992',
+  'transcendtherubicon': '1993',
+  'thegrotesqueasymmetry': '1994',
+  'thedreamsyoudread': '1995',
+  'grindbastard': '1998',
+  'organisedchaos': '2001',
+  'killingmusic': '2008',
+  'scriptures': '2020',
+
+  // Hypocrisy
+  'penetralia': '1992',
+  'pleasureofmolestation': '1993',
+  'osculumobscenum': '1993',
+  'inferiordevoties': '1994',
+  'thefourthdimension': '1994',
+  'abducted': '1996',
+  'maximumabduction': '1997',
+  'thefinalchapter': '1997',
+  'hypocrisydestroyswacken': '1999',
+  'hypocrisy': '1999',
+  'intotheabyss': '2000',
+  'catch22': '2002',
+  'thearrival': '2004',
+  'virus': '2005',
+  'catch22v2008': '2008',
+  'atasteofextremedivinity': '2009',
+  'worship': '2021',
 
   // Birdflesh
   'borntodecide': '2002',
@@ -280,9 +314,13 @@ export const KNOWN_ALBUM_RELEASE_YEARS: Record<string, string> = {
   'sociopathicconstructs': '2019',
 
   // Extermination Dismemberment
-  'butchertripleact': '2010',
-  'serialviolence': '2013',
+  'butcherbasement': '2010',
+  'serialurbicide': '2013',
+  'protonemesis': '2021',
+  'protonemesissingle': '2021',
   'dehumanizationprotocol': '2023',
+  'enslaverofthecontinents': '2024',
+  'enslaverofcontinents': '2024',
 
   // Visceral Disgorge
   'ingestingputridity': '2011',
@@ -697,6 +735,10 @@ export function purgeDeletedAndZombieBands(): void {
     markBandDeletedInStorage('tyler-hansard', 'tyler hansard');
     markBandDeletedInStorage('tyler-slamson', 'tyler slamson');
     // Explicitly mark false placeholder releases as deleted
+    markReleaseDeletedInStorage('rel-ed-fake-1', 'Butcher Triple Act', 'extermination dismemberment');
+    markReleaseDeletedInStorage('rel-ed-fake-2', 'Serial Violence', 'extermination dismemberment');
+    markReleaseDeletedInStorage('rel-ed-fake-3', 'Agony Selection', 'extermination dismemberment');
+    markReleaseDeletedInStorage('rel-ed-fake-4', 'Omnivore', 'extermination dismemberment');
     markReleaseDeletedInStorage('rel-ve-1', 'Degradation of Humanity', 'virulent excision');
     markReleaseDeletedInStorage('rel-ve-2', 'The Excision of Reality', 'virulent excision');
     markReleaseDeletedInStorage('rel-ve-split-2022', 'Acts of Sadistic Cruelty: 4 Way Split', 'virulent excision');
@@ -718,6 +760,7 @@ export function purgeDeletedAndZombieBands(): void {
     markReleaseDeletedInStorage('rel-ngb-2', 'Human Fleshmonger', 'necroticgorebeast');
     markReleaseDeletedInStorage('rel-pf-1', 'Slamaholics Vol. 1', 'peelingflesh');
     markReleaseDeletedInStorage('rel-pp-3', 'Revel in Suffering', 'putrid pile');
+    markReleaseDeletedInStorage('2b6d0a99-67bc-4d96-9c86-b27204130a48', 'Gradually Melted (Re-Issue) - EP', 'deeds of flesh');
 
     // Ensure legitimate releases for featured community bands are never blacklisted locally
     try {
@@ -725,6 +768,10 @@ export function purgeDeletedAndZombieBands(): void {
       let releaseBlacklistChanged = false;
       for (const key of Array.from(deletedReleases)) {
         const k = key.toLowerCase();
+        // Skip duplicate re-issues from whitelist
+        if (k.includes('re-issue') || k.includes('reissue') || k === '2b6d0a99-67bc-4d96-9c86-b27204130a48') {
+          continue;
+        }
         if (
           k.includes('birdflesh') ||
           k.includes('cannibal') ||
@@ -737,7 +784,23 @@ export function purgeDeletedAndZombieBands(): void {
           k.includes('grey') ||
           k.includes('red') ||
           k.includes('black') ||
-          k.includes('gold')
+          k.includes('gold') ||
+          k.includes('protonemesis') ||
+          k.includes('enslaver') ||
+          k.includes('serial urbicide') ||
+          k.includes('butcher basement') ||
+          k.includes('dehumanization protocol') ||
+          k.includes('deeds of flesh') ||
+          k.includes('trading pieces') ||
+          k.includes('inbreeding the anthropophagi') ||
+          k.includes('path of the weakening') ||
+          k.includes('mark of the legion') ||
+          k.includes('reduced to ashes') ||
+          k.includes('crown of souls') ||
+          k.includes('of what\'s to come') ||
+          k.includes('portals to canaan') ||
+          k.includes('nucleus') ||
+          (k.includes('gradually melted') && !k.includes('re-issue'))
         ) {
           deletedReleases.delete(key);
           releaseBlacklistChanged = true;
@@ -773,6 +836,13 @@ export function purgeDeletedAndZombieBands(): void {
       'nexus_core_band_discography_peelingflesh',
       'nexus_core_band_discography_putrid-pile',
       'nexus_core_band_discography_putrid pile',
+      'nexus_core_band_discography_extermination-dismemberment',
+      'nexus_core_band_discography_extermination dismemberment',
+      'nexus_core_band_discography_extermination-dismemberment-official-uuid',
+      'nexus_core_band_discography_deeds of flesh',
+      'nexus_core_band_discography_deeds-of-flesh',
+      'nexus_core_band_discography_831ed6bc-e039-45d3-84cd-0a508fa18f57',
+      'nexus_core_band_discography_dof-deeds-of-flesh-official-uuid',
       'nexus_core_releases_cache'
     ];
 
@@ -790,6 +860,13 @@ export function purgeDeletedAndZombieBands(): void {
               return false;
             }
             if (
+              title.includes('butcher triple act') ||
+              title.includes('serial violence') ||
+              title.includes('agony selection') ||
+              (title.includes('omnivore') && (!r.tracks || r.tracks.length === 0)) ||
+              title.includes('gradually melted (re-issue)') ||
+              title.includes('gradually melted re-issue') ||
+              r.id === '2b6d0a99-67bc-4d96-9c86-b27204130a48' ||
               title.includes('degradation of humanity') || 
               title.includes('excision of reality') || 
               title.includes('acts of sadistic cruelty') ||
@@ -1089,15 +1166,31 @@ export class CommunityBandManager {
         }
       } catch (_) {}
 
-      // Migration to fix Aeon release count (flush stale 4-release cache so all 5 Supabase releases load)
-      // and Cannibal Corpse avatar (flush Unsplash neon sign placeholder to authentic uploaded avatar)
+      // Migration to fix Aeon (5), Benediction (10), Cannibal Corpse (18), Hypocrisy (17), & Extermination Dismemberment (5) discography count
+      // and restore Extermination Dismemberment's complete 5 official releases (Butcher Basement, Serial Urbicide, Protonemesis, Dehumanization Protocol, Enslaver of the Continents)
       try {
-        const AEON_CC_FIX_KEY = 'nexus_aeon_cc_avatar_fix_v3';
-        if (!safeLocalStorage.getItem(AEON_CC_FIX_KEY)) {
-          // Clear cached discography for Aeon to force full re-fetch of all 5 albums from Supabase
+        const ALL_BANDS_DISCOGRAPHY_FIX_KEY = 'nexus_extermination_dismemberment_restore_5_releases_v12';
+        if (!safeLocalStorage.getItem(ALL_BANDS_DISCOGRAPHY_FIX_KEY)) {
+          // Clear cached discography for Aeon, Benediction, Cannibal Corpse, Hypocrisy, and Extermination Dismemberment to force full re-fetch of all releases from Supabase & seed master
           clearBandDiscographyFromCache('0f365267-3742-4ddb-a853-ad458a233c62', 'aeon');
+          clearBandDiscographyFromCache('benediction-official-uuid', 'benediction');
+          clearBandDiscographyFromCache('def01697-734a-43fa-8b88-66166b28f743', 'cannibal corpse');
+          clearBandDiscographyFromCache('hypocrisy-official-uuid', 'hypocrisy');
+          clearBandDiscographyFromCache('2e4753ed-3af6-454d-912a-0512c544fb12', 'extermination dismemberment');
+          clearBandDiscographyFromCache('extermination-dismemberment-official-uuid', 'extermination dismemberment');
           safeLocalStorage.removeItem('nexus_core_band_discography_aeon');
           safeLocalStorage.removeItem('nexus_core_band_discography_0f365267-3742-4ddb-a853-ad458a233c62');
+          safeLocalStorage.removeItem('nexus_core_band_discography_benediction');
+          safeLocalStorage.removeItem('nexus_core_band_discography_benediction-official-uuid');
+          safeLocalStorage.removeItem('nexus_core_band_discography_cannibal corpse');
+          safeLocalStorage.removeItem('nexus_core_band_discography_cannibal-corpse');
+          safeLocalStorage.removeItem('nexus_core_band_discography_def01697-734a-43fa-8b88-66166b28f743');
+          safeLocalStorage.removeItem('nexus_core_band_discography_hypocrisy');
+          safeLocalStorage.removeItem('nexus_core_band_discography_hypocrisy-official-uuid');
+          safeLocalStorage.removeItem('nexus_core_band_discography_extermination dismemberment');
+          safeLocalStorage.removeItem('nexus_core_band_discography_extermination-dismemberment');
+          safeLocalStorage.removeItem('nexus_core_band_discography_2e4753ed-3af6-454d-912a-0512c544fb12');
+          safeLocalStorage.removeItem('nexus_core_band_discography_extermination-dismemberment-official-uuid');
 
           // Set Cannibal Corpse authentic image URLs
           const CC_REAL_AVATAR = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1793953372064_1793953372104.jpg';
@@ -1114,6 +1207,7 @@ export class CommunityBandManager {
                 const bName = (b.name || b.band_name || '').toLowerCase().trim();
                 const bId = String(b.id || '').toLowerCase().trim();
                 if (bName.includes('cannibal corpse') || bId === 'def01697-734a-43fa-8b88-66166b28f743') {
+                  delete b.discography;
                   return {
                     ...b,
                     avatar: CC_REAL_AVATAR,
@@ -1124,10 +1218,43 @@ export class CommunityBandManager {
                     banner_url: CC_REAL_BANNER
                   };
                 }
-                if (bName === 'aeon' || bId === '0f365267-3742-4ddb-a853-ad458a233c62') {
+                if (bName === 'aeon' || bId === '0f365267-3742-4ddb-a853-ad458a233c62' || bName === 'benediction' || bId === 'benediction-official-uuid' || bName === 'hypocrisy' || bId === 'hypocrisy-official-uuid' || bName.includes('extermination dismemberment') || bId === 'extermination-dismemberment-official-uuid' || bId === '2e4753ed-3af6-454d-912a-0512c544fb12') {
+                  delete b.discography;
+                }
+                return b;
+              });
+              safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+            }
+          }
+          safeLocalStorage.setItem(ALL_BANDS_DISCOGRAPHY_FIX_KEY, 'true');
+        }
+      } catch (_) {}
+
+      // Clean slate migration for Deeds of Flesh discography to purge duplicate Gradually Melted (Re-Issue) and load exact 10 releases
+      try {
+        const DOF_FIX_KEY = 'nexus_deeds_of_flesh_10_releases_fix_v13';
+        if (!safeLocalStorage.getItem(DOF_FIX_KEY)) {
+          clearBandDiscographyFromCache('831ed6bc-e039-45d3-84cd-0a508fa18f57', 'deeds of flesh');
+          clearBandDiscographyFromCache('dof-deeds-of-flesh-official-uuid', 'deeds of flesh');
+          safeLocalStorage.removeItem('nexus_core_band_discography_deeds of flesh');
+          safeLocalStorage.removeItem('nexus_core_band_discography_deeds-of-flesh');
+          safeLocalStorage.removeItem('nexus_core_band_discography_831ed6bc-e039-45d3-84cd-0a508fa18f57');
+          safeLocalStorage.removeItem('nexus_core_band_discography_dof-deeds-of-flesh-official-uuid');
+
+          markReleaseDeletedInStorage('2b6d0a99-67bc-4d96-9c86-b27204130a48', 'Gradually Melted (Re-Issue) - EP', 'deeds of flesh');
+
+          const rawArchives = safeLocalStorage.getItem(STORAGE_KEY);
+          if (rawArchives) {
+            const parsedArchives = JSON.parse(rawArchives);
+            if (Array.isArray(parsedArchives)) {
+              const cleaned = parsedArchives.map((b: any) => {
+                const bName = (b.name || b.band_name || '').toLowerCase().trim();
+                const bId = String(b.id || '').toLowerCase().trim();
+                if (bName.includes('deeds of flesh') || bId === '831ed6bc-e039-45d3-84cd-0a508fa18f57' || bId === 'dof-deeds-of-flesh-official-uuid') {
+                  delete b.discography;
                   return {
                     ...b,
-                    discography: []
+                    id: '831ed6bc-e039-45d3-84cd-0a508fa18f57'
                   };
                 }
                 return b;
@@ -1135,7 +1262,53 @@ export class CommunityBandManager {
               safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
             }
           }
-          safeLocalStorage.setItem(AEON_CC_FIX_KEY, 'true');
+          safeLocalStorage.setItem(DOF_FIX_KEY, 'true');
+        }
+      } catch (_) {}
+
+      // Clean slate migration for Lust of Decay lineup and discography sync
+      try {
+        const LOD_FIX_KEY = 'nexus_lust_of_decay_lineup_releases_fix_v2';
+        if (!safeLocalStorage.getItem(LOD_FIX_KEY)) {
+          clearBandDiscographyFromCache('48ef20cc-0954-4a94-868e-0783699ec6ff', 'lust of decay');
+          clearBandDiscographyFromCache('lod-lust-of-decay-official-uuid', 'lust of decay');
+          safeLocalStorage.removeItem('nexus_core_band_lineup_48ef20cc-0954-4a94-868e-0783699ec6ff');
+          safeLocalStorage.removeItem('nexus_core_band_lineup_lod-lust-of-decay-official-uuid');
+          safeLocalStorage.removeItem('nexus_core_band_lineup_lust of decay');
+          safeLocalStorage.removeItem('nexus_core_band_discography_lust of decay');
+          safeLocalStorage.removeItem('nexus_core_band_discography_48ef20cc-0954-4a94-868e-0783699ec6ff');
+
+          const realLODLineup = [
+            { id: 'lod-1', name: 'Steve Green', role: 'Guitar', status: 'active', years: '2000–present' },
+            { id: 'lod-2', name: 'Jay Barnes', role: 'Vocals', status: 'active', years: '2000–present' },
+            { id: 'lod-3', name: 'Jordan Varella', role: 'Drums', status: 'active', years: '2002–2007, 2020–present' },
+            { id: 'lod-4', name: 'Ryan Coulter', role: 'Bass', status: 'active', years: '2014–present' }
+          ];
+
+          safeLocalStorage.setItem('nexus_core_band_lineup_48ef20cc-0954-4a94-868e-0783699ec6ff', JSON.stringify(realLODLineup));
+          safeLocalStorage.setItem('nexus_core_band_lineup_lust of decay', JSON.stringify(realLODLineup));
+
+          const rawArchives = safeLocalStorage.getItem(STORAGE_KEY);
+          if (rawArchives) {
+            const parsedArchives = JSON.parse(rawArchives);
+            if (Array.isArray(parsedArchives)) {
+              const cleaned = parsedArchives.map((b: any) => {
+                const bName = (b.name || b.band_name || '').toLowerCase().trim();
+                const bId = String(b.id || '').toLowerCase().trim();
+                if (bName.includes('lust of decay') || bId === '48ef20cc-0954-4a94-868e-0783699ec6ff' || bId === 'lod-lust-of-decay-official-uuid') {
+                  delete b.discography;
+                  return {
+                    ...b,
+                    id: '48ef20cc-0954-4a94-868e-0783699ec6ff',
+                    lineup: realLODLineup
+                  };
+                }
+                return b;
+              });
+              safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+            }
+          }
+          safeLocalStorage.setItem(LOD_FIX_KEY, 'true');
         }
       } catch (_) {}
 
@@ -1347,7 +1520,12 @@ export class CommunityBandManager {
         }
 
         let processedItem = item;
-        // If it's a pre-seeded band, only fill in missing fields from fresh, never overwrite user edits!
+        // Unified discography & lineup enrichment for ALL community hub bands (pre-seeded and dynamically created alike)
+        const cachedDisco = loadBandDiscographyFromCache(processedItem.id, cleanNorm);
+        const itemDisco = Array.isArray(processedItem.discography) ? processedItem.discography : [];
+        const freshDisco = fresh && Array.isArray(fresh.discography) ? fresh.discography : [];
+
+        // If it's a pre-seeded band, fill in missing baseline fields from fresh, but preserve user edits!
         if (fresh) {
           processedItem = {
             ...fresh,
@@ -1363,31 +1541,27 @@ export class CommunityBandManager {
             state: (item.state !== undefined && item.state !== null) ? item.state : (fresh.state || ''),
             record_label: (item.record_label !== undefined && item.record_label !== null) ? item.record_label : (item.label || fresh.record_label || fresh.label || ''),
             discography: deduplicateDiscography([
-              ...(Array.isArray(item.discography) ? item.discography : []),
-              ...(loadBandDiscographyFromCache(item.id, rawName) || []),
-              ...(fresh.discography || [])
-            ]),
+              ...itemDisco,
+              ...(cachedDisco || []),
+              ...freshDisco
+            ], rawName),
             lineup: (Array.isArray(item.lineup) && item.lineup.length > 0)
               ? item.lineup
               : (restoredLineupFromCache || fresh.lineup || [])
           };
         } else {
-          const cachedDisco = loadBandDiscographyFromCache(processedItem.id, cleanNorm);
-          if (cachedDisco && cachedDisco.length > 0) {
-            processedItem = {
-              ...processedItem,
-              discography: deduplicateDiscography([
-                ...(Array.isArray(processedItem.discography) ? processedItem.discography : []),
-                ...cachedDisco
-              ])
-            };
-          }
-          if (restoredLineupFromCache && (!Array.isArray(processedItem.lineup) || processedItem.lineup.length === 0)) {
-            processedItem = {
-              ...processedItem,
-              lineup: restoredLineupFromCache
-            };
-          }
+          processedItem = {
+            ...processedItem,
+            name: rawName,
+            band_name: rawName,
+            discography: deduplicateDiscography([
+              ...itemDisco,
+              ...(cachedDisco || [])
+            ], rawName),
+            lineup: (Array.isArray(processedItem.lineup) && processedItem.lineup.length > 0)
+              ? processedItem.lineup
+              : (restoredLineupFromCache || [])
+          };
         }
 
         // Group key: if name is non-placeholder, group by normName; if placeholder, group strictly by UUID
@@ -1788,10 +1962,22 @@ export class CommunityBandManager {
       };
       all.unshift(newBand);
       this.saveToStorage(all);
+      if (Array.isArray(newBand.discography) && newBand.discography.length > 0) {
+        saveBandDiscographyToCache(newBand.id, validName, newBand.discography);
+        saveBandDiscographyToCache(newId, validName, newBand.discography);
+      }
       if (newBand.lineup && newBand.lineup.length > 0) {
         safeLocalStorage.setItem(`nexus_core_band_lineup_${newBand.id}`, JSON.stringify(newBand.lineup));
         safeLocalStorage.setItem(`nexus_core_band_lineup_${newId}`, JSON.stringify(newBand.lineup));
         if (validName) safeLocalStorage.setItem(`nexus_core_band_lineup_${validName.toLowerCase().trim()}`, JSON.stringify(newBand.lineup));
+      }
+      if (newBand.logo_url && !newBand.logo_url.startsWith('data:')) {
+        safeLocalStorage.setItem(`nexus_core_band_logo_${newBand.id}`, newBand.logo_url);
+        safeLocalStorage.setItem(`nexus_core_band_logo_${newId}`, newBand.logo_url);
+      }
+      if (newBand.cover_url && !newBand.cover_url.startsWith('data:')) {
+        safeLocalStorage.setItem(`nexus_core_band_cover_${newBand.id}`, newBand.cover_url);
+        safeLocalStorage.setItem(`nexus_core_band_cover_${newId}`, newBand.cover_url);
       }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: newBand }));
@@ -1959,6 +2145,8 @@ export class CommunityBandManager {
         'peelingflesh': 'PeelingFlesh',
         'putrid-pile': 'Putrid Pile',
         'lividity': 'Lividity',
+        'aeon': 'Aeon',
+        'hypocrisy': 'Hypocrisy',
         'cannibal-corpse': 'Cannibal Corpse',
         'cannibal corpse': 'Cannibal Corpse',
         'birdflesh': 'Birdflesh',
@@ -2228,6 +2416,7 @@ export class CommunityBandManager {
             releasePayloads.push({
               id: releaseId,
               band_id: bandUUID,
+              band: resolvedBandName,
               band_name: resolvedBandName,
               artist: resolvedBandName,
               title: album.title || `Release ${idx + 1}`,
@@ -2340,8 +2529,8 @@ export class CommunityBandManager {
             releasesData = fallbackReleases.map(r => ({
               id: r.id,
               band_id: r.band_id,
-              band_name: r.band_name || r.artist || (r as any).artist_name || '',
-              artist: r.artist || r.band_name || (r as any).artist_name || '',
+              band_name: r.band || r.band_name || r.artist || (r as any).artist_name || '',
+              artist: r.artist || r.band || r.band_name || (r as any).artist_name || '',
               title: r.title,
               release_date: r.releaseDate || r.release_date,
               type: r.type,
@@ -2382,7 +2571,7 @@ export class CommunityBandManager {
               if (!r) return false;
               const rBandId = String(r.band_id || '').toLowerCase().trim();
               const rUUID = rBandId ? ensureUUID(rBandId) : '';
-              const rBandName = String(r.band_name || r.artist || r.artist_name || '').toLowerCase().trim();
+              const rBandName = String(r.band || r.band_name || r.artist || r.artist_name || '').toLowerCase().trim();
 
               if (bId && (rBandId === bId.toLowerCase() || rUUID === bId.toLowerCase())) return true;
               if (bUUID && (rBandId === bUUID.toLowerCase() || rUUID === bUUID.toLowerCase())) return true;
@@ -2417,6 +2606,8 @@ export class CommunityBandManager {
         }));
 
         const KNOWN_SEEDED_NAMES: Record<string, string> = {
+          'aeon': 'Aeon',
+          'hypocrisy': 'Hypocrisy',
           'cordyceps': 'Cordyceps',
           'cranial-impalement': 'Cranial Impalement',
           'mortician': 'Mortician',
@@ -2431,7 +2622,9 @@ export class CommunityBandManager {
           'suffocation': 'Suffocation',
           'stabbing': 'Stabbing',
           'cannibal-corpse': 'Cannibal Corpse',
-          'cannibal corpse': 'Cannibal Corpse'
+          'cannibal corpse': 'Cannibal Corpse',
+          'extermination-dismemberment': 'Extermination Dismemberment',
+          'extermination dismemberment': 'Extermination Dismemberment'
         };
 
         // Match existing band by ID (exact or UUID) or custom_slug or exact canonical name
@@ -2568,30 +2761,15 @@ export class CommunityBandManager {
           existingItem?.banner_url
         );
 
-        // Intelligently merge discography: prioritize Supabase remoteDiscography, local edits, existing item, and seed master
+        // Intelligently merge discography: combine Supabase remoteDiscography, local cached edits, existing item, and seed master
         const cachedDiscography = loadBandDiscographyFromCache(bId, cleanBandName);
-        const mergedDiscography: DiscographyRelease[] = (() => {
-          const primarySource = (cachedDiscography && cachedDiscography.length > 0)
-            ? cachedDiscography
-            : ((existingItem?.discography && existingItem.discography.length > 0)
-                ? existingItem.discography
-                : null);
-
-          if (primarySource) {
-            // Keep user local edits, but also include all undeleted remote releases from Supabase so imported albums are never locked out!
-            const validRemote = (remoteDiscography || []).filter(r => !isDeletedRelease(r.id, r.title, cleanBandName));
-            return deduplicateDiscography([...primarySource, ...validRemote], cleanBandName);
-          }
-
-          let list: DiscographyRelease[] = [];
-          if (remoteDiscography && remoteDiscography.length > 0) {
-            list.push(...remoteDiscography);
-          }
-          if (seedMatch?.discography && seedMatch.discography.length > 0) {
-            list.push(...seedMatch.discography);
-          }
-          return deduplicateDiscography(list, cleanBandName);
-        })();
+        const validRemote = (remoteDiscography || []).filter(r => !isDeletedRelease(r.id, r.title, cleanBandName));
+        const mergedDiscography: DiscographyRelease[] = deduplicateDiscography([
+          ...validRemote,
+          ...(cachedDiscography || []),
+          ...(existingItem?.discography || []),
+          ...(seedMatch?.discography || [])
+        ], cleanBandName);
 
         if (mergedDiscography.length > 0) {
           saveBandDiscographyToCache(bId, cleanBandName, mergedDiscography);
