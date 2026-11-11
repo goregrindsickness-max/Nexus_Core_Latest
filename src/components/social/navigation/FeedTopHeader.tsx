@@ -16,7 +16,8 @@ import {
   Camera,
   Video,
   MessageSquare,
-  Bell
+  Bell,
+  Plus
 } from 'lucide-react';
 import { BAND_PORTAL_BILLING } from '../../../config/billingMatrix';
 import { hasRegisteredWorkspace, normalizeRegisteredWorkspaces } from '../../../types';
@@ -43,6 +44,15 @@ import { BandWorkspaceNavBanner } from './BandWorkspaceNavBanner';
 import { PromoterWorkspaceNavBanner } from './PromoterWorkspaceNavBanner';
 import { isMiguelNameOrProfile } from '../utils/profileUtils';
 import { handleImageErrorWithCache, getCachedProfileImage } from '../../../services/profileImageCacheService';
+import {
+  NetworkEntity,
+  ENTITY_CATEGORY_META,
+  getUserManagedEntities,
+  openTaggedBandOrEntityProfile,
+  syncNetworkEntitiesFromSupabase,
+} from '../../../services/networkEntitiesService';
+import { CreateEntityModal } from '../modals/CreateEntityModal';
+import { FestivalLineupEditorModal } from '../modals/FestivalLineupEditorModal';
 
 const HeaderAvatarImage: React.FC<{
   src?: string | null;
@@ -204,6 +214,18 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
         console.error('Failed to fetch profile sync:', e);
       }
     }
+  }, [userProfile?.id]);
+
+  const [managedEntities, setManagedEntities] = React.useState<NetworkEntity[]>([]);
+  const [showCreateEntityModal, setShowCreateEntityModal] = React.useState(false);
+  const [lineupEditorEntity, setLineupEditorEntity] = React.useState<NetworkEntity | null>(null);
+
+  React.useEffect(() => {
+    const refresh = () => setManagedEntities(getUserManagedEntities(userProfile?.id));
+    refresh();
+    syncNetworkEntitiesFromSupabase().then(refresh).catch(() => {});
+    window.addEventListener('nexus_entities_updated', refresh);
+    return () => window.removeEventListener('nexus_entities_updated', refresh);
   }, [userProfile?.id]);
 
   return (
@@ -926,6 +948,69 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                       })()}
                     </div>
 
+                    {/* Decoupled Public Pages & Festival Entities */}
+                    <div className="pt-2 mb-2 border-t border-zinc-900/80 space-y-1.5">
+                      <div className="text-[8px] font-mono font-bold text-amber-400 uppercase tracking-widest px-1">
+                        PUBLIC PAGES & FESTIVAL ENTITIES ({managedEntities.length})
+                      </div>
+                      {managedEntities.length > 0 && (
+                        <div className="space-y-1 max-h-36 overflow-y-auto pr-0.5">
+                          {managedEntities.map((ent) => {
+                            const catMeta = ENTITY_CATEGORY_META[ent.category] || ENTITY_CATEGORY_META.festival;
+                            return (
+                              <div
+                                key={ent.id}
+                                className="w-full flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-lg bg-zinc-900/70 hover:bg-zinc-800/90 border border-zinc-800/80 transition-all"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRoleMenuOpen(false);
+                                    openTaggedBandOrEntityProfile(ent, triggerNotification);
+                                  }}
+                                  className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer"
+                                >
+                                  <span className="text-xs shrink-0">{catMeta.icon}</span>
+                                  <div className="min-w-0">
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-white truncate">
+                                      {ent.display_name}
+                                    </div>
+                                    <div className="text-[8px] font-mono text-amber-300/80 truncate">
+                                      @{ent.slug} • {catMeta.shortLabel}
+                                    </div>
+                                  </div>
+                                </button>
+                                {ent.category === 'festival' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRoleMenuOpen(false);
+                                      setLineupEditorEntity(ent);
+                                    }}
+                                    className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[8px] font-mono font-bold uppercase shrink-0 cursor-pointer"
+                                  >
+                                    Lineup
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRoleMenuOpen(false);
+                          setShowCreateEntityModal(true);
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/50 text-amber-300 hover:text-white text-[10px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-amber-400" />
+                        <span>+ Create Public Page or Entity</span>
+                      </button>
+                    </div>
+
                     <div className="pt-2 border-t border-zinc-900/80">
                       <button 
                         onClick={handleLogout} 
@@ -939,6 +1024,26 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                 </>
               )}
             </AnimatePresence>
+
+            <CreateEntityModal
+              isOpen={showCreateEntityModal}
+              onClose={() => setShowCreateEntityModal(false)}
+              userProfile={userProfile}
+              onEntityCreated={(created, createdEditionId) => {
+                setManagedEntities(getUserManagedEntities(userProfile?.id));
+                if (created.category === 'festival' && createdEditionId) {
+                  setLineupEditorEntity(created);
+                }
+              }}
+              triggerNotification={triggerNotification}
+            />
+
+            <FestivalLineupEditorModal
+              isOpen={Boolean(lineupEditorEntity)}
+              onClose={() => setLineupEditorEntity(null)}
+              entity={lineupEditorEntity}
+              triggerNotification={triggerNotification}
+            />
           </div>
         </div>
       </div>

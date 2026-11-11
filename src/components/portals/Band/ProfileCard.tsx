@@ -31,6 +31,7 @@ import { MasterAudioUploaderModal } from './MasterAudioUploaderModal';
 import { fetchReleasesFromDatabase } from '../../../services/releasesService';
 import { VORTEX_GRAPHICS_SVG_AVATAR, PROMOTER_SVG_AVATAR } from '../../../utils/imageFallbacks';
 import { resolvePublicBandData, enrichBandMetadataAsync } from '../../../services/bandEnrichmentService';
+import { AffiliatedEntitiesSection } from '../../social/cards/AffiliatedEntitiesSection';
 
 export type { ListenerMetric };
 export { calculateListenerMetrics };
@@ -3534,7 +3535,23 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   );
                 })()}
 
-
+                {/* Affiliated Projects & Public Entities Section for Industry Pro & Personal Profiles */}
+                {(() => {
+                  const targetRoleStr = (effTarget?.portalRole || effTarget?.role || effTarget?.account_type || '').toLowerCase();
+                  const isTargetBand = !!(
+                    effTarget?.isBandProfile ||
+                    effTarget?.type === 'band' ||
+                    ((targetRoleStr.includes('artist') || targetRoleStr.includes('band')) && !effTarget?.isPersonal && effTarget?.type !== 'user' && !targetRoleStr.includes('industry') && !targetRoleStr.includes('creative') && !targetRoleStr.includes('pro'))
+                  );
+                  if (isTargetBand) return null;
+                  return (
+                    <AffiliatedEntitiesSection
+                      userProfile={userProfile}
+                      isOwnProfile={Boolean(effTarget?.isYou)}
+                      triggerNotification={triggerNotification}
+                    />
+                  );
+                })()}
 
               {/* Ever-Present Embedded Player Card */}
               {(() => {

@@ -25,6 +25,9 @@ import { ProfileMarketplaceTab } from '../../profile/ProfileMarketplaceTab';
 import { GalleryTab } from '../../profile/GalleryTab';
 import { CrtTvFrame } from '../../profile/CrtTvFrame';
 import PublicStorefrontView from '../../sales/PublicStorefrontView';
+import { AffiliatedEntitiesSection } from '../../social/cards/AffiliatedEntitiesSection';
+import { FestivalLineupCard } from '../../social/cards/FestivalLineupCard';
+import { getEntityByIdOrSlug } from '../../../services/networkEntitiesService';
 
 export type { ListenerMetric };
 export { calculateListenerMetrics };
@@ -2120,6 +2123,33 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       ))}
                   </div>
                 )}
+
+                {/* Interactive Festival Billing Card (when viewing a Festival Entity) & Affiliated Entities */}
+                {(() => {
+                  const matchedEntity =
+                    (selectedUserProfile as any)?.entityData ||
+                    getEntityByIdOrSlug(selectedUserProfile?.id) ||
+                    getEntityByIdOrSlug(selectedUserProfile?.handle?.replace(/^@/, ''));
+                  if (matchedEntity && matchedEntity.category === 'festival') {
+                    return (
+                      <div className="mt-3">
+                        <FestivalLineupCard
+                          entityId={matchedEntity.id}
+                          isEditable={Boolean(selectedUserProfile?.isYou)}
+                          triggerNotification={triggerNotification}
+                        />
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                <AffiliatedEntitiesSection
+                  userProfile={userProfile}
+                  isOwnProfile={Boolean(selectedUserProfile?.isYou)}
+                  showPromoterWorkspacePointer={Boolean(selectedUserProfile?.isYou)}
+                  triggerNotification={triggerNotification}
+                />
 
                 {/* Positioned directly under Associated Entities */}
                                    {/* Glowing Scrolling Marquee Text Box for Live Updates */}

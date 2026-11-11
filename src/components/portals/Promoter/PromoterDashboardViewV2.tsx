@@ -11,6 +11,7 @@ import PromoterSettingsTab from './PromoterSettingsTab';
 import PromoterPortalView from "./PromoterPortalView";
 import PromoterAlliancesView from './PromoterAlliancesView';
 import PromoterWorkspaceProtocols from './PromoterWorkspaceProtocols';
+import { AffiliatedEntitiesSection } from '../../social/cards/AffiliatedEntitiesSection';
 
 interface PromoterDashboardViewV2Props {
   userProfile: UserProfile;
@@ -1908,6 +1909,15 @@ export default function PromoterDashboardViewV2({
             </div>
           </div>
         </div>
+
+        {/* Decoupled Public Entity Pointer (linked_entity_id) & Festival Lineup Manager */}
+        <AffiliatedEntitiesSection
+          userProfile={userProfile}
+          setUserProfile={setUserProfile as any}
+          isOwnProfile={true}
+          showPromoterWorkspacePointer={true}
+          triggerNotification={triggerNotification}
+        />
       </div>
 
       <main className={`w-full mx-auto flex-1 flex flex-col gap-6 ${

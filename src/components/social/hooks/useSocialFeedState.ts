@@ -13,6 +13,11 @@ import { getCurrentCoordinates } from '../../../services/locationService';
 import { submitGlobalReaction } from '../../../services/postInteractionsService';
 import { pushManager } from '../../../lib/pushNotifications';
 import { detectGroundedVenue } from '../../../services/venueGroundingService';
+import {
+  getEditionById,
+  getEntityByIdOrSlug,
+  getLineupForEdition,
+} from '../../../services/networkEntitiesService';
 
 export function getYouTubeId(url: string): string {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -756,7 +761,12 @@ export function useSocialFeedState({
       return;
     }
 
-    if (!newPostText.trim()) return;
+    const pendingFestivalEditionId =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('nexus_pending_festival_edition_id')
+        : null;
+
+    if (!newPostText.trim() && !pendingFestivalEditionId) return;
 
     setIsSubmittingPost(true);
     triggerNotification?.('Publishing post and uploading media...');
@@ -1060,9 +1070,37 @@ export function useSocialFeedState({
         }
       }
 
+      let festivalDataValue: any = undefined;
+      if (pendingFestivalEditionId) {
+        const festEd = getEditionById(pendingFestivalEditionId);
+        if (festEd) {
+          const festEntity = getEntityByIdOrSlug(festEd.entity_id);
+          const festLineup = getLineupForEdition(festEd.id);
+          festivalDataValue = {
+            editionId: festEd.id,
+            entityId: festEd.entity_id,
+            editionName: festEd.edition_name,
+            entityName: festEntity?.display_name || authorName,
+            entitySlug: festEntity?.slug || '',
+            startDate: festEd.start_date,
+            endDate: festEd.end_date,
+            venueName: festEd.venue_name,
+            city: festEd.city,
+            state: festEd.state,
+            ticketUrl: festEd.ticket_url,
+            flyerUrl: festEd.flyer_url,
+            status: festEd.status,
+            lineup: festLineup,
+          };
+        }
+        try {
+          localStorage.removeItem('nexus_pending_festival_edition_id');
+        } catch {}
+      }
+
       const newPost: any = {
         id: postUuid,
-        type: classifiedDataValue ? classifiedType : merchDataValue ? 'merch_drop' : tapeDataValue ? 'tape_share' : pollDataValue ? 'poll' : eventDataValue ? 'event' : 'post',
+        type: festivalDataValue ? 'festival_lineup' : classifiedDataValue ? classifiedType : merchDataValue ? 'merch_drop' : tapeDataValue ? 'tape_share' : pollDataValue ? 'poll' : eventDataValue ? 'event' : 'post',
         category: classifiedDataValue ? classifiedType : undefined,
         workspace_type: activeWorkspace,
         workspaceType: activeWorkspace,
@@ -1071,8 +1109,10 @@ export function useSocialFeedState({
         authorName: authorName,
         authorAvatar: authorAvatar,
         author: {
-          id: isBandRole ? (activeBand?.id || activeAuthorId) : activeAuthorId,
+          id: resolvedPersona.entityId ? resolvedPersona.entityId : (isBandRole ? (activeBand?.id || activeAuthorId) : activeAuthorId),
           personaId: resolvedPersona.id,
+          entityId: resolvedPersona.entityId,
+          entitySlug: resolvedPersona.entitySlug,
           name: authorName,
           realName: authorRealName,
           avatar: authorAvatar,
@@ -1087,8 +1127,8 @@ export function useSocialFeedState({
         timeAgo: 'Just now',
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
-        content: newPostText,
-        tag: classifiedDataValue ? (classifiedType === 'gear' ? 'GEAR SWAP' : 'CLASSIFIED') : newPostTag,
+        content: newPostText || (festivalDataValue ? `🎪 Official Lineup Billing for ${festivalDataValue.editionName}` : ''),
+        tag: festivalDataValue ? 'FESTIVAL LINEUP' : classifiedDataValue ? (classifiedType === 'gear' ? 'GEAR SWAP' : 'CLASSIFIED') : newPostTag,
         image: finalImage,
         mediaUrl: mediaUrlToUse,
         media_url: mediaUrlToUse,
@@ -1101,7 +1141,7 @@ export function useSocialFeedState({
         youtube_id: ytId,
         youtubeUrl: ytUrl,
         youtube_url: ytUrl,
-        location: taggedVenue || (eventDataValue ? eventDataValue.locationName : undefined),
+        location: taggedVenue || (eventDataValue ? eventDataValue.locationName : (festivalDataValue ? `${festivalDataValue.city}${festivalDataValue.state ? `, ${festivalDataValue.state}` : ''}` : undefined)),
         groundedVenue: resolvedGroundedVenue,
         grounded_venue: resolvedGroundedVenue,
         reactions: [{ type: 'flame', count: 0, active: false }],
@@ -1121,6 +1161,8 @@ export function useSocialFeedState({
         merchData: merchDataValue,
         tapeData: tapeDataValue,
         eventData: eventDataValue,
+        festivalData: festivalDataValue,
+        festival_data: festivalDataValue,
         classifiedData: classifiedDataValue,
         classified_data: classifiedDataValue,
       };

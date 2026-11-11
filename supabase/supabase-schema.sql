@@ -1725,3 +1725,72 @@ CREATE POLICY "Allow public delete of releases" ON public."releases"
     TO public
     USING (true);
 
+-- ==========================================
+-- Decoupled Public Entities & Festival Lineup
+-- ==========================================
+
+CREATE TABLE IF NOT EXISTS public."network_entities" (
+    "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "slug" TEXT UNIQUE NOT NULL,
+    "display_name" TEXT NOT NULL,
+    "category" TEXT NOT NULL CHECK ("category" IN ('festival', 'label_distro', 'booking_agency', 'media_press', 'band', 'venue')),
+    "avatar_url" TEXT,
+    "banner_url" TEXT,
+    "bio" TEXT,
+    "location" TEXT,
+    "external_links" JSONB DEFAULT '{}'::jsonb,
+    "owner_id" UUID REFERENCES auth.users("id") ON DELETE SET NULL,
+    "created_at" TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public."entity_members" (
+    "entity_id" UUID REFERENCES public."network_entities"("id") ON DELETE CASCADE,
+    "user_id" UUID REFERENCES auth.users("id") ON DELETE CASCADE,
+    "role" TEXT DEFAULT 'admin' CHECK ("role" IN ('owner', 'admin', 'editor')),
+    PRIMARY KEY ("entity_id", "user_id")
+);
+
+CREATE TABLE IF NOT EXISTS public."festival_editions" (
+    "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "entity_id" UUID REFERENCES public."network_entities"("id") ON DELETE CASCADE NOT NULL,
+    "edition_name" TEXT NOT NULL,
+    "start_date" DATE NOT NULL,
+    "end_date" DATE NOT NULL,
+    "venue_name" TEXT,
+    "city" TEXT NOT NULL,
+    "state" TEXT,
+    "ticket_url" TEXT,
+    "flyer_url" TEXT,
+    "status" TEXT DEFAULT 'announced' CHECK ("status" IN ('draft', 'announced', 'sold_out', 'completed')),
+    "created_at" TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public."festival_lineup_items" (
+    "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "edition_id" UUID REFERENCES public."festival_editions"("id") ON DELETE CASCADE NOT NULL,
+    "band_entity_id" UUID REFERENCES public."network_entities"("id") ON DELETE SET NULL,
+    "custom_band_name" TEXT,
+    "custom_external_url" TEXT,
+    "billing_tier" TEXT DEFAULT 'support' CHECK ("billing_tier" IN ('headliner', 'co_headliner', 'main_support', 'support', 'opener')),
+    "sort_order" INT DEFAULT 0,
+    "day_number" INT DEFAULT 1,
+    "stage_name" TEXT,
+    "performance_date" DATE,
+    "set_time" TEXT,
+    "created_at" TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public."promoter_workspaces" (
+    "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "owner_id" UUID REFERENCES auth.users("id") ON DELETE CASCADE,
+    "workspace_name" TEXT NOT NULL,
+    "linked_entity_id" UUID REFERENCES public."network_entities"("id") ON DELETE SET NULL,
+    "created_at" TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public."network_entities" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."entity_members" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."festival_editions" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."festival_lineup_items" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."promoter_workspaces" ENABLE ROW LEVEL SECURITY;
+

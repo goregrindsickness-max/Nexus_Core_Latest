@@ -3,6 +3,16 @@ import { getSupabase } from '../../supabase';
 import { getCurrentCoordinates } from '../../services/locationService';
 import { getAvailablePersonas, resolveActivePersona } from './utils/personaResolution';
 import {
+  NetworkEntity,
+  FestivalEdition,
+  getEntityByIdOrSlug,
+  getEditionsForEntity,
+  getLineupForEdition,
+} from '../../services/networkEntitiesService';
+import { CreateEntityModal } from './modals/CreateEntityModal';
+import { FestivalLineupEditorModal } from './modals/FestivalLineupEditorModal';
+import { FestivalLineupCard } from './cards/FestivalLineupCard';
+import {
   Send,
   Pin,
   Image as ImageIcon,
@@ -508,6 +518,27 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
   classifiedDescription,
   setClassifiedDescription,
 }) => {
+  const [entitiesRefreshTick, setEntitiesRefreshTick] = useState(0);
+  const [showCreateEntityModal, setShowCreateEntityModal] = useState(false);
+  const [lineupModalEntity, setLineupModalEntity] = useState<NetworkEntity | null>(null);
+  const [attachedFestivalEditionId, setAttachedFestivalEditionId] = useState<string>('');
+
+  useEffect(() => {
+    const handleEntitiesUpdated = () => setEntitiesRefreshTick((t) => t + 1);
+    window.addEventListener('nexus_entities_updated', handleEntitiesUpdated);
+    return () => window.removeEventListener('nexus_entities_updated', handleEntitiesUpdated);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (attachedFestivalEditionId) {
+        localStorage.setItem('nexus_pending_festival_edition_id', attachedFestivalEditionId);
+      } else {
+        localStorage.removeItem('nexus_pending_festival_edition_id');
+      }
+    }
+  }, [attachedFestivalEditionId]);
+
   const availablePersonas = useMemo(() => {
     const effectiveBands = (bands && bands.length > 0) ? bands : (availableIdentities && availableIdentities.length > 0 ? availableIdentities : []);
     return getAvailablePersonas({
@@ -519,7 +550,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
       profileHandle,
       profileAvatarUrl,
     });
-  }, [portalRole, userProfile, activeBand, bands, availableIdentities, profileFullLegalName, profileHandle, profileAvatarUrl]);
+  }, [portalRole, userProfile, activeBand, bands, availableIdentities, profileFullLegalName, profileHandle, profileAvatarUrl, entitiesRefreshTick]);
 
   const activePersona = useMemo(() => {
     const effectiveBands = (bands && bands.length > 0) ? bands : (availableIdentities && availableIdentities.length > 0 ? availableIdentities : []);
@@ -533,7 +564,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
       profileHandle,
       profileAvatarUrl,
     });
-  }, [postIdentity, portalRole, userProfile, activeBand, bands, availableIdentities, profileFullLegalName, profileHandle, profileAvatarUrl]);
+  }, [postIdentity, portalRole, userProfile, activeBand, bands, availableIdentities, profileFullLegalName, profileHandle, profileAvatarUrl, entitiesRefreshTick]);
 
   const effectiveRole = activePersona.type;
   const theme: ComposerThemeConfig = (roleTheme && typeof roleTheme === 'object' && 'roleTitle' in roleTheme) ? (roleTheme as ComposerThemeConfig) : getComposerRoleTheme(effectiveRole);
@@ -1285,28 +1316,75 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1 flex-wrap">
             <span className="text-[10px] sm:text-xs font-mono text-zinc-400 shrink-0 font-bold uppercase tracking-wider">
               Posting as:
             </span>
-            {availablePersonas.length > 1 ? (
-              <select
-                value={activePersona.id}
-                onChange={(e) => setPostIdentity(e.target.value)}
-                className={`bg-[#07050d] text-xs font-mono font-bold border rounded-lg px-2.5 py-1.5 focus:outline-none transition-all cursor-pointer max-w-[200px] xs:max-w-[250px] sm:max-w-[300px] truncate ${theme.badgeText} ${theme.accentBorder}`}
-                title="Select which workspace or band persona you are publishing as"
-              >
-                {availablePersonas.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.roleBadge})
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg border ${theme.badgeBg} ${theme.badgeText} ${theme.accentBorder} truncate max-w-[240px]`}>
-                {activePersona.name} ({activePersona.roleBadge})
-              </span>
-            )}
+            <select
+              value={activePersona.id}
+              onChange={(e) => {
+                if (e.target.value === '__create_new_entity__') {
+                  setShowCreateEntityModal(true);
+                  return;
+                }
+                setPostIdentity(e.target.value);
+              }}
+              className={`bg-[#07050d] text-xs font-mono font-bold border rounded-lg px-2.5 py-1.5 focus:outline-none transition-all cursor-pointer max-w-[210px] xs:max-w-[260px] sm:max-w-[320px] truncate ${theme.badgeText} ${theme.accentBorder}`}
+              title="Select which workspace, band, or public brand entity you are publishing as"
+            >
+              {availablePersonas.map((p) => (
+                <option key={p.id} value={p.id} className="bg-[#0b0d14] text-white">
+                  {p.name} ({p.roleBadge})
+                </option>
+              ))}
+              <option value="__create_new_entity__" className="bg-[#181206] text-amber-300 font-bold">
+                + Register New Organization / Festival Page
+              </option>
+            </select>
+
+            {activePersona.entityId && activePersona.entityCategory === 'festival' && (() => {
+              const entObj = getEntityByIdOrSlug(activePersona.entityId);
+              const entEditions = entObj ? getEditionsForEntity(entObj.id) : [];
+              const primaryEd = entEditions[0];
+              return (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (entObj) setLineupModalEntity(entObj);
+                    }}
+                    className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-[10px] font-mono font-bold uppercase flex items-center gap-1 cursor-pointer"
+                    title="Open Festival Edition & Lineup Roster Editor"
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>Manage Lineup</span>
+                  </button>
+                  {primaryEd && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAttachedFestivalEditionId(
+                          attachedFestivalEditionId === primaryEd.id ? '' : primaryEd.id
+                        )
+                      }
+                      className={`px-2 py-1 rounded-lg border text-[10px] font-mono font-bold uppercase flex items-center gap-1 cursor-pointer transition-all ${
+                        attachedFestivalEditionId === primaryEd.id
+                          ? 'bg-emerald-950/90 border-emerald-500 text-emerald-300'
+                          : 'bg-zinc-900/90 border-zinc-700 text-zinc-300 hover:text-white'
+                      }`}
+                      title="Attach interactive Festival Lineup Billing Card to this post"
+                    >
+                      <Ticket className="w-3 h-3 text-amber-400" />
+                      <span>
+                        {attachedFestivalEditionId === primaryEd.id
+                          ? '✓ Lineup Card Attached'
+                          : '+ Attach Lineup Card'}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -2968,7 +3046,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           <div className="flex items-center gap-2 w-full">
             <button
               type="submit"
-              disabled={!newPostText.trim() && !newPostImageUrl && !tapeAudioUrl && !pollQuestion && !merchDropName && !eventTitle && !eventData && !localClassifiedTitle}
+              disabled={!newPostText.trim() && !newPostImageUrl && !tapeAudioUrl && !pollQuestion && !merchDropName && !eventTitle && !eventData && !localClassifiedTitle && !attachedFestivalEditionId}
               className={`flex-1 py-3 sm:py-3.5 px-4 rounded-xl disabled:bg-zinc-800/80 disabled:border-zinc-800 disabled:text-zinc-500 disabled:shadow-none font-mono font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed active:scale-[0.99] ${theme.buttonBg}`}
             >
               <Send className="w-3.5 h-3.5 shrink-0" />
@@ -3095,6 +3173,27 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           )}
         </div>
 
+        {/* Live Preview of Attached Festival Billing Card in Composer */}
+        {attachedFestivalEditionId && (
+          <div className="pt-2">
+            <div className="flex items-center justify-between text-[10px] font-mono text-amber-300 mb-1">
+              <span>🎪 ATTACHED INTERACTIVE FESTIVAL BILLING CARD PREVIEW</span>
+              <button
+                type="button"
+                onClick={() => setAttachedFestivalEditionId('')}
+                className="text-rose-400 hover:text-rose-300 font-bold uppercase cursor-pointer"
+              >
+                Remove Card
+              </button>
+            </div>
+            <FestivalLineupCard
+              editionId={attachedFestivalEditionId}
+              entityId={activePersona.entityId}
+              triggerNotification={triggerNotification}
+            />
+          </div>
+        )}
+
         {/* Disclaimer Footer Note */}
         <div className="mt-2.5 flex items-center justify-center gap-1.5 text-[8.5px] sm:text-[9.5px] font-mono text-amber-300/80 bg-amber-950/20 border border-amber-500/20 rounded-lg p-2 text-center leading-snug">
           <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
@@ -3103,6 +3202,50 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           </span>
         </div>
       </form>
+
+      <CreateEntityModal
+        isOpen={showCreateEntityModal}
+        onClose={() => setShowCreateEntityModal(false)}
+        userProfile={userProfile}
+        onEntityCreated={(created, createdEditionId) => {
+          setEntitiesRefreshTick((t) => t + 1);
+          setPostIdentity(`entity:${created.id}`);
+          if (created.category === 'festival' && createdEditionId) {
+            setAttachedFestivalEditionId(createdEditionId);
+            setLineupModalEntity(created);
+          }
+        }}
+        triggerNotification={triggerNotification}
+      />
+
+      <FestivalLineupEditorModal
+        isOpen={Boolean(lineupModalEntity)}
+        onClose={() => setLineupModalEntity(null)}
+        entity={lineupModalEntity}
+        onSaved={(savedEdition) => {
+          setEntitiesRefreshTick((t) => t + 1);
+          setAttachedFestivalEditionId(savedEdition.id);
+        }}
+        onShareEditionToFeed={(ent, savedEdition, savedLineup) => {
+          setPostIdentity(`entity:${ent.id}`);
+          setAttachedFestivalEditionId(savedEdition.id);
+          if (!newPostText.trim()) {
+            const headliners = savedLineup
+              .filter((i) => i.billing_tier === 'headliner' || i.billing_tier === 'co_headliner')
+              .map((i) => i.resolved_band_name || i.custom_band_name)
+              .filter(Boolean)
+              .slice(0, 4);
+            setNewPostText(
+              `🎪 OFFICIAL LINEUP ANNOUNCEMENT: ${savedEdition.edition_name} (${savedEdition.city}${
+                savedEdition.state ? `, ${savedEdition.state}` : ''
+              })! Featuring ${
+                headliners.length > 0 ? headliners.join(', ') : 'our full underground roster'
+              } and more. Tap any band on the interactive billing card below to explore their profile!`
+            );
+          }
+        }}
+        triggerNotification={triggerNotification}
+      />
     </div>
   );
 };

@@ -33,6 +33,7 @@ import {
   PollEmbedData,
   REACTION_PALETTE,
 } from './types';
+import { FestivalLineupCard } from '../cards/FestivalLineupCard';
 import { renderPostMessage, renderCommentText } from './utils';
 import { CommentMentionInput } from './CommentMentionInput';
 import { formatPostTimestamp } from '../../../utils/socialFeedUtils';
@@ -1614,6 +1615,13 @@ export const PostCard: React.FC<PostCardProps> = ({
           isRsvped={isRsvped}
           rsvpCount={rsvpCount}
           onToggleRsvp={onToggleRsvp}
+        />
+      )}
+
+      {/* Interactive Festival Lineup / Billing Card */}
+      {((post as any).festivalData || (post as any).festival_data) && (
+        <FestivalLineupCard
+          festivalData={(post as any).festivalData || (post as any).festival_data}
         />
       )}
 

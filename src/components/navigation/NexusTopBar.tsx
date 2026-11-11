@@ -19,6 +19,15 @@ import MarqueeText from '../MarqueeText';
 import { syncGlobalUnreadBadge } from '../../utils/appBadgeService';
 import { CommunityBandManager } from '../../lib/communityBands';
 import { handleImageErrorWithCache } from '../../services/profileImageCacheService';
+import {
+  NetworkEntity,
+  ENTITY_CATEGORY_META,
+  getUserManagedEntities,
+  openTaggedBandOrEntityProfile,
+  syncNetworkEntitiesFromSupabase,
+} from '../../services/networkEntitiesService';
+import { CreateEntityModal } from '../social/modals/CreateEntityModal';
+import { FestivalLineupEditorModal } from '../social/modals/FestivalLineupEditorModal';
 
 export interface NexusTopBarProps {
   activeTab: string;
@@ -90,6 +99,17 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
   // Collapsible state for Active Managed Client / Band switcher card (collapsed by default to shrink vertical footprint)
   const [isBandClientSectionExpanded, setIsBandClientSectionExpanded] = useState(false);
   const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [managedEntities, setManagedEntities] = useState<NetworkEntity[]>([]);
+  const [showCreateEntityModal, setShowCreateEntityModal] = useState(false);
+  const [lineupEditorEntity, setLineupEditorEntity] = useState<NetworkEntity | null>(null);
+
+  useEffect(() => {
+    const refresh = () => setManagedEntities(getUserManagedEntities(userProfile?.id));
+    refresh();
+    syncNetworkEntitiesFromSupabase().then(refresh).catch(() => {});
+    window.addEventListener('nexus_entities_updated', refresh);
+    return () => window.removeEventListener('nexus_entities_updated', refresh);
+  }, [userProfile?.id]);
 
   // Live ticker updates
   const [tickerIndex, setTickerIndex] = useState(0);
@@ -704,6 +724,72 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                       </div>
                     </div>
 
+                    {/* Decoupled Public Brand Entities & Festival Pages */}
+                    <div className="mt-3 pt-3 border-t border-zinc-800/80 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[8px] font-mono font-black text-amber-400 tracking-wider uppercase">
+                          PUBLIC PAGES & FESTIVAL ENTITIES ({managedEntities.length})
+                        </span>
+                      </div>
+
+                      {managedEntities.length > 0 && (
+                        <div className="space-y-1 max-h-36 overflow-y-auto pr-0.5">
+                          {managedEntities.map((ent) => {
+                            const catMeta = ENTITY_CATEGORY_META[ent.category] || ENTITY_CATEGORY_META.festival;
+                            return (
+                              <div
+                                key={ent.id}
+                                className="w-full flex items-center justify-between gap-1.5 p-1.5 rounded-xl bg-zinc-900/70 hover:bg-zinc-800/90 border border-zinc-800/80 transition-all"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRoleMenuOpen(false);
+                                    openTaggedBandOrEntityProfile(ent, triggerNotification);
+                                  }}
+                                  className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer"
+                                >
+                                  <span className="text-xs shrink-0">{catMeta.icon}</span>
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] font-black uppercase tracking-wider text-white truncate">
+                                      {ent.display_name}
+                                    </p>
+                                    <p className="text-[8px] font-mono text-amber-300/80 truncate">
+                                      @{ent.slug} • {catMeta.shortLabel}
+                                    </p>
+                                  </div>
+                                </button>
+                                {ent.category === 'festival' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRoleMenuOpen(false);
+                                      setLineupEditorEntity(ent);
+                                    }}
+                                    className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[8px] font-mono font-bold uppercase shrink-0 cursor-pointer"
+                                  >
+                                    Lineup
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRoleMenuOpen(false);
+                          setShowCreateEntityModal(true);
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-amber-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/50 text-amber-300 hover:text-white text-[10px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-amber-400" />
+                        <span>+ Create Public Page or Entity</span>
+                      </button>
+                    </div>
+
                     {/* Bottom Actions */}
                     <div className="mt-3 pt-3 border-t border-zinc-800/80 space-y-1.5">
                       <button 
@@ -743,6 +829,26 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
           </div>
         </div>
       </div>
+
+      <CreateEntityModal
+        isOpen={showCreateEntityModal}
+        onClose={() => setShowCreateEntityModal(false)}
+        userProfile={userProfile}
+        onEntityCreated={(created, createdEditionId) => {
+          setManagedEntities(getUserManagedEntities(userProfile?.id));
+          if (created.category === 'festival' && createdEditionId) {
+            setLineupEditorEntity(created);
+          }
+        }}
+        triggerNotification={triggerNotification}
+      />
+
+      <FestivalLineupEditorModal
+        isOpen={Boolean(lineupEditorEntity)}
+        onClose={() => setLineupEditorEntity(null)}
+        entity={lineupEditorEntity}
+        triggerNotification={triggerNotification}
+      />
 
       {/* 2. Live Scene Radar Marquee Ticker */}
       <div className="bg-[#090b10] border-t border-b border-zinc-900/80 px-3 py-1 flex items-center gap-2 text-[10px] font-mono text-zinc-400 overflow-hidden">

@@ -1,6 +1,12 @@
 import { hasRegisteredWorkspace } from '../../../types';
 import { resolveBandName, resolveBandLogo, resolveCreativeName, resolveCreativeLogo, resolvePromoterLogo } from '../../../utils/bandProfileUtils';
 import { isMiguelNameOrProfile } from './profileUtils';
+import {
+  getUserManagedEntities,
+  getLinkedEntityForPromoterWorkspace,
+  ENTITY_CATEGORY_META,
+  EntityCategory,
+} from '../../../services/networkEntitiesService';
 
 export interface PostingPersona {
   id: string;
@@ -11,6 +17,9 @@ export interface PostingPersona {
   subtitle: string;
   realName?: string;
   isPrimaryForWorkspace?: boolean;
+  entityId?: string;
+  entityCategory?: EntityCategory;
+  entitySlug?: string;
 }
 
 export interface PersonaResolutionParams {
@@ -172,16 +181,20 @@ export function getAvailablePersonas({
       realName: legalName,
     }, true);
   } else if (normalizedRole === 'promoter') {
-    const promoterName = userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_name || 'Promoter Gateway';
-    const promoterAvatar = resolvePromoterLogo(userProfile, profileAvatarUrl);
+    const linkedEntity = getLinkedEntityForPromoterWorkspace(userProfile);
+    const promoterName = linkedEntity?.display_name || userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_name || 'Promoter Gateway';
+    const promoterAvatar = linkedEntity?.avatar_url || resolvePromoterLogo(userProfile, profileAvatarUrl);
     addPersona({
-      id: 'workspace:promoter',
+      id: linkedEntity ? `entity:${linkedEntity.id}` : 'workspace:promoter',
       type: 'promoter',
       name: promoterName,
       avatarUrl: promoterAvatar,
-      roleBadge: 'Promoter',
-      subtitle: 'Venue Promoter Gateway',
+      roleBadge: linkedEntity ? (ENTITY_CATEGORY_META[linkedEntity.category]?.shortLabel || 'Festival') : 'Promoter',
+      subtitle: linkedEntity ? `Linked Entity (@${linkedEntity.slug})` : 'Venue Promoter Gateway',
       realName: legalName,
+      entityId: linkedEntity?.id,
+      entityCategory: linkedEntity?.category,
+      entitySlug: linkedEntity?.slug,
     }, true);
   } else if (normalizedRole === 'creative') {
     const creativeName = resolveCreativeName(userProfile);
@@ -320,6 +333,38 @@ export function getAvailablePersonas({
     });
   }
 
+  // 7. Add all Decoupled Public Brand Entities (Festivals, Labels/Distros, Booking Agencies, Media/Press) owned or managed by user
+  try {
+    const managedEntities = getUserManagedEntities(userProfile?.id);
+    for (const ent of managedEntities) {
+      if (!ent || !ent.id || !ent.display_name) continue;
+      const entityPersonaId = `entity:${ent.id}`;
+      if (registeredIds.has(entityPersonaId)) continue;
+      const catMeta = ENTITY_CATEGORY_META[ent.category] || ENTITY_CATEGORY_META.festival;
+      const mappedType: PostingPersona['type'] =
+        ent.category === 'label_distro'
+          ? 'label'
+          : ent.category === 'band'
+          ? 'band'
+          : 'promoter';
+
+      addPersona({
+        id: entityPersonaId,
+        type: mappedType,
+        name: ent.display_name,
+        avatarUrl: ent.avatar_url || liveUserAvatar,
+        roleBadge: catMeta.shortLabel,
+        subtitle: `${catMeta.icon} @${ent.slug}`,
+        realName: legalName,
+        entityId: ent.id,
+        entityCategory: ent.category,
+        entitySlug: ent.slug,
+      });
+    }
+  } catch (entErr) {
+    console.debug('[personaResolution] Managed entities lookup notice:', entErr);
+  }
+
   return personas;
 }
 
@@ -346,7 +391,7 @@ export function resolveActivePersona(params: PersonaResolutionParams): PostingPe
   }
 
   // Direct ID match
-  const directMatch = personas.find(p => p.id === identity);
+  const directMatch = personas.find(p => p.id === identity || p.entityId === identity || `entity:${p.entityId}` === identity);
   if (directMatch) return directMatch;
 
   // Band ID match (e.g. postIdentity was just 'b1' instead of 'band:b1' or vice versa)
