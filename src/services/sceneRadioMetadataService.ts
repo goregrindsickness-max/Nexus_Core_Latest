@@ -20,6 +20,7 @@ export interface RadioTrackMeta {
   title: string;
   author: string;
   thumbnailUrl: string;
+  audioUrl?: string;
 }
 
 const LOCAL_STORAGE_KEY_PREFIX = 'nexus_radio_cache_';
@@ -303,3 +304,86 @@ export function persistSingleTrackMeta(playlistId: string, track: RadioTrackMeta
     localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + playlistId, JSON.stringify(list));
   } catch {}
 }
+
+const STREAM_URL_CACHE = new Map<string, string>();
+
+/**
+ * Resolves a direct native HTML5 / Android MediaPlayer compatible audio stream URL (.m4a / .mp3)
+ * for a Scene Radio track so the native media player can play real audio in the background
+ * even when the app is minimized, screen-locked, or closed.
+ */
+export async function resolveNativeAudioStreamUrl(track: {
+  videoId?: string;
+  title?: string;
+  author?: string;
+  audioUrl?: string;
+}): Promise<string | null> {
+  if (!track) return null;
+  if (track.audioUrl && track.audioUrl.startsWith('http')) {
+    return track.audioUrl;
+  }
+
+  const cacheKey = track.videoId || `${track.author || ''}_${track.title || ''}`;
+  if (cacheKey && STREAM_URL_CACHE.has(cacheKey)) {
+    return STREAM_URL_CACHE.get(cacheKey) || null;
+  }
+
+  try {
+    if (cacheKey && typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem(`nexus_radio_stream_${cacheKey}`);
+      if (saved && saved.startsWith('http')) {
+        STREAM_URL_CACHE.set(cacheKey, saved);
+        return saved;
+      }
+    }
+  } catch {}
+
+  const rawTitle = (track.title || '').trim();
+  const rawAuthor = (track.author || '').trim();
+  if (!rawTitle || rawTitle.startsWith('Track ') || rawTitle === 'Scene Track') {
+    return null;
+  }
+
+  const parsed = parseArtistAndTitle(rawTitle, rawAuthor);
+  const cleanTitle = parsed.title
+    .replace(/\[.*?\]|\(.*?\)/g, '')
+    .replace(/\b(official|video|music|audio|lyric|hd|4k|hq|live|uncut|version|remastered)\b/gi, '')
+    .trim();
+  const cleanArtist = parsed.author
+    .replace(/\b(official|records|entertainment|music|vevo|topic)\b/gi, '')
+    .replace(/[-–—]/g, ' ')
+    .trim();
+
+  const queries = [
+    `${cleanArtist} ${cleanTitle}`.trim(),
+    cleanTitle,
+    cleanArtist !== 'Scene Artist' && cleanArtist !== 'Unknown Artist' ? cleanArtist : ''
+  ].filter(q => q.length >= 2);
+
+  for (const query of queries) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3500);
+      const url = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&entity=song&limit=3`;
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const data = await res.json();
+        const hit = (data?.results || []).find((r: any) => typeof r?.previewUrl === 'string' && r.previewUrl.startsWith('http'));
+        if (hit && hit.previewUrl) {
+          if (cacheKey) {
+            STREAM_URL_CACHE.set(cacheKey, hit.previewUrl);
+            try {
+              window.localStorage?.setItem(`nexus_radio_stream_${cacheKey}`, hit.previewUrl);
+            } catch {}
+          }
+          return hit.previewUrl;
+        }
+      }
+    } catch {}
+  }
+
+  return null;
+}
+

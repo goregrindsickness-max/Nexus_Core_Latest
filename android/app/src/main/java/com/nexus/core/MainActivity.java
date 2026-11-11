@@ -303,36 +303,73 @@ public class MainActivity extends BridgeActivity {
         return super.onKeyDown(keyCode, event);
     }
 
+    private void keepWebViewAudioAlive() {
+        try {
+            if (this.bridge != null && this.bridge.getWebView() != null) {
+                final WebView webView = this.bridge.getWebView();
+                webView.onResume();
+                webView.resumeTimers();
+                webView.dispatchWindowVisibilityChanged(android.view.View.VISIBLE);
+                webView.onWindowVisibilityChanged(android.view.View.VISIBLE);
+
+                // Re-assert visibility after WindowManager completes background transition
+                webView.postDelayed(() -> {
+                    if (isAudioActive) {
+                        try {
+                            webView.onResume();
+                            webView.resumeTimers();
+                            webView.dispatchWindowVisibilityChanged(android.view.View.VISIBLE);
+                            webView.onWindowVisibilityChanged(android.view.View.VISIBLE);
+                        } catch (Exception ignored) {}
+                    }
+                }, 150);
+
+                webView.postDelayed(() -> {
+                    if (isAudioActive) {
+                        try {
+                            webView.onResume();
+                            webView.resumeTimers();
+                            webView.dispatchWindowVisibilityChanged(android.view.View.VISIBLE);
+                            webView.onWindowVisibilityChanged(android.view.View.VISIBLE);
+                        } catch (Exception ignored) {}
+                    }
+                }, 500);
+            }
+        } catch (Exception ignored) {}
+    }
+
     @Override
     public void onResume() {
         super.onResume();
         if (this.bridge != null && this.bridge.getWebView() != null) {
+            this.bridge.getWebView().onResume();
             this.bridge.getWebView().resumeTimers();
         }
     }
 
     @Override
     public void onPause() {
-        if (isAudioActive) {
-            // Keep WebView timers and audio processing running in background
-            if (this.bridge != null && this.bridge.getWebView() != null) {
-                this.bridge.getWebView().resumeTimers();
-            }
-            return;
-        }
         super.onPause();
+        if (isAudioActive) {
+            keepWebViewAudioAlive();
+        }
     }
 
     @Override
     public void onStop() {
+        super.onStop();
         if (isAudioActive) {
-            // Prevent OS from halting active background audio playback
-            if (this.bridge != null && this.bridge.getWebView() != null) {
-                this.bridge.getWebView().resumeTimers();
-            }
+            keepWebViewAudioAlive();
+        }
+    }
+
+    @Override
+    public void finish() {
+        if (isAudioActive) {
+            moveTaskToBack(true);
             return;
         }
-        super.onStop();
+        super.finish();
     }
 
     private android.webkit.ValueCallback<android.net.Uri[]> uploadMessage;

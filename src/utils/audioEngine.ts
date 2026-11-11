@@ -600,11 +600,30 @@ class UniversalAudioPlayer {
     try {
       const nativeBridge = (window as any).NexusNativeAudio;
       if (!nativeBridge) return;
-      if (typeof nativeBridge.setAudioActive === 'function') {
-        nativeBridge.setAudioActive(action === 'start' || action === 'update');
-      }
-      if (typeof nativeBridge.stopForegroundAudio === 'function') {
-        nativeBridge.stopForegroundAudio();
+      const title = this.activeTrack?.title || 'Nexus Audio';
+      const artist = this.activeTrack?.artist || 'Nexus Artist';
+      const album = this.activeTrack?.album || 'Scene Radio';
+
+      if (action === 'start') {
+        if (typeof nativeBridge.setAudioActive === 'function') nativeBridge.setAudioActive(true);
+        if (typeof nativeBridge.startForegroundAudio === 'function') {
+          nativeBridge.startForegroundAudio(title, artist, album);
+        }
+      } else if (action === 'update') {
+        if (typeof nativeBridge.setAudioActive === 'function') nativeBridge.setAudioActive(true);
+        if (typeof nativeBridge.updateMetadata === 'function') {
+          nativeBridge.updateMetadata(title, artist);
+        }
+      } else if (action === 'pause') {
+        if (typeof nativeBridge.setAudioActive === 'function') nativeBridge.setAudioActive(false);
+        if (typeof nativeBridge.pauseForegroundAudio === 'function') {
+          nativeBridge.pauseForegroundAudio();
+        }
+      } else if (action === 'stop') {
+        if (typeof nativeBridge.setAudioActive === 'function') nativeBridge.setAudioActive(false);
+        if (typeof nativeBridge.stopForegroundAudio === 'function') {
+          nativeBridge.stopForegroundAudio();
+        }
       }
     } catch (_) {}
   }

@@ -35,7 +35,8 @@ import { FirstTimeTooltip } from '../../common/FirstTimeTooltip';
 import {
   getPlaylistTracksResilient,
   enrichTrackBatchDirect,
-  persistSingleTrackMeta
+  persistSingleTrackMeta,
+  resolveNativeAudioStreamUrl
 } from '../../../services/sceneRadioMetadataService';
 import {
   initGlobalMediaInterceptors,
@@ -509,6 +510,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
   const handleRadioVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value, 10);
     setRadioVolume(val);
+    persistentAudioService.setVolume(val / 100);
     if (ytPlayerRef.current && typeof ytPlayerRef.current.setVolume === 'function') {
       try {
         ytPlayerRef.current.setVolume(val);
@@ -581,12 +583,25 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
 
   const ytPlayerRef = useRef<any>(null);
   const hasUserInteractedWithRadio = useRef(false);
+  const userInitiatedPauseRef = useRef<boolean>(false);
+  const currentNativeStreamUrlRef = useRef<string | null>(null);
 
-  // Poll current playback position & total duration from YouTube Iframe API
+  // Poll current playback position & total duration from YouTube Iframe API or Native Fallback Stream
   useEffect(() => {
     let interval: any = null;
     if (sceneRadioPlaying) {
       interval = setInterval(() => {
+        if (persistentAudioService.isPlayingNativeFallback()) {
+          const cur = persistentAudioService.getCurrentTime() || 0;
+          const dur = persistentAudioService.getDuration() || 0;
+          if (!isScrubbing) {
+            setCurrentTime(cur);
+          }
+          if (dur > 0) {
+            setDuration(dur);
+          }
+          return;
+        }
         if (ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
           try {
             const cur = ytPlayerRef.current.getCurrentTime() || 0;
@@ -596,6 +611,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
             }
             if (dur > 0) {
               setDuration(dur);
+              persistentAudioService.updateMediaSessionPosition(cur, dur);
             }
           } catch (e) {
             // ignore API timing glitches
@@ -618,7 +634,9 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const seekTime = parseFloat(e.target.value);
     setCurrentTime(seekTime);
-    if (ytPlayerRef.current && typeof ytPlayerRef.current.seekTo === 'function') {
+    if (persistentAudioService.isPlayingNativeFallback()) {
+      persistentAudioService.seek(seekTime);
+    } else if (ytPlayerRef.current && typeof ytPlayerRef.current.seekTo === 'function') {
       ytPlayerRef.current.seekTo(seekTime, true);
     }
   };
@@ -678,6 +696,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
       }
 
       if (isPlaying) {
+        userInitiatedPauseRef.current = true;
         sceneRadioPlayingRef.current = false;
         if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
           try {
@@ -686,6 +705,10 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
             // ignore
           }
         }
+        persistentAudioService.pause();
+        try {
+          (window as any).NexusNativeAudio?.pauseForegroundAudio?.();
+        } catch (_) {}
         setSceneRadioPlaying(false);
 
         // Toast notification: alert user that scene radio has been paused for media playback
@@ -867,17 +890,49 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
           },
           onStateChange: (event: any) => {
             if (event.data === 1) { // Playing
+              userInitiatedPauseRef.current = false;
+              sceneRadioPlayingRef.current = true;
               setSceneRadioPlaying(true);
               setRadioPlayerError(null);
               wasPlayingWhenHiddenRef.current = false;
+              persistentAudioService.restoreCarrierMode();
             } else if (event.data === 2) { // Paused
-              // When the app is minimized / backgrounded or screen locked, YouTube iframe triggers auto-pause (data === 2)
-              if (typeof document !== 'undefined' && document.hidden) {
-                console.log('[RADIO PLAYER] Document hidden: YouTube auto-paused by OS. Will resume on tab focus...');
+              // If the user did NOT initiate pause, the OS / background visibility change auto-paused the iframe
+              if (!userInitiatedPauseRef.current && sceneRadioPlayingRef.current && !showVideo) {
+                console.log('[RADIO PLAYER] Background/OS auto-pause detected — maintaining continuous background playback...');
                 wasPlayingWhenHiddenRef.current = true;
+                try {
+                  if (ytPlayerRef.current && typeof ytPlayerRef.current.playVideo === 'function') {
+                    ytPlayerRef.current.playVideo();
+                  }
+                } catch (_) {}
+
+                setTimeout(() => {
+                  if (!userInitiatedPauseRef.current && sceneRadioPlayingRef.current) {
+                    let ytState = -1;
+                    try {
+                      ytState = ytPlayerRef.current?.getPlayerState?.() ?? -1;
+                    } catch (_) {}
+                    if (ytState !== 1) {
+                      const curTrack = playlistVideosRef.current[currentVideoIndexRef.current];
+                      const fallbackUrl = currentNativeStreamUrlRef.current || curTrack?.audioUrl;
+                      if (fallbackUrl) {
+                        persistentAudioService.activateNativeStreamFallback(fallbackUrl, radioVolume / 100);
+                      } else if (curTrack) {
+                        resolveNativeAudioStreamUrl(curTrack).then((url) => {
+                          if (url && sceneRadioPlayingRef.current && !userInitiatedPauseRef.current) {
+                            currentNativeStreamUrlRef.current = url;
+                            persistentAudioService.activateNativeStreamFallback(url, radioVolume / 100);
+                          }
+                        }).catch(() => {});
+                      }
+                    }
+                  }
+                }, 350);
                 return;
               }
               wasPlayingWhenHiddenRef.current = false;
+              sceneRadioPlayingRef.current = false;
               setSceneRadioPlaying(false);
             } else if (event.data === 0) { // Track Ended
               // Continuous Random Radio: if user hasn't locked onto a specific track, pick another random track!
@@ -959,10 +1014,14 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     } catch (_) {}
     window.dispatchEvent(new CustomEvent('nexus_tooltip_dismissed', { detail: { id: 'scene_radio_play' } }));
     if (!sceneRadioPlaying) {
+      userInitiatedPauseRef.current = false;
+      sceneRadioPlayingRef.current = true;
       markSceneRadioUserActive(3000);
     }
     if (!ytPlayerRef.current || typeof ytPlayerRef.current.playVideo !== 'function') {
       const playlistId = RADIO_PLAYLISTS[selectedRadioGenre].playlistId;
+      userInitiatedPauseRef.current = false;
+      sceneRadioPlayingRef.current = true;
       setSceneRadioPlaying(true);
       initYoutubePlayer(playlistId, currentVideoIndex);
       return;
@@ -970,9 +1029,17 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
 
     try {
       if (sceneRadioPlaying) {
+        userInitiatedPauseRef.current = true;
+        sceneRadioPlayingRef.current = false;
         ytPlayerRef.current.pauseVideo();
+        persistentAudioService.pause();
+        try {
+          (window as any).NexusNativeAudio?.pauseForegroundAudio?.();
+        } catch (_) {}
         setSceneRadioPlaying(false);
       } else {
+        userInitiatedPauseRef.current = false;
+        sceneRadioPlayingRef.current = true;
         markSceneRadioUserActive(3000);
         ytPlayerRef.current.playVideo();
         setSceneRadioPlaying(true);
@@ -990,6 +1057,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
 
   const handleNextSong = () => {
     hasUserInteractedWithRadio.current = true;
+    userInitiatedPauseRef.current = false;
     markSceneRadioUserActive(3000);
     const list = playlistVideosRef.current;
     // In continuous random radio mode, skip to a random track
@@ -1023,6 +1091,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
 
   const handlePrevSong = () => {
     hasUserInteractedWithRadio.current = true;
+    userInitiatedPauseRef.current = false;
     markSceneRadioUserActive(3000);
     const list = playlistVideosRef.current;
     if (!userSelectedTrackRef.current && list.length > 1) {
@@ -1053,6 +1122,35 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     }
   };
 
+  // Pre-resolve native audio stream URL for current track so background fallback is instant
+  useEffect(() => {
+    let active = true;
+    const curTrack = playlistVideos[currentVideoIndex];
+    if (!curTrack) {
+      currentNativeStreamUrlRef.current = null;
+      return;
+    }
+    currentNativeStreamUrlRef.current = curTrack.audioUrl || null;
+    resolveNativeAudioStreamUrl(curTrack).then((url) => {
+      if (active && url) {
+        currentNativeStreamUrlRef.current = url;
+        // If already in background fallback mode (e.g. track advanced while app minimized), play new stream immediately
+        if (sceneRadioPlayingRef.current && (persistentAudioService.isPlayingNativeFallback() || (typeof document !== 'undefined' && document.hidden))) {
+          let ytState = -1;
+          try {
+            ytState = ytPlayerRef.current?.getPlayerState?.() ?? -1;
+          } catch (_) {}
+          if (ytState !== 1) {
+            persistentAudioService.activateNativeStreamFallback(url, radioVolume / 100);
+          }
+        }
+      }
+    }).catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [currentVideoIndex, playlistVideos, selectedRadioGenre, radioVolume]);
+
   // Wire up native MediaSession API (Lock screen metadata, notification tray controls)
   useEffect(() => {
     const curTrack = playlistVideos[currentVideoIndex];
@@ -1067,7 +1165,7 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
         navigator.mediaSession.metadata = new MediaMetadata({
           title,
           artist,
-          album: `Nexus Scene Radio • ${genreName}`,
+          album: 'Scene Radio',
           artwork: [
             { src: artwork, sizes: '96x96', type: 'image/png' },
             { src: artwork, sizes: '128x128', type: 'image/png' },
@@ -1097,23 +1195,44 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     }
   }, [currentVideoIndex, playlistVideos, selectedRadioGenre]);
 
-  // Synchronize playback state with persistentAudioService, MediaSession, and native Android Foreground Service
+  const prevPlayingRef = useRef<boolean>(false);
+  const prevGenreRef = useRef<string>(selectedRadioGenre);
+
+  // Synchronize playback state with persistentAudioService, MediaSession, and window.NexusNativeAudio
   useEffect(() => {
     const curTrack = playlistVideos[currentVideoIndex];
     const genreName = RADIO_PLAYLISTS[selectedRadioGenre]?.name || 'Scene Radio';
     const title = curTrack?.title || `${genreName} Radio Track`;
     const artist = curTrack?.author || `Nexus Radio (${genreName})`;
     const artwork = curTrack?.thumbnailUrl || '/icon-512.png';
+    const nativeBridge = typeof window !== 'undefined' ? (window as any).NexusNativeAudio : null;
 
     if (sceneRadioPlaying) {
+      const isStartingOrStationChange = !prevPlayingRef.current || prevGenreRef.current !== selectedRadioGenre;
+      try {
+        if (nativeBridge) {
+          if (typeof nativeBridge.setAudioActive === 'function') {
+            nativeBridge.setAudioActive(true);
+          }
+          if (isStartingOrStationChange && typeof nativeBridge.startForegroundAudio === 'function') {
+            nativeBridge.startForegroundAudio(title, artist, genreName);
+          } else if (typeof nativeBridge.updateMetadata === 'function') {
+            nativeBridge.updateMetadata(title, artist);
+          } else if (typeof nativeBridge.startForegroundAudio === 'function') {
+            nativeBridge.startForegroundAudio(title, artist, genreName);
+          }
+        }
+      } catch (_) {}
+
       persistentAudioService.play({
         id: curTrack?.videoId || `radio_${selectedRadioGenre}_${currentVideoIndex}`,
         title: title,
         artist: artist,
-        album: `Nexus Scene Radio • ${genreName}`,
+        album: 'Scene Radio',
         genre: genreName,
         artworkUrl: artwork,
         audioUrl: curTrack?.audioUrl || getSilentAudioCarrier(),
+        fallbackStreamUrl: currentNativeStreamUrlRef.current || undefined,
         isLiveStream: true
       }, {
         onNext: () => handleNextSong(),
@@ -1125,10 +1244,25 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
           if (sceneRadioPlayingRef.current) togglePlayPause();
         }
       });
-    } else {
+    } else if (prevPlayingRef.current) {
       persistentAudioService.pause();
+      try {
+        nativeBridge?.pauseForegroundAudio?.();
+      } catch (_) {}
     }
+
+    prevPlayingRef.current = sceneRadioPlaying;
+    prevGenreRef.current = selectedRadioGenre;
   }, [sceneRadioPlaying, currentVideoIndex, playlistVideos, selectedRadioGenre]);
+
+  // Stop foreground audio on component unmount
+  useEffect(() => {
+    return () => {
+      try {
+        (window as any).NexusNativeAudio?.stopForegroundAudio?.();
+      } catch (_) {}
+    };
+  }, []);
 
   // Listen for native audio interruptions (e.g. phone call or headset unplugged or OS media notification control)
   useEffect(() => {
@@ -1141,37 +1275,50 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
           console.log('[RADIO PLAYER] Ignoring native pause during immunity window');
           return;
         }
+        userInitiatedPauseRef.current = true;
+        sceneRadioPlayingRef.current = false;
         if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
           try {
             ytPlayerRef.current.pauseVideo();
           } catch (_) {}
         }
         persistentAudioService.pause();
+        try {
+          (window as any).NexusNativeAudio?.pauseForegroundAudio?.();
+        } catch (_) {}
         setSceneRadioPlaying(false);
         triggerNotification?.('🎧 Audio paused');
       } else if ((action === 'resume' || action === 'play') && !sceneRadioPlayingRef.current) {
+        userInitiatedPauseRef.current = false;
+        sceneRadioPlayingRef.current = true;
+        markSceneRadioUserActive(3000);
+        setSceneRadioPlaying(true);
         if (ytPlayerRef.current && typeof ytPlayerRef.current.playVideo === 'function') {
           try {
             ytPlayerRef.current.playVideo();
-            markSceneRadioUserActive(3000);
-            setSceneRadioPlaying(true);
-          } catch (_) {
-            togglePlayPause();
-          }
+          } catch (_) {}
+        }
+        if (typeof document !== 'undefined' && document.hidden && currentNativeStreamUrlRef.current) {
+          persistentAudioService.activateNativeStreamFallback(currentNativeStreamUrlRef.current, radioVolume / 100);
         } else {
-          togglePlayPause();
+          persistentAudioService.resume();
         }
       } else if (action === 'next') {
         handleNextSong();
       } else if (action === 'previous') {
         handlePrevSong();
       } else if (action === 'stop') {
+        userInitiatedPauseRef.current = true;
+        sceneRadioPlayingRef.current = false;
         if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
           try {
             ytPlayerRef.current.pauseVideo();
           } catch (_) {}
         }
         persistentAudioService.stop();
+        try {
+          (window as any).NexusNativeAudio?.stopForegroundAudio?.();
+        } catch (_) {}
         setSceneRadioPlaying(false);
       }
     };
@@ -1183,11 +1330,14 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     if (typeof navigator !== 'undefined' && navigator.mediaDevices && typeof navigator.mediaDevices.addEventListener === 'function') {
       handleDeviceChange = () => {
         if (sceneRadioPlayingRef.current) {
+          userInitiatedPauseRef.current = true;
+          sceneRadioPlayingRef.current = false;
           if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
             try {
               ytPlayerRef.current.pauseVideo();
             } catch (_) {}
           }
+          persistentAudioService.pause();
           setSceneRadioPlaying(false);
           triggerNotification?.('🎧 Headset disconnected — radio paused');
         }
@@ -1201,13 +1351,42 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
         navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
       }
     };
-  }, [triggerNotification]);
+  }, [triggerNotification, radioVolume]);
 
-  // Keep audio playback seamless across document visibility and window focus transitions
+  // Keep audio playback seamless across document visibility, backgrounding, and window focus transitions
   useEffect(() => {
     const handleVisibilityOrFocus = () => {
       if (typeof document === 'undefined') return;
-      if (!document.hidden && (wasPlayingWhenHiddenRef.current || sceneRadioPlayingRef.current)) {
+      if (document.hidden && sceneRadioPlayingRef.current && !userInitiatedPauseRef.current) {
+        // App was minimized or screen locked while playing
+        try {
+          (window as any).NexusNativeAudio?.setAudioActive?.(true);
+          ytPlayerRef.current?.playVideo?.();
+        } catch (_) {}
+
+        setTimeout(() => {
+          if (typeof document !== 'undefined' && document.hidden && sceneRadioPlayingRef.current && !userInitiatedPauseRef.current) {
+            let ytState = -1;
+            try {
+              ytState = ytPlayerRef.current?.getPlayerState?.() ?? -1;
+            } catch (_) {}
+            if (ytState !== 1) {
+              const curTrack = playlistVideosRef.current[currentVideoIndexRef.current];
+              const fallbackUrl = currentNativeStreamUrlRef.current || curTrack?.audioUrl;
+              if (fallbackUrl) {
+                persistentAudioService.activateNativeStreamFallback(fallbackUrl, radioVolume / 100);
+              } else if (curTrack) {
+                resolveNativeAudioStreamUrl(curTrack).then((url) => {
+                  if (url && sceneRadioPlayingRef.current && !userInitiatedPauseRef.current) {
+                    currentNativeStreamUrlRef.current = url;
+                    persistentAudioService.activateNativeStreamFallback(url, radioVolume / 100);
+                  }
+                }).catch(() => {});
+              }
+            }
+          }
+        }, 400);
+      } else if (!document.hidden && (wasPlayingWhenHiddenRef.current || sceneRadioPlayingRef.current) && !userInitiatedPauseRef.current) {
         if (ytPlayerRef.current && typeof ytPlayerRef.current.getPlayerState === 'function') {
           const state = ytPlayerRef.current.getPlayerState();
           // If video was paused (2) or cued (5) while user intended playback, resume
@@ -1222,11 +1401,15 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
 
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
     window.addEventListener('focus', handleVisibilityOrFocus);
+    window.addEventListener('blur', handleVisibilityOrFocus);
+    window.addEventListener('pagehide', handleVisibilityOrFocus);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       window.removeEventListener('focus', handleVisibilityOrFocus);
+      window.removeEventListener('blur', handleVisibilityOrFocus);
+      window.removeEventListener('pagehide', handleVisibilityOrFocus);
     };
-  }, []);
+  }, [radioVolume]);
 
 
   // Select a specific track from the playlist queue
