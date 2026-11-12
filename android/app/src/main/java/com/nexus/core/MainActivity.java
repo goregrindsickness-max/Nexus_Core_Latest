@@ -310,7 +310,6 @@ public class MainActivity extends BridgeActivity {
                 webView.onResume();
                 webView.resumeTimers();
                 webView.dispatchWindowVisibilityChanged(android.view.View.VISIBLE);
-                webView.onWindowVisibilityChanged(android.view.View.VISIBLE);
 
                 // Re-assert visibility after WindowManager completes background transition
                 webView.postDelayed(() -> {
@@ -319,7 +318,6 @@ public class MainActivity extends BridgeActivity {
                             webView.onResume();
                             webView.resumeTimers();
                             webView.dispatchWindowVisibilityChanged(android.view.View.VISIBLE);
-                            webView.onWindowVisibilityChanged(android.view.View.VISIBLE);
                         } catch (Exception ignored) {}
                     }
                 }, 150);
@@ -330,7 +328,6 @@ public class MainActivity extends BridgeActivity {
                             webView.onResume();
                             webView.resumeTimers();
                             webView.dispatchWindowVisibilityChanged(android.view.View.VISIBLE);
-                            webView.onWindowVisibilityChanged(android.view.View.VISIBLE);
                         } catch (Exception ignored) {}
                     }
                 }, 500);
