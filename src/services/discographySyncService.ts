@@ -409,7 +409,9 @@ export function attachAudioToTrack(
     const raw = localStorage.getItem(storageKey) || localStorage.getItem('distro_db_music_tracks');
     if (!raw) return false;
 
-    const tracks: any[] = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return false;
+    const tracks: any[] = parsed;
     const updated = tracks.map(t => {
       if (t.id === trackId || t.title?.toLowerCase() === trackId.toLowerCase()) {
         return {

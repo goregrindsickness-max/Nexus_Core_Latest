@@ -119,6 +119,27 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
     spotify_url: 'https://open.spotify.com/artist/2v6E8j010yG5tX01',
     metal_archives_url: 'https://www.metal-archives.com/bands/Birdflesh/1376'
   },
+  'gorgasm': {
+    founded_year: '1994',
+    status: 'active',
+    is_split_up: false,
+    record_label: 'New Standard Elite / Unique Leader',
+    label: 'New Standard Elite / Unique Leader',
+    city: 'Chicago',
+    state_province: 'IL',
+    country: 'USA',
+    genre: 'Brutal Death Metal',
+    micro_genres: ['Brutal Death Metal', 'Death Metal'],
+    bio: 'Formed in Chicago in 1994, Gorgasm is a prominent and enduring force in American brutal death metal, famous for technical blast sections and punishing groove slams.',
+    lineup: [
+      { id: 'gorg-1', name: 'Damian Leski', role: 'Guitar, Vocals', status: 'active', years: '1994–present' },
+      { id: 'gorg-2', name: 'Sasha Chrosciewicz', role: 'Guitar, Vocals', status: 'active', years: '2018–present' },
+      { id: 'gorg-3', name: 'John Hull', role: 'Bass, Vocals', status: 'active', years: '2022–present' },
+      { id: 'gorg-4', name: 'Tomasz Pilasiewicz', role: 'Drums', status: 'active', years: '2005–2008, 2024–present' }
+    ],
+    spotify_url: 'https://open.spotify.com/artist/5B4Xf5O2v9t4w7r2M4k8v1',
+    metal_archives_url: 'https://www.metal-archives.com/bands/Gorgasm/1175'
+  },
   'extermination dismemberment': {
     founded_year: '2009',
     status: 'active',

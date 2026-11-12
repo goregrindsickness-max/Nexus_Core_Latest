@@ -4573,19 +4573,21 @@ list.push({
                   }
                 }
 
+                const isOwnerMiguel = isMiguelNameOrProfile(customProfile);
+                const cleanPromoterBrand = (v: any) => (v && typeof v === 'string' && v.trim() && (isOwnerMiguel || !v.toLowerCase().includes('nexus live'))) ? v.trim() : '';
                 const hasUnlockedPromoterWorkspace = Boolean(
-                  customProfile.promoter_id ||
-                  customProfile.promoter_agency ||
-                  customProfile.promoter_brand ||
-                  customProfile.promoter_name ||
-                  customProfile.promoter_metadata?.brand_name ||
-                  customProfile.promoter_metadata?.agency_name ||
-                  hasRegisteredWorkspace(customProfile, 'promoter')
+                  isOwnerMiguel ||
+                  (customProfile.promoter_id && customProfile.promoter_id !== customProfile.id && !String(customProfile.promoter_name || customProfile.promoter_agency || '').toLowerCase().includes('nexus live')) ||
+                  cleanPromoterBrand(customProfile.promoter_agency) ||
+                  cleanPromoterBrand(customProfile.promoter_brand) ||
+                  cleanPromoterBrand(customProfile.promoter_name) ||
+                  cleanPromoterBrand(customProfile.promoter_metadata?.brand_name) ||
+                  cleanPromoterBrand(customProfile.promoter_metadata?.agency_name) ||
+                  (hasRegisteredWorkspace(customProfile, 'promoter') && customProfile.account_type !== 'fan' && customProfile.account_type !== 'fan_only' && customProfile.promoter_metadata?.is_registered === true)
                 );
 
                 if (hasUnlockedPromoterWorkspace) {
-                  const isOwnerMiguel = isMiguelNameOrProfile(customProfile);
-                  const pName = customProfile.promoter_metadata?.brand_name || customProfile.promoter_metadata?.agency_name || customProfile.promoter_agency || customProfile.promoter_brand || customProfile.promoter_name || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations');
+                  const pName = cleanPromoterBrand(customProfile.promoter_metadata?.brand_name) || cleanPromoterBrand(customProfile.promoter_metadata?.agency_name) || cleanPromoterBrand(customProfile.promoter_agency) || cleanPromoterBrand(customProfile.promoter_brand) || cleanPromoterBrand(customProfile.promoter_name) || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations');
                   const pId = customProfile.promoter_id || (customProfile.promoter_metadata as any)?.id || customProfile.id;
                   const pLogo = customProfile.promoter_logo || customProfile.promoter_metadata?.logo_url || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : (customProfile.avatar_url || ''));
                   const pCover = customProfile.promoter_cover_image || customProfile.promoter_metadata?.banner_url || customProfile.promoter_metadata?.cover_url || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : (customProfile.banner_url || ''));
@@ -4610,6 +4612,15 @@ list.push({
                   syncPromoterProfileToSupabase(customProfile).catch((err) => {
                     console.warn('[Supabase Promoter Sync Warning]:', err);
                   });
+                } else if (!isOwnerMiguel) {
+                  delete customProfile.promoter_id;
+                  delete customProfile.promoter_agency;
+                  delete customProfile.promoter_brand;
+                  delete customProfile.promoter_name;
+                  delete customProfile.promoter_logo;
+                  delete customProfile.promoter_cover_image;
+                  delete customProfile.promoter_bio;
+                  delete customProfile.promoter_metadata;
                 }
 
                 const hasUnlockedCreativeWorkspace = Boolean(

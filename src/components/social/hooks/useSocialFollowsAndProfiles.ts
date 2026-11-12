@@ -241,6 +241,8 @@ export function useSocialFollowsAndProfiles({
               let profileRole = p.role || p.account_type || 'Member';
               let category = 'friends';
 
+              const isMiguel = (p.email || '').toLowerCase().trim() === 'goregrindsickness@gmail.com' || (p.email || '').toLowerCase().trim() === 'admin@nexus.com' || String(p.id || '').toLowerCase().trim() === '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+
               if (p.account_type === 'label' || p.label_company_name) {
                 profileName = p.label_company_name || profileName;
                 profileAvatar = p.label_avatar || profileAvatar;
@@ -260,7 +262,6 @@ export function useSocialFollowsAndProfiles({
                 profileRole = 'Creative';
                 category = 'creatives';
               } else if (p.account_type === 'promoter') {
-                const isMiguel = (p.email || '').toLowerCase().includes('goregrind') || (profileName || '').toLowerCase().includes('miguel');
                 if (isMiguel) {
                   profileRole = 'Member';
                   category = 'friends';
@@ -277,8 +278,38 @@ export function useSocialFollowsAndProfiles({
                 }
               }
 
+              const rawRegWs = Array.isArray(p.registered_workspaces) ? p.registered_workspaces : [];
+              const hasPollutedPromoter = !isMiguel && [
+                p.promoter_name,
+                p.promoter_agency,
+                p.promoter_brand,
+                p.promoter_metadata?.brand_name,
+                p.promoter_metadata?.agency_name,
+              ].some((v: any) => typeof v === 'string' && v.toLowerCase().includes('nexus live'));
+
+              const cleanRegWs = hasPollutedPromoter
+                ? rawRegWs.filter((w: any) => {
+                    const t = typeof w === 'string' ? w.toLowerCase().trim() : String(w?.type || w?.key || '').toLowerCase().trim();
+                    return t !== 'promoter';
+                  })
+                : rawRegWs;
+
+              const cleanProfFields = hasPollutedPromoter
+                ? {
+                    promoter_id: undefined,
+                    promoter_name: undefined,
+                    promoter_agency: undefined,
+                    promoter_brand: undefined,
+                    promoter_logo: undefined,
+                    promoter_cover_image: undefined,
+                    promoter_bio: undefined,
+                    promoter_metadata: undefined,
+                  }
+                : {};
+
               list.push({
                 ...p,
+                ...cleanProfFields,
                 id: p.id || `real-p-${p.email}`,
                 raw_id: p.id,
                 user_id: p.id,
@@ -297,8 +328,8 @@ export function useSocialFollowsAndProfiles({
                 followed: followedArtistIds.includes(String(p.id || '').toLowerCase().trim()) || followedArtistIds.includes(profileName.toLowerCase()) || !!localFollows[p.id] || !!localFollows[profileName.toLowerCase()],
                 isYou: false,
                 email: p.email,
-                registered_workspaces: p.registered_workspaces || p.allowed_workspaces || p.workspaces || [],
-                allowed_workspaces: p.allowed_workspaces || p.registered_workspaces || []
+                registered_workspaces: cleanRegWs,
+                allowed_workspaces: p.allowed_workspaces || []
               });
             });
           }

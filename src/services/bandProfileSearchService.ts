@@ -1,6 +1,6 @@
 import { getSupabase } from './clientService';
 import { INITIAL_COMMUNITY_BANDS } from '../lib/seedBandsData';
-import { isDeletedOrZombieBand } from '../lib/communityBands';
+import { isDeletedOrZombieBand, pickBestBandImage, isValidBandImageUrl } from '../lib/communityBands';
 
 export interface BandProfileOption {
   id: string;
@@ -55,12 +55,12 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
 
     const discCover = b.discography?.[0]?.cover_url || b.discography?.[0]?.cover_image || b.discography?.[0]?.image_url;
 
-    let avatar = b.logo_url || b.avatar_url || b.avatar || b.logo || b.profile_image || b.image || discCover || '';
+    let avatar = pickBestBandImage(b.logo_url, b.avatar_url, b.avatar, b.logo, b.profile_image, b.image, discCover);
     if (!avatar && (b.cover_url || b.banner_url)) {
-      avatar = b.cover_url || b.banner_url;
+      avatar = pickBestBandImage(b.cover_url, b.banner_url) || '';
     }
 
-    const banner = b.banner_url || b.cover_url || '';
+    const banner = pickBestBandImage(b.banner_url, b.cover_url) || b.banner_url || b.cover_url || '';
     const isVerified = b.is_verified === true || b.verification_status === 'verified_official';
     const followersCount = b.followers_count || 150;
 
@@ -88,10 +88,10 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
         bandMap.set(lowerName, {
           ...existing,
           ...opt,
-          avatar: avatar || existing.avatar,
+          avatar: pickBestBandImage(avatar, existing.avatar) || avatar || existing.avatar,
           source: 'database'
         });
-      } else if (!existing.avatar && avatar) {
+      } else if ((!existing.avatar || !isValidBandImageUrl(existing.avatar)) && avatar) {
         bandMap.set(lowerName, { ...existing, avatar });
       }
     } else {

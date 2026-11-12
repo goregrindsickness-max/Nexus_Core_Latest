@@ -74,7 +74,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "CO",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396969937_1788396969969.jpg?t=1788396969969",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396969937_1788396969969.jpg?t=1788396969969",
-    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788041930287_1788041930303.jpg?t=1788041930303",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396969937_1788396969969.jpg?t=1788396969969",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1788042390992_1788042391008.jpg?t=1788042391008",
     "verification_status": "community_archive",
     "discography": [
@@ -283,7 +283,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "TX",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788395638723_1788395638734.jpg?t=1788395638734",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788395638723_1788395638734.jpg?t=1788395638734",
-    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1787891338290.jpg?t=1787891338290",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788395638723_1788395638734.jpg?t=1788395638734",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787891345437.jpg?t=1787891345437",
     "verification_status": "community_archive",
     "discography": [
@@ -466,7 +466,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "Berlin",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396381585_1788396381626.jpg?t=1788396381626",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396381585_1788396381626.jpg?t=1788396381626",
-    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1787857390098.jpg?t=1787857390098",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396381585_1788396381626.jpg?t=1788396381626",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787857404616.jpg?t=1787857404616",
     "verification_status": "community_archive",
     "discography": [
@@ -701,7 +701,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "IL",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1787849693792.jpg?t=1787849693792",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1787849693792.jpg?t=1787849693792",
-    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1787625126838.jpg?t=1787625126838",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1787849693792.jpg?t=1787849693792",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787625134706.jpg?t=1787625134706",
     "verification_status": "community_archive",
     "discography": [
@@ -797,7 +797,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "TX",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396502651_1788396502844.jpg?t=1788396502844",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396502651_1788396502844.jpg?t=1788396502844",
-    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1787803623565.jpg?t=1787803623565",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396502651_1788396502844.jpg?t=1788396502844",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787803632970.jpg?t=1787803632970",
     "verification_status": "community_archive",
     "discography": [
@@ -929,30 +929,30 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
       {
         "id": "gorg-1",
         "name": "Damian Leski",
-        "role": "Vocals, Guitars",
+        "role": "Guitar, Vocals",
         "status": "active",
         "years": "1994–present"
       },
       {
         "id": "gorg-2",
-        "name": "Anthony Voight",
-        "role": "Bass, Vocals",
+        "name": "Sasha Chrosciewicz",
+        "role": "Guitar, Vocals",
         "status": "active",
-        "years": "2008–present"
+        "years": "2018–present"
       },
       {
         "id": "gorg-3",
-        "name": "Ryan Saylor",
-        "role": "Guitars",
+        "name": "John Hull",
+        "role": "Bass, Vocals",
         "status": "active",
-        "years": "2010–present"
+        "years": "2022–present"
       },
       {
         "id": "gorg-4",
-        "name": "Kyle Moeller",
+        "name": "Tomasz Pilasiewicz",
         "role": "Drums",
         "status": "active",
-        "years": "2014–present"
+        "years": "2005–2008, 2024–present"
       }
     ],
     "band_name": "Gorgasm",
@@ -963,7 +963,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "IL",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396221828_1788396221852.jpg?t=1788396221852",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396221828_1788396221852.jpg?t=1788396221852",
-    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1787807876560.jpg?t=1787807876560",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396221828_1788396221852.jpg?t=1788396221852",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787807883534.jpg?t=1787807883534",
     "verification_status": "community_archive",
     "discography": [
@@ -1124,7 +1124,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "TN",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788395405188_1788395405206.jpg?t=1788395405206",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788395405188_1788395405206.jpg?t=1788395405206",
-    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1787864115165.jpg?t=1787864115165",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788395405188_1788395405206.jpg?t=1788395405206",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787864121287.jpg?t=1787864121287",
     "verification_status": "community_archive",
     "discography": [
@@ -1233,7 +1233,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "WI",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1792024247560_1792024247597.jpg?t=1792024247597",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1792024247560_1792024247597.jpg?t=1792024247597",
-    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1787866579294.jpg?t=1787866579294",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1792024247560_1792024247597.jpg?t=1792024247597",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787866585149.jpg?t=1787866585149",
     "verification_status": "community_archive",
     "discography": [
@@ -1358,7 +1358,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "KS",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788395797409_1788395797432.jpg?t=1788395797432",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788395797409_1788395797432.jpg?t=1788395797432",
-    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1787869057607.jpg?t=1787869057607",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788395797409_1788395797432.jpg?t=1788395797432",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787869083014.jpg?t=1787869083014",
     "verification_status": "community_archive",
     "discography": [
@@ -1528,7 +1528,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "Baden-Württemberg",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790791209160_1790791209171.jpg?t=1790791209171",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790791209160_1790791209171.jpg?t=1790791209171",
-    "image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790791209160_1790791209171.jpg?t=1790791209171",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1790791275869_1790791275870.jpg?t=1790791275870",
     "verification_status": "community_archive",
     "discography": [
@@ -1679,7 +1679,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "MD",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396746010_1788396746022.jpg?t=1788396746022",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396746010_1788396746022.jpg?t=1788396746022",
-    "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396746010_1788396746022.jpg?t=1788396746022",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1788387665188_1788387665194.jpg?t=1788387665194",
     "verification_status": "community_archive",
     "discography": [
@@ -1919,7 +1919,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "OH",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790791100363_1790791100370.jpg?t=1790791100370",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790791100363_1790791100370.jpg?t=1790791100370",
-    "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790791100363_1790791100370.jpg?t=1790791100370",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1788160861877_1788160861892.jpg?t=1788160861892",
     "verification_status": "community_archive",
     "discography": [
@@ -2048,7 +2048,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "NY",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/5b11c121-f310-471b-aef9-cecd5fea3cec/community-avatar_1791937848411_1791937848700.jpg?t=1791937848700",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/5b11c121-f310-471b-aef9-cecd5fea3cec/community-avatar_1791937848411_1791937848700.jpg?t=1791937848700",
-    "image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/5b11c121-f310-471b-aef9-cecd5fea3cec/community-avatar_1791937848411_1791937848700.jpg?t=1791937848700",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/5b11c121-f310-471b-aef9-cecd5fea3cec/community-banner_1791937865523_1791937865710.jpg?t=1791937865710",
     "verification_status": "community_archive",
     "discography": [
@@ -2211,7 +2211,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "NY",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396054583_1788396054592.jpg?t=1788396054592",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396054583_1788396054592.jpg?t=1788396054592",
-    "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396054583_1788396054592.jpg?t=1788396054592",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1788075872226_1788075872243.jpg?t=1788075872243",
     "verification_status": "community_archive",
     "discography": [
@@ -2557,7 +2557,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "Warmia-Masuria",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788545075109_1788545075131.jpg?t=1788545075131",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788545075109_1788545075131.jpg?t=1788545075131",
-    "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788545075109_1788545075131.jpg?t=1788545075131",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1788545093569_1788545093584.jpg?t=1788545093584",
     "verification_status": "community_archive",
     "discography": [
@@ -2876,7 +2876,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "OK",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/2f0193f8-295c-4b0a-905f-c01b18ea18a9/community-avatar_1791939433186_1791939433513.jpg?t=1791939433513",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/2f0193f8-295c-4b0a-905f-c01b18ea18a9/community-avatar_1791939433186_1791939433513.jpg?t=1791939433513",
-    "image": "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/2f0193f8-295c-4b0a-905f-c01b18ea18a9/community-avatar_1791939433186_1791939433513.jpg?t=1791939433513",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/2f0193f8-295c-4b0a-905f-c01b18ea18a9/community-banner_1791939419618_1791939420524.jpg?t=1791939420524",
     "verification_status": "community_archive",
     "discography": [
@@ -3022,7 +3022,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "QC",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788385796973_1788385796991.jpg?t=1788385796991",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788385796973_1788385796991.jpg?t=1788385796991",
-    "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788385796973_1788385796991.jpg?t=1788385796991",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787787755734.jpg?t=1787787755734",
     "verification_status": "community_archive",
     "discography": [
@@ -3249,7 +3249,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "QC",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1789856842149_1789856842172.jpg?t=1789856842172",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1789856842149_1789856842172.jpg?t=1789856842172",
-    "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1789856842149_1789856842172.jpg?t=1789856842172",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1789860344032_1789860344061.jpg?t=1789860344061",
     "verification_status": "community_archive",
     "discography": [
@@ -3365,7 +3365,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "Lisbon",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788403640440_1788403640451.png?t=1788403640451",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788403640440_1788403640451.png?t=1788403640451",
-    "image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788403640440_1788403640451.png?t=1788403640451",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787848876245.jpg?t=1787848876245",
     "verification_status": "community_archive",
     "discography": [
@@ -3551,7 +3551,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "Fife",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1791950586423_1791950586791.jpg?t=1791950586791",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1791950586423_1791950586791.jpg?t=1791950586791",
-    "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1791950586423_1791950586791.jpg?t=1791950586791",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1791950340949_1791950341551.jpg?t=1791950341551",
     "verification_status": "community_archive",
     "discography": [
@@ -3699,7 +3699,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "Attica",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1791943864530_1791943866482.jpg?t=1791943866482",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1791943864530_1791943866482.jpg?t=1791943866482",
-    "image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1791943864530_1791943866482.jpg?t=1791943866482",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/archives/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1791943850509_1791943851103.jpg?t=1791943851103",
     "verification_status": "community_archive",
     "discography": []
@@ -3742,7 +3742,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "TX",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788545558195_1788545558198.jpg?t=1788545558198",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788545558195_1788545558198.jpg?t=1788545558198",
-    "image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788545558195_1788545558198.jpg?t=1788545558198",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1788545412136_1788545412145.jpg?t=1788545412145",
     "verification_status": "community_archive",
     "discography": [
@@ -3813,7 +3813,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "TX",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788077968101_1788077968117.jpg?t=1788077968117",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788077968101_1788077968117.jpg?t=1788077968117",
-    "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788077968101_1788077968117.jpg?t=1788077968117",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1788077626348_1788077626363.jpg?t=1788077626363",
     "verification_status": "community_archive",
     "discography": [
@@ -3884,7 +3884,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "OH",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788404507739_1788404507775.jpg?t=1788404507775",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788404507739_1788404507775.jpg?t=1788404507775",
-    "image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788404507739_1788404507775.jpg?t=1788404507775",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787850600666.jpg?t=1787850600666",
     "verification_status": "community_archive",
     "discography": [
@@ -3955,7 +3955,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "MN",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788074257978_1788074257991.jpg?t=1788074257991",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788074257978_1788074257991.jpg?t=1788074257991",
-    "image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788074257978_1788074257991.jpg?t=1788074257991",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1788073828404_1788073828407.jpg?t=1788073828407",
     "verification_status": "community_archive",
     "discography": []
@@ -3998,7 +3998,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "Bremen",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788404247180_1788404247208.jpg?t=1788404247208",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788404247180_1788404247208.jpg?t=1788404247208",
-    "image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788404247180_1788404247208.jpg?t=1788404247208",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787892438745_1787892438749.jpg?t=1787892438749",
     "verification_status": "community_archive",
     "discography": []
@@ -4041,7 +4041,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "KS",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788478429181_1788478429210.jpg?t=1788478429210",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788478429181_1788478429210.jpg?t=1788478429210",
-    "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788478429181_1788478429210.jpg?t=1788478429210",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1788478443064_1788478443069.jpg?t=1788478443069",
     "verification_status": "community_archive",
     "discography": [
@@ -4129,7 +4129,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "Istanbul",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1789776289702_1789776289715.jpg?t=1789776289715",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1789776289702_1789776289715.jpg?t=1789776289715",
-    "image": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1789776289702_1789776289715.jpg?t=1789776289715",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1789776053693_1789776053701.jpg?t=1789776053701",
     "verification_status": "community_archive",
     "discography": [
@@ -4217,7 +4217,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "TX",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790730492732_1790730492758.jpg?t=1790730492758",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790730492732_1790730492758.jpg?t=1790730492758",
-    "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790730492732_1790730492758.jpg?t=1790730492758",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1790730507194_1790730507199.jpg?t=1790730507199",
     "verification_status": "community_archive",
     "discography": []
@@ -4260,7 +4260,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "TX",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788404992469_1788404992497.jpg?t=1788404992497",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788404992469_1788404992497.jpg?t=1788404992497",
-    "image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788404992469_1788404992497.jpg?t=1788404992497",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1787896941770_1787896941781.jpg?t=1787896941781",
     "verification_status": "community_archive",
     "discography": []
@@ -4303,7 +4303,7 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "state_province": "TX",
     "avatar": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790218237542_1790218237563.jpg?t=1790218237563",
     "logo_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790218237542_1790218237563.jpg?t=1790218237563",
-    "image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=400&auto=format&fit=crop&q=80",
+    "image": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1790218237542_1790218237563.jpg?t=1790218237563",
     "banner_url": "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-banner_1790218246716_1790218246728.jpg?t=1790218246728",
     "verification_status": "community_archive",
     "discography": [

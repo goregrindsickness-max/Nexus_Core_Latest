@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { HelpCircle, X, Check, Sparkles } from 'lucide-react';
+import { X, Check, Sparkles } from 'lucide-react';
 import { safeSetLocalStorageItem } from '../../utils/safeStorage';
 
 interface FirstTimeTooltipProps {
@@ -42,6 +42,7 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
   const [hasSeen, setHasSeen] = useState<boolean>(() => isDismissed(id));
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [horizontalShift, setHorizontalShift] = useState<number>(0);
+  const committedShiftRef = useRef<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -62,39 +63,44 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
     }
   }, [id, autoShow, autoShowDelay]);
 
+  useLayoutEffect(() => {
+    committedShiftRef.current = horizontalShift;
+  }, [horizontalShift]);
+
+  const checkBounds = useCallback(() => {
+    if (!tooltipRef.current) return;
+    const rect = tooltipRef.current.getBoundingClientRect();
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 360;
+    const minPadding = 12;
+
+    const unshiftedLeft = rect.left - committedShiftRef.current;
+    const unshiftedRight = rect.right - committedShiftRef.current;
+
+    let nextShift = 0;
+    if (unshiftedLeft < minPadding) {
+      nextShift = minPadding - unshiftedLeft;
+    } else if (unshiftedRight > viewportWidth - minPadding) {
+      nextShift = (viewportWidth - minPadding) - unshiftedRight;
+    }
+
+    setHorizontalShift((prev) => (Math.abs(prev - nextShift) > 0.5 ? nextShift : prev));
+  }, []);
+
   // Adjust tooltip horizontal position if it overflows mobile viewport edges
   useEffect(() => {
     if (!isOpen || hasSeen) {
       setHorizontalShift(0);
+      committedShiftRef.current = 0;
       return;
     }
 
-    const checkBounds = () => {
-      if (!tooltipRef.current) return;
-      const rect = tooltipRef.current.getBoundingClientRect();
-      const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 360;
-      const minPadding = 12;
-
-      let shift = 0;
-      if (rect.left < minPadding) {
-        shift = minPadding - rect.left;
-      } else if (rect.right > viewportWidth - minPadding) {
-        shift = (viewportWidth - minPadding) - rect.right;
-      }
-
-      if (shift !== 0) {
-        setHorizontalShift((prev) => prev + shift);
-      }
-    };
-
-    setHorizontalShift(0);
     const timer = setTimeout(checkBounds, 20);
     window.addEventListener('resize', checkBounds);
     return () => {
       clearTimeout(timer);
       window.removeEventListener('resize', checkBounds);
     };
-  }, [isOpen, hasSeen]);
+  }, [isOpen, hasSeen, checkBounds]);
 
   // Synchronize across components or tabs if dismissed
   useEffect(() => {
@@ -214,15 +220,22 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
 
       <AnimatePresence>
         {!hasSeen && isOpen && (
-          <motion.div
-            ref={tooltipRef}
-            initial={{ opacity: 0, scale: 0.9, y: position === 'top' ? 4 : position === 'bottom' ? -4 : 0, x: horizontalShift }}
-            animate={{ opacity: 1, scale: 1, y: 0, x: horizontalShift }}
-            exit={{ opacity: 0, scale: 0.9, x: horizontalShift }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
-            className={`absolute z-[200] w-64 max-w-[calc(100vw-1.5rem)] p-3 rounded-xl border ${accentStyles.border} ${accentStyles.bg} ${accentStyles.glow} backdrop-blur-md shadow-2xl ${posClasses} pointer-events-auto`}
+          <div
+            className={`absolute z-[200] w-64 max-w-[calc(100vw-1.5rem)] ${posClasses} pointer-events-auto`}
             onClick={(e) => e.stopPropagation()}
           >
+            <div
+              ref={tooltipRef}
+              style={horizontalShift !== 0 ? { transform: `translateX(${horizontalShift}px)` } : undefined}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: position === 'top' ? 4 : position === 'bottom' ? -4 : 0 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                onAnimationComplete={checkBounds}
+                className={`w-full p-3 rounded-xl border ${accentStyles.border} ${accentStyles.bg} ${accentStyles.glow} backdrop-blur-md shadow-2xl`}
+              >
             <div className="flex items-start justify-between gap-2 mb-1">
               <div className="flex items-center gap-1.5">
                 <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border font-mono ${accentStyles.badge}`}>
@@ -255,7 +268,9 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
                 <Check className="w-3 h-3" /> Got it
               </button>
             </div>
-          </motion.div>
+            </motion.div>
+            </div>
+          </div>
         )}
       </AnimatePresence>
     </div>

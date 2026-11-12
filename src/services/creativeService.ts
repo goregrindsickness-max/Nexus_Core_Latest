@@ -391,21 +391,28 @@ export const autoSyncCreativeProfile = async (userProfile: any) => {
     }
 
     // Check if user is registered in creative workspace
-    const isExplicitlyRegistered =
-      hasRegisteredWorkspace(userProfile, 'creative') ||
-      userProfile.active_workspace === 'creative' ||
-      userProfile.account_type === 'creative' ||
-      (Array.isArray(userProfile.registered_workspaces) &&
-        userProfile.registered_workspaces.some((w: any) =>
-          typeof w === 'string' ? (w.toLowerCase() === 'creative' || w.toLowerCase() === 'creative pro') : w?.type === 'creative'
-        ));
-
+    const isFanAcc = userProfile.account_type === 'fan' || userProfile.account_type === 'fan_only';
     const meta = userProfile.creative_metadata && typeof userProfile.creative_metadata === 'object' ? userProfile.creative_metadata : {};
     const localMeta = localProf.creative_metadata && typeof localProf.creative_metadata === 'object' ? localProf.creative_metadata : {};
-    const hasExplicitCreativeId = Boolean(upAny.creative_id || (localProf && localProf.creative_id) || upAny.registered_creative_id);
-    const hasExplicitBizData = Boolean((meta && meta.business_name) || upAny.creative_business_name);
+    const hasExplicitCreativeId = Boolean(
+      (upAny.creative_id && upAny.creative_id !== userProfile.id) ||
+      (localProf && localProf.creative_id && localProf.creative_id !== userProfile.id) ||
+      upAny.registered_creative_id
+    );
+    const hasExplicitBizData = Boolean((meta && (meta.business_name || meta.creative_name || meta.is_registered === true)) || upAny.creative_business_name || upAny.creative_name);
+    const isExplicitlyRegistered = Boolean(
+      userProfile.active_workspace === 'creative' ||
+      userProfile.account_type === 'creative' ||
+      (hasExplicitBizData && (
+        hasRegisteredWorkspace(userProfile, 'creative') ||
+        (Array.isArray(userProfile.registered_workspaces) &&
+          userProfile.registered_workspaces.some((w: any) =>
+            typeof w === 'string' ? (w.toLowerCase() === 'creative' || w.toLowerCase() === 'creative pro') : w?.type === 'creative'
+          ))
+      ))
+    );
 
-    if (!isExplicitlyRegistered && !hasExplicitCreativeId && !hasExplicitBizData) {
+    if (isFanAcc || (!isExplicitlyRegistered && !hasExplicitCreativeId && !hasExplicitBizData)) {
       return null;
     }
 

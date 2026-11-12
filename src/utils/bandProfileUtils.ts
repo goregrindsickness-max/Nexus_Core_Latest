@@ -256,12 +256,29 @@ export const resolveBandLocation = (activeBand: any, userProfile: any): string =
   return 'Denison, TX, USA';
 };
 
-export const resolvePromoterName = (userProfile: any): string => {
-  const pm = userProfile?.promoter_metadata;
-  const saved = typeof window !== 'undefined' ? (localStorage.getItem('nexus_promoter_brand') || localStorage.getItem('nexus_promoter_name')) : null;
-  if (saved && typeof saved === 'string' && saved.trim()) return saved.trim();
+const isSameLocalUserProfile = (userProfile: any): boolean => {
+  if (!userProfile || typeof window === 'undefined') return false;
+  try {
+    const raw = localStorage.getItem('nexus_core_user_profile');
+    if (!raw) return false;
+    const localProf = JSON.parse(raw);
+    if (!localProf) return false;
+    if (localProf.id && userProfile.id && String(localProf.id).toLowerCase() === String(userProfile.id).toLowerCase()) return true;
+    if (localProf.email && userProfile.email && String(localProf.email).toLowerCase() === String(userProfile.email).toLowerCase()) return true;
+  } catch (_) {}
+  return false;
+};
 
-  return (
+export const resolvePromoterName = (userProfile: any): string => {
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+  const pm = userProfile?.promoter_metadata;
+  const canReadLocal = isSameLocalUserProfile(userProfile);
+  const saved = canReadLocal ? (localStorage.getItem('nexus_promoter_brand') || localStorage.getItem('nexus_promoter_name')) : null;
+  if (saved && typeof saved === 'string' && saved.trim() && (isOwnerMiguel || !saved.toLowerCase().includes('nexus live'))) {
+    return saved.trim();
+  }
+
+  const candidate =
     pm?.brand_name ||
     pm?.agency_name ||
     pm?.entity_name ||
@@ -270,12 +287,20 @@ export const resolvePromoterName = (userProfile: any): string => {
     userProfile?.promoter_name ||
     userProfile?.entity_name ||
     userProfile?.corporate_name ||
-    'Nexus Live Productions'
-  );
+    '';
+
+  if (candidate && typeof candidate === 'string' && candidate.trim()) {
+    if (isOwnerMiguel || !candidate.toLowerCase().includes('nexus live')) {
+      return candidate.trim();
+    }
+  }
+
+  return isOwnerMiguel ? 'Nexus Live Productions' : '';
 };
 
 export const resolvePromoterHandle = (userProfile: any): string => {
   const nameCandidate = resolvePromoterName(userProfile);
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
   const raw =
     userProfile?.promoter_handle ||
     userProfile?.promoter_metadata?.brand_name ||
@@ -283,8 +308,8 @@ export const resolvePromoterHandle = (userProfile: any): string => {
     userProfile?.promoter_agency ||
     userProfile?.promoter_brand ||
     userProfile?.promoter_name ||
-    (nameCandidate ? nameCandidate.replace(/\s+/g, '_').toLowerCase() : 'nexus_live_productions');
-  return raw.replace(/^@+/, '').replace(/\s+/g, '_');
+    (nameCandidate ? nameCandidate.replace(/\s+/g, '_').toLowerCase() : (isOwnerMiguel ? 'nexus_live_productions' : 'promoter'));
+  return String(raw).replace(/^@+/, '').replace(/\s+/g, '_');
 };
 
 export const PROMOTER_DEFAULT_AVATAR = PROMOTER_SVG_AVATAR;
@@ -323,10 +348,14 @@ export const isCreativeCoverUrl = (url?: string | null, _userProfile?: any): boo
 };
 
 export const resolveCreativeName = (userProfile: any): string => {
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
   const cm = userProfile?.creative_metadata;
-  const saved = typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_business_name') || localStorage.getItem('nexus_creative_name')) : null;
+  const canReadLocal = isSameLocalUserProfile(userProfile);
+  const saved = canReadLocal ? (localStorage.getItem('nexus_creative_business_name') || localStorage.getItem('nexus_creative_name')) : null;
   if (saved && typeof saved === 'string' && saved.trim() && !['pro creative', 'creative pro', 'creative hub', 'creative studio'].includes(saved.toLowerCase().trim())) {
-    return saved.trim();
+    if (isOwnerMiguel || !saved.toLowerCase().includes('vortex graphics')) {
+      return saved.trim();
+    }
   }
 
   const cand =
@@ -338,37 +367,44 @@ export const resolveCreativeName = (userProfile: any): string => {
     userProfile?.creative_profile?.name;
 
   if (cand && typeof cand === 'string' && cand.trim() && !['pro creative', 'creative pro', 'creative hub', 'creative studio'].includes(cand.toLowerCase().trim())) {
-    return cand.trim();
+    if (isOwnerMiguel || !cand.toLowerCase().includes('vortex graphics')) {
+      return cand.trim();
+    }
   }
 
-  return 'Vortex Graphics';
+  return isOwnerMiguel ? 'Vortex Graphics' : '';
 };
 
 export const resolveCreativeHandle = (userProfile: any): string => {
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
   const cm = userProfile?.creative_metadata;
+  const canReadLocal = isSameLocalUserProfile(userProfile);
   const raw =
     userProfile?.creative_handle ||
     userProfile?.creative_slug ||
     cm?.creative_handle ||
     cm?.handle ||
-    (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_handle') : null);
+    (canReadLocal ? localStorage.getItem('nexus_creative_handle') : null);
 
   if (raw && typeof raw === 'string' && raw.trim() && !['creative_pro', 'creativepro', 'user', '@user'].includes(raw.toLowerCase().trim())) {
-    return raw.replace(/^@+/, '').replace(/\s+/g, '_');
+    if (isOwnerMiguel || raw.toLowerCase().trim() !== 'vortexgraphics') {
+      return raw.replace(/^@+/, '').replace(/\s+/g, '_');
+    }
   }
 
-  return 'vortexgraphics';
+  return isOwnerMiguel ? 'vortexgraphics' : '';
 };
 
 export const resolveCreativeLogo = (userProfile: any, profileAvatarUrl?: string | null): string => {
   const cm = userProfile?.creative_metadata;
+  const canReadLocal = isSameLocalUserProfile(userProfile);
 
-  const saved = typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null;
+  const saved = canReadLocal ? localStorage.getItem('nexus_creative_avatar') : null;
   if (saved && typeof saved === 'string' && saved.trim() && !isPromoterAvatarUrl(saved)) {
     return saved.trim();
   }
 
-  const personalAvatar = userProfile?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_avatar') : null);
+  const personalAvatar = userProfile?.avatar_url || (canReadLocal ? localStorage.getItem('nexus_user_avatar') : null);
 
   const cand =
     userProfile?.creative_avatar ||
@@ -390,18 +426,19 @@ export const resolveCreativeLogo = (userProfile: any, profileAvatarUrl?: string 
     }
   }
 
-  return VORTEX_GRAPHICS_DEFAULT_AVATAR;
+  return isMiguelNameOrProfile(userProfile) ? VORTEX_GRAPHICS_DEFAULT_AVATAR : '';
 };
 
 export const resolveCreativeCover = (userProfile: any, profileCoverUrl?: string | null): string | null => {
   const cm = userProfile?.creative_metadata;
+  const canReadLocal = isSameLocalUserProfile(userProfile);
 
-  const saved = typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_creative_cover')) : null;
+  const saved = canReadLocal ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_creative_cover')) : null;
   if (saved && typeof saved === 'string' && saved.trim()) {
     return saved.trim();
   }
 
-  const personalCover = userProfile?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_banner') : null);
+  const personalCover = userProfile?.banner_url || (canReadLocal ? localStorage.getItem('nexus_user_banner') : null);
 
   const cand =
     userProfile?.creative_banner ||
@@ -423,33 +460,38 @@ export const resolveCreativeCover = (userProfile: any, profileCoverUrl?: string 
 
 export const resolveCreativeBio = (userProfile: any): string => {
   const cm = userProfile?.creative_metadata;
+  const canReadLocal = isSameLocalUserProfile(userProfile);
   const cand =
     cm?.bio ||
     cm?.biography ||
     userProfile?.creative_bio ||
-    (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_bio') : null);
+    (canReadLocal ? localStorage.getItem('nexus_creative_bio') : null);
 
   if (cand && typeof cand === 'string' && cand.trim()) {
     return cand.trim();
   }
 
-  return 'Heavy vector specialist, halftone master, custom punk typography and production-ready CMYK separated files.';
+  return isMiguelNameOrProfile(userProfile)
+    ? 'Heavy vector specialist, halftone master, custom punk typography and production-ready CMYK separated files.'
+    : 'Independent creative specialist on the Nexus network.';
 };
 
 export const resolveCreativeLocation = (userProfile: any): string => {
   const cm = userProfile?.creative_metadata;
-  const loc = cm?.city || cm?.base_location || userProfile?.creative_city || 'Denison';
-  const state = cm?.state || cm?.state_province || userProfile?.creative_state || 'TX';
+  const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+  const loc = cm?.city || cm?.base_location || userProfile?.creative_city || (isOwnerMiguel ? 'Denison' : userProfile?.city || '');
+  const state = cm?.state || cm?.state_province || userProfile?.creative_state || (isOwnerMiguel ? 'TX' : userProfile?.state_province || '');
 
   const clean = formatCleanLocation(loc, state);
   if (clean) return clean;
-  return 'Denison, Texas';
+  return isOwnerMiguel ? 'Denison, Texas' : '';
 };
 
 export const resolvePromoterLogo = (userProfile: any, profileAvatarUrl?: string | null): string => {
   const pm = userProfile?.promoter_metadata;
+  const canReadLocal = isSameLocalUserProfile(userProfile);
 
-  const saved = typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null;
+  const saved = canReadLocal ? localStorage.getItem('nexus_promoter_logo') : null;
   if (saved && typeof saved === 'string' && saved.trim()) {
     return saved.trim();
   }
@@ -483,13 +525,14 @@ export const resolvePromoterLogo = (userProfile: any, profileAvatarUrl?: string 
 
 export const resolvePromoterCover = (userProfile: any, profileCoverUrl?: string | null): string | null => {
   const pm = userProfile?.promoter_metadata;
+  const canReadLocal = isSameLocalUserProfile(userProfile);
 
-  const saved = typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null;
+  const saved = canReadLocal ? localStorage.getItem('nexus_promoter_cover') : null;
   if (saved && typeof saved === 'string' && saved.trim()) {
     return saved.trim();
   }
 
-  const personalCover = userProfile?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_user_banner') : null);
+  const personalCover = userProfile?.banner_url || (canReadLocal ? localStorage.getItem('nexus_user_banner') : null);
 
   const cand =
     (userProfile as any)?.promoter_cover_image ||
@@ -513,7 +556,9 @@ export const resolvePromoterBio = (userProfile: any): string => {
   if (cand && !cand.toLowerCase().includes('booking management for underground')) {
     return cand;
   }
-  return 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
+  return isMiguelNameOrProfile(userProfile)
+    ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.'
+    : 'Independent concert promoter and live events coordinator.';
 };
 
 export const resolvePromoterLocation = (userProfile: any): string => {

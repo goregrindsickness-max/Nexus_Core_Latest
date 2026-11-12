@@ -460,9 +460,10 @@ export function useUserProfileState({
       return (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_bio') : null) || userProfile?.creative_metadata?.bio || userProfile?.creative_bio || 'Professional creative specialist on the Nexus network.';
     }
     if (portalRole === 'promoter') {
+      const isOwner = isMiguelNameOrProfile(userProfile) || userProfile?.email?.toLowerCase() === 'goregrindsickness@gmail.com';
       const stored = typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null;
       const cleanStored = (stored && !stored.toLowerCase().includes('booking management') && !stored.toLowerCase().includes('event organizer on nexus')) ? stored : null;
-      return userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || cleanStored || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
+      return userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || cleanStored || (isOwner ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent concert promoter and live events coordinator.');
     }
     if (portalRole === 'label') {
       return (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_bio') : null) || userProfile?.label_bio || 'Official record label on Nexus.';
@@ -481,9 +482,10 @@ export function useUserProfileState({
     } else if (portalRole === 'creative') {
       freshBio = (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_bio') : null) || userProfile?.creative_metadata?.bio || userProfile?.creative_bio || 'Professional creative specialist on the Nexus network.';
     } else if (portalRole === 'promoter') {
+      const isOwner = isMiguelNameOrProfile(userProfile) || userProfile?.email?.toLowerCase() === 'goregrindsickness@gmail.com';
       const stored = typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_bio') : null;
       const cleanStored = (stored && !stored.toLowerCase().includes('booking management') && !stored.toLowerCase().includes('event organizer on nexus')) ? stored : null;
-      freshBio = userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || cleanStored || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
+      freshBio = userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio || cleanStored || (isOwner ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent concert promoter and live events coordinator.');
     } else if (portalRole === 'label') {
       freshBio = (typeof window !== 'undefined' ? localStorage.getItem('nexus_label_bio') : null) || userProfile?.label_bio || 'Official record label on Nexus.';
     } else {
@@ -525,10 +527,10 @@ export function useUserProfileState({
 
   const saveProfileData = (finalSave: boolean = false) => {
     const isOwner = isMiguelNameOrProfile(userProfile) || userProfile?.email?.toLowerCase() === 'goregrindsickness@gmail.com';
-    const cleanLoc = formatCleanLocation(profileLocation) || (isOwner ? 'Denison, TX' : 'Denison, TX');
-    const locParts = cleanLoc.split(',').map(s => s.trim());
-    const resolvedCity = locParts[0] || (isOwner ? 'Denison' : 'Denison');
-    const resolvedState = locParts[1] || (isOwner ? 'TX' : 'TX');
+    const cleanLoc = formatCleanLocation(profileLocation) || (isOwner ? 'Denison, TX' : '');
+    const locParts = cleanLoc ? cleanLoc.split(',').map(s => s.trim()) : [];
+    const resolvedCity = locParts[0] || (isOwner ? 'Denison' : '');
+    const resolvedState = locParts[1] || (isOwner ? 'TX' : '');
 
     const combinedGenres = Array.from(new Set([
       ...profilePrimaryGenres,

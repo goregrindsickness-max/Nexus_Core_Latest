@@ -251,7 +251,8 @@ export function sanitizeBandPayload(rawPayload: any): Record<string, any> {
     'hate eternal': 'Hate Eternal',
     'scour': 'Scour',
     'squash-bowels': 'Squash Bowels',
-    'squash bowels': 'Squash Bowels'
+    'squash bowels': 'Squash Bowels',
+    'gorgasm': 'Gorgasm'
   };
 
   let bName = (clean.band_name || clean.name || '').trim();

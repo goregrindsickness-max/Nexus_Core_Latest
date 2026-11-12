@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   CheckCircle2,
@@ -249,17 +250,19 @@ export const CreateEntityModal: React.FC<CreateEntityModalProps> = ({
 
   const activeMeta = ENTITY_CATEGORY_META[category] || ENTITY_CATEGORY_META.festival;
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
+      className="fixed inset-0 z-[1000010] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-hidden"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl bg-[#0b0d13] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden text-left my-auto animate-in fade-in zoom-in-95 duration-150"
+        className="w-full max-w-xl bg-[#0b0d13] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden text-left animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2.5rem)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header */}
-        <div className="px-5 py-4 bg-[#11141d] border-b border-zinc-800/90 flex items-center justify-between">
+        <div className="px-5 py-4 bg-[#11141d] border-b border-zinc-800/90 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-lg shrink-0">
               {activeMeta.icon}
@@ -288,7 +291,7 @@ export const CreateEntityModal: React.FC<CreateEntityModalProps> = ({
         </div>
 
         {/* Step Indicator Bar */}
-        <div className="grid grid-cols-3 bg-[#080a0f] border-b border-zinc-800/80 text-[10px] font-mono font-bold uppercase">
+        <div className="grid grid-cols-3 bg-[#080a0f] border-b border-zinc-800/80 text-[10px] font-mono font-bold uppercase shrink-0">
           <button
             type="button"
             onClick={() => setStep(1)}
@@ -331,7 +334,7 @@ export const CreateEntityModal: React.FC<CreateEntityModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 flex-1 min-h-0 overflow-y-auto">
           {errorMsg && (
             <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/50 text-xs font-mono text-rose-200">
               {errorMsg}
@@ -768,7 +771,8 @@ export const CreateEntityModal: React.FC<CreateEntityModalProps> = ({
           )}
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

@@ -18,9 +18,8 @@ export const getProfileGlowInfo = (profile: any): ProfileGlowInfo => {
   const rawType = (profile?.type || '').toLowerCase();
   const isPersonal = profile?.isPersonal === true || profile?.isIndustryProPersonal === true;
   const workspaces = [
-    ...(profile?.registered_workspaces || []),
-    ...(profile?.allowed_workspaces || [])
-  ].map((w: string) => typeof w === 'string' ? w.toLowerCase() : '');
+    ...(profile?.registered_workspaces || [])
+  ].map((w: any) => typeof w === 'string' ? w.toLowerCase() : (w?.type ? String(w.type).toLowerCase() : ''));
 
   const createInfo = (
     type: ProfileGlowInfo['type'],

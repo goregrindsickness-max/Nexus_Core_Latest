@@ -492,12 +492,13 @@ export function AppNavigationBar({
                         
                         // Give React a moment to render the view if it isn't already
                         setTimeout(() => {
+                          const isOwnerMiguel = isMiguelNameOrProfile(updated);
                           window.dispatchEvent(new CustomEvent('openPublicProfile', {
                             detail: isCreativeAcc ? {
                               id: updated?.id || null,
-                              name: (updated as any)?.creative_metadata?.business_name || (updated as any)?.creative_name || updated?.name || 'Vortex Graphics',
+                              name: (updated as any)?.creative_metadata?.business_name || (updated as any)?.creative_name || updated?.name || (isOwnerMiguel ? 'Vortex Graphics' : 'Creative Studio'),
                               creative_name: (updated as any)?.creative_name || updated?.name,
-                              business_name: (updated as any)?.creative_metadata?.business_name || (updated as any)?.creative_name || updated?.name || 'Vortex Graphics',
+                              business_name: (updated as any)?.creative_metadata?.business_name || (updated as any)?.creative_name || updated?.name || (isOwnerMiguel ? 'Vortex Graphics' : 'Creative Studio'),
                               legalName: updated?.full_name || updated?.name,
                               avatar: (updated as any)?.creative_avatar || updated?.avatar_url || null,
                               avatar_url: (updated as any)?.creative_avatar || updated?.avatar_url || null,
@@ -514,26 +515,26 @@ export function AppNavigationBar({
                               badges: ['🛠️ Creative Pro', '🎨 Designer'],
                               customBadges: ['🛠️ Creative Pro', '🎨 Designer'],
                               bio: updated?.bio || (updated as any)?.creative_metadata?.bio || 'Professional creative specialist on the Nexus network.',
-                              handle: (updated as any)?.creative_handle || updated?.console_handle || 'vortexgraphics',
-                              console_handle: (updated as any)?.creative_handle || updated?.console_handle || 'vortexgraphics',
+                              handle: (updated as any)?.creative_handle || updated?.console_handle || (isOwnerMiguel ? 'vortexgraphics' : 'creative'),
+                              console_handle: (updated as any)?.creative_handle || updated?.console_handle || (isOwnerMiguel ? 'vortexgraphics' : 'creative'),
                               creative_metadata: (updated as any)?.creative_metadata || {}
                             } : isPromoterAcc ? {
-                              id: (updated as any)?.promoter_id || updated?.id || 'promoter:nexuslive',
-                              name: (updated as any)?.promoter_metadata?.brand_name || (updated as any)?.promoter_metadata?.agency_name || (updated as any)?.promoter_agency || 'Nexus Live Productions',
-                              legalName: (updated as any)?.promoter_metadata?.brand_name || (updated as any)?.promoter_agency || 'Nexus Live Productions',
-                              handle: '@NexusLive',
-                              console_handle: '@NexusLive',
-                              username: '@NexusLive',
-                              avatar: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601',
-                              avatar_url: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601',
-                              logo: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601',
-                              logo_url: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601',
-                              promoter_logo: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601',
-                              banner: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635',
-                              banner_url: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635',
-                              cover: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635',
-                              cover_url: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635',
-                              promoter_cover_image: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635',
+                              id: (updated as any)?.promoter_id || updated?.id || (isOwnerMiguel ? 'promoter:nexuslive' : 'promoter:user'),
+                              name: (updated as any)?.promoter_metadata?.brand_name || (updated as any)?.promoter_metadata?.agency_name || (updated as any)?.promoter_agency || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations'),
+                              legalName: (updated as any)?.promoter_metadata?.brand_name || (updated as any)?.promoter_agency || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations'),
+                              handle: isOwnerMiguel ? '@NexusLive' : `@${updated?.console_handle || 'promoter'}`,
+                              console_handle: isOwnerMiguel ? '@NexusLive' : `@${updated?.console_handle || 'promoter'}`,
+                              username: isOwnerMiguel ? '@NexusLive' : `@${updated?.console_handle || 'promoter'}`,
+                              avatar: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : updated?.avatar_url || null),
+                              avatar_url: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : updated?.avatar_url || null),
+                              logo: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : updated?.avatar_url || null),
+                              logo_url: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : updated?.avatar_url || null),
+                              promoter_logo: (updated as any)?.promoter_logo || (updated as any)?.promoter_metadata?.logo_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : updated?.avatar_url || null),
+                              banner: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : updated?.banner_url || null),
+                              banner_url: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : updated?.banner_url || null),
+                              cover: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : updated?.banner_url || null),
+                              cover_url: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : updated?.banner_url || null),
+                              promoter_cover_image: (updated as any)?.promoter_cover_image || (updated as any)?.promoter_metadata?.banner_url || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_cover') : null) || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : updated?.banner_url || null),
                               location: updated?.city ? `${updated.city}, ${(updated as any)?.state || 'TX'}` : 'Denison, TX',
                               role: 'Event Promoter',
                               type: 'promoter',
@@ -542,9 +543,9 @@ export function AppNavigationBar({
                               isPersonal: false,
                               isBandProfile: false,
                               isYou: true,
-                              badges: ['🎪 Event Promoter', '⚡ Nexus Live'],
-                              customBadges: ['🎪 Event Promoter', '⚡ Nexus Live'],
-                              bio: (updated as any)?.promoter_metadata?.bio || (updated as any)?.promoter_bio || 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.',
+                              badges: isOwnerMiguel ? ['🎪 Event Promoter', '⚡ Nexus Live'] : ['🎪 Event Promoter'],
+                              customBadges: isOwnerMiguel ? ['🎪 Event Promoter', '⚡ Nexus Live'] : ['🎪 Event Promoter'],
+                              bio: (updated as any)?.promoter_metadata?.bio || (updated as any)?.promoter_bio || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent concert promoter and live events coordinator.'),
                               promoter_metadata: (updated as any)?.promoter_metadata || {}
                             } : (() => {
                               const isOwnerMiguel = isMiguelNameOrProfile(updated);

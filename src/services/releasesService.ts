@@ -208,8 +208,26 @@ export async function persistReleasesLocallyAndServer(releases: any[]): Promise<
   }
 }
 
+function safeJsonParse<T>(val: unknown, fallback: T): T {
+  if (typeof val !== 'string') return fallback;
+  const trimmed = val.trim();
+  if (!trimmed) return fallback;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function mapDbRowToRelease(row: any): CatalogRelease {
   const cover = row.cover_image || row.cover_url || row.coverImage || row.coverUrl || row.image_url || '';
+  const parsedTracks = Array.isArray(row.tracks) ? row.tracks : safeJsonParse<any[]>(row.tracks, []);
+  const parsedFormats = typeof row.formats === 'object' && row.formats && !Array.isArray(row.formats)
+    ? row.formats
+    : safeJsonParse<Record<string, any>>(row.formats, {});
+  const parsedDigital = Array.isArray(row.digital) ? row.digital : safeJsonParse<any[]>(row.digital, []);
+
   return {
     id: row.id,
     catalogId: row.catalog_id || row.catalogId,
@@ -225,9 +243,9 @@ function mapDbRowToRelease(row: any): CatalogRelease {
     coverUrl: cover,
     cover_image: cover,
     cover_url: cover,
-    tracks: Array.isArray(row.tracks) ? row.tracks : (typeof row.tracks === 'string' ? JSON.parse(row.tracks) : []),
-    formats: typeof row.formats === 'object' && row.formats ? row.formats : (typeof row.formats === 'string' ? JSON.parse(row.formats) : {}),
-    digital: Array.isArray(row.digital) ? row.digital : (typeof row.digital === 'string' ? JSON.parse(row.digital) : []),
+    tracks: Array.isArray(parsedTracks) ? parsedTracks : [],
+    formats: typeof parsedFormats === 'object' && parsedFormats && !Array.isArray(parsedFormats) ? parsedFormats : {},
+    digital: Array.isArray(parsedDigital) ? parsedDigital : [],
     audio_vault_path: row.audio_vault_path,
     band_id: row.band_id,
     band: row.band || row.band_name || row.artist || row.artist_name || '',

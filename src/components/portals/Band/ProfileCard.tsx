@@ -9,7 +9,7 @@ import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, upsertBandToDatabase, generateUUID } from '../../../supabase';
 import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER, resolvePromoterLogo, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER, isBandSplitUp, resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
-import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache, resolveAuthenticReleaseYear, deduplicateDiscography, extractReleaseCover, findMasterReleaseCover } from '../../../lib/communityBands';
+import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache, resolveAuthenticReleaseYear, deduplicateDiscography, extractReleaseCover, findMasterReleaseCover, isValidBandImageUrl, pickBestBandImage, isGorgasmBand, isStaleGorgasmLineup, GORGASM_OFFICIAL_LINEUP, GORGASM_OFFICIAL_LOGO } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
 import CommunityBandCuratorModal from '../../social/modals/CommunityBandCuratorModal';
@@ -613,12 +613,18 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           }
 
           if (isMounted && record) {
+            const recNameLower = (record.band_name || record.name || '').toLowerCase().trim();
+            const isGorgRec = isGorgasmBand(record.id || recNameLower, record.custom_slug || record.slug);
+            const cleanRecAvatar = pickBestBandImage(record.avatar_url, record.logo_url, record.avatar, record.image, isGorgRec ? GORGASM_OFFICIAL_LOGO : '');
+            const cleanRecCover = pickBestBandImage(record.cover_url, record.banner_url, record.banner, record.cover);
+            const cleanRecLineup = (isGorgRec && isStaleGorgasmLineup(record.lineup)) ? GORGASM_OFFICIAL_LINEUP : record.lineup;
             const normalizedRecord = {
               ...record,
-              avatar_url: record.avatar_url || record.logo_url || record.avatar || record.image || '',
-              logo_url: record.logo_url || record.avatar_url || record.avatar || record.image || '',
-              cover_url: record.cover_url || record.banner_url || record.banner || record.cover || '',
-              banner_url: record.banner_url || record.cover_url || record.banner || record.cover || '',
+              avatar_url: cleanRecAvatar,
+              logo_url: cleanRecAvatar,
+              cover_url: cleanRecCover,
+              banner_url: cleanRecCover,
+              lineup: cleanRecLineup,
               name: record.band_name || record.name || '',
               band_name: record.band_name || record.name || ''
             };
@@ -745,12 +751,17 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           );
 
           if (matchesId || matchesName) {
+            const isGorgNew = isGorgasmBand(newBand.id || newBand.band_name || newBand.name, newBand.custom_slug || newBand.slug);
+            const cleanNewAvatar = pickBestBandImage(newBand.avatar_url, newBand.logo_url, newBand.avatar, newBand.image, isGorgNew ? GORGASM_OFFICIAL_LOGO : '');
+            const cleanNewCover = pickBestBandImage(newBand.cover_url, newBand.banner_url, newBand.banner, newBand.cover);
+            const cleanNewLineup = (isGorgNew && isStaleGorgasmLineup(newBand.lineup)) ? GORGASM_OFFICIAL_LINEUP : newBand.lineup;
             const normalized = {
               ...newBand,
-              avatar_url: newBand.avatar_url || newBand.logo_url || newBand.avatar || newBand.image || '',
-              logo_url: newBand.logo_url || newBand.avatar_url || newBand.avatar || newBand.image || '',
-              cover_url: newBand.cover_url || newBand.banner_url || newBand.banner || newBand.cover || '',
-              banner_url: newBand.banner_url || newBand.cover_url || newBand.banner || newBand.cover || '',
+              avatar_url: cleanNewAvatar,
+              logo_url: cleanNewAvatar,
+              cover_url: cleanNewCover,
+              banner_url: cleanNewCover,
+              lineup: cleanNewLineup,
               name: newBand.band_name || newBand.name || '',
               band_name: newBand.band_name || newBand.name || ''
             };
@@ -904,20 +915,35 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     const directMatch = communityArchiveMatch || (candidateName ? (communityBandManager.findMatch(candidateName) || communityBandManager.findByName(candidateName)) : null);
     if (!fetchedBandData && !directMatch && !(isOwnBand && localSavedBand)) return null;
 
+    const isGorg = isGorgasmBand(candidateName || fetchedBandData?.id || directMatch?.id, directMatch?.custom_slug || fetchedBandData?.custom_slug);
     const targetBandUUID = userProfile?.band_id || fetchedBandData?.id || '';
     const bandLogoFromStorage = typeof window !== 'undefined' ? (localStorage.getItem('nexus_core_band_avatar_' + targetBandUUID) || localStorage.getItem('nexus_band_logo')) : null;
     const customUserLogo = isOwnBand ? (userProfile?.band_logo || bandLogoFromStorage) : null;
-    const rawLogo = customUserLogo || fetchedBandData?.logo_url || fetchedBandData?.avatar_url || (isOwnBand ? localSavedBand?.logo_url : null) || directMatch?.logo_url || directMatch?.avatar_url;
-    const rawAvatar = customUserLogo || fetchedBandData?.avatar_url || fetchedBandData?.logo_url || (isOwnBand ? localSavedBand?.avatar_url : null) || directMatch?.avatar_url || directMatch?.logo_url;
+    const rawLogo = pickBestBandImage(
+      customUserLogo,
+      fetchedBandData?.logo_url,
+      fetchedBandData?.avatar_url,
+      isOwnBand ? localSavedBand?.logo_url : null,
+      directMatch?.logo_url,
+      directMatch?.avatar_url,
+      isGorg ? GORGASM_OFFICIAL_LOGO : null
+    ) || customUserLogo || fetchedBandData?.logo_url || fetchedBandData?.avatar_url || (isOwnBand ? localSavedBand?.logo_url : null) || directMatch?.logo_url || directMatch?.avatar_url;
+    const rawAvatar = rawLogo;
 
     const bandBannerFromStorage = typeof window !== 'undefined' ? (localStorage.getItem('nexus_core_band_cover_' + targetBandUUID) || localStorage.getItem('nexus_band_cover')) : null;
     const customUserCover = isOwnBand ? (bandBannerFromStorage || userProfile?.band_cover) : null;
-    let rawCover = customUserCover || fetchedBandData?.cover_url || fetchedBandData?.banner_url;
-    if ((!rawCover || (typeof rawCover === 'string' && rawCover.includes('unsplash'))) && (directMatch?.cover_url || directMatch?.banner_url)) {
-      rawCover = directMatch.cover_url || directMatch.banner_url;
-    }
-    if (!rawCover) {
-      rawCover = fetchedBandData?.cover_url || fetchedBandData?.banner_url || directMatch?.cover_url || directMatch?.banner_url || (isOwnBand ? (localSavedBand?.cover_url || localSavedBand?.banner_url) : null);
+    let rawCover = pickBestBandImage(
+      customUserCover,
+      fetchedBandData?.cover_url,
+      fetchedBandData?.banner_url,
+      directMatch?.cover_url,
+      directMatch?.banner_url,
+      isOwnBand ? (localSavedBand?.cover_url || localSavedBand?.banner_url) : null
+    ) || customUserCover || fetchedBandData?.cover_url || fetchedBandData?.banner_url || directMatch?.cover_url || directMatch?.banner_url || (isOwnBand ? (localSavedBand?.cover_url || localSavedBand?.banner_url) : null);
+
+    let resolvedLineupList = isOwnBand && localSavedBand?.lineup?.length ? localSavedBand.lineup : (fetchedBandData?.lineup?.length ? fetchedBandData.lineup : (directMatch?.lineup || []));
+    if (isGorg && isStaleGorgasmLineup(resolvedLineupList)) {
+      resolvedLineupList = GORGASM_OFFICIAL_LINEUP;
     }
 
     return {
@@ -929,7 +955,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       cover_url: rawCover,
       banner_url: rawCover,
       bio: isOwnBand ? (localSavedBand?.bio || fetchedBandData?.bio || directMatch?.bio) : (fetchedBandData?.bio || directMatch?.bio || ''),
-      lineup: isOwnBand && localSavedBand?.lineup?.length ? localSavedBand.lineup : (fetchedBandData?.lineup?.length ? fetchedBandData.lineup : (directMatch?.lineup || [])),
+      lineup: resolvedLineupList,
       discography: isOwnBand && localSavedBand?.discography?.length ? localSavedBand.discography : (fetchedBandData?.discography?.length ? fetchedBandData.discography : (directMatch?.discography || [])),
     };
   }, [isExplicitPersonal, fetchedBandData, communityArchiveMatch, localSavedBand, selectedUserProfile?.id, selectedUserProfile?.name, targetProfile?.id, targetProfile?.name, userProfile?.id, baseTarget?.id, targetId]);
@@ -992,6 +1018,25 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   })();
 
   const rawResolvedBandLogo = isBandTarget ? (
+    pickBestBandImage(
+      fetchedBandData?.logo_url,
+      fetchedBandData?.avatar_url,
+      bData?.logo_url,
+      bData?.avatar_url,
+      (bData as any)?.avatar,
+      (bData as any)?.image,
+      communityArchiveMatch?.avatar_url,
+      communityArchiveMatch?.logo_url,
+      (communityArchiveMatch as any)?.avatar,
+      (communityArchiveMatch as any)?.image,
+      baseTarget?.logo_url,
+      baseTarget?.avatar_url,
+      baseTarget?.avatar,
+      baseTarget?.band_logo,
+      (fetchedProfileData as any)?.band_logo,
+      (fetchedProfileData as any)?.logo_url,
+      isGorgasmBand(rawResolvedBandName || bData?.id || baseTarget?.id, bData?.custom_slug || baseTarget?.custom_slug) ? GORGASM_OFFICIAL_LOGO : null
+    ) ||
     fetchedBandData?.logo_url || fetchedBandData?.avatar_url ||
     bData?.logo_url || bData?.avatar_url || (bData as any)?.avatar || (bData as any)?.image ||
     communityArchiveMatch?.avatar_url || communityArchiveMatch?.logo_url || (communityArchiveMatch as any)?.avatar || (communityArchiveMatch as any)?.image ||
@@ -1179,7 +1224,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const userPresence = useUserPresence(effTarget?.id || effTarget?.email || effTarget?.handle || effTarget?.name || selectedUserProfile?.id || selectedUserProfile?.email || selectedUserProfile?.name);
   const isOnline = selectedUserProfile?.isYou || userPresence?.isOnline || userPresence?.formatted?.statusType === 'online';
   const isRecentlyActive = userPresence?.formatted?.isRecentlyActive || userPresence?.formatted?.statusType === 'recent';
-  const workspaces = prof?.registered_workspaces || prof?.allowed_workspaces || prof?.workspaces || (prof?.isYou || prof?.id === userProfile?.id ? userProfile?.registered_workspaces || userProfile?.allowed_workspaces : []) || [];
+  const workspaces = prof?.registered_workspaces || prof?.workspaces || (prof?.isYou || prof?.id === userProfile?.id ? (userProfile?.registered_workspaces || userProfile?.workspaces) : []) || [];
   const isPro = prof?.is_pro === true;
   const r = (prof?.portalRole || prof?.role || prof?.account_type || targetRole || '').toLowerCase();
   const isBandProfile = !isExplicitPersonal && !!(prof?.isBandProfile || prof?.type === 'band' || ((r.includes('artist') || r.includes('band')) && !prof?.isPersonal && prof?.type !== 'user' && !r.includes('industry') && !r.includes('creative') && !r.includes('pro')));
@@ -1312,7 +1357,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     (publicEnrichedForLineup?.lineup && publicEnrichedForLineup.lineup.length > 0 ? publicEnrichedForLineup.lineup : null) ||
     bData?.lineup || communityArchiveMatch?.lineup || selectedUserProfile?.lineup || '';
 
-  const displayLineup = parseLineup(rawLineupSource);
+  const parsedDisplayLineup = parseLineup(rawLineupSource);
+  const displayLineup = (isGorgasmBand(rawResolvedBandName || bData?.id || baseTarget?.id, bData?.custom_slug || baseTarget?.custom_slug) && isStaleGorgasmLineup(parsedDisplayLineup))
+    ? GORGASM_OFFICIAL_LINEUP
+    : parsedDisplayLineup;
 
   const hasLineup = displayLineup.length > 0;
 
@@ -1386,6 +1434,16 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     }
   };
 
+  const isSelfUserPro = Boolean(
+    (userProfile?.id === effTarget?.id || effTarget?.isYou) &&
+    (
+      userProfile?.is_pro === true ||
+      userProfile?.account_type === 'industry pro' ||
+      userProfile?.account_type === 'industry_pro' ||
+      userProfile?.account_type === 'pro' ||
+      userProfile?.account_type === 'admin'
+    )
+  );
   const isProAccount = !!(
     prof?.account_type === 'industry pro' ||
     prof?.account_type === 'industry_pro' ||
@@ -1397,9 +1455,9 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     r.includes('creative') ||
     r.includes('promoter') ||
     r.includes('label') ||
-    (Array.isArray(workspaces) && workspaces.some((w: any) => ['industry_pro', 'industry pro', 'pro', 'creative', 'promoter', 'label', 'band'].includes(typeof w === 'string' ? w : w?.type))) ||
-    (Array.isArray(selectedUserProfile?.registered_workspaces) && selectedUserProfile.registered_workspaces.some((w: any) => ['industry_pro', 'industry pro', 'pro', 'creative', 'promoter', 'label', 'band'].includes(typeof w === 'string' ? w : w?.type))) ||
-    (userProfile?.id === effTarget?.id || effTarget?.isYou)
+    (Array.isArray(workspaces) && workspaces.some((w: any) => ['industry_pro', 'industry pro', 'pro', 'creative', 'promoter', 'label', 'band'].includes(typeof w === 'string' ? w.toLowerCase() : String(w?.type || '').toLowerCase()))) ||
+    (Array.isArray(selectedUserProfile?.registered_workspaces) && selectedUserProfile.registered_workspaces.some((w: any) => ['industry_pro', 'industry pro', 'pro', 'creative', 'promoter', 'label', 'band'].includes(typeof w === 'string' ? w.toLowerCase() : String(w?.type || '').toLowerCase()))) ||
+    isSelfUserPro
   );
   
   return (
@@ -2035,7 +2093,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     (userProfile?.email && effTarget?.email && String(effTarget.email).toLowerCase() === String(userProfile.email).toLowerCase()) ||
                     (userProfile?.email && baseTarget?.email && String(baseTarget.email).toLowerCase() === String(userProfile.email).toLowerCase())
                   );
-                  const rawWs = prof?.registered_workspaces || prof?.allowed_workspaces || prof?.workspaces || (isTargetSelf ? (userProfile?.registered_workspaces || userProfile?.allowed_workspaces || userProfile?.workspaces) : []) || [];
+                  const rawWs = prof?.registered_workspaces || prof?.workspaces || (isTargetSelf ? (userProfile?.registered_workspaces || userProfile?.workspaces) : []) || [];
                   const workspaces = Array.isArray(rawWs)
                     ? rawWs.map((w: any) => (typeof w === 'string' ? w.toLowerCase() : w?.type?.toLowerCase() || ''))
                     : [];
@@ -2043,6 +2101,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   const badgesToRender: Array<{ label: string; classes: string }> = [];
 
                   const r = (prof?.portalRole || prof?.role || prof?.account_type || '').toLowerCase();
+                  const isProfExplicitFan = (prof?.account_type === 'fan' || prof?.account_type === 'fan_only' || r === 'fan' || r === 'fan_only' || r === 'fan listener') && !isPro;
                   const isBandProfile = !isExplicitPersonal && !!(prof?.isBandProfile || prof?.type === 'band' || ((r.includes('artist') || r.includes('band')) && !prof?.isPersonal && prof?.type !== 'user' && !r.includes('industry') && !r.includes('creative') && !r.includes('pro')));
 
                   if (!isBandProfile) {
@@ -2072,11 +2131,14 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     });
                   }
 
-                  // 🎸 Musician Badge: Associated with anyone tied to a band profile
+                  const confirmedBandId = prof?.band_id && String(prof.band_id) !== String(prof?.id || '') ? prof.band_id : null;
+                  const confirmedBandProfileId = prof?.band_profile_id && String(prof.band_profile_id) !== String(prof?.id || '') ? prof.band_profile_id : null;
+
+                  // 🎸 Musician Badge: Associated with anyone tied to a confirmed band profile
                   const isTiedToBand = Boolean(
-                    workspaces.includes('band') ||
-                    prof?.band_id ||
-                    prof?.band_profile_id ||
+                    (!isProfExplicitFan && workspaces.includes('band')) ||
+                    confirmedBandId ||
+                    confirmedBandProfileId ||
                     (typeof prof?.band_name === 'string' && prof.band_name.trim()) ||
                     prof?.is_musician === true ||
                     prof?.isMusician === true ||
@@ -2087,7 +2149,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       prof.role.toLowerCase().includes('vocal') ||
                       prof.role.toLowerCase().includes('bass')
                     )) ||
-                    (isTargetSelf && (userProfile?.band_id || (typeof userProfile?.band_name === 'string' && userProfile.band_name.trim()) || userProfile?.band_profile_id)) ||
+                    (isTargetSelf && ((userProfile?.band_id && String(userProfile.band_id) !== String(userProfile?.id || '')) || (typeof userProfile?.band_name === 'string' && userProfile.band_name.trim()) || userProfile?.band_profile_id)) ||
                     (isTargetSelf && isMiguelProfile)
                   );
 
@@ -2099,16 +2161,27 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   }
 
                   const isProfMiguel = isMiguelNameOrProfile(prof);
+                  const cleanBadgeName = (val: any, forbidden: string) => {
+                    const s = typeof val === 'string' ? val.trim() : '';
+                    if (!s) return '';
+                    if (!isProfMiguel && s.toLowerCase() === forbidden.toLowerCase()) return '';
+                    return s;
+                  };
+                  const validPromoterMetaBrand = cleanBadgeName(prof?.promoter_metadata?.brand_name || prof?.promoter_metadata?.agency_name || prof?.promoter_metadata?.promoter_name, 'Nexus Live Productions');
+                  const validPromoterTopName = cleanBadgeName(prof?.promoter_name || prof?.promoter_agency || prof?.promoter_brand || prof?.agency_name, 'Nexus Live Productions');
+                  const confirmedPromoterIdBadge = prof?.promoter_id && String(prof.promoter_id) !== String(prof?.id || '') ? prof.promoter_id : null;
+
                   const hasPromoterBadge = Boolean(
                     prof?.account_type === 'promoter' ||
                     prof?.active_workspace === 'promoter' ||
+                    isProfMiguel ||
                     (prof?.promoter_metadata && typeof prof.promoter_metadata === 'object' && (
-                      prof.promoter_metadata.is_registered === true ||
-                      (isProfMiguel && (prof.promoter_metadata.brand_name || prof.promoter_agency)) ||
-                      (!isProfMiguel && prof.promoter_metadata.brand_name && prof.promoter_metadata.brand_name !== 'Nexus Live Productions')
+                      Boolean(validPromoterMetaBrand) ||
+                      (!isProfExplicitFan && prof.promoter_metadata.is_registered === true && prof.promoter_metadata.brand_name !== 'Nexus Live Productions' && prof.promoter_metadata.agency_name !== 'Nexus Live Productions')
                     )) ||
-                    (isProfMiguel && (prof?.promoter_id || prof?.promoter_name)) ||
-                    (workspaces.includes('promoter') && (isProfMiguel || (prof?.promoter_metadata && prof.promoter_metadata.is_registered)))
+                    Boolean(validPromoterTopName) ||
+                    Boolean(confirmedPromoterIdBadge) ||
+                    (!isProfExplicitFan && workspaces.includes('promoter') && (Boolean(validPromoterMetaBrand) || Boolean(validPromoterTopName) || Boolean(confirmedPromoterIdBadge)))
                   );
 
                   if (hasPromoterBadge) {
@@ -2118,15 +2191,14 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     });
                   }
 
+                  const confirmedLabelIdBadge = prof?.label_id && String(prof.label_id) !== String(prof?.id || '') ? prof.label_id : null;
+                  const validLabelNameBadge = (typeof prof?.label_name === 'string' && prof.label_name.trim()) || (typeof prof?.labelName === 'string' && prof.labelName.trim()) || (typeof prof?.label_metadata?.label_name === 'string' && prof.label_metadata.label_name.trim()) || '';
+
                   const hasLabelBadge = Boolean(
-                    workspaces.includes('label') ||
-                    prof?.label_id ||
-                    (typeof prof?.label_name === 'string' && prof.label_name.trim()) ||
-                    (typeof prof?.labelName === 'string' && prof.labelName.trim()) ||
-                    (prof?.label_metadata && typeof prof.label_metadata === 'object' && (
-                      (typeof prof.label_metadata.label_name === 'string' && prof.label_metadata.label_name.trim()) ||
-                      prof.label_metadata.is_registered === true
-                    ))
+                    (!isProfExplicitFan && workspaces.includes('label')) ||
+                    confirmedLabelIdBadge ||
+                    validLabelNameBadge ||
+                    (!isProfExplicitFan && prof?.label_metadata && typeof prof.label_metadata === 'object' && prof.label_metadata.is_registered === true)
                   );
 
                   if (hasLabelBadge) {
@@ -2136,18 +2208,18 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     });
                   }
 
+                  const validCreativeMetaBrand = cleanBadgeName(prof?.creative_metadata?.business_name || prof?.creative_metadata?.creative_name, 'Vortex Graphics');
+                  const validCreativeTopName = cleanBadgeName(prof?.creative_name || prof?.creative_business_name || prof?.business_name, 'Vortex Graphics');
+                  const confirmedCreativeIdBadge = prof?.creative_id && String(prof.creative_id) !== String(prof?.id || '') ? prof.creative_id : null;
+
                   const hasCreativeBadge = Boolean(
-                    workspaces.includes('creative') ||
-                    prof?.creative_id ||
-                    (typeof prof?.creative_name === 'string' && prof.creative_name.trim()) ||
-                    (typeof prof?.creative_business_name === 'string' && prof.creative_business_name.trim()) ||
-                    (typeof prof?.business_name === 'string' && prof.business_name.trim()) ||
+                    isProfMiguel ||
+                    Boolean(validCreativeTopName) ||
+                    Boolean(validCreativeMetaBrand) ||
+                    Boolean(confirmedCreativeIdBadge) ||
                     (prof?.category === 'creative') ||
-                    (prof?.creative_metadata && typeof prof.creative_metadata === 'object' && (
-                      (typeof prof.creative_metadata.business_name === 'string' && prof.creative_metadata.business_name.trim()) ||
-                      (typeof prof.creative_metadata.creative_name === 'string' && prof.creative_metadata.creative_name.trim()) ||
-                      prof.creative_metadata.is_registered === true
-                    ))
+                    (!isProfExplicitFan && prof?.creative_metadata && typeof prof.creative_metadata === 'object' && prof.creative_metadata.is_registered === true && prof.creative_metadata.business_name !== 'Vortex Graphics' && prof.creative_metadata.creative_name !== 'Vortex Graphics') ||
+                    (!isProfExplicitFan && workspaces.includes('creative') && (Boolean(validCreativeTopName) || Boolean(validCreativeMetaBrand) || Boolean(confirmedCreativeIdBadge)))
                   );
 
                   if (hasCreativeBadge) {
@@ -2388,8 +2460,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     (userProfile?.email && baseTarget?.email && String(baseTarget.email).toLowerCase() === String(userProfile.email).toLowerCase())
                   );
                   const registeredWorkspaces = isTargetSelf
-                    ? (userProfile?.registered_workspaces || effTarget?.registered_workspaces || userProfile?.allowed_workspaces || effTarget?.allowed_workspaces || effTarget?.workspaces || [])
-                    : (effTarget?.registered_workspaces || effTarget?.allowed_workspaces || effTarget?.workspaces || []);
+                    ? (userProfile?.registered_workspaces || effTarget?.registered_workspaces || effTarget?.workspaces || [])
+                    : (effTarget?.registered_workspaces || effTarget?.workspaces || []);
 
                   const hasWorkspaceType = (type: string) => {
                     if (!registeredWorkspaces || !Array.isArray(registeredWorkspaces)) return false;
@@ -2436,7 +2508,23 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   );
 
                   const isEffTargetMiguel = (isTargetSelf && isMiguelNameOrProfile(userProfile)) || (!isTargetSelf && (isMiguelNameOrProfile(effTarget) || isMiguelNameOrProfile(baseTarget) || isMiguelNameOrProfile(selectedUserProfile)));
-                  const targetBandId = isEffTargetMiguel ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (effTarget?.band_id || (isTargetSelf ? userProfile?.band_id : null));
+                  const targetAccTypeLower = String(effTarget?.account_type || baseTarget?.account_type || '').toLowerCase();
+                  const isTargetFanAccount = (targetAccTypeLower === 'fan' || targetAccTypeLower === 'fan_only' || targetAccTypeLower === 'listener') && effTarget?.is_pro !== true;
+                  const cleanNonMiguelPromoterName = (val: any) => {
+                    const s = typeof val === 'string' ? val.trim() : '';
+                    if (!s) return '';
+                    if (!isEffTargetMiguel && s.toLowerCase() === 'nexus live productions') return '';
+                    return s;
+                  };
+                  const cleanNonMiguelCreativeName = (val: any) => {
+                    const s = typeof val === 'string' ? val.trim() : '';
+                    if (!s) return '';
+                    if (!isEffTargetMiguel && s.toLowerCase() === 'vortex graphics') return '';
+                    return s;
+                  };
+
+                  const rawTargetBandId = isEffTargetMiguel ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (effTarget?.band_id || (isTargetSelf ? userProfile?.band_id : null));
+                  const targetBandId = rawTargetBandId && String(rawTargetBandId) !== String(effTarget?.id || '') ? rawTargetBandId : null;
 
                   const targetBandNameDirect = (
                     effTarget?.band_name ||
@@ -2503,21 +2591,13 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     }
                   }
 
-                  // If still no band found, look up by member name in community band lineups (e.g. Christopher Wirstrom -> Cranial Impalement, Andre Gonzalez -> Cordyceps)
+                  // Only apply verified email/account band overrides for confirmed members (no unconfirmed name-based auto-assignment)
                   if (!matchingBandProfile && !isEffTargetMiguel) {
-                    if (targetFullName) {
-                      matchingBandProfile = communityBandManager.findByMember(targetFullName);
-                    }
-                    if (!matchingBandProfile) {
-                      const targetEmailLower = (effTarget?.email || baseTarget?.email || selectedUserProfile?.email || (isTargetSelf ? userProfile?.email : '') || '').toLowerCase();
-                      const targetWords = (targetFullName || '').toLowerCase().trim().split(/[\s._-]+/).filter(Boolean);
-                      const isTargetAndreGonzalez = targetWords.some((w: string) => w === 'andre' || w === 'andré') && (targetFullName.toLowerCase().includes('gonzal') || targetEmailLower.includes('exposedentrails'));
-
-                      if (targetEmailLower.includes('exposedentrails') || isTargetAndreGonzalez) {
-                        matchingBandProfile = communityBandManager.findByName('Cordyceps');
-                      } else if (targetEmailLower.includes('wirstrom84') || targetFullName.toLowerCase().includes('wirstrom')) {
-                        matchingBandProfile = communityBandManager.findByName('Cranial Impalement');
-                      }
+                    const targetEmailLower = (effTarget?.email || baseTarget?.email || selectedUserProfile?.email || (isTargetSelf ? userProfile?.email : '') || '').toLowerCase();
+                    if (targetEmailLower.includes('exposedentrails')) {
+                      matchingBandProfile = communityBandManager.findByName('Cordyceps');
+                    } else if (targetEmailLower.includes('wirstrom84')) {
+                      matchingBandProfile = communityBandManager.findByName('Cranial Impalement');
                     }
                   }
 
@@ -2530,7 +2610,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   }
 
                   const lbd = matchingBandProfile || (
-                    isTargetSelf && (userProfile?.band_name || userProfile?.band_id) ? (
+                    isTargetSelf && (userProfile?.band_name || (userProfile?.band_id && String(userProfile.band_id) !== String(userProfile?.id || ''))) ? (
                       (typeof fetchedBandData !== 'undefined' && fetchedBandData) ? fetchedBandData : localSavedBand
                     ) : null
                   );
@@ -2552,23 +2632,23 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     isEffTargetMiguel ||
                     Boolean(matchingBandProfile) ||
                     Boolean(targetBandNameDirect) ||
-                    hasWorkspaceType('band') ||
                     Boolean(targetBandId) ||
-                    (isTargetSelf && Boolean(userProfile?.band_name || userProfile?.band_id))
+                    (typeof bandWsRef === 'object' && Boolean(bandWsRef?.name)) ||
+                    (isTargetSelf && Boolean(userProfile?.band_name || (userProfile?.band_id && String(userProfile.band_id) !== String(userProfile?.id || ''))))
                   ) && Boolean(rawBandName) && String(rawBandName).trim() !== '';
 
                    const hasBand = !isCurrentProfileBand && hasBandWorkspace;
 
-                   const promoterRefLogo = effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null);
+                   const promoterRefLogo = effTarget?.promoter_logo || effTarget?.promoter_metadata?.logo_url || (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || (isTargetSelf && typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null);
 
                    const isLogoPromoterLogo = (candidateLogo?: string | null) => {
                      if (!candidateLogo) return false;
                      if (promoterRefLogo && candidateLogo === promoterRefLogo) return true;
                      if (effTarget?.promoter_logo && candidateLogo === effTarget.promoter_logo) return true;
                      if (effTarget?.promoter_metadata?.logo_url && candidateLogo === effTarget.promoter_metadata.logo_url) return true;
-                     if (userProfile?.promoter_logo && candidateLogo === userProfile.promoter_logo) return true;
-                     if (userProfile?.promoter_metadata?.logo_url && candidateLogo === userProfile.promoter_metadata.logo_url) return true;
-                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_promoter_logo') === candidateLogo) return true;
+                     if (isTargetSelf && userProfile?.promoter_logo && candidateLogo === userProfile.promoter_logo) return true;
+                     if (isTargetSelf && userProfile?.promoter_metadata?.logo_url && candidateLogo === userProfile.promoter_metadata.logo_url) return true;
+                     if (isTargetSelf && typeof window !== 'undefined' && localStorage.getItem('nexus_promoter_logo') === candidateLogo) return true;
                      return false;
                    };
 
@@ -2578,24 +2658,21 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                      if (effTarget?.avatar_url && candidateLogo === effTarget.avatar_url) return true;
                      if (baseTarget?.avatar && candidateLogo === baseTarget.avatar) return true;
                      if (baseTarget?.avatar_url && candidateLogo === baseTarget.avatar_url) return true;
-                     if (userProfile?.avatar && candidateLogo === userProfile.avatar) return true;
-                     if (userProfile?.avatar_url && candidateLogo === userProfile.avatar_url) return true;
                      if (selectedUserProfile?.avatar && candidateLogo === selectedUserProfile.avatar) return true;
                      if (selectedUserProfile?.avatar_url && candidateLogo === selectedUserProfile.avatar_url) return true;
-                     if (userProfile?.creative_avatar && candidateLogo === userProfile.creative_avatar) return true;
-                     if (userProfile?.label_avatar && candidateLogo === userProfile.label_avatar) return true;
-                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_user_avatar') === candidateLogo) return true;
-                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_creative_avatar') === candidateLogo) return true;
-                     if (typeof window !== 'undefined' && localStorage.getItem('nexus_label_avatar') === candidateLogo) return true;
+                     if (isTargetSelf && userProfile?.avatar && candidateLogo === userProfile.avatar) return true;
+                     if (isTargetSelf && userProfile?.avatar_url && candidateLogo === userProfile.avatar_url) return true;
+                     if (isTargetSelf && userProfile?.creative_avatar && candidateLogo === userProfile.creative_avatar) return true;
+                     if (isTargetSelf && userProfile?.label_avatar && candidateLogo === userProfile.label_avatar) return true;
+                     if (isTargetSelf && typeof window !== 'undefined' && localStorage.getItem('nexus_user_avatar') === candidateLogo) return true;
+                     if (isTargetSelf && typeof window !== 'undefined' && localStorage.getItem('nexus_creative_avatar') === candidateLogo) return true;
+                     if (isTargetSelf && typeof window !== 'undefined' && localStorage.getItem('nexus_label_avatar') === candidateLogo) return true;
                      return false;
                    };
 
                    const isValidBandLogo = (candidateLogo?: string | null) => {
-                     if (!candidateLogo || typeof candidateLogo !== 'string') return false;
-                     if (candidateLogo.trim() === '') return false;
-                     if (candidateLogo.includes('unsplash')) return false;
-                     if (candidateLogo.startsWith('data:image')) return false;
-                     if (candidateLogo.includes('default') || candidateLogo.includes('photo-')) return false;
+                     if (!isValidBandImageUrl(candidateLogo, false)) return false;
+                     if ((candidateLogo as string).includes('default') || (candidateLogo as string).includes('photo-')) return false;
                      if (isLogoPromoterLogo(candidateLogo)) return false;
                      if (isPersonalOrOtherAvatar(candidateLogo)) return false;
                      return true;
@@ -2607,11 +2684,11 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     const isVirulentExcision = name.toLowerCase() === 'virulent excision' || isVeOverride;
                     const veLogo = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396';
                     const veBanner = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-cover_1787467851123.jpg?t=1787467851123';
+                    const commBandFallback = !isVirulentExcision ? (communityBandManager.findByName(name) || communityBandManager.findMatch(name)) : null;
                     
                     const savedCoreBandLogo = (typeof window !== 'undefined') ? (
-                      localStorage.getItem('nexus_core_band_logo_cbddb810-259b-4230-9968-3d402dfdb872') ||
-                      localStorage.getItem('nexus_band_logo_cbddb810-259b-4230-9968-3d402dfdb872') ||
-                      (targetBandId ? localStorage.getItem(`nexus_core_band_logo_${targetBandId}`) : null)
+                      (isVirulentExcision ? (localStorage.getItem('nexus_core_band_logo_cbddb810-259b-4230-9968-3d402dfdb872') || localStorage.getItem('nexus_band_logo_cbddb810-259b-4230-9968-3d402dfdb872')) : null) ||
+                      (isTargetSelf && targetBandId ? localStorage.getItem(`nexus_core_band_logo_${targetBandId}`) : null)
                     ) : null;
 
                     const candidateBandLogo = (
@@ -2625,6 +2702,9 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       (lbd?.logo_url && isValidBandLogo(lbd.logo_url) ? lbd.logo_url : null) ||
                       (lbd?.avatar_url && isValidBandLogo(lbd.avatar_url) ? lbd.avatar_url : null) ||
                       (lbd?.avatar && isValidBandLogo(lbd.avatar) ? lbd.avatar : null) ||
+                      (commBandFallback?.logo_url && isValidBandLogo(commBandFallback.logo_url) ? commBandFallback.logo_url : null) ||
+                      (commBandFallback?.avatar_url && isValidBandLogo(commBandFallback.avatar_url) ? commBandFallback.avatar_url : null) ||
+                      (isGorgasmBand(name) ? GORGASM_OFFICIAL_LOGO : null) ||
                       null
                     );
 
@@ -2694,46 +2774,58 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     (targetRole && targetRole.toLowerCase() === 'promoter')
                   );
 
-                  const matchingPromoterProfile = Array.isArray(allProfiles) ? allProfiles.find((p: any) => {
+                  const rawMatchingPromoterProfile = Array.isArray(allProfiles) ? allProfiles.find((p: any) => {
                     const isPromoterType = p.type === 'promoter' || p.role === 'Promoter' || p.category === 'venues' || p.account_type === 'promoter';
                     if (!isPromoterType) return false;
-                    if (effTarget.promoter_id && (p.id === effTarget.promoter_id || p.promoter_id === effTarget.promoter_id)) return true;
+                    if (effTarget.promoter_id && String(effTarget.promoter_id) !== String(effTarget.id || '') && (p.id === effTarget.promoter_id || p.promoter_id === effTarget.promoter_id)) return true;
                     if (effTarget.id && (p.user_id === effTarget.id || p.owner_id === effTarget.id)) return true;
                     if (typeof promoterWsRef === 'object' && promoterWsRef?.workspace_id && (p.id === promoterWsRef.workspace_id || p.promoter_id === promoterWsRef.workspace_id)) return true;
                     return false;
                   }) : null;
+                  const matchingPromoterProfile = rawMatchingPromoterProfile && (
+                    isEffTargetMiguel ||
+                    cleanNonMiguelPromoterName(rawMatchingPromoterProfile.brand_name || rawMatchingPromoterProfile.promoter_name || rawMatchingPromoterProfile.agency_name || rawMatchingPromoterProfile.name) !== ''
+                  ) ? rawMatchingPromoterProfile : null;
 
+                  const confirmedPromoterId = effTarget.promoter_id && String(effTarget.promoter_id) !== String(effTarget.id || '') ? effTarget.promoter_id : null;
                   const rawPromoterName = 
-                    matchingPromoterProfile?.brand_name ||
-                    matchingPromoterProfile?.promoter_name || 
-                    matchingPromoterProfile?.promoterName || 
-                    matchingPromoterProfile?.agency_name || 
-                    matchingPromoterProfile?.company_name ||
-                    effTarget.promoter_agency ||
-                    effTarget.promoter_brand ||
-                    effTarget.promoter_name || 
-                    effTarget.promoterName || 
-                    effTarget.agency_name || 
-                    effTarget.company_name ||
-                    effTarget.promoter_metadata?.brand_name ||
-                    effTarget.promoter_metadata?.agency_name ||
-                    effTarget.promoter_metadata?.promoter_name ||
-                    (isTargetSelf ? (userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_metadata?.agency_name || userProfile?.promoter_agency || userProfile?.promoter_brand || userProfile?.promoter_name) : null) ||
-                    (typeof promoterWsRef === 'object' && promoterWsRef?.name ? promoterWsRef.name : null) ||
-                    (hasWorkspaceType('promoter') ? 'Nexus Live Productions' : null) ||
-                    matchingPromoterProfile?.name ||
-                    'Nexus Live Productions';
+                    cleanNonMiguelPromoterName(matchingPromoterProfile?.brand_name) ||
+                    cleanNonMiguelPromoterName(matchingPromoterProfile?.promoter_name) || 
+                    cleanNonMiguelPromoterName(matchingPromoterProfile?.promoterName) || 
+                    cleanNonMiguelPromoterName(matchingPromoterProfile?.agency_name) || 
+                    cleanNonMiguelPromoterName(matchingPromoterProfile?.company_name) ||
+                    cleanNonMiguelPromoterName(effTarget.promoter_agency) ||
+                    cleanNonMiguelPromoterName(effTarget.promoter_brand) ||
+                    cleanNonMiguelPromoterName(effTarget.promoter_name) || 
+                    cleanNonMiguelPromoterName(effTarget.promoterName) || 
+                    cleanNonMiguelPromoterName(effTarget.agency_name) || 
+                    cleanNonMiguelPromoterName(effTarget.company_name) ||
+                    cleanNonMiguelPromoterName(effTarget.promoter_metadata?.brand_name) ||
+                    cleanNonMiguelPromoterName(effTarget.promoter_metadata?.agency_name) ||
+                    cleanNonMiguelPromoterName(effTarget.promoter_metadata?.promoter_name) ||
+                    (isTargetSelf ? (cleanNonMiguelPromoterName(userProfile?.promoter_metadata?.brand_name) || cleanNonMiguelPromoterName(userProfile?.promoter_metadata?.agency_name) || cleanNonMiguelPromoterName(userProfile?.promoter_agency) || cleanNonMiguelPromoterName(userProfile?.promoter_brand) || cleanNonMiguelPromoterName(userProfile?.promoter_name)) : '') ||
+                    (typeof promoterWsRef === 'object' && promoterWsRef?.name ? cleanNonMiguelPromoterName(promoterWsRef.name) : '') ||
+                    cleanNonMiguelPromoterName(matchingPromoterProfile?.name) ||
+                    (isEffTargetMiguel ? 'Nexus Live Productions' : '');
 
-                  const hasPromoterWorkspace = (hasWorkspaceType('promoter') || Boolean(matchingPromoterProfile) || Boolean(effTarget.agency_name) || Boolean(effTarget.promoter_name) || Boolean(effTarget.promoter_agency) || Boolean(effTarget.promoter_id)) && Boolean(rawPromoterName) && String(rawPromoterName).trim() !== '';
+                  const hasPromoterWorkspace = (
+                    isEffTargetMiguel ||
+                    Boolean(matchingPromoterProfile) ||
+                    (!isTargetFanAccount && (
+                      hasWorkspaceType('promoter') ||
+                      Boolean(confirmedPromoterId) ||
+                      Boolean(cleanNonMiguelPromoterName(effTarget.agency_name || effTarget.promoter_name || effTarget.promoter_agency || effTarget.promoter_brand || effTarget.promoter_metadata?.brand_name || effTarget.promoter_metadata?.agency_name))
+                    ))
+                  ) && Boolean(rawPromoterName) && String(rawPromoterName).trim() !== '';
 
                   const hasPromoter = !isCurrentProfilePromoter && hasPromoterWorkspace;
 
                   if (hasPromoter) {
                     const name = String(rawPromoterName).trim();
                     const logo = 
-                      (typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 
+                      (isTargetSelf && typeof window !== 'undefined' ? localStorage.getItem('nexus_promoter_logo') : null) || 
                       matchingPromoterProfile?.promoter_logo || 
-                      (matchingPromoterProfile?.logo_url && !matchingPromoterProfile.logo_url.includes('unsplash') && matchingPromoterProfile.logo_url !== userProfile?.avatar_url ? matchingPromoterProfile.logo_url : null) || 
+                      (matchingPromoterProfile?.logo_url && !matchingPromoterProfile.logo_url.includes('unsplash') && (!isTargetSelf || matchingPromoterProfile.logo_url !== userProfile?.avatar_url) ? matchingPromoterProfile.logo_url : null) || 
                       effTarget?.promoter_logo || 
                       effTarget?.promoter_metadata?.logo_url || 
                       (isTargetSelf ? (userProfile?.promoter_logo || userProfile?.promoter_metadata?.logo_url) : null) || 
@@ -2753,7 +2845,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       onClick: () => {
                         const promoterProfileObj = {
                           ...effTarget,
-                          id: effTarget.promoter_id || (typeof promoterWsRef === 'object' && promoterWsRef?.id) || (isTargetSelf && isOwnerMiguel ? '5403162d-1947-43aa-b5f6-38a1bd2a1b80' : `promoter_${effTarget.id || Date.now()}`),
+                          id: confirmedPromoterId || (typeof promoterWsRef === 'object' && promoterWsRef?.id) || (isEffTargetMiguel ? '5403162d-1947-43aa-b5f6-38a1bd2a1b80' : `promoter_${effTarget.id || Date.now()}`),
                           name,
                           agency_name: name,
                           promoter_agency: name,
@@ -2792,33 +2884,49 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     (targetRole && targetRole.toLowerCase() === 'creative')
                   );
 
-                  const matchingCreativeProfile = Array.isArray(allProfiles) ? allProfiles.find((p: any) => {
+                  const rawMatchingCreativeProfile = Array.isArray(allProfiles) ? allProfiles.find((p: any) => {
                     const isCreativeType = p.type === 'creative' || p.role === 'Creative' || p.category === 'creatives' || p.account_type === 'creative';
                     if (!isCreativeType) return false;
-                    if (effTarget.creative_id && (p.id === effTarget.creative_id || p.creative_id === effTarget.creative_id)) return true;
+                    if (effTarget.creative_id && String(effTarget.creative_id) !== String(effTarget.id || '') && (p.id === effTarget.creative_id || p.creative_id === effTarget.creative_id)) return true;
                     if (effTarget.id && (p.user_id === effTarget.id || p.owner_id === effTarget.id)) return true;
                     if (typeof creativeWsRef === 'object' && creativeWsRef?.workspace_id && (p.id === creativeWsRef.workspace_id || p.creative_id === creativeWsRef.workspace_id)) return true;
                     return false;
                   }) : null;
+                  const matchingCreativeProfile = rawMatchingCreativeProfile && (
+                    isEffTargetMiguel ||
+                    cleanNonMiguelCreativeName(rawMatchingCreativeProfile.creative_name || rawMatchingCreativeProfile.creative_business_name || rawMatchingCreativeProfile.business_name || rawMatchingCreativeProfile.name) !== ''
+                  ) ? rawMatchingCreativeProfile : null;
 
+                  const confirmedCreativeId = effTarget.creative_id && String(effTarget.creative_id) !== String(effTarget.id || '') ? effTarget.creative_id : null;
                   const rawCreativeName = 
-                    matchingCreativeProfile?.creative_name || 
-                    matchingCreativeProfile?.creative_business_name || 
-                    matchingCreativeProfile?.business_name || 
-                    effTarget.creative_name || 
-                    effTarget.creative_business_name || 
-                    effTarget.business_name || 
-                    (isTargetSelf ? (userProfile?.creative_business_name || userProfile?.creative_name || userProfile?.creative_metadata?.business_name) : null) ||
-                    (typeof creativeWsRef === 'object' && creativeWsRef?.name ? creativeWsRef.name : null) || 
-                    'Vortex Graphics';
-                  const hasCreativeWorkspace = (hasWorkspaceType('creative') || Boolean(matchingCreativeProfile) || Boolean(effTarget.business_name) || Boolean(effTarget.creative_name) || Boolean(effTarget.creative_id) || (isTargetSelf && Boolean(userProfile?.creative_id || userProfile?.creative_name || userProfile?.creative_business_name))) && Boolean(rawCreativeName) && String(rawCreativeName).trim() !== '';
+                    cleanNonMiguelCreativeName(matchingCreativeProfile?.creative_name) || 
+                    cleanNonMiguelCreativeName(matchingCreativeProfile?.creative_business_name) || 
+                    cleanNonMiguelCreativeName(matchingCreativeProfile?.business_name) || 
+                    cleanNonMiguelCreativeName(effTarget.creative_name) || 
+                    cleanNonMiguelCreativeName(effTarget.creative_business_name) || 
+                    cleanNonMiguelCreativeName(effTarget.business_name) || 
+                    cleanNonMiguelCreativeName(effTarget.creative_metadata?.business_name) ||
+                    cleanNonMiguelCreativeName(effTarget.creative_metadata?.creative_name) ||
+                    (isTargetSelf ? (cleanNonMiguelCreativeName(userProfile?.creative_business_name) || cleanNonMiguelCreativeName(userProfile?.creative_name) || cleanNonMiguelCreativeName(userProfile?.creative_metadata?.business_name)) : '') ||
+                    (typeof creativeWsRef === 'object' && creativeWsRef?.name ? cleanNonMiguelCreativeName(creativeWsRef.name) : '') || 
+                    (isEffTargetMiguel ? 'Vortex Graphics' : '');
+                  const hasCreativeWorkspace = (
+                    isEffTargetMiguel ||
+                    Boolean(matchingCreativeProfile) ||
+                    (!isTargetFanAccount && (
+                      hasWorkspaceType('creative') ||
+                      Boolean(confirmedCreativeId) ||
+                      Boolean(cleanNonMiguelCreativeName(effTarget.business_name || effTarget.creative_name || effTarget.creative_business_name || effTarget.creative_metadata?.business_name)) ||
+                      (isTargetSelf && Boolean((userProfile?.creative_id && String(userProfile.creative_id) !== String(userProfile?.id || '')) || cleanNonMiguelCreativeName(userProfile?.creative_name || userProfile?.creative_business_name)))
+                    ))
+                  ) && Boolean(rawCreativeName) && String(rawCreativeName).trim() !== '';
 
                   const hasCreative = !isCurrentProfileCreative && hasCreativeWorkspace;
 
                   if (hasCreative) {
                     const name = String(rawCreativeName).trim();
                     const logo = 
-                      (typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 
+                      (isTargetSelf && typeof window !== 'undefined' ? localStorage.getItem('nexus_creative_avatar') : null) || 
                       matchingCreativeProfile?.creative_avatar || 
                       effTarget?.creative_avatar || 
                       effTarget?.creative_metadata?.avatar_url || 
@@ -2836,14 +2944,14 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       logo,
                       subtitle,
                       onClick: () => {
-                        const creativeBanner = matchingCreativeProfile?.creative_banner || (typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_creative_cover')) : null) || effTarget?.creative_banner || (isTargetSelf ? userProfile?.creative_banner : null) || VORTEX_GRAPHICS_DEFAULT_COVER;
-                        const creativeHandle = matchingCreativeProfile?.creative_handle || matchingCreativeProfile?.console_handle || matchingCreativeProfile?.handle || effTarget?.creative_handle || (isTargetSelf ? userProfile?.creative_handle : null) || 'vortexgraphics';
-                        const creativeName = name || matchingCreativeProfile?.business_name || matchingCreativeProfile?.creative_name || effTarget?.creative_name || (isTargetSelf ? userProfile?.creative_business_name : null) || 'Vortex Graphics';
+                        const creativeBanner = matchingCreativeProfile?.creative_banner || (isTargetSelf && typeof window !== 'undefined' ? (localStorage.getItem('nexus_creative_banner') || localStorage.getItem('nexus_creative_cover')) : null) || effTarget?.creative_banner || (isTargetSelf ? userProfile?.creative_banner : null) || VORTEX_GRAPHICS_DEFAULT_COVER;
+                        const creativeHandle = matchingCreativeProfile?.creative_handle || matchingCreativeProfile?.console_handle || matchingCreativeProfile?.handle || effTarget?.creative_handle || (isTargetSelf ? userProfile?.creative_handle : null) || (isEffTargetMiguel ? 'vortexgraphics' : name.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                        const creativeName = name;
 
                         const creativeProfileObj = {
                           ...(matchingCreativeProfile || {}),
                           ...(!matchingCreativeProfile ? effTarget : {}),
-                          id: matchingCreativeProfile?.id || effTarget.creative_id || (typeof creativeWsRef === 'object' && creativeWsRef?.id) || (isTargetSelf && isOwnerMiguel ? 'c-vortex' : `creative_${effTarget.id || Date.now()}`),
+                          id: matchingCreativeProfile?.id || confirmedCreativeId || (typeof creativeWsRef === 'object' && creativeWsRef?.id) || (isEffTargetMiguel ? 'c-vortex' : `creative_${effTarget.id || Date.now()}`),
                           name: creativeName,
                           business_name: creativeName,
                           creative_name: creativeName,
@@ -2888,12 +2996,13 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   const matchingLabelProfile = Array.isArray(allProfiles) ? allProfiles.find((p: any) => {
                     const isLabelType = p.type === 'label' || p.role === 'Label' || p.category === 'labels' || p.account_type === 'label';
                     if (!isLabelType) return false;
-                    if (effTarget.label_id && (p.id === effTarget.label_id || p.label_id === effTarget.label_id)) return true;
+                    if (effTarget.label_id && String(effTarget.label_id) !== String(effTarget.id || '') && (p.id === effTarget.label_id || p.label_id === effTarget.label_id)) return true;
                     if (effTarget.id && (p.user_id === effTarget.id || p.owner_id === effTarget.id)) return true;
                     if (typeof labelWsRef === 'object' && labelWsRef?.workspace_id && (p.id === labelWsRef.workspace_id || p.label_id === labelWsRef.workspace_id)) return true;
                     return false;
                   }) : null;
 
+                  const confirmedLabelId = effTarget.label_id && String(effTarget.label_id) !== String(effTarget.id || '') ? effTarget.label_id : null;
                   const rawLabelName = 
                     matchingLabelProfile?.label_company_name || 
                     matchingLabelProfile?.label_name || 
@@ -2901,11 +3010,23 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     effTarget.label_company_name || 
                     effTarget.label_name || 
                     effTarget.labelName || 
+                    effTarget.label_metadata?.label_name ||
                     (isTargetSelf ? userProfile?.label_company_name : null) ||
                     matchingLabelProfile?.name || 
                     (typeof labelWsRef === 'object' && labelWsRef?.name ? labelWsRef.name : null) || 
-                    (hasWorkspaceType('label') ? (effTarget.name ? `${effTarget.name} Records` : 'Record Label') : null);
-                  const hasLabelWorkspace = (hasWorkspaceType('label') || Boolean(matchingLabelProfile) || Boolean(effTarget?.label_name) || Boolean(effTarget?.labelName) || Boolean(effTarget?.label_id) || (isTargetSelf && Boolean(userProfile?.label_id || userProfile?.label_company_name))) && Boolean(rawLabelName) && String(rawLabelName).trim() !== '';
+                    null;
+                  const hasLabelWorkspace = (
+                    Boolean(matchingLabelProfile) ||
+                    (!isTargetFanAccount && (
+                      Boolean(effTarget?.label_name) ||
+                      Boolean(effTarget?.labelName) ||
+                      Boolean(effTarget?.label_company_name) ||
+                      Boolean(effTarget?.label_metadata?.label_name) ||
+                      Boolean(confirmedLabelId) ||
+                      (typeof labelWsRef === 'object' && Boolean(labelWsRef?.name)) ||
+                      (isTargetSelf && Boolean((userProfile?.label_id && String(userProfile.label_id) !== String(userProfile?.id || '')) || userProfile?.label_company_name))
+                    ))
+                  ) && Boolean(rawLabelName) && String(rawLabelName).trim() !== '';
 
                   const hasLabel = !isCurrentProfileLabel && hasLabelWorkspace;
 

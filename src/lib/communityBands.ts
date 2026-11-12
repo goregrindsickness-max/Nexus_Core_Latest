@@ -420,6 +420,60 @@ export function isValidCoverUrl(url?: string | null): boolean {
   return u.startsWith('http://') || u.startsWith('https://') || u.startsWith('data:image/');
 }
 
+export const GORGASM_BAND_ID = 'e50f2943-6d87-41cb-b50f-29436d87a1cb';
+export const GORGASM_OFFICIAL_LOGO = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/community-bands/5403162d-1947-43aa-b5f6-38a1bd2a1b80/community-avatar_1788396221828_1788396221852.jpg?t=1788396221852';
+export const GORGASM_OFFICIAL_LINEUP: LineupMember[] = [
+  { id: 'gorg-1', name: 'Damian Leski', role: 'Guitar, Vocals', status: 'active', years: '1994–present' },
+  { id: 'gorg-2', name: 'Sasha Chrosciewicz', role: 'Guitar, Vocals', status: 'active', years: '2018–present' },
+  { id: 'gorg-3', name: 'John Hull', role: 'Bass, Vocals', status: 'active', years: '2022–present' },
+  { id: 'gorg-4', name: 'Tomasz Pilasiewicz', role: 'Drums', status: 'active', years: '2005–2008, 2024–present' }
+];
+
+const BROKEN_BAND_IMAGE_FRAGMENTS = [
+  'community-avatar_1787807876560',
+  'community-avatar_1788041930287',
+  'community-avatar_1787891338290',
+  'community-avatar_1787857390098',
+  'community-avatar_1787625126838',
+  'community-avatar_1787803623565',
+  'community-avatar_1787864115165',
+  'community-avatar_1787866579294',
+  'community-avatar_1787869057607'
+];
+
+export function isValidBandImageUrl(url?: string | null, allowDataUri = true): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const u = url.trim();
+  if (!u) return false;
+  const lower = u.toLowerCase();
+  if (lower === 'null' || lower === 'undefined') return false;
+  if (lower.includes('unsplash') || lower.includes('placeholder')) return false;
+  if (BROKEN_BAND_IMAGE_FRAGMENTS.some(frag => lower.includes(frag))) return false;
+  if (u.startsWith('data:image/')) return allowDataUri;
+  return u.startsWith('http://') || u.startsWith('https://') || u.startsWith('/assets/');
+}
+
+export function pickBestBandImage(...urls: (string | undefined | null)[]): string {
+  for (const u of urls) {
+    if (isValidBandImageUrl(u)) return (u as string).trim();
+  }
+  return '';
+}
+
+export function isGorgasmBand(bandIdOrName?: string | null, customSlug?: string | null): boolean {
+  const idOrName = String(bandIdOrName || '').toLowerCase().trim();
+  const slug = String(customSlug || '').toLowerCase().trim();
+  return idOrName === 'gorgasm' || idOrName === GORGASM_BAND_ID || slug === 'gorgasm';
+}
+
+export function isStaleGorgasmLineup(members?: any[] | null): boolean {
+  if (!Array.isArray(members) || members.length === 0) return true;
+  return members.some(m => {
+    const n = String(m?.name || '').toLowerCase().trim();
+    return n === 'anthony voight' || n === 'ryan saylor' || n === 'kyle moeller';
+  });
+}
+
 export function generateMetalAlbumSvg(title: string, year?: string, bandName?: string): string {
   const cleanTitle = (title || 'Catalog Release').trim();
   const cleanYear = (year || '').trim();
@@ -1364,6 +1418,47 @@ export class CommunityBandManager {
         }
       } catch (_) {}
 
+      // Clean slate migration for Gorgasm logo & official lineup
+      try {
+        const GORGASM_FIX_KEY = 'nexus_gorgasm_logo_lineup_fix_v2';
+        if (!safeLocalStorage.getItem(GORGASM_FIX_KEY)) {
+          safeLocalStorage.removeItem(`nexus_core_band_lineup_${GORGASM_BAND_ID}`);
+          safeLocalStorage.removeItem('nexus_core_band_lineup_gorgasm');
+          safeLocalStorage.removeItem(`nexus_core_band_logo_${GORGASM_BAND_ID}`);
+          safeLocalStorage.removeItem('nexus_core_band_logo_gorgasm');
+
+          safeLocalStorage.setItem(`nexus_core_band_lineup_${GORGASM_BAND_ID}`, JSON.stringify(GORGASM_OFFICIAL_LINEUP));
+          safeLocalStorage.setItem('nexus_core_band_lineup_gorgasm', JSON.stringify(GORGASM_OFFICIAL_LINEUP));
+          safeLocalStorage.setItem(`nexus_core_band_logo_${GORGASM_BAND_ID}`, GORGASM_OFFICIAL_LOGO);
+
+          const rawArchives = safeLocalStorage.getItem(STORAGE_KEY);
+          if (rawArchives) {
+            const parsedArchives = JSON.parse(rawArchives);
+            if (Array.isArray(parsedArchives)) {
+              const cleaned = parsedArchives.map((b: any) => {
+                const bName = (b.name || b.band_name || '').toLowerCase().trim();
+                const bId = String(b.id || '').toLowerCase().trim();
+                const bSlug = String(b.custom_slug || b.slug || '').toLowerCase().trim();
+                if (bName === 'gorgasm' || bId === GORGASM_BAND_ID || bSlug === 'gorgasm') {
+                  return {
+                    ...b,
+                    id: GORGASM_BAND_ID,
+                    avatar_url: GORGASM_OFFICIAL_LOGO,
+                    logo_url: GORGASM_OFFICIAL_LOGO,
+                    avatar: GORGASM_OFFICIAL_LOGO,
+                    image: GORGASM_OFFICIAL_LOGO,
+                    lineup: GORGASM_OFFICIAL_LINEUP
+                  };
+                }
+                return b;
+              });
+              safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+            }
+          }
+          safeLocalStorage.setItem(GORGASM_FIX_KEY, 'true');
+        }
+      } catch (_) {}
+
       const deletedIds = getDeletedBandIds();
 
       const stored = safeLocalStorage.getItem(STORAGE_KEY);
@@ -1405,21 +1500,23 @@ export class CommunityBandManager {
             } else {
               const bIdKey = initBand.id || '';
               const bUUIDKey = bIdKey ? ensureUUID(bIdKey) : '';
-              const savedLogo = (bIdKey ? safeLocalStorage.getItem(`nexus_core_band_logo_${bIdKey}`) : null) || 
-                                (bUUIDKey ? safeLocalStorage.getItem(`nexus_core_band_logo_${bUUIDKey}`) : null) ||
-                                safeLocalStorage.getItem(`nexus_core_band_logo_${updated[idx].id}`);
-              const savedCover = (bIdKey ? safeLocalStorage.getItem(`nexus_core_band_cover_${bIdKey}`) : null) || 
-                                 (bUUIDKey ? safeLocalStorage.getItem(`nexus_core_band_cover_${bUUIDKey}`) : null) ||
-                                 safeLocalStorage.getItem(`nexus_core_band_cover_${updated[idx].id}`);
+              const rawSavedLogo = (bIdKey ? safeLocalStorage.getItem(`nexus_core_band_logo_${bIdKey}`) : null) || 
+                                   (bUUIDKey ? safeLocalStorage.getItem(`nexus_core_band_logo_${bUUIDKey}`) : null) ||
+                                   safeLocalStorage.getItem(`nexus_core_band_logo_${updated[idx].id}`);
+              const savedLogo = isValidBandImageUrl(rawSavedLogo) ? rawSavedLogo : null;
+              const rawSavedCover = (bIdKey ? safeLocalStorage.getItem(`nexus_core_band_cover_${bIdKey}`) : null) || 
+                                    (bUUIDKey ? safeLocalStorage.getItem(`nexus_core_band_cover_${bUUIDKey}`) : null) ||
+                                    safeLocalStorage.getItem(`nexus_core_band_cover_${updated[idx].id}`);
+              const savedCover = isValidBandImageUrl(rawSavedCover) ? rawSavedCover : null;
               
               const bestLogo = savedLogo || 
-                (updated[idx].logo_url && updated[idx].logo_url !== initBand.logo_url && !updated[idx].logo_url.includes('unsplash') ? updated[idx].logo_url : null) ||
-                (updated[idx].avatar_url && updated[idx].avatar_url !== initBand.avatar_url && !updated[idx].avatar_url.includes('unsplash') ? updated[idx].avatar_url : null) ||
+                (isValidBandImageUrl(updated[idx].logo_url) && updated[idx].logo_url !== initBand.logo_url ? updated[idx].logo_url : null) ||
+                (isValidBandImageUrl(updated[idx].avatar_url) && updated[idx].avatar_url !== initBand.avatar_url ? updated[idx].avatar_url : null) ||
                 initBand.logo_url;
               const bestAvatar = bestLogo;
               const bestCover = savedCover ||
-                (updated[idx].cover_url && updated[idx].cover_url !== initBand.cover_url && !updated[idx].cover_url.includes('unsplash') ? updated[idx].cover_url : null) ||
-                (updated[idx].banner_url && updated[idx].banner_url !== initBand.banner_url && !updated[idx].banner_url.includes('unsplash') ? updated[idx].banner_url : null) ||
+                (isValidBandImageUrl(updated[idx].cover_url) && updated[idx].cover_url !== initBand.cover_url ? updated[idx].cover_url : null) ||
+                (isValidBandImageUrl(updated[idx].banner_url) && updated[idx].banner_url !== initBand.banner_url ? updated[idx].banner_url : null) ||
                 initBand.cover_url;
               const bestBio = (updated[idx].bio && updated[idx].bio.trim() !== '') ? updated[idx].bio : (initBand.bio || '');
               const cachedDiscography = loadBandDiscographyFromCache(initBand.id, initName);
@@ -1449,13 +1546,16 @@ export class CommunityBandManager {
                  } catch {}
                }
 
-               const bestLineup = deduplicateLineup(
+               let bestLineup = deduplicateLineup(
                  (cachedLineupForSeed && cachedLineupForSeed.length > 0)
                    ? cachedLineupForSeed
                    : ((updated[idx].lineup && updated[idx].lineup.length > 0)
                        ? updated[idx].lineup
                        : (initBand.lineup || []))
                );
+               if ((initName === 'gorgasm' || initBand.id === GORGASM_BAND_ID) && isStaleGorgasmLineup(bestLineup)) {
+                 bestLineup = GORGASM_OFFICIAL_LINEUP;
+               }
 
               // Upgrade with user edits taking absolute precedence over pre-seeded master
               updated[idx] = {
@@ -1579,15 +1679,26 @@ export class CommunityBandManager {
 
         // If it's a pre-seeded band, fill in missing baseline fields from fresh, but preserve user edits!
         if (fresh) {
+          const isGorg = cleanNorm === 'gorgasm' || fresh.id === GORGASM_BAND_ID;
+          const rawResolvedItemLineup = (Array.isArray(item.lineup) && item.lineup.length > 0)
+            ? item.lineup
+            : (restoredLineupFromCache || fresh.lineup || []);
+          const safeLineup = (isGorg && isStaleGorgasmLineup(rawResolvedItemLineup))
+            ? GORGASM_OFFICIAL_LINEUP
+            : rawResolvedItemLineup;
+          const safeAvatar = pickBestBandImage(item.avatar_url, item.logo_url, (item as any).avatar, (item as any).image, fresh.avatar_url, fresh.logo_url) || item.avatar_url || fresh.avatar_url;
+          const safeCover = pickBestBandImage(item.cover_url, item.banner_url, fresh.cover_url, fresh.banner_url) || item.cover_url || fresh.cover_url;
           processedItem = {
             ...fresh,
             ...item,
             name: rawName,
             band_name: rawName,
-            avatar_url: item.avatar_url || fresh.avatar_url,
-            logo_url: item.logo_url || fresh.logo_url,
-            cover_url: item.cover_url || fresh.cover_url,
-            banner_url: item.banner_url || fresh.banner_url,
+            avatar_url: safeAvatar,
+            logo_url: safeAvatar,
+            avatar: safeAvatar,
+            image: safeAvatar,
+            cover_url: safeCover,
+            banner_url: safeCover,
             bio: (item.bio !== undefined && item.bio !== null) ? item.bio : (fresh.bio || ''),
             city: (item.city !== undefined && item.city !== null) ? item.city : (fresh.city || ''),
             state: (item.state !== undefined && item.state !== null) ? item.state : (fresh.state || ''),
@@ -1597,9 +1708,7 @@ export class CommunityBandManager {
               ...(cachedDisco || []),
               ...freshDisco
             ], rawName),
-            lineup: (Array.isArray(item.lineup) && item.lineup.length > 0)
-              ? item.lineup
-              : (restoredLineupFromCache || fresh.lineup || [])
+            lineup: safeLineup
           };
         } else {
           processedItem = {
@@ -1869,8 +1978,8 @@ export class CommunityBandManager {
     const now = new Date().toISOString();
     let result: CommunityBandRecord;
 
-    const resolvedAvatar = band.avatar_url || band.logo_url || (band as any).avatar || (band as any).image;
-    const resolvedCover = band.cover_url || band.banner_url || (band as any).banner || (band as any).cover;
+    const resolvedAvatar = pickBestBandImage(band.avatar_url, band.logo_url, (band as any).avatar, (band as any).image);
+    const resolvedCover = pickBestBandImage(band.cover_url, band.banner_url, (band as any).banner, (band as any).cover);
 
     if (existingIndex >= 0 && !isExplicitNew) {
       const existing = all[existingIndex];
@@ -1911,6 +2020,15 @@ export class CommunityBandManager {
         }
       }
 
+      if (isGorgasmBand(validName, (band as any).custom_slug || (existing as any).custom_slug) && isStaleGorgasmLineup(lineupToSave)) {
+        lineupToSave = GORGASM_OFFICIAL_LINEUP;
+      }
+
+      const existingBestAvatar = pickBestBandImage(existing.avatar_url, existing.logo_url, (existing as any).avatar, (existing as any).image);
+      const existingBestCover = pickBestBandImage(existing.cover_url, existing.banner_url, (existing as any).banner, (existing as any).cover);
+      const finalBestAvatar = resolvedAvatar || existingBestAvatar || (isGorgasmBand(validName, (band as any).custom_slug || (existing as any).custom_slug) ? GORGASM_OFFICIAL_LOGO : '') || existing.avatar_url || existing.logo_url;
+      const finalBestCover = resolvedCover || existingBestCover || existing.cover_url || existing.banner_url;
+
       const updated: CommunityBandRecord = {
         ...existing,
         ...band,
@@ -1920,12 +2038,12 @@ export class CommunityBandManager {
         genre: band.genre || existing.genre || 'Extreme Metal',
         micro_genres: updatedMicroGenres,
         subgenres: updatedMicroGenres,
-        avatar_url: (band.avatar_url !== undefined && band.avatar_url !== null) ? band.avatar_url : (resolvedAvatar !== undefined && resolvedAvatar !== '' ? resolvedAvatar : (existing.avatar_url || existing.logo_url)),
-        logo_url: (band.logo_url !== undefined && band.logo_url !== null) ? band.logo_url : (resolvedAvatar !== undefined && resolvedAvatar !== '' ? resolvedAvatar : (existing.logo_url || existing.avatar_url)),
-        avatar: (band.avatar !== undefined && band.avatar !== null) ? band.avatar : (resolvedAvatar !== undefined && resolvedAvatar !== '' ? resolvedAvatar : (existing.avatar || existing.avatar_url)),
-        image: (band.image !== undefined && band.image !== null) ? band.image : (resolvedAvatar !== undefined && resolvedAvatar !== '' ? resolvedAvatar : (existing.image || existing.avatar_url)),
-        cover_url: (band.cover_url !== undefined && band.cover_url !== null) ? band.cover_url : (resolvedCover !== undefined && resolvedCover !== '' ? resolvedCover : (existing.cover_url || existing.banner_url)),
-        banner_url: (band.banner_url !== undefined && band.banner_url !== null) ? band.banner_url : (resolvedCover !== undefined && resolvedCover !== '' ? resolvedCover : (existing.banner_url || existing.cover_url)),
+        avatar_url: finalBestAvatar,
+        logo_url: finalBestAvatar,
+        avatar: finalBestAvatar,
+        image: finalBestAvatar,
+        cover_url: finalBestCover,
+        banner_url: finalBestCover,
         founded_year: band.founded_year !== undefined ? band.founded_year : existing.founded_year,
         city: band.city !== undefined ? band.city : existing.city,
         state: band.state !== undefined ? band.state : existing.state,
@@ -2206,7 +2324,8 @@ export class CommunityBandManager {
         'hate eternal': 'Hate Eternal',
         'scour': 'Scour',
         'squash-bowels': 'Squash Bowels',
-        'squash bowels': 'Squash Bowels'
+        'squash bowels': 'Squash Bowels',
+        'gorgasm': 'Gorgasm'
       };
 
       if (!resolvedBandName || resolvedBandName.toLowerCase() === 'nexus artist' || resolvedBandName.toLowerCase() === 'underground label') {
@@ -2273,7 +2392,7 @@ export class CommunityBandManager {
       dispatchSyncLog(`Resolved target band "${resolvedBandName}" (UUID: ${bandUUID}, Mode: ${isExplicitNew ? 'INSERT' : 'UPDATE/UPSERT'}). Checking storage assets...`);
 
       // Auto-upload base64 images to community-bands bucket using standardized uploadCommunityBandMedia helper
-      let finalAvatarUrl = band.avatar_url || (band as any).logo_url || (band as any).avatar || (band as any).image || existing?.avatar_url || existing?.logo_url;
+      let finalAvatarUrl = pickBestBandImage(band.avatar_url, (band as any).logo_url, (band as any).avatar, (band as any).image, existing?.avatar_url, existing?.logo_url) || undefined;
       if (finalAvatarUrl && finalAvatarUrl.startsWith('data:')) {
         try {
           dispatchSyncLog('Uploading avatar/logo image to Supabase storage bucket...');
@@ -2288,7 +2407,7 @@ export class CommunityBandManager {
         }
       }
 
-      let finalCoverUrl = band.cover_url || (band as any).banner_url || (band as any).banner || (band as any).cover || existing?.cover_url || existing?.banner_url;
+      let finalCoverUrl = pickBestBandImage(band.cover_url, (band as any).banner_url, (band as any).banner, (band as any).cover, existing?.cover_url, existing?.banner_url) || undefined;
       if (finalCoverUrl && finalCoverUrl.startsWith('data:')) {
         try {
           dispatchSyncLog('Uploading cover banner image to Supabase storage bucket...');
@@ -2307,7 +2426,7 @@ export class CommunityBandManager {
       const all = this.getAll();
       const idx = all.findIndex(b => b.id === band.id || ensureUUID(b.id) === bandUUID);
 
-      const resolvedLineup: LineupMember[] = (() => {
+      let resolvedLineup: LineupMember[] = (() => {
         if (Array.isArray(band.lineup) && band.lineup.length > 0) return band.lineup;
         if (idx >= 0 && Array.isArray(all[idx].lineup) && all[idx].lineup.length > 0) return all[idx].lineup;
         if (existing?.lineup && Array.isArray(existing.lineup) && existing.lineup.length > 0) return existing.lineup;
@@ -2322,6 +2441,25 @@ export class CommunityBandManager {
         }
         return [];
       })();
+      if (isGorgasmBand(resolvedBandName, targetSlug) && isStaleGorgasmLineup(resolvedLineup)) {
+        resolvedLineup = GORGASM_OFFICIAL_LINEUP;
+      }
+
+      const safeMergedAvatar = pickBestBandImage(
+        finalAvatarUrl,
+        band.avatar_url,
+        band.logo_url,
+        idx >= 0 ? all[idx].avatar_url : undefined,
+        idx >= 0 ? all[idx].logo_url : undefined,
+        isGorgasmBand(resolvedBandName, targetSlug) ? GORGASM_OFFICIAL_LOGO : undefined
+      ) || undefined;
+      const safeMergedCover = pickBestBandImage(
+        finalCoverUrl,
+        band.cover_url,
+        band.banner_url,
+        idx >= 0 ? all[idx].cover_url : undefined,
+        idx >= 0 ? all[idx].banner_url : undefined
+      ) || undefined;
 
       const mergedRecord: CommunityBandRecord = {
         ...(idx >= 0 ? all[idx] : {}),
@@ -2333,12 +2471,12 @@ export class CommunityBandManager {
         genre: band.genre || (idx >= 0 ? all[idx].genre : undefined) || 'Extreme Metal',
         created_at: (idx >= 0 ? all[idx].created_at : undefined) || new Date().toISOString(),
         verification_status: band.verification_status || (idx >= 0 ? all[idx].verification_status : undefined) || 'community_archive',
-        avatar_url: finalAvatarUrl || band.avatar_url || (idx >= 0 ? all[idx].avatar_url : undefined),
-        logo_url: finalAvatarUrl || band.logo_url || (idx >= 0 ? all[idx].logo_url : undefined),
-        avatar: finalAvatarUrl || band.avatar || (idx >= 0 ? all[idx].avatar : undefined),
-        image: finalAvatarUrl || band.image || (idx >= 0 ? all[idx].image : undefined),
-        cover_url: finalCoverUrl || band.cover_url || (idx >= 0 ? all[idx].cover_url : undefined),
-        banner_url: finalCoverUrl || band.banner_url || (idx >= 0 ? all[idx].banner_url : undefined),
+        avatar_url: safeMergedAvatar,
+        logo_url: safeMergedAvatar,
+        avatar: safeMergedAvatar,
+        image: safeMergedAvatar,
+        cover_url: safeMergedCover,
+        banner_url: safeMergedCover,
         bio: band.bio !== undefined ? band.bio : (idx >= 0 ? all[idx].bio : '')
       };
 
@@ -2510,9 +2648,21 @@ export class CommunityBandManager {
           }
         } else if (releasePayloads.length > 0) {
           try {
-            const { data: allRemoteReleases } = await client
-              .from('releases')
-              .select('id, title, band_id');
+            const isUuidStr = (val?: string | null) =>
+              Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim()));
+            const targetBandIds = Array.from(
+              new Set(
+                [bandUUID, band.id]
+                  .filter((v): v is string => isUuidStr(v ? String(v) : null))
+                  .map((v) => String(v).trim())
+              )
+            );
+            const { data: allRemoteReleases } = targetBandIds.length > 0
+              ? await client
+                  .from('releases')
+                  .select('id, title, band_id')
+                  .in('band_id', targetBandIds)
+              : { data: [] as any[] };
             
             if (allRemoteReleases && Array.isArray(allRemoteReleases)) {
               const activeIds = new Set(releasePayloads.map(r => r.id));
@@ -2676,7 +2826,9 @@ export class CommunityBandManager {
           'cannibal-corpse': 'Cannibal Corpse',
           'cannibal corpse': 'Cannibal Corpse',
           'extermination-dismemberment': 'Extermination Dismemberment',
-          'extermination dismemberment': 'Extermination Dismemberment'
+          'extermination dismemberment': 'Extermination Dismemberment',
+          'birdflesh': 'Birdflesh',
+          'gorgasm': 'Gorgasm'
         };
 
         // Match existing band by ID (exact or UUID) or custom_slug or exact canonical name
@@ -2779,12 +2931,14 @@ export class CommunityBandManager {
 
         const pickBestImage = (...urls: (string | undefined | null)[]): string => {
           for (const u of urls) {
-            if (u && typeof u === 'string' && u.trim() && (u.includes('supabase.co') || (!u.includes('unsplash') && !u.includes('placeholder')))) {
-              return u.trim();
+            if (isValidBandImageUrl(u)) {
+              return (u as string).trim();
             }
           }
           for (const u of urls) {
-            if (u && typeof u === 'string' && u.trim()) return u.trim();
+            if (u && typeof u === 'string' && u.trim() && !BROKEN_BAND_IMAGE_FRAGMENTS.some(frag => u.toLowerCase().includes(frag))) {
+              return u.trim();
+            }
           }
           return '';
         };
@@ -2850,6 +3004,8 @@ export class CommunityBandManager {
             { id: 'bf-2', name: 'Joakim Svensson', role: 'Bass, Vocals', status: 'active', years: '2007–present' },
             { id: 'bf-3', name: 'Elis Edin Markskog', role: 'Guitars, Vocals', status: 'active', years: '2011–present' }
           ];
+        } else if (isGorgasmBand(cleanBandName || b.id, bSlug) && isStaleGorgasmLineup(mergedLineup)) {
+          mergedLineup = GORGASM_OFFICIAL_LINEUP;
         }
 
         const isOfficialVE = (b.id === 'cbddb810-259b-4230-9968-3d402dfdb872' || cleanBandName === 'virulent excision');

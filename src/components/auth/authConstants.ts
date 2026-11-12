@@ -58,7 +58,7 @@ export function generateUUID(): string {
 export function normalizeLoadedProfile(data: any): any {
   if (!data) return {};
   const isMiguel = isMiguelNameOrProfile(data);
-  return {
+  const next: any = {
     ...data,
     id: data.id,
     full_name: data.full_name || data.name || '',
@@ -76,6 +76,44 @@ export function normalizeLoadedProfile(data: any): any {
     allowed_workspaces: Array.isArray(data.allowed_workspaces) ? data.allowed_workspaces : [],
     registered_workspaces: Array.isArray(data.registered_workspaces) ? data.registered_workspaces : []
   };
+
+  if (!isMiguel) {
+    const pBrand = String(next.promoter_name || next.promoter_agency || next.promoter_brand || next.promoter_metadata?.brand_name || next.promoter_metadata?.agency_name || '').toLowerCase();
+    if (pBrand.includes('nexus live')) {
+      delete next.promoter_name;
+      delete next.promoter_agency;
+      delete next.promoter_brand;
+      delete next.promoter_logo;
+      delete next.promoter_cover_image;
+      delete next.promoter_bio;
+      delete next.promoter_metadata;
+      if (!next.promoter_id || next.promoter_id === next.id) {
+        delete next.promoter_id;
+      }
+      next.registered_workspaces = (next.registered_workspaces || []).filter((w: any) => {
+        const t = typeof w === 'string' ? w.toLowerCase().trim() : String(w?.type || w?.key || '').toLowerCase().trim();
+        return t !== 'promoter';
+      });
+    }
+    const cBrand = String(next.creative_name || next.creative_business_name || next.creative_metadata?.business_name || '').toLowerCase();
+    if (cBrand.includes('vortex graphics')) {
+      delete next.creative_name;
+      delete next.creative_business_name;
+      delete next.creative_avatar;
+      delete next.creative_banner;
+      delete next.creative_bio;
+      delete next.creative_metadata;
+      if (!next.creative_id || next.creative_id === next.id) {
+        delete next.creative_id;
+      }
+      next.registered_workspaces = (next.registered_workspaces || []).filter((w: any) => {
+        const t = typeof w === 'string' ? w.toLowerCase().trim() : String(w?.type || w?.key || '').toLowerCase().trim();
+        return t !== 'creative';
+      });
+    }
+  }
+
+  return next;
 }
 
 export function normalizeRegisteredWorkspaces(existing: any = [], newRefs: any = []): string[] {

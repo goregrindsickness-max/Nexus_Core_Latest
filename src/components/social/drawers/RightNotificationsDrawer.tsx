@@ -15,14 +15,9 @@ import {
   Clock,
   Flame,
   ShieldAlert,
-  Megaphone,
-  Radio,
-  Volume2,
-  Zap,
-  Check
+  Megaphone
 } from 'lucide-react';
 import { pushManager, PushPermissionStatus, isIframeEnvironment } from '../../../lib/pushNotifications';
-import { testAppBadge, clearAppBadge, getStoredBadgeCount, isBadgeEnabled, saveBadgePreference, syncGlobalUnreadBadge } from '../../../utils/appBadgeService';
 
 interface RightNotificationsDrawerProps {
   rightDrawerOpen: boolean;
@@ -57,10 +52,6 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
 }) => {
   const [permissionStatus, setPermissionStatus] = useState<PushPermissionStatus>('default');
   const [isRequesting, setIsRequesting] = useState(false);
-  const [isTestingPush, setIsTestingPush] = useState(false);
-  const [testPushSuccess, setTestPushSuccess] = useState(false);
-  const [badgeCount, setBadgeCount] = useState<number>(() => getStoredBadgeCount());
-  const [badgeEnabled, setBadgeEnabled] = useState<boolean>(() => isBadgeEnabled());
   const inIframe = isIframeEnvironment();
 
   useEffect(() => {
@@ -78,22 +69,12 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
       pushManager.refreshPermissionStatus().then(setPermissionStatus);
     };
 
-    const handleBadgeChange = (e: any) => {
-      if (e.detail && typeof e.detail.count === 'number') {
-        setBadgeCount(e.detail.count);
-      } else {
-        setBadgeCount(getStoredBadgeCount());
-      }
-    };
-
     window.addEventListener('nexus_in_app_notice', handleInAppNotice);
-    window.addEventListener('nexus_app_badge_changed', handleBadgeChange);
     window.addEventListener('focus', handleSyncStatus);
     document.addEventListener('visibilitychange', handleSyncStatus);
 
     return () => {
       window.removeEventListener('nexus_in_app_notice', handleInAppNotice);
-      window.removeEventListener('nexus_app_badge_changed', handleBadgeChange);
       window.removeEventListener('focus', handleSyncStatus);
       document.removeEventListener('visibilitychange', handleSyncStatus);
     };
@@ -130,21 +111,6 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
       }
     } finally {
       setIsRequesting(false);
-    }
-  };
-
-  const handleTestNotification = async () => {
-    setIsTestingPush(true);
-    try {
-      await pushManager.sendTestAlert('routing_beacon');
-      const updated = await pushManager.refreshPermissionStatus();
-      setPermissionStatus(updated);
-      setTestPushSuccess(true);
-      setTimeout(() => setTestPushSuccess(false), 2500);
-    } catch (err) {
-      console.warn('Test push notification failed:', err);
-    } finally {
-      setIsTestingPush(false);
     }
   };
 

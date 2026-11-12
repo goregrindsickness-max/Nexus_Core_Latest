@@ -30,7 +30,9 @@ export const resolveBandName = (item: any, bandIdFallback?: string): any => {
     'origin': 'Origin',
     'peelingflesh': 'PeelingFlesh',
     'putrid-pile': 'Putrid Pile',
-    'lividity': 'Lividity'
+    'lividity': 'Lividity',
+    'birdflesh': 'Birdflesh',
+    'gorgasm': 'Gorgasm'
   };
 
   if ((!bName || bName.toLowerCase() === 'underground label' || bName.toLowerCase() === 'nexus artist') && rawSlugCandidate && KNOWN_SEEDED_NAMES[rawSlugCandidate]) {

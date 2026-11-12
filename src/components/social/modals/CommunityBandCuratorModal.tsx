@@ -47,7 +47,13 @@ import {
   markReleaseDeletedInStorage,
   resolveAuthenticReleaseYear,
   findMasterReleaseCover,
-  isValidCoverUrl
+  isValidCoverUrl,
+  isValidBandImageUrl,
+  pickBestBandImage,
+  isGorgasmBand,
+  isStaleGorgasmLineup,
+  GORGASM_OFFICIAL_LOGO,
+  GORGASM_OFFICIAL_LINEUP
 } from '../../../lib/communityBands';
 import { deleteReleaseFromDatabase } from '../../../services/releasesService';
 import { uploadBase64ToStorage, generateUUID, ensureUUID } from '../../../supabase';
@@ -414,15 +420,18 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     const isUserBio = Boolean(userBio && (rawBio === userBio || rawBio === (userProfile as any)?.profileBlurb));
     const validBio = (rawBio && !isUserBio && !rawBio.startsWith('Community-curated archive')) ? rawBio : 'Not written yet.';
     setBio(validBio);
-    const resolvedAvatar = [
+    const bandNameOrId = band.id || band.name || (band as any).band_name || '';
+    const resolvedAvatar = pickBestBandImage(
       band.avatar_url,
       band.logo_url,
       (band as any).avatar,
-      (band as any).image
-    ].find(u => u && typeof u === 'string' && (u.includes('supabase.co') || (!u.includes('unsplash') && !u.includes('placeholder')))) ||
-    band.avatar_url || band.logo_url || (band as any).avatar || (band as any).image || '';
+      (band as any).image,
+      isGorgasmBand(bandNameOrId, (band as any).custom_slug) ? GORGASM_OFFICIAL_LOGO : ''
+    ) || band.avatar_url || band.logo_url || (band as any).avatar || (band as any).image || '';
     setAvatarUrl(resolvedAvatar);
-    setCoverUrl(band.cover_url || band.banner_url || (band as any).cover || (band as any).banner || '');
+    const resolvedCover = pickBestBandImage(band.cover_url, band.banner_url, (band as any).cover, (band as any).banner) ||
+      band.cover_url || band.banner_url || (band as any).cover || (band as any).banner || '';
+    setCoverUrl(resolvedCover);
     setSpotifyUrl(band.spotify_url || publicDetails.spotify_url || '');
     setBandcampUrl(band.bandcamp_url || '');
     setMetalArchivesUrl(band.metal_archives_url || publicDetails.metal_archives_url || '');
@@ -497,13 +506,17 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     }
     // Sanitize lineup with deduplicateLineup to strip any legacy mock/fake names
     const cleanLineup = deduplicateLineup(loadedLineup);
-    const isBirdflesh = (band.name || (band as any).band_name || '').toLowerCase().trim().includes('birdflesh');
-    if (isBirdflesh || cleanLineup.length === 0 || cleanLineup.some(m => m.name === 'Smögen' || m.name === 'Smogen' || m.name === 'Barra')) {
+    const bandNameLower = (band.name || (band as any).band_name || '').toLowerCase().trim();
+    const isBirdflesh = bandNameLower.includes('birdflesh');
+    const isGorgasm = isGorgasmBand(band.id || bandNameLower, (band as any).custom_slug);
+    if (isBirdflesh && (cleanLineup.length === 0 || cleanLineup.some(m => m.name === 'Smögen' || m.name === 'Smogen' || m.name === 'Barra'))) {
       setLineup([
         { id: 'bf-1', name: 'Adde Mitroulis', role: 'Drums, Vocals', status: 'active', years: '1997–present' },
         { id: 'bf-2', name: 'Joakim Svensson', role: 'Bass, Vocals', status: 'active', years: '2007–present' },
         { id: 'bf-3', name: 'Elis Edin Markskog', role: 'Guitars, Vocals', status: 'active', years: '2011–present' }
       ]);
+    } else if (isGorgasm && isStaleGorgasmLineup(cleanLineup)) {
+      setLineup(GORGASM_OFFICIAL_LINEUP);
     } else {
       setLineup(cleanLineup);
     }
@@ -572,8 +585,10 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
             if (liveBand.micro_genres && Array.isArray(liveBand.micro_genres) && liveBand.micro_genres.length > 0) {
               setMicroGenres(liveBand.micro_genres);
             }
-            if (liveBand.logo_url) setAvatarUrl(liveBand.logo_url);
-            if (liveBand.cover_url) setCoverUrl(liveBand.cover_url);
+            const liveLogo = pickBestBandImage(liveBand.logo_url, liveBand.avatar_url);
+            if (liveLogo) setAvatarUrl(liveLogo);
+            const liveCover = pickBestBandImage(liveBand.cover_url, liveBand.banner_url);
+            if (liveCover) setCoverUrl(liveCover);
             if (liveBand.spotify) setSpotifyUrl(liveBand.spotify);
             if (liveBand.bandcamp) setBandcampUrl(liveBand.bandcamp);
             if (liveBand.metal_archives_url) setMetalArchivesUrl(liveBand.metal_archives_url);
@@ -587,7 +602,18 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                   if (Array.isArray(p)) parsedL = p;
                 } catch {}
               }
-              if (parsedL.length > 0) setLineup(parsedL);
+              const cleanLiveLineup = deduplicateLineup(parsedL);
+              if (isGorgasm && isStaleGorgasmLineup(cleanLiveLineup)) {
+                setLineup(GORGASM_OFFICIAL_LINEUP);
+              } else if (isBirdflesh) {
+                setLineup([
+                  { id: 'bf-1', name: 'Adde Mitroulis', role: 'Drums, Vocals', status: 'active', years: '1997–present' },
+                  { id: 'bf-2', name: 'Joakim Svensson', role: 'Bass, Vocals', status: 'active', years: '2007–present' },
+                  { id: 'bf-3', name: 'Elis Edin Markskog', role: 'Guitars, Vocals', status: 'active', years: '2011–present' }
+                ]);
+              } else if (cleanLiveLineup.length > 0) {
+                setLineup(cleanLiveLineup);
+              }
             }
           }
 
@@ -1029,8 +1055,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
 
   const filteredBands = bandsList
     .filter((b) =>
-      b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      b.genre.toLowerCase().includes(searchQuery.toLowerCase())
+      (b.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (b.genre || '').toLowerCase().includes(searchQuery.toLowerCase())
     )
     .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true }));
 
@@ -1195,8 +1221,14 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                   className="w-full text-left p-3.5 sm:p-4 rounded-xl border bg-zinc-900/60 border-zinc-800/80 hover:border-amber-500/50 hover:bg-zinc-900 transition-all flex items-center gap-3.5 cursor-pointer shadow-sm group"
                 >
                   {(() => {
-                    const avatarCandidates = [band.avatar_url, band.logo_url, (band as any).avatar, (band as any).image];
-                    const bestAvatar = avatarCandidates.find(u => u && typeof u === 'string' && (u.includes('supabase.co') || (!u.includes('unsplash') && !u.includes('placeholder')))) ||
+                    const isGorg = isGorgasmBand(band.id || band.name || (band as any).band_name, (band as any).custom_slug);
+                    const bestAvatar = pickBestBandImage(
+                      band.avatar_url,
+                      band.logo_url,
+                      (band as any).avatar,
+                      (band as any).image,
+                      isGorg ? GORGASM_OFFICIAL_LOGO : ''
+                    ) ||
                       band.avatar_url || band.logo_url || (band as any).avatar || (band as any).image ||
                       'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=120';
                     return (
@@ -1205,7 +1237,12 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                         alt={band.name}
                         className="w-14 h-14 rounded-xl object-cover border border-zinc-750 shrink-0 group-hover:scale-105 transition-transform"
                         onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=120';
+                          const imgEl = e.currentTarget as HTMLImageElement;
+                          if (isGorg && imgEl.src !== GORGASM_OFFICIAL_LOGO) {
+                            imgEl.src = GORGASM_OFFICIAL_LOGO;
+                          } else if (!imgEl.src.includes('unsplash')) {
+                            imgEl.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=120';
+                          }
                         }}
                       />
                     );

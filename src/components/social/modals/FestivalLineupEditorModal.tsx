@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Plus,
@@ -277,17 +278,19 @@ export const FestivalLineupEditorModal: React.FC<FestivalLineupEditorModalProps>
     }
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-5 overflow-y-auto"
+      className="fixed inset-0 z-[1000010] bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-5 overflow-hidden"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-4xl bg-[#0a0c12] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden text-left my-auto animate-in fade-in zoom-in-95 duration-150"
+        className="w-full max-w-4xl bg-[#0a0c12] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden text-left animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[calc(100dvh-1.25rem)] sm:max-h-[calc(100dvh-2.5rem)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header */}
-        <div className="px-5 py-4 bg-[#11141e] border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+        <div className="px-5 py-4 bg-[#11141e] border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-xl shrink-0">
               🎪
@@ -332,7 +335,7 @@ export const FestivalLineupEditorModal: React.FC<FestivalLineupEditorModalProps>
         </div>
 
         {/* Body Content */}
-        <div className="p-4 sm:p-5 space-y-5 max-h-[78vh] overflow-y-auto">
+        <div className="p-4 sm:p-5 space-y-5 flex-1 min-h-0 overflow-y-auto">
           {/* 1. Edition Details Grid */}
           <div className="p-4 rounded-xl bg-[#0e1118] border border-zinc-800/90 space-y-3">
             <div className="flex items-center justify-between">
@@ -825,7 +828,8 @@ export const FestivalLineupEditorModal: React.FC<FestivalLineupEditorModalProps>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

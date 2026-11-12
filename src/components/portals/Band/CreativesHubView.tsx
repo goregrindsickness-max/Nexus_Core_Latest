@@ -2643,12 +2643,9 @@ export default function CreativesHubView({
                                   <h4 className="text-white text-[11px] font-black uppercase truncate text-[#A855F7] drop-shadow-md">
                                     {item?.talent?.name || 'Creative Artist'}
                                   </h4>
-                                  <p
-                                    className="text-[10px] text-zinc-300 truncate mt-0.5"
-                                    dangerouslySetInnerHTML={{
-                                      __html: item?.talent?.skills || [][0],
-                                    }}
-                                  />
+                                  <p className="text-[10px] text-zinc-300 truncate mt-0.5">
+                                    {item?.talent?.skills || ''}
+                                  </p>
                                   {((item as any).genre ||
                                     (item as any).microGenre) && (
                                     <div className="flex flex-wrap gap-1 mt-1 pl-0.5">

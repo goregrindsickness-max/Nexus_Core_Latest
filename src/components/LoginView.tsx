@@ -14,6 +14,8 @@ import {
   generateUUID,
   RegisteredWorkspaceRef
 } from './auth/authConstants';
+import { isMiguelNameOrProfile } from './social/utils/profileUtils';
+import { hasRegisteredWorkspace } from '../types';
 import { COUNTRIES, US_STATES } from '../constants/location';
 import { MASTER_GENRES } from '../constants/genres';
 import TermsOfServiceView from './TermsOfServiceView';
@@ -540,6 +542,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
         console.warn('[Supabase Auth] Session auto-login exception:', aErr);
       }
 
+      const isOwnerMiguel = isMiguelNameOrProfile(data);
+
       // Query bands table for this user to check if they own/created a band workspace
       let userBand: any = null;
       try {
@@ -561,44 +565,70 @@ export const LoginView: React.FC<LoginViewProps> = ({
         console.warn('Could not fetch user band on login:', bErr);
       }
 
-      if (userBand || data.band_id || data.band_name || data.bandName) {
+      const hasConfirmedBand = Boolean(
+        userBand ||
+        (data.band_id && data.band_id !== data.id) ||
+        (data.band_name && String(data.band_name).trim()) ||
+        (data.bandName && String(data.bandName).trim())
+      );
+
+      if (hasConfirmedBand) {
         const effectiveBandId = userBand?.id || data.band_id;
-        const effectiveBandName = userBand?.band_name || userBand?.name || data.band_name || data.bandName || 'Band Workspace';
+        const effectiveBandName = userBand?.band_name || userBand?.name || data.band_name || data.bandName || '';
 
-        normalizedProfile.band_id = effectiveBandId;
-        normalizedProfile.band_name = effectiveBandName;
-        normalizedProfile.bandName = effectiveBandName;
+        if (effectiveBandName) {
+          normalizedProfile.band_id = effectiveBandId;
+          normalizedProfile.band_name = effectiveBandName;
+          normalizedProfile.bandName = effectiveBandName;
 
-        normalizedProfile.allowed_workspaces = Array.from(new Set([
-          ...(normalizedProfile.allowed_workspaces || []),
-          'band'
-        ]));
+          normalizedProfile.allowed_workspaces = Array.from(new Set([
+            ...(normalizedProfile.allowed_workspaces || []),
+            'band'
+          ]));
 
-        normalizedProfile.registered_workspaces = normalizeRegisteredWorkspaces(
-          normalizedProfile.registered_workspaces || [],
-          [{ type: 'band', id: effectiveBandId, name: effectiveBandName }]
-        );
+          normalizedProfile.registered_workspaces = normalizeRegisteredWorkspaces(
+            normalizedProfile.registered_workspaces || [],
+            [{ type: 'band', id: effectiveBandId, name: effectiveBandName }]
+          );
 
-        normalizedProfile.active_workspace = (normalizedProfile.account_type === 'fan' || normalizedProfile.account_type === 'fan_only')
-          ? 'fan_only'
-          : 'industry_pro';
-        if (normalizedProfile.account_type !== 'fan' && normalizedProfile.account_type !== 'fan_only') {
-          normalizedProfile.account_type = 'industry pro';
-        }
+          normalizedProfile.active_workspace = (normalizedProfile.account_type === 'fan' || normalizedProfile.account_type === 'fan_only')
+            ? 'fan_only'
+            : 'industry_pro';
+          if (normalizedProfile.account_type !== 'fan' && normalizedProfile.account_type !== 'fan_only') {
+            normalizedProfile.account_type = 'industry pro';
+          }
 
-        // Backfill NULL band_id or band_name in profiles table in Supabase
-        if (!data.band_id || !data.band_name || !data.registered_workspaces) {
-          await supabase.from('profiles').update({
-            band_id: effectiveBandId,
-            band_name: effectiveBandName,
-            bandName: effectiveBandName,
-            allowed_workspaces: normalizedProfile.allowed_workspaces,
-            registered_workspaces: normalizedProfile.registered_workspaces
-          }).eq('id', data.id);
+          // Backfill NULL band_id or band_name in profiles table in Supabase
+          if (!data.band_id || !data.band_name || !data.registered_workspaces) {
+            await supabase.from('profiles').update({
+              band_id: effectiveBandId,
+              band_name: effectiveBandName,
+              bandName: effectiveBandName,
+              allowed_workspaces: normalizedProfile.allowed_workspaces,
+              registered_workspaces: normalizedProfile.registered_workspaces
+            }).eq('id', data.id);
+          }
         }
       }
 
       // Query creatives table for this user to check if they own/created a creative workspace
+      const cmRaw = data.creative_metadata && typeof data.creative_metadata === 'object' ? data.creative_metadata : null;
+      const cleanCreativeField = (v: any) => (v && typeof v === 'string' && v.trim() && (isOwnerMiguel || !v.toLowerCase().includes('vortex graphics'))) ? v.trim() : '';
+      const hasConfirmedCreativeMeta = Boolean(
+        cmRaw && (
+          cmRaw.is_registered === true ||
+          Boolean(cleanCreativeField(cmRaw.business_name)) ||
+          Boolean(cleanCreativeField(cmRaw.creative_name))
+        )
+      );
+      const hasConfirmedCreative = Boolean(
+        hasConfirmedCreativeMeta ||
+        cleanCreativeField(data.creative_business_name) ||
+        cleanCreativeField(data.creative_name) ||
+        (data.creative_id && data.creative_id !== data.id && !String(data.creative_name || '').toLowerCase().includes('vortex graphics')) ||
+        (hasRegisteredWorkspace(data, 'creative') && (isOwnerMiguel || hasConfirmedCreativeMeta || Boolean(cleanCreativeField(data.creative_name) || cleanCreativeField(data.creative_business_name))))
+      );
+
       let userCreative: any = null;
       try {
         const { data: creativeData } = await supabase
@@ -611,51 +641,84 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
         if (creativeData) {
           userCreative = creativeData;
-        } else if (data.creative_metadata || data.creative_business_name || data.creative_name || data.creative_id || (data.allowed_workspaces && data.allowed_workspaces.includes('creative'))) {
+        } else if (hasConfirmedCreative) {
           userCreative = await autoSyncCreativeProfile({ ...data, ...normalizedProfile });
         }
       } catch (cErr) {
         console.warn('Could not fetch user creative on login:', cErr);
       }
 
-      if (userCreative || data.creative_id || data.creative_name || data.creative_business_name) {
+      if (userCreative || hasConfirmedCreative) {
         const effectiveCreativeId = userCreative?.id || data.creative_id;
-        const effectiveCreativeName = userCreative?.business_name || userCreative?.creative_name || userCreative?.name || data.creative_business_name || data.creative_name || 'Creative Studio';
+        const effectiveCreativeName =
+          cleanCreativeField(userCreative?.business_name) ||
+          cleanCreativeField(userCreative?.creative_name) ||
+          cleanCreativeField(userCreative?.name) ||
+          cleanCreativeField(data.creative_business_name) ||
+          cleanCreativeField(data.creative_name) ||
+          cleanCreativeField(cmRaw?.business_name) ||
+          (isOwnerMiguel ? 'Vortex Graphics' : '');
         const effectiveCreativeAvatar = userCreative?.avatar_url || userCreative?.creative_avatar || userCreative?.image || data.creative_avatar;
         const effectiveCreativeBanner = userCreative?.banner_url || userCreative?.creative_banner || userCreative?.cover_url || data.creative_banner;
 
-        normalizedProfile.creative_id = effectiveCreativeId;
-        normalizedProfile.creative_name = effectiveCreativeName;
-        normalizedProfile.creative_business_name = effectiveCreativeName;
-        if (effectiveCreativeAvatar) normalizedProfile.creative_avatar = effectiveCreativeAvatar;
-        if (effectiveCreativeBanner) normalizedProfile.creative_banner = effectiveCreativeBanner;
+        if (effectiveCreativeName) {
+          normalizedProfile.creative_id = effectiveCreativeId;
+          normalizedProfile.creative_name = effectiveCreativeName;
+          normalizedProfile.creative_business_name = effectiveCreativeName;
+          if (effectiveCreativeAvatar) normalizedProfile.creative_avatar = effectiveCreativeAvatar;
+          if (effectiveCreativeBanner) normalizedProfile.creative_banner = effectiveCreativeBanner;
 
-        normalizedProfile.allowed_workspaces = Array.from(new Set([
-          ...(normalizedProfile.allowed_workspaces || []),
-          'creative'
-        ]));
+          normalizedProfile.allowed_workspaces = Array.from(new Set([
+            ...(normalizedProfile.allowed_workspaces || []),
+            'creative'
+          ]));
 
-        normalizedProfile.registered_workspaces = normalizeRegisteredWorkspaces(
-          normalizedProfile.registered_workspaces || [],
-          [{ type: 'creative', id: effectiveCreativeId, name: effectiveCreativeName }]
-        );
+          normalizedProfile.registered_workspaces = normalizeRegisteredWorkspaces(
+            normalizedProfile.registered_workspaces || [],
+            [{ type: 'creative', id: effectiveCreativeId, name: effectiveCreativeName }]
+          );
 
-        if (normalizedProfile.account_type !== 'fan' && normalizedProfile.account_type !== 'fan_only') {
-          normalizedProfile.account_type = 'industry pro';
-        }
+          if (normalizedProfile.account_type !== 'fan' && normalizedProfile.account_type !== 'fan_only') {
+            normalizedProfile.account_type = 'industry pro';
+          }
 
-        // Backfill NULL creative_id or creative_name in profiles table in Supabase
-        if (!data.creative_id || !data.creative_name || !data.registered_workspaces) {
-          await supabase.from('profiles').update({
-            creative_id: effectiveCreativeId,
-            creative_name: effectiveCreativeName,
-            allowed_workspaces: normalizedProfile.allowed_workspaces,
-            registered_workspaces: normalizedProfile.registered_workspaces
-          }).eq('id', data.id);
+          // Backfill NULL creative_id or creative_name in profiles table in Supabase
+          if (!data.creative_id || !data.creative_name || !data.registered_workspaces) {
+            await supabase.from('profiles').update({
+              creative_id: effectiveCreativeId,
+              creative_name: effectiveCreativeName,
+              allowed_workspaces: normalizedProfile.allowed_workspaces,
+              registered_workspaces: normalizedProfile.registered_workspaces
+            }).eq('id', data.id);
+          }
         }
       }
 
       // Query promoters table / promoter_metadata for this user to check if they own/created a promoter workspace
+      const pmRaw = data.promoter_metadata && typeof data.promoter_metadata === 'object' ? data.promoter_metadata : null;
+      const cleanPromoterField = (v: any) => (v && typeof v === 'string' && v.trim() && (isOwnerMiguel || !v.toLowerCase().includes('nexus live'))) ? v.trim() : '';
+      const hasConfirmedPromoterMeta = Boolean(
+        pmRaw && (
+          pmRaw.is_registered === true ||
+          Boolean(cleanPromoterField(pmRaw.brand_name)) ||
+          Boolean(cleanPromoterField(pmRaw.agency_name)) ||
+          Boolean(cleanPromoterField(pmRaw.entity_name)) ||
+          Boolean(cleanPromoterField(pmRaw.business_name))
+        )
+      );
+      const isFanAccountData = data.account_type === 'fan' || data.account_type === 'fan_only';
+      const hasConfirmedPromoter = Boolean(
+        isOwnerMiguel ||
+        data.account_type === 'promoter' ||
+        data.active_workspace === 'promoter' ||
+        hasConfirmedPromoterMeta ||
+        cleanPromoterField(data.promoter_agency) ||
+        cleanPromoterField(data.promoter_brand) ||
+        cleanPromoterField(data.promoter_name) ||
+        (!isFanAccountData && data.promoter_id && data.promoter_id !== data.id && !String(data.promoter_name || data.promoter_agency || '').toLowerCase().includes('nexus live')) ||
+        (hasRegisteredWorkspace(data, 'promoter') && (isOwnerMiguel || hasConfirmedPromoterMeta || Boolean(cleanPromoterField(data.promoter_agency) || cleanPromoterField(data.promoter_name))))
+      );
+
       let userPromoter: any = null;
       try {
         const { data: promoterData } = await supabase
@@ -666,69 +729,90 @@ export const LoginView: React.FC<LoginViewProps> = ({
           .limit(1)
           .maybeSingle();
 
-        if (promoterData) {
+        if (promoterData && (isOwnerMiguel || !String(promoterData.entity_name || promoterData.brand_name || '').toLowerCase().includes('nexus live'))) {
           userPromoter = promoterData;
-        } else if (data.promoter_metadata || data.promoter_agency || data.promoter_id || (data.allowed_workspaces && data.allowed_workspaces.includes('promoter'))) {
+        } else if (hasConfirmedPromoter) {
           userPromoter = await autoSyncPromoterProfile({ ...data, ...normalizedProfile });
         }
       } catch (pErr) {
         console.warn('Could not fetch user promoter on login:', pErr);
       }
 
-      if (userPromoter || data.promoter_id || data.promoter_agency || data.promoter_metadata) {
+      if (userPromoter || hasConfirmedPromoter) {
         const effectivePromoterId = userPromoter?.id || data.promoter_id || data.id;
-        const effectivePromoterName = userPromoter?.entity_name || userPromoter?.brand_name || userPromoter?.name || data.promoter_metadata?.brand_name || data.promoter_metadata?.agency_name || data.promoter_agency || 'Nexus Live Productions';
-        const effectivePromoterLogo = userPromoter?.promoter_logo || userPromoter?.logo_url || data.promoter_metadata?.logo_url || data.promoter_logo;
-        const effectivePromoterBanner = userPromoter?.promoter_cover_image || userPromoter?.banner_url || data.promoter_metadata?.banner_url || data.promoter_cover_image;
-        const effectivePromoterBio = userPromoter?.bio || data.promoter_metadata?.bio || data.promoter_bio;
+        const effectivePromoterName =
+          cleanPromoterField(userPromoter?.entity_name) ||
+          cleanPromoterField(userPromoter?.brand_name) ||
+          cleanPromoterField(userPromoter?.name) ||
+          cleanPromoterField(pmRaw?.brand_name) ||
+          cleanPromoterField(pmRaw?.agency_name) ||
+          cleanPromoterField(data.promoter_agency) ||
+          cleanPromoterField(data.promoter_brand) ||
+          cleanPromoterField(data.promoter_name) ||
+          (isOwnerMiguel ? 'Nexus Live Productions' : '');
+        const effectivePromoterLogo = userPromoter?.promoter_logo || userPromoter?.logo_url || pmRaw?.logo_url || data.promoter_logo;
+        const effectivePromoterBanner = userPromoter?.promoter_cover_image || userPromoter?.banner_url || pmRaw?.banner_url || data.promoter_cover_image;
+        const effectivePromoterBio = userPromoter?.bio || pmRaw?.bio || data.promoter_bio;
 
-        normalizedProfile.promoter_id = effectivePromoterId;
-        normalizedProfile.promoter_name = effectivePromoterName;
-        normalizedProfile.promoter_agency = effectivePromoterName;
-        normalizedProfile.promoter_brand = effectivePromoterName;
-        if (effectivePromoterLogo) normalizedProfile.promoter_logo = effectivePromoterLogo;
-        if (effectivePromoterBanner) normalizedProfile.promoter_cover_image = effectivePromoterBanner;
-        if (effectivePromoterBio) normalizedProfile.promoter_bio = effectivePromoterBio;
+        if (effectivePromoterName) {
+          normalizedProfile.promoter_id = effectivePromoterId;
+          normalizedProfile.promoter_name = effectivePromoterName;
+          normalizedProfile.promoter_agency = effectivePromoterName;
+          normalizedProfile.promoter_brand = effectivePromoterName;
+          if (effectivePromoterLogo) normalizedProfile.promoter_logo = effectivePromoterLogo;
+          if (effectivePromoterBanner) normalizedProfile.promoter_cover_image = effectivePromoterBanner;
+          if (effectivePromoterBio) normalizedProfile.promoter_bio = effectivePromoterBio;
 
-        normalizedProfile.allowed_workspaces = Array.from(new Set([
-          ...(normalizedProfile.allowed_workspaces || []),
-          'promoter'
-        ]));
+          normalizedProfile.allowed_workspaces = Array.from(new Set([
+            ...(normalizedProfile.allowed_workspaces || []),
+            'promoter'
+          ]));
 
-        normalizedProfile.registered_workspaces = normalizeRegisteredWorkspaces(
-          normalizedProfile.registered_workspaces || [],
-          [{ type: 'promoter', id: effectivePromoterId, name: effectivePromoterName }]
-        );
+          normalizedProfile.registered_workspaces = normalizeRegisteredWorkspaces(
+            normalizedProfile.registered_workspaces || [],
+            [{ type: 'promoter', id: effectivePromoterId, name: effectivePromoterName }]
+          );
 
-        normalizedProfile.promoter_metadata = {
-          ...(normalizedProfile.promoter_metadata || {}),
-          ...(userPromoter || {}),
-          brand_name: effectivePromoterName,
-          agency_name: effectivePromoterName,
-          entity_name: effectivePromoterName,
-          business_name: effectivePromoterName,
-          logo_url: effectivePromoterLogo,
-          banner_url: effectivePromoterBanner,
-          bio: effectivePromoterBio
-        };
+          normalizedProfile.promoter_metadata = {
+            ...(normalizedProfile.promoter_metadata || {}),
+            ...(userPromoter || {}),
+            brand_name: effectivePromoterName,
+            agency_name: effectivePromoterName,
+            entity_name: effectivePromoterName,
+            business_name: effectivePromoterName,
+            logo_url: effectivePromoterLogo,
+            banner_url: effectivePromoterBanner,
+            bio: effectivePromoterBio
+          };
 
-        if (normalizedProfile.account_type !== 'fan' && normalizedProfile.account_type !== 'fan_only') {
-          normalizedProfile.account_type = 'industry pro';
+          if (normalizedProfile.account_type !== 'fan' && normalizedProfile.account_type !== 'fan_only') {
+            normalizedProfile.account_type = 'industry pro';
+          }
+
+          // Backfill NULL promoter_id or promoter_agency in profiles table in Supabase
+          if (!data.promoter_id || !data.promoter_agency || !data.promoter_logo) {
+            await supabase.from('profiles').update({
+              promoter_id: effectivePromoterId,
+              promoter_agency: effectivePromoterName,
+              promoter_brand: effectivePromoterName,
+              promoter_name: effectivePromoterName,
+              promoter_logo: effectivePromoterLogo,
+              promoter_cover_image: effectivePromoterBanner,
+              allowed_workspaces: normalizedProfile.allowed_workspaces,
+              registered_workspaces: normalizedProfile.registered_workspaces
+            }).eq('id', data.id);
+          }
         }
-
-        // Backfill NULL promoter_id or promoter_agency in profiles table in Supabase
-        if (!data.promoter_id || !data.promoter_agency || !data.promoter_logo) {
-          await supabase.from('profiles').update({
-            promoter_id: effectivePromoterId,
-            promoter_agency: effectivePromoterName,
-            promoter_brand: effectivePromoterName,
-            promoter_name: effectivePromoterName,
-            promoter_logo: effectivePromoterLogo,
-            promoter_cover_image: effectivePromoterBanner,
-            allowed_workspaces: normalizedProfile.allowed_workspaces,
-            registered_workspaces: normalizedProfile.registered_workspaces
-          }).eq('id', data.id);
-        }
+      } else {
+        // Strip any polluted default promoter markers from unconfirmed/fan profiles
+        delete normalizedProfile.promoter_id;
+        delete normalizedProfile.promoter_name;
+        delete normalizedProfile.promoter_agency;
+        delete normalizedProfile.promoter_brand;
+        delete normalizedProfile.promoter_logo;
+        delete normalizedProfile.promoter_cover_image;
+        delete normalizedProfile.promoter_bio;
+        delete normalizedProfile.promoter_metadata;
       }
 
       onLogin(normalizedProfile, userBand, userBand?.id);
@@ -842,7 +926,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       banner_url: labelBannerUrl || labelBanner || undefined
     } : undefined;
 
-    const isOwnerMiguel = (userProfile?.email || signupEmail || '').toLowerCase().trim() === 'goregrindsickness@gmail.com' || (userProfile?.name || fullName || '').toLowerCase().includes('miguel');
+    const isOwnerMiguel = isMiguelNameOrProfile({ id: userProfile?.id, email: userProfile?.email || signupEmail, name: userProfile?.name || fullName, full_name: userProfile?.full_name || fullName });
     const promoterAgencyName = promoterAgency.trim() || (isOwnerMiguel ? 'Nexus Live Productions' : (fullName ? `${fullName} Productions` : 'Promoter Operations'));
     const promoterMetadata = hasPromoter ? {
       ...(userProfile?.promoter_metadata || {}),
@@ -1203,7 +1287,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
     if (!hasPromoter) return undefined;
     const finalProfileId = explicitUserId || ((isUpgradeMode && userProfile?.id) ? userProfile.id : (newUserId || generateUUID()));
     const idToUse = explicitPromoterId || registeredPromoterId || (userProfile?.promoter_id) || generateUUID();
-    const isOwnerMiguel = (userProfile?.email || signupEmail || '').toLowerCase().trim() === 'goregrindsickness@gmail.com' || (userProfile?.name || fullName || '').toLowerCase().includes('miguel');
+    const isOwnerMiguel = isMiguelNameOrProfile({ id: userProfile?.id, email: userProfile?.email || signupEmail, name: userProfile?.name || fullName, full_name: userProfile?.full_name || fullName });
     const pName = promoterAgency.trim() || (isOwnerMiguel ? 'Nexus Live Productions' : (userProfile?.name || fullName ? `${userProfile?.name || fullName} Productions` : 'Promoter Operations'));
     const resolvedLogo = logoUrlOverride || promoterLogo || (userProfile?.promoter_logo) || (userProfile?.promoter_metadata as any)?.logo_url || undefined;
     const resolvedBanner = bannerUrlOverride || promoterCoverImage || (userProfile?.promoter_cover_image) || (userProfile?.promoter_metadata as any)?.cover_url || undefined;
@@ -1847,7 +1931,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       if (hasPromoter) {
         const activePromoterId = registeredPromoterId || profileToUse.promoter_id || newUserId;
         profileToUse.promoter_id = activePromoterId;
-        const isOwnerMiguel = (profileToUse.email || userProfile?.email || '').toLowerCase().trim() === 'goregrindsickness@gmail.com' || (profileToUse.name || userProfile?.name || '').toLowerCase().includes('miguel');
+        const isOwnerMiguel = isMiguelNameOrProfile({ id: profileToUse.id || userProfile?.id, email: profileToUse.email || userProfile?.email, name: profileToUse.name || userProfile?.name, full_name: profileToUse.full_name || userProfile?.full_name });
         const pName = promoterAgency.trim() || profileToUse.promoter_agency || profileToUse.promoter_brand || profileToUse.promoter_name || (isOwnerMiguel ? 'Nexus Live Productions' : (profileToUse.name ? `${profileToUse.name} Productions` : 'Promoter Operations'));
         profileToUse.promoter_agency = pName;
         profileToUse.promoter_brand = pName;

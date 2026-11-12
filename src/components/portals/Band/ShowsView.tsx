@@ -953,7 +953,20 @@ export default function ShowsView({
 
           const tooltip = document.createElement('div');
           tooltip.className = 'absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/95 text-[9.5px] font-mono text-white px-2.5 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-zinc-700 pointer-events-none z-50 shadow-2xl';
-          tooltip.innerHTML = `<span style="color:${tourColor.hex};font-weight:bold;">[${tour.title}]</span> ${stop.venueName} • ${stop.city}${stop.state ? `, ${stop.state}` : ''} <span style="opacity:0.7">(${stop.date})</span>`;
+          const titleSpan = document.createElement('span');
+          titleSpan.style.color = tourColor.hex;
+          titleSpan.style.fontWeight = 'bold';
+          titleSpan.textContent = `[${tour.title}]`;
+          tooltip.appendChild(titleSpan);
+          tooltip.appendChild(
+            document.createTextNode(
+              ` ${stop.venueName} • ${stop.city}${stop.state ? `, ${stop.state}` : ''} `
+            )
+          );
+          const dateSpan = document.createElement('span');
+          dateSpan.style.opacity = '0.7';
+          dateSpan.textContent = `(${stop.date})`;
+          tooltip.appendChild(dateSpan);
           el.appendChild(tooltip);
 
           el.addEventListener('click', (e) => {

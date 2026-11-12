@@ -82,7 +82,7 @@ import { profileStore, socialFeedStore } from '../../utils/indexedDB';
 import { supabase } from '../../lib/supabaseClient';
 import { getSupabase, subscribeToTable, executeWithSchemaResilience, uploadBase64ToStorage, normalizeLoadedProfile, createShopMerchItem, fetchShopMerchItems, sanitizeMicroGenres, formatBandLocation, sanitizeShowForDb, ensureUUID } from '../../supabase';
 import { uploadFeedMedia } from '../../lib/storage';
-import { communityBandManager } from '../../lib/communityBands';
+import { communityBandManager, pickBestBandImage, isGorgasmBand, GORGASM_OFFICIAL_LOGO } from '../../lib/communityBands';
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../utils/followSyncService';
 import { hasRegisteredWorkspace } from '../../types';
 import { tourPackageManager } from '../../lib/tourPackageManager';
@@ -4193,45 +4193,79 @@ const getProfileForUser = (userParam: any) => {
       }
     }
 
-    // Build dynamic associated profiles/ties from registered workspaces & real profile attributes
+    // Build dynamic associated profiles/ties from registered workspaces & real confirmed profile attributes
 const dynamicUserTies: { name: string; role: string; avatar: string }[] = [];
 const targetProfObj = isYou ? userProfile : dbProfile;
+const isTargetMiguel = isMiguelNameOrProfile(targetProfObj) || (isYou && isMiguelNameOrProfile(userProfile));
+const targetAccLower = String(targetProfObj?.account_type || '').toLowerCase().trim();
+const isFanOnlyTarget = targetAccLower === 'fan' || targetAccLower === 'fan_only';
 
-// Ensure workspaces is always treated as an array regardless of DB return type
-const rawWorkspaces = targetProfObj?.registered_workspaces || targetProfObj?.allowed_workspaces || [];
-const regWorkspaces: string[] = Array.isArray(rawWorkspaces) 
-  ? rawWorkspaces 
-  : typeof rawWorkspaces === 'string' 
-    ? rawWorkspaces.split(',').map((s: string) => s.trim()) 
+// Ensure workspaces is always treated as an array (never treat allowed_workspaces as registered entities)
+const rawWorkspaces = targetProfObj?.registered_workspaces || [];
+const regWorkspaces: string[] = Array.isArray(rawWorkspaces)
+  ? rawWorkspaces.map((w: any) => String(typeof w === 'string' ? w : (w?.type || w?.key || '')).toLowerCase().trim()).filter(Boolean)
+  : typeof rawWorkspaces === 'string'
+    ? rawWorkspaces.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean)
     : [];
 
-if (regWorkspaces.includes('label') || targetProfObj?.label_company_name) {
+const confirmedLabelName = targetProfObj?.label_company_name || targetProfObj?.label_name || targetProfObj?.label_metadata?.company_name;
+if (confirmedLabelName && String(confirmedLabelName).trim()) {
   dynamicUserTies.push({
-    name: targetProfObj?.label_company_name || 'Record Label',
+    name: String(confirmedLabelName).trim(),
     role: 'Label',
     avatar: targetProfObj?.label_avatar || targetProfObj?.avatar || 'https://images.unsplash.com/photo-1542208998-f6dbbb27a72f?w=150'
   });
 }
 
-const promoterName = targetProfObj?.promoter_name || targetProfObj?.promoter_metadata?.brand_name;
-if (regWorkspaces.includes('promoter') || promoterName) {
+const cleanPromoterTie = (v?: string | null) => {
+  if (!v || typeof v !== 'string') return '';
+  const t = v.trim();
+  if (!t) return '';
+  if (!isTargetMiguel && t.toLowerCase().includes('nexus live')) return '';
+  return t;
+};
+const promoterName =
+  cleanPromoterTie(targetProfObj?.promoter_name) ||
+  cleanPromoterTie(targetProfObj?.promoter_agency) ||
+  cleanPromoterTie(targetProfObj?.promoter_metadata?.brand_name) ||
+  cleanPromoterTie(targetProfObj?.promoter_metadata?.agency_name) ||
+  (isTargetMiguel ? 'Nexus Live Productions' : '');
+const hasConfirmedPromoterTie = Boolean(
+  promoterName && (
+    isTargetMiguel ||
+    targetProfObj?.account_type === 'promoter' ||
+    targetProfObj?.promoter_metadata?.is_registered === true ||
+    !isFanOnlyTarget
+  )
+);
+if (hasConfirmedPromoterTie) {
   dynamicUserTies.push({
-    name: promoterName || 'Live Event Promoter',
+    name: promoterName,
     role: 'Promoter',
-    avatar: targetProfObj?.promoter_logo || targetProfObj?.promoter_metadata?.logo || targetProfObj?.avatar || 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=150'
+    avatar: targetProfObj?.promoter_logo || targetProfObj?.promoter_metadata?.logo_url || targetProfObj?.avatar || 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=150'
   });
 }
 
-const creativeName = targetProfObj?.creative_name || targetProfObj?.creative_metadata?.business_name;
-if (regWorkspaces.includes('creative') || creativeName) {
+const cleanCreativeTie = (v?: string | null) => {
+  if (!v || typeof v !== 'string') return '';
+  const t = v.trim();
+  if (!t) return '';
+  if (!isTargetMiguel && t.toLowerCase().includes('vortex graphics')) return '';
+  return t;
+};
+const creativeName =
+  cleanCreativeTie(targetProfObj?.creative_name) ||
+  cleanCreativeTie(targetProfObj?.creative_business_name) ||
+  cleanCreativeTie(targetProfObj?.creative_metadata?.business_name) ||
+  (isTargetMiguel ? 'Vortex Graphics' : '');
+if (creativeName && (isTargetMiguel || !isFanOnlyTarget || targetProfObj?.creative_metadata?.is_registered === true)) {
   dynamicUserTies.push({
-    name: creativeName || 'Creative Services',
+    name: creativeName,
     role: 'Creative',
     avatar: targetProfObj?.creative_avatar || targetProfObj?.avatar || 'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=150'
   });
 }
 
-const isTargetMiguel = isMiguelNameOrProfile(targetProfObj) || (isYou && isMiguelNameOrProfile(userProfile));
 const rawBandNameVal = targetProfObj?.band_name || targetProfObj?.bandName || (isYou ? userProfile?.band_name : null);
 const targetFullName = (
   targetProfObj?.full_name ||
@@ -4241,7 +4275,6 @@ const targetFullName = (
   ''
 ).trim();
 
-// Find matched community band by direct name or member name (e.g. Andre Gonzalez -> Cordyceps, Christopher Wirstrom -> Cranial Impalement)
 const isEmmanuelTargetProfile = Boolean(
   (targetFullName.toLowerCase().includes('emmanuel') && targetFullName.toLowerCase().includes('flores')) ||
   (targetProfObj?.username && String(targetProfObj.username).toLowerCase().includes('emmanuel') && String(targetProfObj.username).toLowerCase().includes('flores'))
@@ -4252,8 +4285,8 @@ if (!isTargetMiguel) {
   if (rawBandNameVal && (!isEmmanuelTargetProfile || rawBandNameVal.toLowerCase() !== 'origin')) {
     resolvedBandForTies = communityBandManager.findByName(rawBandNameVal) || communityBandManager.findMatch(rawBandNameVal);
   }
-  if (!resolvedBandForTies && targetFullName && !isEmmanuelTargetProfile) {
-    resolvedBandForTies = communityBandManager.findByMember(targetFullName);
+  if (!resolvedBandForTies && targetProfObj?.band_id && targetProfObj.band_id !== targetProfObj.id) {
+    resolvedBandForTies = communityBandManager.getById(targetProfObj.band_id);
   }
   if (!resolvedBandForTies) {
     const targetEmailLower = (targetProfObj?.email || dbProfile?.email || '').toLowerCase();
@@ -4273,13 +4306,13 @@ const bandNameVal = isTargetMiguel
   ? 'Virulent Excision'
   : (resolvedBandForTies?.name || resolvedBandForTies?.band_name || rawBandNameVal || null);
 
-if (regWorkspaces.includes('band') || (bandNameVal && (isTargetMiguel || resolvedBandForTies || rawBandNameVal))) {
+if (bandNameVal && (isTargetMiguel || resolvedBandForTies || rawBandNameVal)) {
   const finalBandName = bandNameVal;
   if (finalBandName) {
     const isVE = isTargetMiguel || finalBandName.toLowerCase() === 'virulent excision';
     const bandAvatar = isVE
       ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396'
-      : (resolvedBandForTies?.logo_url || resolvedBandForTies?.avatar_url || targetProfObj?.band_logo || targetProfObj?.avatar || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150');
+      : (pickBestBandImage(resolvedBandForTies?.logo_url, resolvedBandForTies?.avatar_url, targetProfObj?.band_logo, targetProfObj?.avatar, isGorgasmBand(finalBandName) ? GORGASM_OFFICIAL_LOGO : null) || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150');
     dynamicUserTies.push({
       name: finalBandName,
       role: 'Artist',
@@ -5096,17 +5129,27 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         const mappedBands = (bandsData || []).map(b => {
           const loc = formatBandLocation(b);
           const cleanMicros = sanitizeMicroGenres(b.micro_genres || b.sub_genres || b.genre_tags || b.genres || b.genre);
+          const bTitle = b.band_name || b.name || 'Registered Band';
+          const commMatch = communityBandManager.findByName(bTitle) || communityBandManager.findMatch(bTitle);
+          const bestBandAvatar = pickBestBandImage(
+            b.logo_url,
+            b.avatar_url,
+            commMatch?.logo_url,
+            commMatch?.avatar_url,
+            isGorgasmBand(b.id || bTitle, b.custom_slug) ? GORGASM_OFFICIAL_LOGO : null
+          );
 
           return {
             ...b,
             id: b.id || `band_${b.band_name || b.name}`,
             band_id: b.id,
-            name: b.band_name || b.name || 'Registered Band',
-            band_name: b.band_name || b.name,
-            full_name: b.band_name || b.name,
-            username: (b.band_name || b.name || '').toLowerCase().replace(/\s+/g, '_'),
-            avatar: b.logo_url || b.avatar_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150',
-            avatar_url: b.logo_url || b.avatar_url,
+            name: bTitle,
+            band_name: bTitle,
+            full_name: bTitle,
+            username: (bTitle || '').toLowerCase().replace(/\s+/g, '_'),
+            avatar: bestBandAvatar || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150',
+            avatar_url: bestBandAvatar || b.logo_url || b.avatar_url,
+            logo_url: bestBandAvatar || b.logo_url || b.avatar_url,
             role: 'band',
             portalRole: 'Band / Artist',
             type: 'band',

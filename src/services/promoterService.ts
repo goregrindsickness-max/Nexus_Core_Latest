@@ -153,18 +153,32 @@ export async function autoSyncPromoterProfile(userProfile: any): Promise<any> {
     }
 
     const isOwnerMiguel = isMiguelNameOrProfile(userProfile) || isMiguelNameOrProfile(profData);
+    const cleanNonNexus = (v: any) => (v && typeof v === 'string' && v.trim() && (isOwnerMiguel || !v.toLowerCase().includes('nexus live'))) ? v.trim() : '';
+    const pmCandidate = profData?.promoter_metadata || userProfile?.promoter_metadata || {};
+    const hasCustomPromoterName = Boolean(
+      cleanNonNexus(pmCandidate?.brand_name) ||
+      cleanNonNexus(pmCandidate?.agency_name) ||
+      cleanNonNexus(pmCandidate?.entity_name) ||
+      cleanNonNexus(profData?.promoter_agency) ||
+      cleanNonNexus(profData?.promoter_brand) ||
+      cleanNonNexus(profData?.promoter_name) ||
+      cleanNonNexus(userProfile?.promoter_agency) ||
+      cleanNonNexus(userProfile?.promoter_brand) ||
+      cleanNonNexus(userProfile?.promoter_name)
+    );
+    const isFanAccount = (profData?.account_type === 'fan' || profData?.account_type === 'fan_only' || userProfile?.account_type === 'fan' || userProfile?.account_type === 'fan_only');
+    const hasValidPromoterRecord = Boolean(
+      promoterRecord && (isOwnerMiguel || !String(promoterRecord.entity_name || promoterRecord.brand_name || '').toLowerCase().includes('nexus live'))
+    );
+    const hasIndependentPromoterId = Boolean(
+      (profData?.promoter_id && profData.promoter_id !== userId) ||
+      (userProfile?.promoter_id && userProfile.promoter_id !== userId)
+    );
+
     const hasPromoterRegistration = Boolean(
       isOwnerMiguel ||
-      promoterRecord ||
-      profData?.promoter_id ||
-      userProfile?.promoter_id ||
-      userProfile?.promoter_agency ||
-      userProfile?.promoter_brand ||
-      (userProfile?.promoter_metadata && (userProfile.promoter_metadata.is_registered || userProfile.promoter_metadata.brand_name)) ||
-      (Array.isArray(userProfile?.registered_workspaces) && userProfile.registered_workspaces.some((w: any) => {
-        const type = typeof w === 'string' ? w : (w?.type || w?.key || '');
-        return String(type).toLowerCase() === 'promoter';
-      }))
+      hasValidPromoterRecord ||
+      (!isFanAccount && (hasIndependentPromoterId || hasCustomPromoterName || pmCandidate?.is_registered === true))
     );
 
     if (!hasPromoterRegistration) {
@@ -173,7 +187,14 @@ export async function autoSyncPromoterProfile(userProfile: any): Promise<any> {
 
     const pm = profData?.promoter_metadata || userProfile?.promoter_metadata || {};
     const effectiveBio = promoterRecord?.bio || pm.bio || profData?.promoter_bio || userProfile?.promoter_bio || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent live event promoter and concert coordinator.');
-    const effectiveBrandName = promoterRecord?.entity_name || pm.brand_name || pm.agency_name || pm.business_name || profData?.promoter_agency || profData?.promoter_brand || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations');
+    const effectiveBrandName =
+      cleanNonNexus(promoterRecord?.entity_name) ||
+      cleanNonNexus(pm.brand_name) ||
+      cleanNonNexus(pm.agency_name) ||
+      cleanNonNexus(pm.business_name) ||
+      cleanNonNexus(profData?.promoter_agency) ||
+      cleanNonNexus(profData?.promoter_brand) ||
+      (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations');
     const effectiveLogo = promoterRecord?.promoter_logo || pm.logo_url || profData?.promoter_logo || profData?.avatar_url || userProfile?.promoter_logo || userProfile?.avatar_url || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : '');
     const effectiveBanner = promoterRecord?.promoter_cover_image || pm.banner_url || pm.cover_url || profData?.promoter_cover_image || profData?.banner_url || userProfile?.promoter_cover_image || userProfile?.banner_url || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : '');
 
@@ -204,7 +225,7 @@ export async function autoSyncPromoterProfile(userProfile: any): Promise<any> {
       featured_youtube_url: promoterRecord?.featured_youtube_url || promoterRecord?.top_song_url || pm.featured_video_url || pm.featured_youtube_url || pm.top_song_url || profData?.featured_youtube_url || profData?.top_song_url || userProfile?.featured_youtube_url || userProfile?.top_song_url || '',
       top_song_artist: promoterRecord?.top_song_artist || pm.top_song_artist || profData?.top_song_artist || userProfile?.top_song_artist || '',
       top_song_title: promoterRecord?.top_song_title || pm.top_song_title || profData?.top_song_title || userProfile?.top_song_title || '',
-      active_venues: promoterRecord?.active_venues || pm.active_venues || [
+      active_venues: promoterRecord?.active_venues || pm.active_venues || (isOwnerMiguel ? [
         'Reggies Rock Club',
         'Subterranean',
         'Cobra Lounge',
@@ -212,11 +233,11 @@ export async function autoSyncPromoterProfile(userProfile: any): Promise<any> {
         'Live Wire Lounge',
         'Empty Bottle',
         'Beat Kitchen'
-      ],
-      social_links: promoterRecord?.social_links || pm.social_links || {
+      ] : ['Local DIY & Club Venues']),
+      social_links: promoterRecord?.social_links || pm.social_links || (isOwnerMiguel ? {
         facebook: 'https://facebook.com/nexuslive',
         instagram: 'https://instagram.com/nexusliveproductions'
-      },
+      } : {}),
       genres: Array.isArray(promoterRecord?.genres) && promoterRecord.genres.length > 0 
         ? promoterRecord.genres 
         : (Array.isArray(promoterRecord?.genre_tags) && promoterRecord.genre_tags.length > 0
