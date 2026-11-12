@@ -267,7 +267,6 @@ export default function NotificationCenterView({
       if (!n.is_read) onMarkAsRead(n.id);
     });
     setTimeout(syncGlobalUnreadBadge, 50);
-    if (triggerNotification) triggerNotification("All alerts logged as read.");
   };
 
   // Handle clear/delete all
@@ -277,7 +276,6 @@ export default function NotificationCenterView({
       setNotifications([]);
       localStorage.setItem('nexus_core_notifications', JSON.stringify([]));
       setTimeout(syncGlobalUnreadBadge, 50);
-      if (triggerNotification) triggerNotification("Cleared notification console.");
     }
   };
 

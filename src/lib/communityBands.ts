@@ -1115,7 +1115,7 @@ export class CommunityBandManager {
 
       // Clean slate migration for bands affected by 0-track / empty-cover placeholder discographies
       try {
-        const PLACEHOLDER_WIPED_KEY = 'nexus_placeholder_discographies_wiped_v2';
+        const PLACEHOLDER_WIPED_KEY = 'nexus_placeholder_discographies_wiped_v3';
         if (!safeLocalStorage.getItem(PLACEHOLDER_WIPED_KEY)) {
           const targetBands = [
             { id: 'dof-deeds-of-flesh-official-uuid', name: 'deeds of flesh' },

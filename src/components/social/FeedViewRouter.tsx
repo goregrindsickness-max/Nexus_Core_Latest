@@ -696,6 +696,64 @@ export const FeedViewRouter: React.FC<any> = (props) => {
               </div>
             )}
 
+            {/* Category Filter Bar positioned right above the feed stream */}
+            <div className="max-w-2xl mx-auto px-4 pt-3 pb-1 sm:px-4 text-left">
+              <div className="flex items-center justify-between gap-2 mb-1.5 px-0.5">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-400">
+                  Filter your Feed
+                </span>
+                {props.activeFeedCategoryFilter && props.activeFeedCategoryFilter !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => props.setActiveFeedCategoryFilter?.('all')}
+                    className="text-[9.5px] font-mono font-bold text-amber-400 hover:text-amber-300 uppercase tracking-wider cursor-pointer"
+                  >
+                    Reset Filter
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 select-none">
+                {[
+                  { id: 'all', label: 'All Stream', emoji: '🔥' },
+                  { id: 'followed', label: 'Followed', emoji: '⭐' },
+                  { id: 'bulletin', label: 'Bulletin & Gear', emoji: '📌' },
+                  { id: 'tour', label: 'Tour Dates', emoji: '🎟️' },
+                  { id: 'merch', label: 'Merch Drops', emoji: '👕' },
+                  { id: 'audio', label: 'Demos & Tapes', emoji: '🎙️' },
+                  { id: 'photos', label: 'Photo Pit', emoji: '📸' }
+                ].map((chip) => {
+                  const isSelected = 
+                    (props.activeFeedCategoryFilter || 'all') === chip.id || 
+                    (chip.id === 'followed' && props.activeFeedCategoryFilter === 'following');
+                  return (
+                    <button
+                      key={`feed-filter-chip-${chip.id}`}
+                      type="button"
+                      onClick={() => props.setActiveFeedCategoryFilter?.(chip.id)}
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-tight whitespace-nowrap transition-all cursor-pointer ${
+                        isSelected
+                          ? portalRole === 'fan_only'
+                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/70 shadow-[0_0_12px_rgba(34,211,238,0.35)]'
+                            : portalRole === 'promoter'
+                            ? 'bg-yellow-500/25 text-yellow-300 border border-yellow-400/80 shadow-[0_0_12px_rgba(234,179,8,0.4)]'
+                            : (portalRole === 'band' || userProfile?.active_workspace === 'band')
+                            ? 'bg-[#39ff14]/20 text-[#39ff14] border border-[#39ff14]/80 shadow-[0_0_12px_rgba(57,255,20,0.4)]'
+                            : portalRole === 'label'
+                            ? 'bg-orange-500/20 text-orange-300 border border-orange-400/80 shadow-[0_0_12px_rgba(249,115,22,0.4)]'
+                            : portalRole === 'creative'
+                            ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-400/80 shadow-[0_0_12px_rgba(217,70,239,0.4)]'
+                            : 'bg-[#6601BB]/30 text-[#e9d5ff] border border-[#a855f7]/70 shadow-[0_0_12px_rgba(168,85,247,0.35)]'
+                          : 'bg-zinc-900/90 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border border-zinc-800/80'
+                      }`}
+                    >
+                      <span className="text-sm">{chip.emoji}</span>
+                      <span>{chip.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Empty state for active category filter */}
             {isFilterActive && filteredFeed.length === 0 && (
               <div className="bg-[#0b0b0d] border border-zinc-800/80 rounded-2xl p-8 text-center my-4 space-y-3 shadow-xl animate-in fade-in duration-200">

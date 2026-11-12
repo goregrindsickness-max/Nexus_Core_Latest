@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { ChevronDown, MapPin, Ticket, Filter, Map as MapIcon, SlidersHorizontal, Calendar, Star, Clock, Trash2, History, UserPlus, Check, Sparkles, Building2, Palette, Music, Disc } from 'lucide-react';
+import { ChevronDown, MapPin, Ticket, Filter, Map as MapIcon, SlidersHorizontal, Calendar, Star, Clock, Trash2, History, UserPlus, Check, Sparkles, Building2, Palette, Music, Disc, Plus } from 'lucide-react';
 import { formatTimeTo12h, hasGigTickets, isPastShowDate } from '../../utils/socialFeedUtils';
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME, getTargetFollowKeys } from '../../utils/followSyncService';
 
@@ -314,9 +314,55 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
     return featuredGigs;
   }, [liveEvents, userProfile]);
 
+  const [selectedCity, setSelectedCity] = useState<string>('ALL');
+
+  const availableCities = useMemo(() => {
+    const set = new Set<string>();
+    (uniqueLiveEvents || []).forEach(g => {
+      if (g.city && g.city.trim()) {
+        set.add(g.city.trim());
+      }
+    });
+    return Array.from(set);
+  }, [uniqueLiveEvents]);
+
+  const filteredGigs = useMemo(() => {
+    if (selectedCity === 'ALL') return uniqueLiveEvents;
+    return uniqueLiveEvents.filter(g => (g.city || '').toLowerCase().includes(selectedCity.toLowerCase()));
+  }, [uniqueLiveEvents, selectedCity]);
+
+  // Helper function to format countdown badge
+  const getGigCountdownBadge = (gig: LiveTonightGig) => {
+    const dateStr = (gig.date || '').toLowerCase().trim();
+    const timeStr = (gig.time || '').toLowerCase().trim();
+
+    if (dateStr === 'tonight' || timeStr.includes('tonight')) {
+      return { text: '🔥 TONIGHT', style: 'bg-rose-950/80 border-rose-500/60 text-rose-300 animate-pulse font-bold' };
+    }
+    if (dateStr === 'tomorrow') {
+      return { text: '⚡ TOMORROW', style: 'bg-amber-950/70 border-amber-500/60 text-amber-300 font-bold' };
+    }
+
+    if (gig.date) {
+      try {
+        const gigDate = new Date(gig.date);
+        if (!isNaN(gigDate.getTime())) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const diffDays = Math.ceil((gigDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays === 0) return { text: '🔥 TONIGHT', style: 'bg-rose-950/80 border-rose-500/60 text-rose-300 animate-pulse font-bold' };
+          if (diffDays === 1) return { text: '⚡ TOMORROW', style: 'bg-amber-950/70 border-amber-500/60 text-amber-300 font-bold' };
+          if (diffDays > 1 && diffDays <= 7) return { text: `⏳ IN ${diffDays} DAYS`, style: 'bg-cyan-950/70 border-cyan-500/50 text-cyan-300 font-bold' };
+        }
+      } catch {}
+    }
+
+    return null;
+  };
+
   // Auto-scroll loop at a medium readable speed (~3.5 seconds per step), pausing on user interaction
   React.useEffect(() => {
-    if (!isLiveTonightOpen || uniqueLiveEvents.length <= 1) return;
+    if (!isLiveTonightOpen || filteredGigs.length <= 1) return;
     const el = scrollRef.current;
     if (!el) return;
 
@@ -336,17 +382,17 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
     return () => {
       clearInterval(intervalId);
     };
-  }, [isLiveTonightOpen, uniqueLiveEvents.length]);
+  }, [isLiveTonightOpen, filteredGigs.length]);
 
   return (
     <div className="w-full bg-black/60 border-b border-zinc-900">
       {/* Upcoming Shows Near You Strip */}
       <div className="py-2.5 pl-1 sm:pl-0 border-t border-zinc-900/60">
         <div
-          className="px-4 mb-2 flex items-center justify-between cursor-pointer select-none"
+          className="px-4 mb-2 flex items-center justify-between cursor-pointer select-none flex-wrap gap-2"
           onClick={() => setIsLiveTonightOpen(!isLiveTonightOpen)}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <div
               className={`w-2 h-2 rounded-full ${
                 isLiveTonightOpen
@@ -375,13 +421,29 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
             >
               Upcoming Shows & Tours Near You
             </span>
-            {uniqueLiveEvents && uniqueLiveEvents.length > 0 && (
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 hidden sm:inline">
-                {uniqueLiveEvents.length} {uniqueLiveEvents.length === 1 ? 'Show' : 'Shows'} Featured
-              </span>
+
+            {/* Hometown / City Filter Pill Dropdown */}
+            {availableCities.length > 0 && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1 bg-zinc-900/90 border border-amber-500/40 hover:border-amber-400 rounded-lg px-2 py-0.5 text-[9.5px] font-mono font-bold text-amber-300 shadow-sm"
+              >
+                <MapPin className="w-2.5 h-2.5 text-rose-400 shrink-0" />
+                <select
+                  value={selectedCity}
+                  onChange={(e) => setSelectedCity(e.target.value)}
+                  className="bg-transparent text-amber-300 font-mono font-bold focus:outline-none cursor-pointer text-[9.5px]"
+                >
+                  <option value="ALL" className="bg-zinc-950 text-white">📍 All Cities ({uniqueLiveEvents.length})</option>
+                  {availableCities.map(c => (
+                    <option key={c} value={c} className="bg-zinc-950 text-white">📍 {c}</option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center gap-2 shrink-0">
             {onOpenShowCreator && (
               <button
                 type="button"
@@ -389,7 +451,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                   e.stopPropagation();
                   onOpenShowCreator();
                 }}
-                className="text-[9px] font-mono uppercase font-bold text-[#00ffcc] hover:text-black hover:bg-[#00ffcc] bg-zinc-900 border border-[#00ffcc]/40 px-2 py-0.5 rounded-md flex items-center gap-1 transition-all cursor-pointer"
+                className="text-[9px] font-mono uppercase font-bold text-[#00ffcc] hover:text-black hover:bg-[#00ffcc] bg-zinc-900 border border-[#00ffcc]/40 px-2 py-0.5 rounded-md flex items-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95"
               >
                 + Post Show
               </button>
@@ -416,110 +478,187 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
         </div>
 
         {isLiveTonightOpen && (
-          <div
-            ref={scrollRef}
-            onMouseEnter={() => { isHoveredRef.current = true; }}
-            onMouseLeave={() => { isHoveredRef.current = false; }}
-            onTouchStart={() => { isHoveredRef.current = true; }}
-            onTouchEnd={() => { isHoveredRef.current = false; }}
-            className="overflow-x-auto no-scrollbar px-4 flex gap-3 pb-1 animate-in slide-in-from-top-2 fade-in duration-200 scroll-smooth"
-          >
-            {uniqueLiveEvents.map((gig, idx) => {
-              const isTonight = gig.date?.toLowerCase() === 'tonight' || (!gig.date && gig.time.toLowerCase().includes('tonight'));
-              const isTomorrow = gig.date?.toLowerCase() === 'tomorrow';
-              const ticketsAvailable = hasGigTickets(gig);
-              const formattedTime = formatTimeTo12h(gig.time);
-              
-              return (
-                <div
-                  key={`gig-${gig.id}-${idx}`}
-                  className={`shrink-0 bg-[#0a0c10] border rounded-xl px-3 py-2 flex items-center gap-3 shadow-lg shadow-black/50 transition-all group cursor-pointer ${
-                    isBand
-                      ? 'border-[#39ff14]/60 hover:border-[#39ff14] bg-gradient-to-r from-[#39ff14]/10 to-[#0a0c10] shadow-[0_0_12px_rgba(57,255,20,0.15)]'
-                      : isIndustryPro
-                      ? 'border-purple-500/70 hover:border-purple-400 bg-gradient-to-r from-purple-950/40 via-[#130826] to-[#0a0c10] shadow-[0_0_14px_rgba(168,85,247,0.25)]'
-                      : isPromoter
-                      ? 'border-yellow-500/60 hover:border-yellow-400 bg-gradient-to-r from-yellow-950/20 to-[#0a0c10]'
-                      : isFan
-                      ? 'border-cyan-500/60 hover:border-cyan-400 bg-gradient-to-r from-cyan-950/20 to-[#0a0c10]'
-                      : gig.isFollowed 
-                      ? 'border-amber-500/50 hover:border-amber-400/80 bg-gradient-to-r from-amber-950/20 to-[#0a0c10]' 
-                      : 'border-zinc-800 hover:border-zinc-700'
-                  }`}
-                  onClick={() => onSelectLiveTonight(gig)}
-                >
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <div className={`text-xs font-black text-white uppercase tracking-wide ${
-                        isBand ? 'group-hover:text-[#39ff14]' : isIndustryPro ? 'group-hover:text-purple-300' : 'group-hover:text-rose-400'
-                      } transition-colors truncate max-w-[130px] sm:max-w-[170px]`}>
-                        {gig.headliner}
+          <>
+            {filteredGigs.length === 0 ? (
+              <div className="mx-4 my-2 p-3.5 rounded-xl bg-zinc-950/80 border border-dashed border-amber-500/40 text-center space-y-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/60 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold">
+                  <MapPin className="w-3 h-3 text-rose-400" /> No shows currently listed for {selectedCity}
+                </div>
+                <p className="text-[10px] font-mono text-zinc-400 max-w-sm mx-auto">
+                  Be the first to submit a local gig, venue flyer, or tour date in {selectedCity}!
+                </p>
+                {onOpenShowCreator && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenShowCreator();
+                    }}
+                    className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-mono font-black text-[10px] uppercase tracking-wider inline-flex items-center gap-1.5 cursor-pointer shadow-md"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Post Show in {selectedCity}</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div
+                ref={scrollRef}
+                onMouseEnter={() => { isHoveredRef.current = true; }}
+                onMouseLeave={() => { isHoveredRef.current = false; }}
+                onTouchStart={() => { isHoveredRef.current = true; }}
+                onTouchEnd={() => { isHoveredRef.current = false; }}
+                className="overflow-x-auto no-scrollbar px-4 flex gap-3 pb-1 animate-in slide-in-from-top-2 fade-in duration-200 scroll-smooth"
+              >
+                {filteredGigs.map((gig, idx) => {
+                  const isTonight = gig.date?.toLowerCase() === 'tonight' || (!gig.date && gig.time.toLowerCase().includes('tonight'));
+                  const isTomorrow = gig.date?.toLowerCase() === 'tomorrow';
+                  const ticketsAvailable = hasGigTickets(gig);
+                  const formattedTime = formatTimeTo12h(gig.time);
+                  const countdownBadge = getGigCountdownBadge(gig);
+                  const flyerUrl = (gig as any).flyer_url || (gig as any).image_url || (gig as any).cover_url;
+                  const lineupSupport = (gig as any).lineup || (gig as any).support_acts;
+                  
+                  return (
+                    <div
+                      key={`gig-${gig.id}-${idx}`}
+                      className={`shrink-0 bg-[#0a0c10] border rounded-xl px-3 py-2 flex items-center gap-3 shadow-lg shadow-black/50 transition-all group cursor-pointer ${
+                        isBand
+                          ? 'border-[#39ff14]/60 hover:border-[#39ff14] bg-gradient-to-r from-[#39ff14]/10 to-[#0a0c10] shadow-[0_0_12px_rgba(57,255,20,0.15)]'
+                          : isIndustryPro
+                          ? 'border-purple-500/70 hover:border-purple-400 bg-gradient-to-r from-purple-950/40 via-[#130826] to-[#0a0c10] shadow-[0_0_14px_rgba(168,85,247,0.25)]'
+                          : isPromoter
+                          ? 'border-yellow-500/60 hover:border-yellow-400 bg-gradient-to-r from-yellow-950/20 to-[#0a0c10]'
+                          : isFan
+                          ? 'border-cyan-500/60 hover:border-cyan-400 bg-gradient-to-r from-cyan-950/20 to-[#0a0c10]'
+                          : gig.isFollowed 
+                          ? 'border-amber-500/50 hover:border-amber-400/80 bg-gradient-to-r from-amber-950/20 to-[#0a0c10]' 
+                          : 'border-zinc-800 hover:border-zinc-700'
+                      }`}
+                      onClick={() => onSelectLiveTonight(gig)}
+                    >
+                      {/* Concert Ticket Stub Image/Icon Badge */}
+                      <div className="w-10 h-10 rounded-lg bg-zinc-950 border border-zinc-750 flex items-center justify-center shrink-0 overflow-hidden relative shadow-inner">
+                        {flyerUrl ? (
+                          <img src={flyerUrl} alt={gig.headliner} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-amber-400">
+                            <Building2 className="w-4 h-4 text-amber-400" />
+                          </div>
+                        )}
                       </div>
 
-                      {/* Followed Band Badge */}
-                      {gig.isFollowed && (
-                        <span className="inline-flex items-center gap-0.5 text-[8px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                          <Star className="w-2 h-2 fill-amber-300" /> Following
-                        </span>
-                      )}
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <div className={`text-xs font-black text-white uppercase tracking-wide ${
+                            isBand ? 'group-hover:text-[#39ff14]' : isIndustryPro ? 'group-hover:text-purple-300' : 'group-hover:text-rose-400'
+                          } transition-colors truncate max-w-[130px] sm:max-w-[170px]`}>
+                            {gig.headliner}
+                          </div>
 
-                      {/* Date Badge */}
-                      {gig.date && (
-                        <span className={`text-[8.5px] font-mono font-bold px-1.5 py-0.2 rounded border ${
-                          isTonight 
-                            ? isBand ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 animate-pulse' : isIndustryPro ? 'bg-purple-950/80 border-purple-500/60 text-purple-200 animate-pulse' : 'bg-rose-950/70 border-rose-500/50 text-rose-300 animate-pulse' 
-                            : isTomorrow
-                            ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
-                            : 'bg-zinc-900 border-zinc-800 text-zinc-300'
-                        }`}>
-                          {gig.date}
-                        </span>
-                      )}
+                          {/* Live Countdown Badge */}
+                          {countdownBadge && (
+                            <span className={`text-[8px] font-mono px-1.5 py-0.2 rounded border ${countdownBadge.style}`}>
+                              {countdownBadge.text}
+                            </span>
+                          )}
+
+                          {/* Followed Band Badge */}
+                          {gig.isFollowed && (
+                            <span className="inline-flex items-center gap-0.5 text-[8px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                              <Star className="w-2 h-2 fill-amber-300" /> Following
+                            </span>
+                          )}
+
+                          {/* Date Badge */}
+                          {gig.date && !countdownBadge && (
+                            <span className={`text-[8.5px] font-mono font-bold px-1.5 py-0.2 rounded border ${
+                              isTonight 
+                                ? isBand ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 animate-pulse' : isIndustryPro ? 'bg-purple-950/80 border-purple-500/60 text-purple-200 animate-pulse' : 'bg-rose-950/70 border-rose-500/50 text-rose-300 animate-pulse' 
+                                : isTomorrow
+                                ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
+                                : 'bg-zinc-900 border-zinc-800 text-zinc-300'
+                            }`}>
+                              {gig.date}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Lineup Support snippet if available */}
+                        {lineupSupport && (
+                          <div className="text-[8.5px] font-mono text-zinc-400 truncate max-w-[140px] sm:max-w-[170px]">
+                            w/ {typeof lineupSupport === 'string' ? lineupSupport : Array.isArray(lineupSupport) ? lineupSupport.join(', ') : 'Local Support'}
+                          </div>
+                        )}
+
+                        {/* Venue & Location */}
+                        <div className="text-[9px] text-zinc-400 flex items-center gap-1 font-mono truncate">
+                          <MapPin className={`w-2.5 h-2.5 ${isBand ? 'text-[#39ff14]' : isIndustryPro ? 'text-purple-400' : 'text-rose-500'} shrink-0`} /> 
+                          <span className="truncate max-w-[130px] sm:max-w-[160px]">{gig.venue}{gig.city ? ` • ${gig.city}` : ''}</span>
+                          {gig.distance && (
+                            <span className="text-[#00ffcc] shrink-0">({gig.distance})</span>
+                          )}
+                        </div>
+
+                        {/* Time / Doors Schedule */}
+                        <div className="text-[8.5px] text-zinc-300 flex items-center gap-1 font-mono">
+                          <Clock className="w-2.5 h-2.5 text-zinc-500 shrink-0" />
+                          <span>{formattedTime}</span>
+                          {gig.price && (
+                            <span className="text-emerald-400 font-bold ml-1">{gig.price}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0 ml-1">
+                        <button
+                          type="button"
+                          disabled={!ticketsAvailable}
+                          className={`p-1.5 rounded-lg transition-colors shadow-md ${
+                            ticketsAvailable
+                              ? 'bg-[#006df9] hover:bg-[#005bc3] text-white cursor-pointer shadow-blue-900/30'
+                              : 'bg-zinc-800/80 text-zinc-600 cursor-not-allowed opacity-40'
+                          }`}
+                          title={ticketsAvailable ? "Get Tickets / Box Office" : "Box Office Unlinked / No Tickets Available"}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (ticketsAvailable) {
+                              onCheckoutTicket(gig);
+                            }
+                          }}
+                        >
+                          <Ticket className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
+                  );
+                })}
 
-                    {/* Venue & Location */}
-                    <div className="text-[9px] text-zinc-400 flex items-center gap-1 font-mono truncate">
-                      <MapPin className={`w-2.5 h-2.5 ${isBand ? 'text-[#39ff14]' : isIndustryPro ? 'text-purple-400' : 'text-rose-500'} shrink-0`} /> 
-                      <span className="truncate max-w-[130px] sm:max-w-[160px]">{gig.venue}{gig.city ? ` • ${gig.city}` : ''}</span>
-                      {gig.distance && (
-                        <span className="text-[#00ffcc] shrink-0">({gig.distance})</span>
-                      )}
+                {/* Hometown Scout End Card */}
+                {onOpenShowCreator && (
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenShowCreator();
+                    }}
+                    className="shrink-0 bg-gradient-to-r from-amber-950/40 via-[#140d02] to-[#0a0c10] border border-amber-500/60 hover:border-amber-400 rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-lg shadow-black/50 transition-all cursor-pointer group select-none"
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-300 shrink-0">
+                      <Plus className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
                     </div>
-
-                    {/* Time / Doors Schedule */}
-                    <div className="text-[8.5px] text-zinc-300 flex items-center gap-1 font-mono">
-                      <Clock className="w-2.5 h-2.5 text-zinc-500 shrink-0" />
-                      <span>{formattedTime}</span>
-                      {gig.price && (
-                        <span className="text-emerald-400 font-bold ml-1">{gig.price}</span>
-                      )}
+                    <div className="space-y-0.5 text-left min-w-[150px]">
+                      <div className="text-xs font-black text-amber-300 uppercase tracking-wide flex items-center gap-1">
+                        <span>+ Add Hometown Show</span>
+                      </div>
+                      <div className="text-[9px] text-zinc-400 font-mono">
+                        {selectedCity !== 'ALL' ? `Know a show in ${selectedCity}? Post it!` : 'Post local venue flyers or tour dates!'}
+                      </div>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-1 shrink-0 ml-1">
-                    <button
-                      type="button"
-                      disabled={!ticketsAvailable}
-                      className={`p-1.5 rounded-lg transition-colors shadow-md ${
-                        ticketsAvailable
-                          ? 'bg-[#006df9] hover:bg-[#005bc3] text-white cursor-pointer shadow-blue-900/30'
-                          : 'bg-zinc-800/80 text-zinc-600 cursor-not-allowed opacity-40'
-                      }`}
-                      title={ticketsAvailable ? "Get Tickets / Box Office" : "Box Office Unlinked / No Tickets Available"}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (ticketsAvailable) {
-                          onCheckoutTicket(gig);
-                        }
-                      }}
-                    >
-                      <Ticket className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 

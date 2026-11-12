@@ -726,7 +726,6 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     setEventFlyerUrl?.('');
     setEventIsSecret?.(false);
     setEventData?.(null);
-    triggerNotification?.('Event details cleared.');
   };
 
   // Expanded Mention / Tag State (@ query for Profiles, Bands, and Venues)

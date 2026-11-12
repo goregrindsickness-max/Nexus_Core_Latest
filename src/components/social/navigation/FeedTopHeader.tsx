@@ -1172,50 +1172,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                 )}
               </div>
 
-              {/* 2. One-Tap Category Filter Chips (Active on Feed tab when not searching) */}
-              {activeTab === 'feed' && !globalSearchQuery && (
-                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-2 px-0.5 select-none">
-                  {[
-                    { id: 'all', label: 'All Stream', emoji: '🔥' },
-                    { id: 'followed', label: 'Followed', emoji: '⭐' },
-                    { id: 'bulletin', label: 'Bulletin & Gear', emoji: '📌' },
-                    { id: 'tour', label: 'Tour Dates', emoji: '🎟️' },
-                    { id: 'merch', label: 'Merch Drops', emoji: '👕' },
-                    { id: 'audio', label: 'Demos & Tapes', emoji: '🎙️' },
-                    { id: 'photos', label: 'Photo Pit', emoji: '📸' }
-                  ].map((chip) => {
-                    const isSelected = 
-                      (activeFeedCategoryFilter || 'all') === chip.id || 
-                      (chip.id === 'followed' && activeFeedCategoryFilter === 'following');
-                    return (
-                      <button
-                        key={`feed-filter-chip-${chip.id}`}
-                        type="button"
-                        onClick={() => setActiveFeedCategoryFilter?.(chip.id)}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-tight whitespace-nowrap transition-all cursor-pointer ${
-                          isSelected
-                            ? portalRole === 'fan_only'
-                              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/70 shadow-[0_0_12px_rgba(34,211,238,0.35)]'
-                              : portalRole === 'promoter'
-                              ? 'bg-yellow-500/25 text-yellow-300 border border-yellow-400/80 shadow-[0_0_12px_rgba(234,179,8,0.4)]'
-                              : (portalRole === 'band' || userProfile?.active_workspace === 'band')
-                              ? 'bg-[#39ff14]/20 text-[#39ff14] border border-[#39ff14]/80 shadow-[0_0_12px_rgba(57,255,20,0.4)]'
-                              : portalRole === 'label'
-                              ? 'bg-orange-500/20 text-orange-300 border border-orange-400/80 shadow-[0_0_12px_rgba(249,115,22,0.4)]'
-                              : portalRole === 'creative'
-                              ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-400/80 shadow-[0_0_12px_rgba(217,70,239,0.4)]'
-                              : 'bg-[#6601BB]/30 text-[#e9d5ff] border border-[#a855f7]/70 shadow-[0_0_12px_rgba(168,85,247,0.35)]'
-                            : 'bg-zinc-900/90 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border border-zinc-800/80'
-                        }`}
-                      >
-                        <span className="text-[12px]">{chip.emoji}</span>
-                        <span>{chip.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
               {/* Search Dropdown Results */}
               {globalSearchQuery.trim().length > 0 && (
                 <div className="absolute right-0 left-0 top-full mt-2 mx-2 bg-[#121214] border border-zinc-800 rounded-2xl shadow-2xl p-2 z-[9999] overflow-hidden max-h-96 overflow-y-auto no-scrollbar">

@@ -243,230 +243,67 @@ export function slugifyEntityName(input: string): string {
     .replace(/^-+|-+$/g, '') || `entity-${Date.now().toString(36)}`;
 }
 
-const DEFAULT_SEED_ENTITIES: NetworkEntity[] = [
-  {
-    id: 'e1111111-1111-4111-8111-111111111111',
-    slug: 'chicago-domination-fest',
-    display_name: 'Chicago Domination Fest',
-    category: 'festival',
-    avatar_url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=400&q=80',
-    banner_url: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1200&q=80',
-    bio: 'Midwest premier extreme & brutal death metal gathering. Three days of relentless underground brutality, international headliners, and massive distro village in Chicago, IL.',
-    location: 'Chicago, IL',
-    external_links: {
-      website: 'https://chicagodominationfest.com',
-      instagram: 'https://instagram.com/chicagodominationfest',
-      tickets: 'https://chicagodominationfest.com/tickets',
-    },
-    owner_id: '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
-    created_at: '2026-01-15T12:00:00.000Z',
-  },
-  {
-    id: 'e2222222-2222-4222-8222-222222222222',
-    slug: 'brutal-mind-distro',
-    display_name: 'Brutal Mind Label & Distro',
-    category: 'label_distro',
-    avatar_url: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?auto=format&fit=crop&w=400&q=80',
-    banner_url: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=1200&q=80',
-    bio: 'Global underground extreme metal label, limited vinyl pressings, and official tour merch syndicate.',
-    location: 'Jakarta / Los Angeles',
-    external_links: {
-      website: 'https://brutalmind.id',
-      bandcamp: 'https://brutalmind.bandcamp.com',
-    },
-    owner_id: '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
-    created_at: '2026-02-01T12:00:00.000Z',
-  },
-  {
-    id: 'e3333333-3333-4333-8333-333333333333',
-    slug: 'necrotic-booking-collective',
-    display_name: 'Necrotic Routing & Booking',
-    category: 'booking_agency',
-    avatar_url: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=400&q=80',
-    banner_url: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1200&q=80',
-    bio: 'North American & European extreme metal tour routing, festival talent buyers, and visa logistics.',
-    location: 'Austin, TX',
-    external_links: {
-      website: 'https://necroticbooking.net',
-    },
-    owner_id: '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
-    created_at: '2026-02-10T12:00:00.000Z',
-  },
-];
+const DEFAULT_SEED_ENTITIES: NetworkEntity[] = [];
 
-const DEFAULT_SEED_EDITIONS: FestivalEdition[] = [
-  {
-    id: 'f1111111-1111-4111-8111-111111111111',
-    entity_id: 'e1111111-1111-4111-8111-111111111111',
-    edition_name: 'Chicago Domination Fest 2027',
-    start_date: '2027-07-16',
-    end_date: '2027-07-18',
-    venue_name: 'Reggies Rock Club & Music Joint',
-    city: 'Chicago',
-    state: 'IL',
-    ticket_url: 'https://chicagodominationfest.com/tickets',
-    flyer_url: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1200&q=80',
-    status: 'announced',
-    created_at: '2026-03-01T12:00:00.000Z',
-  },
-];
+const DEFAULT_SEED_EDITIONS: FestivalEdition[] = [];
 
-const DEFAULT_SEED_LINEUP_ITEMS: FestivalLineupItem[] = [
-  {
-    id: 'l1111111-1111-4111-8111-000000000001',
-    edition_id: 'f1111111-1111-4111-8111-111111111111',
-    band_entity_id: 'band:suffocation',
-    custom_band_name: 'Suffocation',
-    billing_tier: 'headliner',
-    sort_order: 1,
-    day_number: 1,
-    stage_name: 'Main Domination Stage',
-    performance_date: '2027-07-16',
-    set_time: '10:30 PM',
-    created_at: '2026-03-01T12:01:00.000Z',
-    resolved_band_name: 'Suffocation',
-    resolved_band_genre: 'Brutal Technical Death Metal',
-    resolved_band_location: 'Long Island, NY',
-    is_platform_band: true,
-  },
-  {
-    id: 'l1111111-1111-4111-8111-000000000002',
-    edition_id: 'f1111111-1111-4111-8111-111111111111',
-    band_entity_id: 'band:dying-fetus',
-    custom_band_name: 'Dying Fetus',
-    billing_tier: 'headliner',
-    sort_order: 2,
-    day_number: 2,
-    stage_name: 'Main Domination Stage',
-    performance_date: '2027-07-17',
-    set_time: '10:45 PM',
-    created_at: '2026-03-01T12:02:00.000Z',
-    resolved_band_name: 'Dying Fetus',
-    resolved_band_genre: 'Brutal Death Metal / Grind',
-    resolved_band_location: 'Baltimore, MD',
-    is_platform_band: true,
-  },
-  {
-    id: 'l1111111-1111-4111-8111-000000000003',
-    edition_id: 'f1111111-1111-4111-8111-111111111111',
-    band_entity_id: 'band:deeds-of-flesh',
-    custom_band_name: 'Deeds of Flesh',
-    billing_tier: 'co_headliner',
-    sort_order: 3,
-    day_number: 1,
-    stage_name: 'Main Domination Stage',
-    performance_date: '2027-07-16',
-    set_time: '9:15 PM',
-    created_at: '2026-03-01T12:03:00.000Z',
-    resolved_band_name: 'Deeds of Flesh',
-    resolved_band_genre: 'Brutal Death Metal',
-    resolved_band_location: 'Los Osos, CA',
-    is_platform_band: true,
-  },
-  {
-    id: 'l1111111-1111-4111-8111-000000000004',
-    edition_id: 'f1111111-1111-4111-8111-111111111111',
-    band_entity_id: 'band:defeated-sanity',
-    custom_band_name: 'Defeated Sanity',
-    billing_tier: 'co_headliner',
-    sort_order: 4,
-    day_number: 2,
-    stage_name: 'Main Domination Stage',
-    performance_date: '2027-07-17',
-    set_time: '9:20 PM',
-    created_at: '2026-03-01T12:04:00.000Z',
-    resolved_band_name: 'Defeated Sanity',
-    resolved_band_genre: 'Technical Brutal Death Metal',
-    resolved_band_location: 'Berlin, Germany',
-    is_platform_band: true,
-  },
-  {
-    id: 'l1111111-1111-4111-8111-000000000005',
-    edition_id: 'f1111111-1111-4111-8111-111111111111',
-    band_entity_id: 'band:disgorge',
-    custom_band_name: 'Disgorge',
-    billing_tier: 'main_support',
-    sort_order: 5,
-    day_number: 1,
-    stage_name: 'Main Domination Stage',
-    performance_date: '2027-07-16',
-    set_time: '8:10 PM',
-    created_at: '2026-03-01T12:05:00.000Z',
-    resolved_band_name: 'Disgorge',
-    resolved_band_genre: 'Brutal Death Metal',
-    resolved_band_location: 'San Diego, CA',
-    is_platform_band: true,
-  },
-  {
-    id: 'l1111111-1111-4111-8111-000000000006',
-    edition_id: 'f1111111-1111-4111-8111-111111111111',
-    band_entity_id: 'band:lust-of-decay',
-    custom_band_name: 'Lust of Decay',
-    billing_tier: 'main_support',
-    sort_order: 6,
-    day_number: 2,
-    stage_name: 'Main Domination Stage',
-    performance_date: '2027-07-17',
-    set_time: '8:15 PM',
-    created_at: '2026-03-01T12:06:00.000Z',
-    resolved_band_name: 'Lust of Decay',
-    resolved_band_genre: 'Brutal Death Metal',
-    resolved_band_location: 'Raleigh, NC',
-    is_platform_band: true,
-  },
-  {
-    id: 'l1111111-1111-4111-8111-000000000007',
-    edition_id: 'f1111111-1111-4111-8111-111111111111',
-    band_entity_id: 'band:virulent-excision',
-    custom_band_name: 'Virulent Excision',
-    billing_tier: 'support',
-    sort_order: 7,
-    day_number: 1,
-    stage_name: 'Underground Pit Stage',
-    performance_date: '2027-07-16',
-    set_time: '7:00 PM',
-    created_at: '2026-03-01T12:07:00.000Z',
-    resolved_band_name: 'Virulent Excision',
-    resolved_band_genre: 'Brutal Death Metal',
-    resolved_band_location: 'Chicago, IL',
-    is_platform_band: true,
-  },
-  {
-    id: 'l1111111-1111-4111-8111-000000000008',
-    edition_id: 'f1111111-1111-4111-8111-111111111111',
-    band_entity_id: 'band:gorgasm',
-    custom_band_name: 'Gorgasm',
-    billing_tier: 'support',
-    sort_order: 8,
-    day_number: 2,
-    stage_name: 'Underground Pit Stage',
-    performance_date: '2027-07-17',
-    set_time: '7:10 PM',
-    created_at: '2026-03-01T12:08:00.000Z',
-    resolved_band_name: 'Gorgasm',
-    resolved_band_genre: 'Brutal Death Metal',
-    resolved_band_location: 'Chicago, IL',
-    is_platform_band: true,
-  },
-  {
-    id: 'l1111111-1111-4111-8111-000000000009',
-    edition_id: 'f1111111-1111-4111-8111-111111111111',
-    band_entity_id: null,
-    custom_band_name: 'Mortal Decay',
-    custom_external_url: 'https://mortaldecay.bandcamp.com',
-    billing_tier: 'opener',
-    sort_order: 9,
-    day_number: 1,
-    stage_name: 'Underground Pit Stage',
-    performance_date: '2027-07-16',
-    set_time: '6:00 PM',
-    created_at: '2026-03-01T12:09:00.000Z',
-    resolved_band_name: 'Mortal Decay',
-    resolved_band_genre: 'Technical Brutal Death Metal',
-    resolved_band_location: 'New Jersey, USA',
-    is_platform_band: false,
-  },
-];
+const DEFAULT_SEED_LINEUP_ITEMS: FestivalLineupItem[] = [];
+
+const SEED_PURGED_KEY = 'nexus_sample_entities_purged_v3';
+const DEMO_SEED_IDS = new Set([
+  'e1111111-1111-4111-8111-111111111111',
+  'e2222222-2222-4222-8222-222222222222',
+  'e3333333-3333-4333-8333-333333333333'
+]);
+
+function purgeSampleSeedEntities(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!localStorage.getItem(SEED_PURGED_KEY)) {
+      const rawEntities = localStorage.getItem(STORAGE_KEYS.ENTITIES);
+      if (rawEntities) {
+        const parsed = JSON.parse(rawEntities);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((e: any) => 
+            !DEMO_SEED_IDS.has(e.id) && 
+            e.slug !== 'chicago-domination-fest' && 
+            e.slug !== 'brutal-mind-distro' && 
+            e.slug !== 'necrotic-booking-collective'
+          );
+          localStorage.setItem(STORAGE_KEYS.ENTITIES, JSON.stringify(filtered));
+        }
+      } else {
+        localStorage.setItem(STORAGE_KEYS.ENTITIES, JSON.stringify([]));
+      }
+
+      const rawEditions = localStorage.getItem(STORAGE_KEYS.EDITIONS);
+      if (rawEditions) {
+        const parsed = JSON.parse(rawEditions);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((ed: any) => ed.id !== 'f1111111-1111-4111-8111-111111111111' && !DEMO_SEED_IDS.has(ed.entity_id));
+          localStorage.setItem(STORAGE_KEYS.EDITIONS, JSON.stringify(filtered));
+        }
+      } else {
+        localStorage.setItem(STORAGE_KEYS.EDITIONS, JSON.stringify([]));
+      }
+
+      const rawLineup = localStorage.getItem(STORAGE_KEYS.LINEUP_ITEMS);
+      if (rawLineup) {
+        const parsed = JSON.parse(rawLineup);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((item: any) => item.edition_id !== 'f1111111-1111-4111-8111-111111111111');
+          localStorage.setItem(STORAGE_KEYS.LINEUP_ITEMS, JSON.stringify(filtered));
+        }
+      } else {
+        localStorage.setItem(STORAGE_KEYS.LINEUP_ITEMS, JSON.stringify([]));
+      }
+
+      localStorage.setItem(SEED_PURGED_KEY, 'true');
+    }
+  } catch (e) {
+    console.warn('[networkEntitiesService] Error purging sample seed entities:', e);
+  }
+}
 
 function readLocalList<T>(key: string, defaultList: T[]): T[] {
   if (typeof window === 'undefined') return defaultList;
@@ -504,10 +341,12 @@ export function broadcastEntitiesUpdated(detail?: any): void {
 }
 
 export function getLocalNetworkEntities(): NetworkEntity[] {
+  purgeSampleSeedEntities();
   return readLocalList<NetworkEntity>(STORAGE_KEYS.ENTITIES, DEFAULT_SEED_ENTITIES);
 }
 
 export function getLocalEntityMembers(): EntityMember[] {
+  purgeSampleSeedEntities();
   const defaultMembers: EntityMember[] = DEFAULT_SEED_ENTITIES.map((e) => ({
     entity_id: e.id,
     user_id: e.owner_id || '5403162d-1947-43aa-b5f6-38a1bd2a1b80',
@@ -517,10 +356,12 @@ export function getLocalEntityMembers(): EntityMember[] {
 }
 
 export function getLocalFestivalEditions(): FestivalEdition[] {
+  purgeSampleSeedEntities();
   return readLocalList<FestivalEdition>(STORAGE_KEYS.EDITIONS, DEFAULT_SEED_EDITIONS);
 }
 
 export function getLocalFestivalLineupItems(): FestivalLineupItem[] {
+  purgeSampleSeedEntities();
   return readLocalList<FestivalLineupItem>(STORAGE_KEYS.LINEUP_ITEMS, DEFAULT_SEED_LINEUP_ITEMS);
 }
 
@@ -529,6 +370,7 @@ export function getLocalFestivalLineupItems(): FestivalLineupItem[] {
  * In demo/local sessions, also returns entities created in this browser session.
  */
 export function getUserManagedEntities(userId?: string | null): NetworkEntity[] {
+  purgeSampleSeedEntities();
   const allEntities = getLocalNetworkEntities();
   const members = getLocalEntityMembers();
 
@@ -544,11 +386,10 @@ export function getUserManagedEntities(userId?: string | null): NetworkEntity[] 
     (e) =>
       e.owner_id === userId ||
       memberEntityIds.has(e.id) ||
-      e.owner_id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
       !e.owner_id
   );
 
-  return ownedOrMember.length > 0 ? ownedOrMember : allEntities;
+  return ownedOrMember;
 }
 
 export function getEntityByIdOrSlug(idOrSlug?: string | null): NetworkEntity | null {

@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Building2,
   MapPin,
+  Trash2,
 } from 'lucide-react';
 import {
   NetworkEntity,
@@ -22,6 +23,7 @@ import {
   openTaggedBandOrEntityProfile,
   getLinkedEntityForPromoterWorkspace,
   linkEntityToPromoterWorkspace,
+  deleteNetworkEntity,
 } from '../../../services/networkEntitiesService';
 import { CreateEntityModal } from '../modals/CreateEntityModal';
 import { FestivalLineupEditorModal } from '../modals/FestivalLineupEditorModal';
@@ -74,29 +76,15 @@ export const AffiliatedEntitiesSection: React.FC<AffiliatedEntitiesSectionProps>
         <div className="flex items-center gap-2">
           <Building2 className="w-4 h-4 text-amber-400 shrink-0" />
           <div>
-            <h4 className="text-[11px] font-mono font-black uppercase tracking-widest text-white">
-              Affiliated Projects & Public Entities
+            <h4 className="text-[11px] font-mono font-black uppercase tracking-widest text-white flex items-center gap-1.5">
+              <span>Public Pages & Festival Entities</span>
+              <span className="text-amber-400 font-bold">({entities.length})</span>
             </h4>
             <p className="text-[9.5px] font-mono text-zinc-400">
               Festivals, Labels/Distros, Booking Collectives & Press Pages
             </p>
           </div>
         </div>
-
-        {isOwnProfile && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditingEntity(null);
-              setShowCreateModal(true);
-            }}
-            className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-mono font-bold text-[10px] uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer shrink-0"
-          >
-            <Plus className="w-3 h-3" />
-            <span>Create Public Page</span>
-          </button>
-        )}
       </div>
 
       {/* Optional Promoter Workspace Pointer/Reference Model Banner */}
@@ -162,25 +150,27 @@ export const AffiliatedEntitiesSection: React.FC<AffiliatedEntitiesSectionProps>
 
       {/* Entities List or Empty CTA Card */}
       {entities.length === 0 ? (
-        <div className="p-4 rounded-xl bg-zinc-900/50 border border-dashed border-zinc-800 text-center space-y-2">
+        <div className="p-4 rounded-xl bg-zinc-900/50 border border-dashed border-zinc-800 text-center space-y-3">
           <p className="text-xs font-mono font-bold text-zinc-300">
-            No Affiliated Public Pages Registered Yet
+            No Public Pages or Festival Entities Created Yet
           </p>
           <p className="text-[10px] font-mono text-zinc-500 max-w-md mx-auto">
-            Launch a public Festival, Record Label/Distro, Booking Collective, or Media page to post updates and build interactive festival lineups.
+            Create a public Festival, Record Label/Distro, Booking Collective, or Media page to post updates and build interactive festival lineups.
           </p>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditingEntity(null);
-              setShowCreateModal(true);
-            }}
-            className="mt-1 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-mono font-black text-[10px] uppercase tracking-wider cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Create Public Page or Entity</span>
-          </button>
+          {isOwnProfile && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingEntity(null);
+                setShowCreateModal(true);
+              }}
+              className="w-full py-3 rounded-xl bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/60 hover:border-amber-400 text-amber-300 font-mono font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-[0.99]"
+            >
+              <Plus className="w-4 h-4 text-amber-400" />
+              <span>+ CREATE PUBLIC PAGE OR ENTITY</span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -283,18 +273,34 @@ export const AffiliatedEntitiesSection: React.FC<AffiliatedEntitiesSectionProps>
                     )}
 
                     {isOwnProfile && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingEntity(ent);
-                          setShowCreateModal(true);
-                        }}
-                        className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
-                        title="Edit Public Entity"
-                      >
-                        <Edit3 className="w-3 h-3" />
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingEntity(ent);
+                            setShowCreateModal(true);
+                          }}
+                          className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+                          title="Edit Public Entity"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Are you sure you want to delete public entity "${ent.display_name}"?`)) {
+                              await deleteNetworkEntity(ent.id);
+                              refreshEntities();
+                            }
+                          }}
+                          className="p-1.5 rounded-lg bg-zinc-950 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-500/50 text-zinc-400 hover:text-rose-300 cursor-pointer"
+                          title="Delete Public Entity"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </>
                     )}
 
                     <button
@@ -329,6 +335,21 @@ export const AffiliatedEntitiesSection: React.FC<AffiliatedEntitiesSectionProps>
               </div>
             );
           })}
+
+          {isOwnProfile && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingEntity(null);
+                setShowCreateModal(true);
+              }}
+              className="w-full py-3 rounded-xl bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/60 hover:border-amber-400 text-amber-300 font-mono font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-[0.99] mt-2"
+            >
+              <Plus className="w-4 h-4 text-amber-400" />
+              <span>+ CREATE PUBLIC PAGE OR ENTITY</span>
+            </button>
+          )}
         </div>
       )}
 

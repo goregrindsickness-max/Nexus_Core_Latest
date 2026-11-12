@@ -1148,7 +1148,6 @@ export default function SettingsView({
 
   const handleToggleNotification = (key: keyof typeof notificationSettings) => {
     setNotificationSettings(prev => ({ ...prev, [key]: !prev[key] }));
-    triggerNotification(`Notification setting updated.`);
   };
 
   // Register the FCM service worker standby for system-level notifications if permitted
@@ -2419,7 +2418,7 @@ ALTER TABLE public.nexus_posts ADD COLUMN IF NOT EXISTS data JSONB;`}
                     <label className="text-[9px] font-mono text-zinc-550 uppercase tracking-widest">Base Currency Unit</label>
                     <select
                       value={currency}
-                      onChange={e => { setCurrency(e.target.value); triggerNotification(`Currency changed to ${e.target.value}`); }}
+                      onChange={e => setCurrency(e.target.value)}
                       className="w-full bg-[#111319]/60 border border-zinc-850 text-white rounded-xl px-3.5 py-2.5 font-mono text-xs focus:outline-none focus:border-emerald-500"
                     >
                       <option value="USD ($)">USD ($) - US Dollar</option>
@@ -2433,7 +2432,7 @@ ALTER TABLE public.nexus_posts ADD COLUMN IF NOT EXISTS data JSONB;`}
                     <label className="text-[9px] font-mono text-zinc-555 uppercase tracking-widest">Global Timezone Reference</label>
                     <select
                       value={timezone}
-                      onChange={e => { setTimezone(e.target.value); triggerNotification(`Timezone changed to ${e.target.value}`); }}
+                      onChange={e => setTimezone(e.target.value)}
                       className="w-full bg-[#111319]/60 border border-zinc-850 text-white rounded-xl px-3.5 py-2.5 font-mono text-xs focus:outline-none focus:border-emerald-500"
                     >
                       <option value="GMT-5 (EST)">GMT-5 (EST) - Eastern Standard Time</option>

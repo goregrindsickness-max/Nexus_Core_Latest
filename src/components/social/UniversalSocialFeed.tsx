@@ -1497,7 +1497,6 @@ export function UniversalSocialFeed({
       }
       return updated;
     });
-    triggerNotification?.('All notifications marked as read.');
   };
 
   const clearAllNotifs = () => {
@@ -1517,7 +1516,6 @@ export function UniversalSocialFeed({
           if (error) console.warn("Error clearing notifications in Supabase:", error);
         });
     }
-    triggerNotification?.('All notifications cleared.');
   };
 
   const deleteNotif = (id: string) => {
@@ -3530,7 +3528,6 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
       return;
     }
     setRotationIsPlaying(songName);
-    triggerNotification?.(`🔊 Tuning frequency: "${songName}" stream`);
     playAmbientMetalDroneEngine(songName);
 
     setTimeout(() => {

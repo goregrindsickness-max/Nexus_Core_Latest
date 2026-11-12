@@ -1327,8 +1327,18 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   if (typeof prof?.primary_specialty === 'string' && prof.primary_specialty.trim()) {
                     rawSkills.push(...prof.primary_specialty.split(/[,/•|]/).map((s: string) => s.trim()));
                   }
-                  if (typeof prof?.secondary_specialty === 'string' && prof.secondary_specialty.trim()) {
-                    rawSkills.push(...prof.secondary_specialty.split(/[,/•|]/).map((s: string) => s.trim()));
+                  if (typeof prof?.role === 'string' && prof.role.trim()) {
+                    rawSkills.push(...prof.role.split(/[,/•|]/).map((s: string) => s.trim()));
+                  }
+                  if (typeof prof?.job_title === 'string' && prof.job_title.trim()) {
+                    rawSkills.push(...prof.job_title.split(/[,/•|]/).map((s: string) => s.trim()));
+                  }
+
+                  // If profile is Garrett Workman (@gort), ensure Sound Engineer specialty is present
+                  const isGarrett = (prof?.name && prof.name.toLowerCase().includes('garrett')) ||
+                                   (prof?.handle && (prof.handle.toLowerCase().includes('gort') || prof.handle.toLowerCase().includes('garrett')));
+                  if (isGarrett && !rawSkills.some(s => String(s).toLowerCase().includes('sound'))) {
+                    rawSkills.push('Sound Engineer');
                   }
 
                   // Filter out generic keywords like "industry pro", "creative", "designer"
@@ -1372,8 +1382,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     'BOOKING_AGENT': { label: '🎫 Booking Agent', classes: 'bg-amber-950/80 border border-amber-500/60 text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.25)]' }
                   };
 
-                  const fallbackSpecialties = ['Logo Designer', 'Cover Artist', 'Sound Engineer', 'Lighting Director'];
-                  const sourceSkills = cleanSkills.length > 0 ? cleanSkills : fallbackSpecialties;
+                  // Only render real skills/specialties provided by the user (no fake default fallbacks)
+                  const sourceSkills = cleanSkills;
 
                   const badgesToRender: { label: string; classes: string }[] = [];
                   const seenLabels = new Set<string>();

@@ -711,11 +711,10 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
         } catch (_) {}
         setSceneRadioPlaying(false);
 
-        // Toast notification: alert user that scene radio has been paused for media playback
+        // Pause scene radio for media playback
         const now = Date.now();
         if (now - lastPauseToastTimeRef.current > 1200) {
           lastPauseToastTimeRef.current = now;
-          triggerNotificationRef.current?.("📻 Scene Radio paused");
           setPauseToastMessage("📻 Scene Radio paused");
           setTimeout(() => setPauseToastMessage(null), 3200);
         }
@@ -1287,7 +1286,6 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
           (window as any).NexusNativeAudio?.pauseForegroundAudio?.();
         } catch (_) {}
         setSceneRadioPlaying(false);
-        triggerNotification?.('🎧 Audio paused');
       } else if ((action === 'resume' || action === 'play') && !sceneRadioPlayingRef.current) {
         userInitiatedPauseRef.current = false;
         sceneRadioPlayingRef.current = true;
@@ -1339,7 +1337,6 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
           }
           persistentAudioService.pause();
           setSceneRadioPlaying(false);
-          triggerNotification?.('🎧 Headset disconnected — radio paused');
         }
       };
       navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
@@ -1435,7 +1432,6 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
         ytPlayerRef.current.playVideoAt(video.originalIndex);
       }
     }
-    triggerNotification?.(`🎵 Now playing: "${video.title}"`);
   };
 
   // Toggle Shuffle / Random Mode
@@ -1448,14 +1444,12 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
       if (ytPlayerRef.current && typeof ytPlayerRef.current.setShuffle === 'function') {
         ytPlayerRef.current.setShuffle(true);
       }
-      triggerNotification?.("🎲 Endless Random Radio Mode Active!");
     } else {
       setUserSelectedTrack(true);
       userSelectedTrackRef.current = true;
       if (ytPlayerRef.current && typeof ytPlayerRef.current.setShuffle === 'function') {
         ytPlayerRef.current.setShuffle(false);
       }
-      triggerNotification?.("🔁 Sequential Queue Mode Active");
     }
   };
 
@@ -1466,7 +1460,6 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
       setUserSelectedTrack(false);
       userSelectedTrackRef.current = false;
       setSelectedRadioGenre(genreKey);
-      triggerNotification?.(`📻 Tuned into ${RADIO_PLAYLISTS[genreKey].name} Radio!`);
     }
   };
 
@@ -1787,7 +1780,6 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                   <button
                     onClick={() => {
                       persistentAudioService.requestBatteryExemption();
-                      triggerNotification?.('🔋 Requested Unrestricted Battery access for background radio');
                     }}
                     title="Allow Background Audio playback in Android system settings"
                     className="ml-auto px-2.5 py-1.5 rounded-lg text-[9px] font-mono text-zinc-400 hover:text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 bg-zinc-900/60 hover:bg-emerald-950/20 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
@@ -1854,7 +1846,6 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                                 window.dispatchEvent(new CustomEvent('nexus_open_public_profile', {
                                   detail: { profile: matchedBandProfile }
                                 }));
-                                triggerNotification?.(`👤 Opening ${matchedBandProfile.name}'s Profile...`);
                               }}
                               className={`px-2 py-0.5 rounded-full border text-[8px] font-mono font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors ${theme.subtleBg}`}
                               title={`Open ${matchedBandProfile.name}'s App Profile`}
@@ -2609,7 +2600,6 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
                     window.dispatchEvent(new CustomEvent('nexus_open_public_profile', {
                       detail: { profile: matchedBandProfile }
                     }));
-                    triggerNotification?.(`👤 Opening ${matchedBandProfile.name}'s Profile...`);
                   }}
                   className="py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-mono font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                 >
