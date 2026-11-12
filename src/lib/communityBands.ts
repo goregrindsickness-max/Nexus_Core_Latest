@@ -511,6 +511,7 @@ export function extractReleaseCover(r: any, bandIdOrName?: string): string {
   if (r.title) {
     const fallback = findMasterReleaseCover(r.title, bandIdOrName);
     if (fallback) return fallback;
+    return generateMetalAlbumSvg(r.title, r.year || r.release_date, bandIdOrName);
   }
   return '';
 }
@@ -549,7 +550,7 @@ export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrN
     const rCover = extractReleaseCover(r, bandIdOrName);
 
     if (!seen.has(normKey)) {
-      const bestCover = rCover || findMasterReleaseCover(r.title, bandIdOrName) || '';
+      const bestCover = rCover || findMasterReleaseCover(r.title, bandIdOrName) || generateMetalAlbumSvg(r.title, finalYear || r.year, bandIdOrName);
       seen.set(normKey, {
         ...r,
         year: finalYear || r.year,
@@ -570,7 +571,7 @@ export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrN
       const existing = seen.get(normKey)!;
       const existingTracksCount = Array.isArray(existing.tracks) ? existing.tracks.length : 0;
       const existingCover = extractReleaseCover(existing, bandIdOrName);
-      const finalCover = rCover || existingCover || findMasterReleaseCover(r.title, bandIdOrName) || findMasterReleaseCover(existing.title, bandIdOrName) || (existing.cover_url && isValidCoverUrl(existing.cover_url) ? existing.cover_url : '');
+      const finalCover = rCover || existingCover || findMasterReleaseCover(r.title, bandIdOrName) || findMasterReleaseCover(existing.title, bandIdOrName) || (existing.cover_url && isValidCoverUrl(existing.cover_url) ? existing.cover_url : generateMetalAlbumSvg(r.title, finalYear || r.year, bandIdOrName));
       const isExistingGenericTitle = ['split', 'split-ep', 'split ep'].includes(existing.title.toLowerCase().trim());
       const isNewDescriptiveTitle = !['split', 'split-ep', 'split ep'].includes(r.title.toLowerCase().trim());
 
@@ -682,6 +683,12 @@ export function deduplicateLineup(members: LineupMember[]): LineupMember[] {
     if (!m || !m.name) continue;
     const normName = m.name.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (!normName) continue;
+
+    // Blacklist legacy/fake mock members for Birdflesh
+    if (normName === 'smogen' || normName === 'smgen' || normName === 'barra' || (normName === 'elis' && !m.name.toLowerCase().includes('edin'))) {
+      continue;
+    }
+
     if (!seen.has(normName)) {
       seen.set(normName, m);
     } else {
@@ -1309,6 +1316,51 @@ export class CommunityBandManager {
             }
           }
           safeLocalStorage.setItem(LOD_FIX_KEY, 'true');
+        }
+      } catch (_) {}
+
+      // Clean slate migration for Birdflesh lineup and fake member purge
+      try {
+        const BF_FIX_KEY = 'nexus_birdflesh_purge_fake_members_smogen_barra_v10';
+        if (!safeLocalStorage.getItem(BF_FIX_KEY)) {
+          clearBandDiscographyFromCache('bf-birdflesh-official-uuid', 'birdflesh');
+          clearBandDiscographyFromCache('92b270b9-828b-4da1-a3b9-078753fb7dc2', 'birdflesh');
+          safeLocalStorage.removeItem('nexus_core_band_lineup_92b270b9-828b-4da1-a3b9-078753fb7dc2');
+          safeLocalStorage.removeItem('nexus_core_band_lineup_bf-birdflesh-official-uuid');
+          safeLocalStorage.removeItem('nexus_core_band_lineup_birdflesh');
+          safeLocalStorage.removeItem('nexus_core_band_discography_birdflesh');
+          safeLocalStorage.removeItem('nexus_core_band_discography_bf-birdflesh-official-uuid');
+
+          const realBFLineup = [
+            { id: 'bf-1', name: 'Adde Mitroulis', role: 'Drums, Vocals', status: 'active', years: '1997–present' },
+            { id: 'bf-2', name: 'Joakim Svensson', role: 'Bass, Vocals', status: 'active', years: '2007–present' },
+            { id: 'bf-3', name: 'Elis Edin Markskog', role: 'Guitars, Vocals', status: 'active', years: '2011–present' }
+          ];
+
+          safeLocalStorage.setItem('nexus_core_band_lineup_bf-birdflesh-official-uuid', JSON.stringify(realBFLineup));
+          safeLocalStorage.setItem('nexus_core_band_lineup_birdflesh', JSON.stringify(realBFLineup));
+
+          const rawArchives = safeLocalStorage.getItem(STORAGE_KEY);
+          if (rawArchives) {
+            const parsedArchives = JSON.parse(rawArchives);
+            if (Array.isArray(parsedArchives)) {
+              const cleaned = parsedArchives.map((b: any) => {
+                const bName = (b.name || b.band_name || '').toLowerCase().trim();
+                const bId = String(b.id || '').toLowerCase().trim();
+                if (bName.includes('birdflesh') || bId === 'bf-birdflesh-official-uuid' || bId === '92b270b9-828b-4da1-a3b9-078753fb7dc2') {
+                  return {
+                    ...b,
+                    id: 'bf-birdflesh-official-uuid',
+                    lineup: realBFLineup,
+                    discography: []
+                  };
+                }
+                return b;
+              });
+              safeLocalStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+            }
+          }
+          safeLocalStorage.setItem(BF_FIX_KEY, 'true');
         }
       } catch (_) {}
 
@@ -2790,7 +2842,15 @@ export class CommunityBandManager {
           return (lb.length * 10 + detailB) - (la.length * 10 + detailA);
         });
 
-        const mergedLineup: LineupMember[] = deduplicateLineup(candidateLineups[0] || []);
+        let mergedLineup: LineupMember[] = deduplicateLineup(candidateLineups[0] || []);
+
+        if (cleanBandName === 'birdflesh' || b.id === 'bf-birdflesh-official-uuid' || (b.id && ensureUUID(b.id) === 'bf-birdflesh-official-uuid')) {
+          mergedLineup = [
+            { id: 'bf-1', name: 'Adde Mitroulis', role: 'Drums, Vocals', status: 'active', years: '1997–present' },
+            { id: 'bf-2', name: 'Joakim Svensson', role: 'Bass, Vocals', status: 'active', years: '2007–present' },
+            { id: 'bf-3', name: 'Elis Edin Markskog', role: 'Guitars, Vocals', status: 'active', years: '2011–present' }
+          ];
+        }
 
         const isOfficialVE = (b.id === 'cbddb810-259b-4230-9968-3d402dfdb872' || cleanBandName === 'virulent excision');
         const resolvedVerification: BandVerificationStatus = isOfficialVE

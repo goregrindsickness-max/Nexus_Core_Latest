@@ -193,8 +193,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Sevared Records",
         "catalog_id": "SR-112",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -294,8 +294,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "United Guttural Records",
         "catalog_id": "UGR-004",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -346,8 +346,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Relapse Records",
         "catalog_id": "RR-7422",
-        "cover_url": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -477,8 +477,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Willowtip Records",
         "catalog_id": "WT-109",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -534,8 +534,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Willowtip Records",
         "catalog_id": "WT-188",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -591,8 +591,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Season of Mist",
         "catalog_id": "SOM-744",
-        "cover_url": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -712,8 +712,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "United Guttural Records",
         "catalog_id": "UGR-002",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -808,8 +808,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "ep",
         "label": "Independent",
         "catalog_id": "STAB-001",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -974,8 +974,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Extremist Records",
         "catalog_id": "EXT-004",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1011,8 +1011,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Unique Leader Records",
         "catalog_id": "ULR-028",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1043,8 +1043,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "New Standard Elite",
         "catalog_id": "NSE-018",
-        "cover_url": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1135,8 +1135,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Ablated Records",
         "catalog_id": "AB-003",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1167,8 +1167,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Season of Mist",
         "catalog_id": "SOM-750",
-        "cover_url": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1244,8 +1244,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "United Guttural Records",
         "catalog_id": "UGR-018",
-        "cover_url": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1276,8 +1276,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Sevared Records",
         "catalog_id": "SR-048",
-        "cover_url": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1369,8 +1369,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Relapse Records",
         "catalog_id": "RR-6738",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1406,8 +1406,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Nuclear Blast",
         "catalog_id": "NB-2715",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1438,8 +1438,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Agonia Records / Nuclear Blast",
         "catalog_id": "AR-545",
-        "cover_url": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1539,8 +1539,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Noise Solution / Willowtip",
         "catalog_id": "WT-034",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1576,8 +1576,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Relapse Records",
         "catalog_id": "RR-6632",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1690,8 +1690,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Relapse Records",
         "catalog_id": "RR-6467",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1742,8 +1742,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Relapse Records",
         "catalog_id": "RR-7182",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1799,8 +1799,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Relapse Records",
         "catalog_id": "RR-7531",
-        "cover_url": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1930,8 +1930,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Century Media Records",
         "catalog_id": "CM-9871",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -1967,8 +1967,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Century Media Records",
         "catalog_id": "CM-9982",
-        "cover_url": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -2059,8 +2059,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Relapse Records",
         "catalog_id": "RR-6934",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -2101,8 +2101,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Relapse Records",
         "catalog_id": "RR-6435",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -2222,8 +2222,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Roadrunner Records",
         "catalog_id": "RR-9275",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -2279,8 +2279,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Roadrunner Records",
         "catalog_id": "RR-9013",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -2331,8 +2331,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Roadrunner Records",
         "catalog_id": "RR-8951",
-        "cover_url": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -2378,8 +2378,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Nuclear Blast",
         "catalog_id": "NB-6531",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -2568,8 +2568,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Earache Records",
         "catalog_id": "MOSH-059",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -2635,8 +2635,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Impact Records / Nuclear Blast",
         "catalog_id": "IR-004",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -2692,8 +2692,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Metal Blade Records",
         "catalog_id": "3984-14299-2",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -2744,8 +2744,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Nuclear Blast",
         "catalog_id": "NB-4789",
-        "cover_url": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -2887,8 +2887,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Independent",
         "catalog_id": "PF-002",
-        "cover_url": "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -2924,8 +2924,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Unique Leader Records",
         "catalog_id": "ULR-412",
-        "cover_url": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3033,8 +3033,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Wrong Again Records / Century Media",
         "catalog_id": "WAR-008",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3085,8 +3085,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Invasion Records",
         "catalog_id": "INV-022",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3142,8 +3142,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Nuclear Blast",
         "catalog_id": "NB-6211",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3260,8 +3260,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Comatose Music",
         "catalog_id": "COMA-129",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3297,8 +3297,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Comatose Music",
         "catalog_id": "COMA-181",
-        "cover_url": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3376,8 +3376,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "ep",
         "label": "Vomit Your Shirt",
         "catalog_id": "VYS-005",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3408,8 +3408,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Unique Leader Records",
         "catalog_id": "ULR-192",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3445,8 +3445,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Agonia Records / Miasma Records",
         "catalog_id": "AR-549",
-        "cover_url": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3562,8 +3562,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Gore House Productions",
         "catalog_id": "GHP-025",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3594,8 +3594,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Gore House Productions",
         "catalog_id": "GHP-058",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3626,8 +3626,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Unique Leader Records",
         "catalog_id": "ULR-420",
-        "cover_url": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3753,8 +3753,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Extreme Souls Production",
         "catalog_id": "ESP-006",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3824,8 +3824,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Comatose Music",
         "catalog_id": "COMA-118",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -3895,8 +3895,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Ablated Records",
         "catalog_id": "AB-001",
-        "cover_url": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -4052,8 +4052,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Unique Leader Records",
         "catalog_id": "ULR-048",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -4074,8 +4074,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Willowtip Records",
         "catalog_id": "WT-185",
-        "cover_url": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -4140,8 +4140,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Rotten Music",
         "catalog_id": "RM-032",
-        "cover_url": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -4162,8 +4162,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Rotten Music",
         "catalog_id": "RM-061",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -4314,8 +4314,8 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
         "type": "album",
         "label": "Independent",
         "catalog_id": "ND-001",
-        "cover_url": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=800&auto=format&fit=crop&q=80",
+        "cover_url": null,
+        "cover_image": null,
         "tracks": [
           {
             "number": 1,
@@ -4780,363 +4780,11 @@ export const INITIAL_COMMUNITY_BANDS: CommunityBandRecord[] = [
     "created_at": "1992-01-01T00:00:00Z",
     "followers_count": 18400,
     "lineup": [
-      { "id": "bf-1", "name": "Smögen", "role": "Bass, Vocals", "status": "active", "years": "1992–present" },
-      { "id": "bf-2", "name": "Elis", "role": "Guitars, Vocals", "status": "active", "years": "2014–present" },
-      { "id": "bf-3", "name": "Barra", "role": "Drums, Vocals", "status": "active", "years": "2021–present" }
+      { "id": "bf-1", "name": "Adde Mitroulis", "role": "Drums, Vocals", "status": "active", "years": "1997–present" },
+      { "id": "bf-2", "name": "Joakim Svensson", "role": "Bass, Vocals", "status": "active", "years": "2007–present" },
+      { "id": "bf-3", "name": "Elis Edin Markskog", "role": "Guitars, Vocals", "status": "active", "years": "2011–present" }
     ],
-    "discography": [
-      {
-        "id": "rel-bf-1",
-        "title": "Extreme Sickness First Class",
-        "year": "2023",
-        "type": "album",
-        "label": "Everlasting Spew Records",
-        "catalog_id": "SPEW148",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Extremely Smashed", "duration": "1:24" },
-          { "number": 2, "title": "Harmful Insects", "duration": "1:15" },
-          { "number": 3, "title": "Choking on Spit", "duration": "1:32" },
-          { "number": 4, "title": "Guacamole Massacre", "duration": "1:08" },
-          { "number": 5, "title": "Welcome to the Machine", "duration": "1:45" },
-          { "number": 6, "title": "Incest Metal", "duration": "1:12" },
-          { "number": 7, "title": "Prepare for Grind", "duration": "1:28" },
-          { "number": 8, "title": "Coffin Ride", "duration": "1:36" },
-          { "number": 9, "title": "Extreme Sickness First Class", "duration": "2:04" },
-          { "number": 10, "title": "Grind 'Em All", "duration": "1:19" }
-        ]
-      },
-      {
-        "id": "rel-bf-2",
-        "title": "All the Mosh / Demo-n-Demos",
-        "year": "2021",
-        "type": "compilation",
-        "label": "Horror Records",
-        "catalog_id": "HR-088",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Grind 'Em All", "duration": "1:19" },
-          { "number": 2, "title": "Dead by Mosh", "duration": "1:22" },
-          { "number": 3, "title": "Mosh-Pit Carnage", "duration": "1:40" },
-          { "number": 4, "title": "Suburban Blastbeat", "duration": "1:10" },
-          { "number": 5, "title": "Växjö Grind", "duration": "1:35" },
-          { "number": 6, "title": "Cemetery Stomp", "duration": "1:50" }
-        ]
-      },
-      {
-        "id": "rel-bf-3",
-        "title": "Birdflesh / World Downfall",
-        "year": "2019",
-        "type": "split",
-        "label": "Everlasting Spew Records",
-        "catalog_id": "SPEW-SPLIT-09",
-        "cover_url": "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Birdflesh - World Grind", "duration": "1:25" },
-          { "number": 2, "title": "Birdflesh - Downfall Massacre", "duration": "1:38" },
-          { "number": 3, "title": "World Downfall - Nuclear Decay", "duration": "2:10" }
-        ]
-      },
-      {
-        "id": "rel-bf-4",
-        "title": "Choking on Spit",
-        "year": "2018",
-        "type": "ep",
-        "label": "Everlasting Spew Records",
-        "catalog_id": "SPEW112",
-        "cover_url": "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Choking on Spit", "duration": "1:32" },
-          { "number": 2, "title": "Grind and Bear It", "duration": "1:18" },
-          { "number": 3, "title": "Happy Hour in Hell", "duration": "1:44" },
-          { "number": 4, "title": "Spit Massacre", "duration": "1:25" }
-        ]
-      },
-      {
-        "id": "rel-bf-5",
-        "title": "Satan's Goats",
-        "year": "2018",
-        "type": "ep",
-        "label": "Power It Up Records",
-        "catalog_id": "PIU-241",
-        "cover_url": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Satan's Goats", "duration": "1:40" },
-          { "number": 2, "title": "Hellish Blast", "duration": "1:15" },
-          { "number": 3, "title": "Grindcore Party", "duration": "1:30" }
-        ]
-      },
-      {
-        "id": "rel-bf-6",
-        "title": "Birdflesh / Mr. Marcaille",
-        "year": "2015",
-        "type": "split",
-        "label": "Lard Records",
-        "catalog_id": "LARD-042",
-        "cover_url": "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Birdflesh - Cello Mosh", "duration": "1:20" },
-          { "number": 2, "title": "Mr. Marcaille - Heavier Than Heavy", "duration": "2:30" }
-        ]
-      },
-      {
-        "id": "rel-bf-7",
-        "title": "Birdflesh / Rot",
-        "year": "2012",
-        "type": "split",
-        "label": "Power It Up Records",
-        "catalog_id": "PIU-189",
-        "cover_url": "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Birdflesh - Rotten Mosh", "duration": "1:28" },
-          { "number": 2, "title": "Rot - Brazilian-Swedish Collision", "duration": "1:55" }
-        ]
-      },
-      {
-        "id": "rel-bf-8",
-        "title": "Birdflesh / General Surgery",
-        "year": "2011",
-        "type": "split",
-        "label": "Relapse Records",
-        "catalog_id": "RR-7182",
-        "cover_url": "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Birdflesh - Surgical Grind", "duration": "1:35" },
-          { "number": 2, "title": "General Surgery - Pathological Blast", "duration": "2:05" }
-        ]
-      },
-      {
-        "id": "rel-bf-9",
-        "title": "The Night of the Living Shred / Alive Autopsy",
-        "year": "2009",
-        "type": "compilation",
-        "label": "Razorback Records",
-        "catalog_id": "RZR-055",
-        "cover_url": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Born to Decide", "duration": "1:42" },
-          { "number": 2, "title": "Night of the Living Shred", "duration": "1:30" },
-          { "number": 3, "title": "Alive Autopsy", "duration": "1:50" },
-          { "number": 4, "title": "Wheelchair Violence", "duration": "1:25" }
-        ]
-      },
-      {
-        "id": "rel-bf-10",
-        "title": "Night of the Ultimate Mosh",
-        "year": "2008",
-        "type": "album",
-        "label": "Razorback Records / Relapse",
-        "catalog_id": "RZR-044",
-        "cover_url": "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Victim of the Mosh", "duration": "1:35" },
-          { "number": 2, "title": "Mega-Mosh", "duration": "1:20" },
-          { "number": 3, "title": "Night of the Ultimate Mosh", "duration": "1:45" },
-          { "number": 4, "title": "Dance or Die", "duration": "1:18" },
-          { "number": 5, "title": "Grind Machine", "duration": "1:22" },
-          { "number": 6, "title": "Heavy Metal Chainsaw", "duration": "1:40" },
-          { "number": 7, "title": "Assassination in the Pit", "duration": "1:30" },
-          { "number": 8, "title": "Cat in a Blender", "duration": "1:15" },
-          { "number": 9, "title": "Anal Nightmare", "duration": "1:52" },
-          { "number": 10, "title": "Deadly Blasts", "duration": "1:28" }
-        ]
-      },
-      {
-        "id": "rel-bf-11",
-        "title": "Birdflesh / Organ Fuzz",
-        "year": "2007",
-        "type": "split",
-        "label": "Underground Grind Records",
-        "catalog_id": "UGR-012",
-        "cover_url": "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Birdflesh - Fuzz Mosh", "duration": "1:30" },
-          { "number": 2, "title": "Organ Fuzz - Organ Explosion", "duration": "2:02" }
-        ]
-      },
-      {
-        "id": "rel-bf-12",
-        "title": "Birdflesh / Final Exit",
-        "year": "2006",
-        "type": "split",
-        "label": "Fast&Furious Records",
-        "catalog_id": "FFR-03",
-        "cover_url": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Birdflesh - Exit Grind", "duration": "1:14" },
-          { "number": 2, "title": "Final Exit - Final Blast", "duration": "1:40" }
-        ]
-      },
-      {
-        "id": "rel-bf-13",
-        "title": "Birdflesh / Embalming Theatre",
-        "year": "2005",
-        "type": "split",
-        "label": "Razorback Records",
-        "catalog_id": "RZR-028",
-        "cover_url": "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Birdflesh - Theatre of Grind", "duration": "1:38" },
-          { "number": 2, "title": "Embalming Theatre - Mortuary Mosh", "duration": "2:12" }
-        ]
-      },
-      {
-        "id": "rel-bf-14",
-        "title": "Welcoming the Apocalyptic Ferret (w/ Hatebeak)",
-        "year": "2004",
-        "type": "split",
-        "label": "Reptilian Records",
-        "catalog_id": "REP-077",
-        "cover_url": "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Birdflesh - Ferret Rampage", "duration": "1:22" },
-          { "number": 2, "title": "Birdflesh - Parrot Metal", "duration": "1:18" },
-          { "number": 3, "title": "Hatebeak - Bird seeds of Vengeance", "duration": "2:05" }
-        ]
-      },
-      {
-        "id": "rel-bf-15",
-        "title": "Alive Autopsy",
-        "year": "2004",
-        "type": "album",
-        "label": "Razorback Records",
-        "catalog_id": "RZR-022",
-        "cover_url": "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Alive Autopsy", "duration": "1:50" },
-          { "number": 2, "title": "Wheelchair Violence", "duration": "1:25" },
-          { "number": 3, "title": "Cemetery Mosh", "duration": "1:34" },
-          { "number": 4, "title": "Grindcore Is Dead", "duration": "1:18" },
-          { "number": 5, "title": "Body Bag Blitz", "duration": "1:42" },
-          { "number": 6, "title": "Zombie Disco", "duration": "1:30" },
-          { "number": 7, "title": "Rotten to the Bone", "duration": "1:28" },
-          { "number": 8, "title": "Flesh Feast", "duration": "1:55" }
-        ]
-      },
-      {
-        "id": "rel-bf-16",
-        "title": "Birdflesh / Catheter",
-        "year": "2003",
-        "type": "split",
-        "label": "Razorback Records",
-        "catalog_id": "RZR-018",
-        "cover_url": "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Birdflesh - Puking Mosh", "duration": "1:22" },
-          { "number": 2, "title": "Birdflesh - Toilet Blast", "duration": "1:15" },
-          { "number": 3, "title": "Catheter - Skull Splitting Grind", "duration": "2:10" }
-        ]
-      },
-      {
-        "id": "rel-bf-17",
-        "title": "Birdflesh / Sewn Shut",
-        "year": "2003",
-        "type": "split",
-        "label": "Bizarre Leprous Production",
-        "catalog_id": "BLP-048",
-        "cover_url": "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Birdflesh - Sewn Shut Mosh", "duration": "1:28" },
-          { "number": 2, "title": "Sewn Shut - Metal Madness", "duration": "1:45" }
-        ]
-      },
-      {
-        "id": "rel-bf-18",
-        "title": "Carnage in the Pit",
-        "year": "2002",
-        "type": "album",
-        "label": "Grindwork Records",
-        "catalog_id": "GW-009",
-        "cover_url": "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Live at Obscene Extreme", "duration": "12:30" },
-          { "number": 2, "title": "Grind Assault Live", "duration": "8:45" }
-        ]
-      },
-      {
-        "id": "rel-bf-19",
-        "title": "Night of the Living Shred",
-        "year": "2002",
-        "type": "album",
-        "label": "Razorback Records",
-        "catalog_id": "RZR-011",
-        "cover_url": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Born to Decide", "duration": "1:42" },
-          { "number": 2, "title": "Night of the Living Shred", "duration": "1:30" },
-          { "number": 3, "title": "Grind Power", "duration": "1:15" },
-          { "number": 4, "title": "Frying Pan Assault", "duration": "1:22" },
-          { "number": 5, "title": "Satanic Mosh", "duration": "1:38" },
-          { "number": 6, "title": "Monster Attack", "duration": "1:20" },
-          { "number": 7, "title": "Gore in the Pit", "duration": "1:45" },
-          { "number": 8, "title": "Växjö Chainsaw", "duration": "1:33" }
-        ]
-      },
-      {
-        "id": "rel-bf-20",
-        "title": "Trip to the Meat-City",
-        "year": "2000",
-        "type": "ep",
-        "label": "Defiled Records",
-        "catalog_id": "DR-005",
-        "cover_url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Trip to the Meat-City", "duration": "1:40" },
-          { "number": 2, "title": "Meat Grind", "duration": "1:25" },
-          { "number": 3, "title": "Chopping Block", "duration": "1:35" }
-        ]
-      },
-      {
-        "id": "rel-bf-21",
-        "title": "Sneaking Out of Hell",
-        "year": "1998",
-        "type": "ep",
-        "label": "Underground Records",
-        "catalog_id": "UR-002",
-        "cover_url": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Sneaking Out of Hell", "duration": "1:35" },
-          { "number": 2, "title": "Hellish Grind", "duration": "1:20" },
-          { "number": 3, "title": "Växjö Slaughter", "duration": "1:42" }
-        ]
-      },
-      {
-        "id": "rel-bf-22",
-        "title": "Sickness in the North / Fish Fart",
-        "year": "1995",
-        "type": "demo",
-        "label": "Self-Released",
-        "catalog_id": "DEMO-95",
-        "cover_url": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "cover_image": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80",
-        "tracks": [
-          { "number": 1, "title": "Sickness in the North", "duration": "1:45" },
-          { "number": 2, "title": "Fish Fart", "duration": "1:10" },
-          { "number": 3, "title": "Early Mosh", "duration": "1:30" }
-        ]
-      }
-    ]
+    "discography": []
   },
   {
     "id": "sc-scour-official-uuid",

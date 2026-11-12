@@ -1287,12 +1287,12 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
       />
 
       {/* Header & Identity Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-zinc-800/80 mb-3 relative z-10">
-        {/* Left Side: Avatar + Posting as Dropdown */}
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+      <div className="flex flex-col gap-3 pb-3 border-b border-zinc-800/80 mb-3 relative z-10">
+        {/* Top Section: Larger Avatar + POSTING AS Label & Full Width Dropdown */}
+        <div className="flex items-center gap-3">
           <div 
-            className="w-9 h-9 rounded-full border p-0.5 bg-black/60 shrink-0 overflow-hidden transition-all relative flex items-center justify-center"
-            style={{ borderColor: `${theme.glowHex}80`, boxShadow: `0 0 10px ${theme.glowHex}40` }}
+            className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border p-0.5 bg-black/60 shrink-0 overflow-hidden transition-all relative flex items-center justify-center"
+            style={{ borderColor: `${theme.glowHex}80`, boxShadow: `0 0 12px ${theme.glowHex}40` }}
           >
             {avatarUrl && (
               <img 
@@ -1310,13 +1310,13 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                 }}
               />
             )}
-            <div className={`w-full h-full rounded-full bg-zinc-900 flex items-center justify-center font-black text-xs ${avatarUrl ? 'hidden' : ''}`} style={{ color: theme.glowHex }}>
+            <div className={`w-full h-full rounded-full bg-zinc-900 flex items-center justify-center font-black text-sm ${avatarUrl ? 'hidden' : ''}`} style={{ color: theme.glowHex }}>
               {(displayName || 'U').charAt(0).toUpperCase()}
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 min-w-0 flex-1 flex-wrap">
-            <span className="text-[10px] sm:text-xs font-mono text-zinc-400 shrink-0 font-bold uppercase tracking-wider">
+          <div className="flex flex-col gap-1 min-w-0 flex-1">
+            <span className="text-[10px] sm:text-xs font-mono text-zinc-400 font-bold uppercase tracking-wider">
               Posting as:
             </span>
             <select
@@ -1328,7 +1328,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                 }
                 setPostIdentity(e.target.value);
               }}
-              className={`bg-[#07050d] text-xs font-mono font-bold border rounded-lg px-2.5 py-1.5 focus:outline-none transition-all cursor-pointer max-w-[210px] xs:max-w-[260px] sm:max-w-[320px] truncate ${theme.badgeText} ${theme.accentBorder}`}
+              className={`w-full bg-[#07050d] text-xs sm:text-sm font-mono font-bold border rounded-xl px-3 py-2 focus:outline-none transition-all cursor-pointer truncate ${theme.badgeText} ${theme.accentBorder}`}
               title="Select which workspace, band, or public brand entity you are publishing as"
             >
               {availablePersonas.map((p) => (
@@ -1346,7 +1346,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
               const entEditions = entObj ? getEditionsForEntity(entObj.id) : [];
               const primaryEd = entEditions[0];
               return (
-                <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -1387,17 +1387,17 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           </div>
         </div>
 
-        {/* Right Side: Location Badge & Scope Selector */}
-        <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-center flex-wrap">
+        {/* Centered Buttons Underneath: Location Display & Scope Selector */}
+        <div className="flex items-center justify-center gap-2 w-full flex-wrap pt-1">
           {/* Automatic Location Display */}
           {isScrapingLocation ? (
-            <span className="text-[9.5px] font-mono text-zinc-400 animate-pulse flex items-center gap-1 bg-black/40 px-2.5 py-1 rounded-lg border border-zinc-800">
+            <span className="text-[9.5px] font-mono text-zinc-400 animate-pulse flex items-center gap-1 bg-black/40 px-3 py-1.5 rounded-xl border border-zinc-800">
               <RefreshCw className="w-3 h-3 animate-spin text-rose-400" /> Detecting location...
             </span>
           ) : scrapedLocation ? (
-            <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 bg-emerald-950/70 px-2.5 py-1 rounded-lg border border-emerald-800/80 shadow-sm max-w-full">
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-mono text-emerald-400 bg-emerald-950/70 px-3 py-1.5 rounded-xl border border-emerald-800/80 shadow-sm">
               <MapPin className="w-3 h-3 text-rose-400 shrink-0" />
-              <span className="truncate max-w-[120px] xs:max-w-[160px] sm:max-w-[200px] font-bold">{scrapedLocation}</span>
+              <span className="truncate font-bold">{scrapedLocation}</span>
               <button
                 type="button"
                 title="Clear location"
@@ -1410,32 +1410,32 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                 }}
                 className="text-zinc-400 hover:text-rose-400 ml-0.5 cursor-pointer p-0.5"
               >
-                <X className="w-3 h-3" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           ) : (
             <button
               type="button"
               onClick={fetchAutoLocation}
-              className={`text-[10px] font-mono hover:text-white flex items-center gap-1 px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${theme.badgeBg} ${theme.badgeText} ${theme.accentBorder}`}
+              className={`text-[11px] font-mono hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${theme.badgeBg} ${theme.badgeText} ${theme.accentBorder}`}
             >
               <MapPin className="w-3 h-3 text-rose-400" />
               <span>Detect Location</span>
             </button>
           )}
 
-          {/* Scope Selector Button moved next to Location */}
+          {/* Scope Selector Button */}
           <button
             type="button"
             onClick={() => togglePanel('scope')}
-            className={`text-[10px] font-mono font-bold hover:text-white flex items-center gap-1 px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+            className={`text-[11px] font-mono font-bold hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
               postScope !== 'public' || activePanel === 'scope'
                 ? `${theme.activeBtnStyle} text-cyan-300 border-cyan-500/60 shadow-[0_0_10px_rgba(6,182,212,0.3)]`
                 : `${theme.badgeBg} ${theme.badgeText} ${theme.accentBorder}`
             }`}
             title="Select transmission privacy scope"
           >
-            <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
+            <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
             <span>SCOPE: {postScope.toUpperCase()}</span>
           </button>
         </div>

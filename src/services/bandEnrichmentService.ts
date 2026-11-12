@@ -112,9 +112,9 @@ const KNOWN_PUBLIC_BANDS: Record<string, BandEnrichedMetadata> = {
     micro_genres: ['Extreme Metal', 'Deathgrind', 'Grindcore'],
     bio: 'Formed in 1992 in Växjö, Sweden, Birdflesh is a cult underground institution of humorous, high-octane grindcore and deathgrind, known for wearing outlandish stage masks and delivering breakneck blast beats.',
     lineup: [
-      { id: 'bf-1', name: 'Smögen', role: 'Bass, Vocals', status: 'active', years: '1992–present' },
-      { id: 'bf-2', name: 'Elis', role: 'Guitars, Vocals', status: 'active', years: '2014–present' },
-      { id: 'bf-3', name: 'Barra', role: 'Drums, Vocals', status: 'active', years: '2021–present' }
+      { id: 'bf-1', name: 'Adde Mitroulis', role: 'Drums, Vocals', status: 'active', years: '1997–present' },
+      { id: 'bf-2', name: 'Joakim Svensson', role: 'Bass, Vocals', status: 'active', years: '2007–present' },
+      { id: 'bf-3', name: 'Elis Edin Markskog', role: 'Guitars, Vocals', status: 'active', years: '2011–present' }
     ],
     spotify_url: 'https://open.spotify.com/artist/2v6E8j010yG5tX01',
     metal_archives_url: 'https://www.metal-archives.com/bands/Birdflesh/1376'

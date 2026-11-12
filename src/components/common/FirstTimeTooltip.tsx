@@ -41,7 +41,9 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
 }) => {
   const [hasSeen, setHasSeen] = useState<boolean>(() => isDismissed(id));
   const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [horizontalShift, setHorizontalShift] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isDismissed(id)) {
@@ -59,6 +61,40 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
       return () => clearTimeout(timer);
     }
   }, [id, autoShow, autoShowDelay]);
+
+  // Adjust tooltip horizontal position if it overflows mobile viewport edges
+  useEffect(() => {
+    if (!isOpen || hasSeen) {
+      setHorizontalShift(0);
+      return;
+    }
+
+    const checkBounds = () => {
+      if (!tooltipRef.current) return;
+      const rect = tooltipRef.current.getBoundingClientRect();
+      const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 360;
+      const minPadding = 12;
+
+      let shift = 0;
+      if (rect.left < minPadding) {
+        shift = minPadding - rect.left;
+      } else if (rect.right > viewportWidth - minPadding) {
+        shift = (viewportWidth - minPadding) - rect.right;
+      }
+
+      if (shift !== 0) {
+        setHorizontalShift((prev) => prev + shift);
+      }
+    };
+
+    setHorizontalShift(0);
+    const timer = setTimeout(checkBounds, 20);
+    window.addEventListener('resize', checkBounds);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', checkBounds);
+    };
+  }, [isOpen, hasSeen]);
 
   // Synchronize across components or tabs if dismissed
   useEffect(() => {
@@ -155,8 +191,8 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
   }[accentColor];
 
   const posClasses = {
-    top: 'bottom-full mb-3 right-0 sm:left-1/2 sm:-translate-x-1/2',
-    bottom: 'top-full mt-3 right-0 sm:left-1/2 sm:-translate-x-1/2',
+    top: 'bottom-full mb-3 left-1/2 -translate-x-1/2',
+    bottom: 'top-full mt-3 left-1/2 -translate-x-1/2',
     left: 'right-full mr-2 top-1/2 -translate-y-1/2',
     right: 'left-full ml-2 top-1/2 -translate-y-1/2',
   }[position];
@@ -179,11 +215,12 @@ export const FirstTimeTooltip: React.FC<FirstTimeTooltipProps> = ({
       <AnimatePresence>
         {!hasSeen && isOpen && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: position === 'top' ? 4 : position === 'bottom' ? -4 : 0 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9 }}
+            ref={tooltipRef}
+            initial={{ opacity: 0, scale: 0.9, y: position === 'top' ? 4 : position === 'bottom' ? -4 : 0, x: horizontalShift }}
+            animate={{ opacity: 1, scale: 1, y: 0, x: horizontalShift }}
+            exit={{ opacity: 0, scale: 0.9, x: horizontalShift }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className={`absolute z-[200] w-64 p-3 rounded-xl border ${accentStyles.border} ${accentStyles.bg} ${accentStyles.glow} backdrop-blur-md shadow-2xl ${posClasses} pointer-events-auto`}
+            className={`absolute z-[200] w-64 max-w-[calc(100vw-1.5rem)] p-3 rounded-xl border ${accentStyles.border} ${accentStyles.bg} ${accentStyles.glow} backdrop-blur-md shadow-2xl ${posClasses} pointer-events-auto`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-2 mb-1">

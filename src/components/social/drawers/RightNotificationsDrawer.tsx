@@ -233,113 +233,17 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
         {/* Filter Bar & Quick Actions */}
         <div className="p-3 border-b border-zinc-900/60 bg-[#06070a]/80 backdrop-blur z-10 flex flex-col gap-2.5">
           {/* Allow Device Notifications Button */}
-          {permissionStatus !== 'granted' ? (
-            <div className="flex flex-col gap-1.5">
-              <button
-                id="allow-device-notifications-btn"
-                onClick={handleAllowNotifications}
-                disabled={isRequesting}
-                className="w-full py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 active:scale-[0.99] text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer border border-rose-500/30 disabled:opacity-60"
-              >
-                <Bell className="w-3.5 h-3.5 fill-current" />
-                {isRequesting ? 'Authorizing...' : 'Allow Device Notifications'}
-              </button>
-              <div className="flex items-center justify-between px-1 text-[11px] font-mono text-zinc-400">
-                <span>Preview notification engine:</span>
-                <button
-                  id="test-device-notification-btn"
-                  onClick={handleTestNotification}
-                  disabled={isTestingPush}
-                  className="text-[10px] text-zinc-400 hover:text-rose-400 underline cursor-pointer"
-                >
-                  {testPushSuccess ? '✓ Alert Sent' : isTestingPush ? 'Sending...' : 'Test Alert Now'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="w-full py-1.5 px-3 rounded-lg bg-zinc-900/80 border border-emerald-500/30 flex items-center justify-between text-xs font-mono text-zinc-300">
-              <span className="flex items-center gap-1.5 text-emerald-400 font-bold text-[11px]">
-                <Check className="w-3.5 h-3.5" /> Device Notifications Active
-              </span>
-              <button
-                id="test-device-notification-btn"
-                onClick={handleTestNotification}
-                disabled={isTestingPush}
-                className={`text-[10px] px-2.5 py-0.5 rounded transition-all font-mono font-bold cursor-pointer flex items-center gap-1 ${
-                  testPushSuccess
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm'
-                    : isTestingPush
-                    ? 'bg-zinc-800 text-zinc-400 cursor-wait'
-                    : 'text-zinc-300 hover:text-white bg-zinc-800/90 hover:bg-zinc-700/90 border border-zinc-700/70'
-                }`}
-                title="Send test alert to device status bar"
-              >
-                {testPushSuccess ? (
-                  <>
-                    <Check className="w-2.5 h-2.5" /> Sent!
-                  </>
-                ) : isTestingPush ? (
-                  'Sending...'
-                ) : (
-                  'Test Alert'
-                )}
-              </button>
-            </div>
+          {permissionStatus !== 'granted' && (
+            <button
+              id="allow-device-notifications-btn"
+              onClick={handleAllowNotifications}
+              disabled={isRequesting}
+              className="w-full py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 active:scale-[0.99] text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer border border-rose-500/30 disabled:opacity-60"
+            >
+              <Bell className="w-3.5 h-3.5 fill-current" />
+              {isRequesting ? 'Authorizing...' : 'Allow Device Notifications'}
+            </button>
           )}
-
-          {/* App Icon Badge Counter Controls (Facebook & Reddit style Home Screen Badging) */}
-          <div className="w-full p-2 rounded-lg bg-zinc-950/90 border border-rose-500/20 flex flex-col gap-1.5 font-mono">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-zinc-300 font-bold flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${badgeCount > 0 ? 'bg-rose-500 animate-pulse' : 'bg-zinc-600'}`} />
-                APP ICON BADGE:
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${badgeCount > 0 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-zinc-800 text-zinc-400'}`}>
-                  {badgeCount > 0 ? `[ ${badgeCount} ] ACTIVE` : 'CLEARED'}
-                </span>
-              </span>
-              <button
-                onClick={() => {
-                  const next = !badgeEnabled;
-                  setBadgeEnabled(next);
-                  saveBadgePreference(next);
-                }}
-                className={`text-[9px] px-2 py-0.5 rounded uppercase font-bold transition-all cursor-pointer ${
-                  badgeEnabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-500'
-                }`}
-              >
-                {badgeEnabled ? 'Enabled' : 'Disabled'}
-              </button>
-            </div>
-            <div className="flex items-center gap-1.5 pt-0.5">
-              <button
-                onClick={() => {
-                  testAppBadge(2);
-                }}
-                className="flex-1 py-1 px-2 rounded bg-rose-600/90 hover:bg-rose-500 text-white font-bold text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer shadow-sm border border-rose-500/40"
-                title="Set home screen icon badge to 2 (like Facebook & Reddit app badges)"
-              >
-                <Sparkles className="w-3 h-3" /> Test Badge (2)
-              </button>
-              <button
-                onClick={() => {
-                  syncGlobalUnreadBadge();
-                }}
-                className="py-1 px-2 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer border border-zinc-700"
-                title="Sync icon badge with unread notifications count"
-              >
-                Sync Unread
-              </button>
-              <button
-                onClick={() => {
-                  clearAppBadge();
-                }}
-                className="py-1 px-2 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer border border-zinc-800"
-                title="Clear home screen app icon badge"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
             {[

@@ -388,13 +388,14 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
     <div className="w-full bg-black/60 border-b border-zinc-900">
       {/* Upcoming Shows Near You Strip */}
       <div className="py-2.5 pl-1 sm:pl-0 border-t border-zinc-900/60">
+        {/* Title Header Row with Collapse Chevron */}
         <div
-          className="px-4 mb-2 flex items-center justify-between cursor-pointer select-none flex-wrap gap-2"
+          className="px-4 mb-2 flex items-center justify-between cursor-pointer select-none"
           onClick={() => setIsLiveTonightOpen(!isLiveTonightOpen)}
         >
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
             <div
-              className={`w-2 h-2 rounded-full ${
+              className={`w-2.5 h-2.5 rounded-full ${
                 isLiveTonightOpen
                   ? isBand
                     ? 'bg-[#39ff14] shadow-[0_0_8px_#39ff14] animate-pulse'
@@ -407,7 +408,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
               }`}
             />
             <span
-              className={`text-[10px] font-black uppercase tracking-widest ${
+              className={`text-xs font-black uppercase tracking-widest ${
                 isLiveTonightOpen
                   ? isBand
                     ? 'text-[#39ff14]'
@@ -421,61 +422,69 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
             >
               Upcoming Shows & Tours Near You
             </span>
-
-            {/* Hometown / City Filter Pill Dropdown */}
-            {availableCities.length > 0 && (
-              <div
-                onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-1 bg-zinc-900/90 border border-amber-500/40 hover:border-amber-400 rounded-lg px-2 py-0.5 text-[9.5px] font-mono font-bold text-amber-300 shadow-sm"
-              >
-                <MapPin className="w-2.5 h-2.5 text-rose-400 shrink-0" />
-                <select
-                  value={selectedCity}
-                  onChange={(e) => setSelectedCity(e.target.value)}
-                  className="bg-transparent text-amber-300 font-mono font-bold focus:outline-none cursor-pointer text-[9.5px]"
-                >
-                  <option value="ALL" className="bg-zinc-950 text-white">📍 All Cities ({uniqueLiveEvents.length})</option>
-                  {availableCities.map(c => (
-                    <option key={c} value={c} className="bg-zinc-950 text-white">📍 {c}</option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {onOpenShowCreator && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenShowCreator();
-                }}
-                className="text-[9px] font-mono uppercase font-bold text-[#00ffcc] hover:text-black hover:bg-[#00ffcc] bg-zinc-900 border border-[#00ffcc]/40 px-2 py-0.5 rounded-md flex items-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95"
-              >
-                + Post Show
-              </button>
-            )}
-            {onOpenMapModal && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenMapModal();
-                }}
-                className="text-[9px] font-mono uppercase text-cyan-300 hover:text-black bg-cyan-950/60 hover:bg-cyan-400 border border-cyan-800/80 hover:border-cyan-400 px-2 py-0.5 rounded-md flex items-center gap-1 transition-all cursor-pointer shadow-sm"
-                title="Explore all upcoming events, single shows, multi-city tours, and scene archives"
-              >
-                <Calendar className="w-3 h-3 text-cyan-400 group-hover:text-black" /> View All Events
-              </button>
-            )}
-            <ChevronDown
-              className={`w-4 h-4 text-zinc-500 transition-transform duration-300 ${
-                isLiveTonightOpen ? 'rotate-180' : ''
-              }`}
-            />
-          </div>
+          <ChevronDown
+            className={`w-4 h-4 text-zinc-400 transition-transform duration-300 ${
+              isLiveTonightOpen ? 'rotate-180' : ''
+            }`}
+          />
         </div>
+
+        {/* Controls Row: All Cities Dropdown (left) and View All Events (right) on the SAME SINGLE LINE */}
+        <div className="px-4 mb-2.5 flex items-center justify-between gap-2">
+          {/* Hometown / City Filter Pill Dropdown */}
+          {availableCities.length > 0 ? (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 flex items-center bg-zinc-900/90 border border-amber-500/50 hover:border-amber-400 rounded-lg px-2.5 py-1 text-[11px] font-mono font-bold text-amber-300 shadow-sm transition-all min-w-0"
+            >
+              <select
+                value={selectedCity}
+                onChange={(e) => setSelectedCity(e.target.value)}
+                className="w-full bg-transparent text-amber-300 font-mono font-bold focus:outline-none cursor-pointer text-[11px] truncate"
+              >
+                <option value="ALL" className="bg-zinc-950 text-white">All Cities ({uniqueLiveEvents.length})</option>
+                {availableCities.map(c => (
+                  <option key={c} value={c} className="bg-zinc-950 text-white">{c}</option>
+                ))}
+              </select>
+            </div>
+          ) : <div />}
+
+          {/* View All Events Button (on the same single line) */}
+          {onOpenMapModal && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenMapModal();
+              }}
+              className="text-[11px] font-mono uppercase font-bold text-cyan-300 hover:text-black bg-cyan-950/70 hover:bg-cyan-400 border border-cyan-800/90 hover:border-cyan-400 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0 whitespace-nowrap"
+              title="Explore all upcoming events, single shows, multi-city tours, and scene archives"
+            >
+              <Calendar className="w-3.5 h-3.5 text-cyan-400 group-hover:text-black" />
+              <span>View All Events</span>
+            </button>
+          )}
+        </div>
+
+        {/* Full-Width + Post Show Button */}
+        {onOpenShowCreator && (
+          <div className="px-4 mb-3">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenShowCreator();
+              }}
+              className="w-full text-xs font-mono uppercase font-black text-[#00ffcc] hover:text-black hover:bg-[#00ffcc] bg-zinc-900/90 border border-[#00ffcc]/50 hover:border-[#00ffcc] px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-[#00ffcc]/10 active:scale-[0.99] group"
+            >
+              <Plus className="w-4 h-4 text-[#00ffcc] group-hover:text-black transition-colors" />
+              <span>+ Post Show</span>
+            </button>
+          </div>
+        )}
 
         {isLiveTonightOpen && (
           <>

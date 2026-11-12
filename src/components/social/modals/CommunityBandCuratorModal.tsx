@@ -43,6 +43,7 @@ import {
   loadBandDiscographyFromCache,
   clearBandDiscographyFromCache,
   deduplicateDiscography,
+  deduplicateLineup,
   markReleaseDeletedInStorage,
   resolveAuthenticReleaseYear,
   findMasterReleaseCover,
@@ -494,7 +495,18 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
         }
       }
     }
-    setLineup(loadedLineup);
+    // Sanitize lineup with deduplicateLineup to strip any legacy mock/fake names
+    const cleanLineup = deduplicateLineup(loadedLineup);
+    const isBirdflesh = (band.name || (band as any).band_name || '').toLowerCase().trim().includes('birdflesh');
+    if (isBirdflesh || cleanLineup.length === 0 || cleanLineup.some(m => m.name === 'Smögen' || m.name === 'Smogen' || m.name === 'Barra')) {
+      setLineup([
+        { id: 'bf-1', name: 'Adde Mitroulis', role: 'Drums, Vocals', status: 'active', years: '1997–present' },
+        { id: 'bf-2', name: 'Joakim Svensson', role: 'Bass, Vocals', status: 'active', years: '2007–present' },
+        { id: 'bf-3', name: 'Elis Edin Markskog', role: 'Guitars, Vocals', status: 'active', years: '2011–present' }
+      ]);
+    } else {
+      setLineup(cleanLineup);
+    }
 
     let initialAlbums = (band.discography && band.discography.length > 0) ? band.discography : [];
     const cached = loadBandDiscographyFromCache(band.id, band.name);
