@@ -9,7 +9,7 @@ import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, upsertBandToDatabase, generateUUID } from '../../../supabase';
 import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER, resolvePromoterLogo, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER, isBandSplitUp, resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
-import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache, resolveAuthenticReleaseYear, deduplicateDiscography, extractReleaseCover, findMasterReleaseCover, isValidBandImageUrl, pickBestBandImage, isGorgasmBand, isStaleGorgasmLineup, GORGASM_OFFICIAL_LINEUP, GORGASM_OFFICIAL_LOGO } from '../../../lib/communityBands';
+import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache, resolveAuthenticReleaseYear, deduplicateDiscography, extractReleaseCover, findMasterReleaseCover, isValidBandImageUrl, pickBestBandImage, isGorgasmBand, isStaleGorgasmLineup, parseBandLineup, GORGASM_OFFICIAL_LINEUP, GORGASM_OFFICIAL_LOGO } from '../../../lib/communityBands';
 import { isMiguelNameOrProfile } from '../../social/utils/profileUtils';
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
 import CommunityBandCuratorModal from '../../social/modals/CommunityBandCuratorModal';
@@ -182,15 +182,18 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     let existing = communityArchiveMatch || communityBandManager.findMatch(effectiveBandName) || communityBandManager.findByName(effectiveBandName);
 
     if (existing && bData) {
+      const existingLineup = parseBandLineup(existing.lineup);
+      const bDataLineup = parseBandLineup(bData.lineup);
       existing = communityBandManager.upsertBand({
         ...existing,
         ...bData,
         id: existing.id || bData.id,
         name: effectiveBandName,
         band_name: effectiveBandName,
+        lineup: bDataLineup.length > 0 ? bDataLineup : existingLineup,
         status: bData.status || existing.status,
         is_split_up: Boolean(bData.status === 'split-up' || (bData as any).is_split_up || existing.status === 'split-up')
-      });
+      }, { isNew: false, skipRemoteSync: true });
       setCommunityArchiveMatch(existing);
     }
 
@@ -208,6 +211,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         ? bData.bio
         : (publicDetails.bio || 'Not written yet.');
 
+      const initialLineup = (publicDetails.lineup?.length ? publicDetails.lineup : parseBandLineup(bData?.lineup)) || [];
       const freshBandPayload: Partial<CommunityBandRecord> = {
         id: bData?.id || generateUUID(),
         name: effectiveBandName,
@@ -231,36 +235,37 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         bandcamp_url: bData?.bandcamp_url || '',
         metal_archives_url: publicDetails.metal_archives_url || bData?.metal_archives_url || '',
         youtube_url: publicDetails.youtube_url || bData?.youtube_url || '',
-        lineup: (publicDetails.lineup?.length ? publicDetails.lineup : bData?.lineup) || [],
+        lineup: initialLineup,
         discography: (publicDetails.discography?.length ? publicDetails.discography : bData?.discography) || [],
         curated_by: userProfile?.console_handle || userProfile?.handle || '@community_archivist'
       };
 
-      existing = communityBandManager.upsertBand(freshBandPayload);
+      existing = communityBandManager.upsertBand(freshBandPayload, { isNew: true, skipRemoteSync: true });
       setCommunityArchiveMatch(existing);
 
       // Async background enrichment call to Gemini & Open Music DB
       enrichBandMetadataAsync(effectiveBandName).then(asyncDetails => {
         if (asyncDetails && Object.keys(asyncDetails).length > 0 && existing?.id) {
+          const latestSaved = communityBandManager.findByName(effectiveBandName) || existing;
+          const preservedLineup = parseBandLineup(latestSaved.lineup);
           const updated = communityBandManager.upsertBand({
-            id: existing.id,
+            id: latestSaved.id,
             name: effectiveBandName,
             band_name: effectiveBandName,
-            founded_year: existing.founded_year || asyncDetails.founded_year,
-            record_label: existing.record_label || asyncDetails.record_label,
-            label: existing.label || asyncDetails.record_label,
-            city: existing.city || asyncDetails.city,
-            state_province: existing.state_province || asyncDetails.state_province,
-            country: existing.country || asyncDetails.country,
-            genre: existing.genre || asyncDetails.genre,
-            micro_genres: existing.micro_genres?.length ? existing.micro_genres : asyncDetails.micro_genres,
-            bio: (!existing.bio || existing.bio === 'Not written yet.') ? asyncDetails.bio : existing.bio
-          });
+            founded_year: latestSaved.founded_year || asyncDetails.founded_year,
+            record_label: latestSaved.record_label || asyncDetails.record_label,
+            label: latestSaved.label || asyncDetails.record_label,
+            city: latestSaved.city || asyncDetails.city,
+            state_province: latestSaved.state_province || asyncDetails.state_province,
+            country: latestSaved.country || asyncDetails.country,
+            genre: latestSaved.genre || asyncDetails.genre,
+            micro_genres: latestSaved.micro_genres?.length ? latestSaved.micro_genres : asyncDetails.micro_genres,
+            bio: (!latestSaved.bio || latestSaved.bio === 'Not written yet.') ? asyncDetails.bio : latestSaved.bio,
+            lineup: preservedLineup
+          }, { isNew: false, skipRemoteSync: true });
           setCommunityArchiveMatch(updated);
         }
       }).catch(() => {});
-
-      triggerNotification?.(`✨ Created new community entry for "${effectiveBandName}" with pre-filled public metadata!`);
     } else {
       setCommunityArchiveMatch(existing);
     }
@@ -443,7 +448,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     if (saveProfileData) {
       saveProfileData(true);
     }
-    triggerNotification?.("⚡ Live profile marquee update saved!");
   };
 
   const isTargetExplicitSelf = Boolean(
@@ -617,7 +621,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
             const isGorgRec = isGorgasmBand(record.id || recNameLower, record.custom_slug || record.slug);
             const cleanRecAvatar = pickBestBandImage(record.avatar_url, record.logo_url, record.avatar, record.image, isGorgRec ? GORGASM_OFFICIAL_LOGO : '');
             const cleanRecCover = pickBestBandImage(record.cover_url, record.banner_url, record.banner, record.cover);
-            const cleanRecLineup = (isGorgRec && isStaleGorgasmLineup(record.lineup)) ? GORGASM_OFFICIAL_LINEUP : record.lineup;
+            const parsedRecLineup = parseBandLineup(record.lineup);
+            const cleanRecLineup = (isGorgRec && isStaleGorgasmLineup(parsedRecLineup)) ? GORGASM_OFFICIAL_LINEUP : parsedRecLineup;
             const normalizedRecord = {
               ...record,
               avatar_url: cleanRecAvatar,
@@ -630,7 +635,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
             };
             setFetchedBandData(normalizedRecord);
             try {
-              const updatedMatch = communityBandManager.upsertBand(normalizedRecord);
+              const updatedMatch = communityBandManager.upsertBand(normalizedRecord, { isNew: false, skipRemoteSync: true });
               if (updatedMatch) {
                 setCommunityArchiveMatch(updatedMatch);
               }
@@ -754,7 +759,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
             const isGorgNew = isGorgasmBand(newBand.id || newBand.band_name || newBand.name, newBand.custom_slug || newBand.slug);
             const cleanNewAvatar = pickBestBandImage(newBand.avatar_url, newBand.logo_url, newBand.avatar, newBand.image, isGorgNew ? GORGASM_OFFICIAL_LOGO : '');
             const cleanNewCover = pickBestBandImage(newBand.cover_url, newBand.banner_url, newBand.banner, newBand.cover);
-            const cleanNewLineup = (isGorgNew && isStaleGorgasmLineup(newBand.lineup)) ? GORGASM_OFFICIAL_LINEUP : newBand.lineup;
+            const parsedNewLineup = parseBandLineup(newBand.lineup);
+            const cleanNewLineup = (isGorgNew && isStaleGorgasmLineup(parsedNewLineup)) ? GORGASM_OFFICIAL_LINEUP : parsedNewLineup;
             const normalized = {
               ...newBand,
               avatar_url: cleanNewAvatar,
@@ -766,7 +772,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
               band_name: newBand.band_name || newBand.name || ''
             };
             setFetchedBandData(normalized);
-            communityBandManager.upsertCommunityBand(normalized, { isNew: false });
+            communityBandManager.upsertCommunityBand(normalized, { isNew: false, skipRemoteSync: true });
           }
         }
       )
@@ -804,10 +810,13 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       );
 
       if (isIdMatch || isNameMatch || isYouMatch) {
+        const hasUpdatedLineup = typeof updated === 'object' && 'lineup' in updated && updated.lineup !== undefined;
+        const parsedUpdatedLineup = hasUpdatedLineup ? parseBandLineup(updated.lineup) : undefined;
         if (typeof updated === 'object' && (updated.name || updated.band_name)) {
           setCommunityArchiveMatch((prev) => ({
             ...(prev || {}),
             ...updated,
+            ...(hasUpdatedLineup ? { lineup: parsedUpdatedLineup } : {}),
             avatar_url: newAvatar || prev?.avatar_url,
             logo_url: newAvatar || prev?.logo_url,
             cover_url: newBanner || prev?.cover_url,
@@ -817,6 +826,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         setFetchedBandData((prev: any) => ({
           ...(prev || {}),
           ...(typeof updated === 'object' ? updated : {}),
+          ...(hasUpdatedLineup ? { lineup: parsedUpdatedLineup } : {}),
           logo_url: newAvatar || prev?.logo_url,
           avatar_url: newAvatar || prev?.avatar_url,
           cover_url: newBanner || prev?.cover_url,
@@ -941,7 +951,12 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       isOwnBand ? (localSavedBand?.cover_url || localSavedBand?.banner_url) : null
     ) || customUserCover || fetchedBandData?.cover_url || fetchedBandData?.banner_url || directMatch?.cover_url || directMatch?.banner_url || (isOwnBand ? (localSavedBand?.cover_url || localSavedBand?.banner_url) : null);
 
-    let resolvedLineupList = isOwnBand && localSavedBand?.lineup?.length ? localSavedBand.lineup : (fetchedBandData?.lineup?.length ? fetchedBandData.lineup : (directMatch?.lineup || []));
+    const parsedOwnLineup = isOwnBand ? parseBandLineup(localSavedBand?.lineup) : [];
+    const parsedFetchedLineup = parseBandLineup(fetchedBandData?.lineup);
+    const parsedDirectLineup = parseBandLineup(directMatch?.lineup);
+    let resolvedLineupList = parsedOwnLineup.length > 0
+      ? parsedOwnLineup
+      : (parsedFetchedLineup.length > 0 ? parsedFetchedLineup : parsedDirectLineup);
     if (isGorg && isStaleGorgasmLineup(resolvedLineupList)) {
       resolvedLineupList = GORGASM_OFFICIAL_LINEUP;
     }
@@ -1430,7 +1445,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
     if (matchedProf) {
       setSelectedUserProfile(matchedProf);
-      triggerNotification?.(`🔗 Opening ${mem.name}'s Profile...`);
     }
   };
 
@@ -1916,7 +1930,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         <button
                           onClick={async () => {
                             if (isYou) {
-                              triggerNotification?.("Profile Preview: Follow button is active for your audience.");
                               return;
                             }
                             const isCurrentlyFollowed = isProfileFollowedGlobally(effTarget) || isProfileFollowedGlobally(selectedUserProfile);
@@ -1984,7 +1997,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             e.preventDefault();
                             e.stopPropagation();
                             setShowEventsModal(true);
-                            triggerNotification?.(isTargetPromoter ? "⚡ Loading upcoming events & festival schedule..." : "📅 Opening upcoming shows list...");
                           }}
                           className={`w-full py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all uppercase font-mono cursor-pointer active:scale-95 ${
                             isTargetPromoter
@@ -2003,7 +2015,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             e.preventDefault();
 
                             if (isYou) {
-                              triggerNotification?.("Profile Preview: Direct Message button is active for visitors.");
                               return;
                             }
 
@@ -2048,7 +2059,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               e.stopPropagation();
                               e.preventDefault();
                               setShowArchivesModal(true);
-                              triggerNotification?.("📜 Accessing promoter historical show archives...");
                             }}
                             className={`${showStorefront ? 'col-span-1' : 'col-span-2'} w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-yellow-500/40 text-yellow-400 hover:text-yellow-300 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all uppercase font-mono shadow-md cursor-pointer active:scale-95`}
                             title="All past shows and historic festival archives"
@@ -2065,10 +2075,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               e.preventDefault();
                               e.stopPropagation();
                               const targetData = effTarget || selectedUserProfile;
-                              const targetBandName = effTarget?.band_name || effTarget?.name || selectedUserProfile?.band_name || selectedUserProfile?.name || 'Band';
                               setStorefrontBandData(targetData);
                               setIsIsolatedStorefrontOpen(true);
-                              triggerNotification?.(`🛒 Opening ${targetBandName}'s Official Storefront...`);
                             }}
                             className={`${isTargetPromoter ? 'col-span-1' : 'col-span-2'} w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-500 text-white text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-colors uppercase font-mono shadow-md cursor-pointer`}
                           >
@@ -2762,7 +2770,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           bio: isVirulentExcision ? 'V.E. is brutal death metal, fusing old-school NYDM weight with modern technical slam. Driven by themes of biological reconfiguration and systemic depopulation, the project stands as an uncompromising, heavy-hitting soundtrack to humanity’s extinction..' : (lbd?.bio || lbd?.description || targetBandProfile?.bio || `Official Nexus Artist Profile for ${name}.`)
                         };
                         setSelectedUserProfile(bandProfileObj);
-                        triggerNotification?.(`🎸 Opening Public Band Profile for ${name}...`);
                       }
                     });
                   }
@@ -2872,7 +2879,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           bio: effTarget.promoter_bio || effTarget.promoter_metadata?.bio || (isTargetSelf ? (userProfile?.promoter_metadata?.bio || userProfile?.promoter_bio) : null) || effTarget.bio || `Official Promoter & Booking entity for ${name}.`
                         };
                         setSelectedUserProfile(promoterProfileObj);
-                        triggerNotification?.(`🎪 Opening Promoter Profile for ${name}...`);
                       }
                     });
                   }
@@ -2981,7 +2987,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           bio: matchingCreativeProfile?.bio || effTarget?.creative_bio || effTarget?.creative_metadata?.bio || (isTargetSelf ? (userProfile?.creative_metadata?.bio || userProfile?.creative_bio) : null) || effTarget.bio || `Official Creative Specialist Profile for ${creativeName}.`
                         };
                         setSelectedUserProfile(creativeProfileObj);
-                        triggerNotification?.(`🎨 Opening Creative Profile for ${creativeName}...`);
                       }
                     });
                   }
@@ -3062,7 +3067,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           bio: effTarget.bio || `Official Record Label Profile for ${name}.`
                         };
                         setSelectedUserProfile(labelProfileObj);
-                        triggerNotification?.(`🏷️ Opening Record Label Profile for ${name}...`);
                       }
                     });
                   }
@@ -3120,6 +3124,25 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         ))}
                       </div>
                     </div>
+                  );
+                })()}
+
+                {(() => {
+                  const targetRoleStr = (effTarget?.portalRole || effTarget?.role || effTarget?.account_type || '').toLowerCase();
+                  const isTargetBand = !!(
+                    effTarget?.isBandProfile ||
+                    effTarget?.type === 'band' ||
+                    ((targetRoleStr.includes('artist') || targetRoleStr.includes('band')) && !effTarget?.isPersonal && effTarget?.type !== 'user' && !targetRoleStr.includes('industry') && !targetRoleStr.includes('creative') && !targetRoleStr.includes('pro'))
+                  );
+                  if (isTargetBand) return null;
+                  return (
+                    <AffiliatedEntitiesSection
+                      variant="cards"
+                      userProfile={userProfile}
+                      targetProfile={effTarget}
+                      isOwnProfile={Boolean(effTarget?.isYou)}
+                      triggerNotification={triggerNotification}
+                    />
                   );
                 })()}
 
@@ -3274,7 +3297,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         setSelectedUserProfile(null);
                         window.dispatchEvent(new CustomEvent('nexus_open_chat', { detail: { profile_id: targetUser?.email || targetUser?.name, name: targetUser?.name, username: targetUser?.name, avatar_url: targetUser?.avatar } }));
                         window.dispatchEvent(new CustomEvent('nexus_open_chat_thread', { detail: { profile_id: targetUser?.email || targetUser?.name, name: targetUser?.name, username: targetUser?.name, avatar_url: targetUser?.avatar } }));
-                        triggerNotification?.(`⚡ Opened encrypted channel with ${targetUser?.name || 'Unknown Label'}`);
                       }}
                       className="flex items-center justify-center gap-1.5 py-2 px-3 bg-orange-600/10 hover:bg-orange-600/20 border border-orange-500/30 hover:border-orange-500/60 text-orange-400 text-[10px] font-black rounded-xl uppercase tracking-wider font-mono transition-all cursor-pointer shadow-sm"
                     >
@@ -3283,7 +3305,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     <button
                       onClick={() => {
                         setShowSubmitEpkModal?.(true);
-                        triggerNotification?.("⚡ EPK Submission Terminal active");
                       }}
                       className="flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/30 hover:border-emerald-500/60 text-emerald-400 text-[10px] font-black rounded-xl uppercase tracking-wider font-mono transition-all cursor-pointer shadow-sm"
                     >
@@ -3296,10 +3317,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         e.preventDefault();
                         e.stopPropagation();
                         const targetData = selectedUserProfile || effTarget;
-                        const labelName = selectedUserProfile?.name || effTarget?.name || 'Store';
                         setStorefrontBandData(targetData);
                         setIsIsolatedStorefrontOpen(true);
-                        triggerNotification?.(`🛒 Opening ${labelName}'s Official Storefront...`);
                       }}
                       className="col-span-2 mt-2 w-full flex items-center justify-center gap-2 py-2 px-3 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-[10px] font-black rounded-xl uppercase tracking-widest font-mono transition-all cursor-pointer shadow-[0_0_15px_rgba(249,115,22,0.3)] border border-orange-400/40 hover:scale-[1.01]"
                     >
@@ -3329,7 +3348,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                  communityBandManager.upsertCommunityBand({
                                    name: candidateName,
                                    bio: val
-                                 });
+                                 }, { isNew: false, skipRemoteSync: true });
                                }
 
                                try {
@@ -3352,7 +3371,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                saveProfileData(true);
                              }
                              setIsEditingBio(false);
-                             triggerNotification?.("💾 Bio updated in your node matrix.");
                            }}
                            className="px-2 py-0.5 bg-[#39ff14]/10 hover:bg-[#39ff14]/20 border border-[#39ff14]/40 text-[#39ff14] text-[9.5px] font-mono font-bold rounded flex items-center gap-1 transition-all cursor-pointer"
                          >
@@ -3393,7 +3411,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                communityBandManager.upsertCommunityBand({
                                  name: candidateName,
                                  bio: val
-                               });
+                               }, { isNew: false, skipRemoteSync: true });
                              }
                              const bandUUID = bData?.id || selectedUserProfile?.band_id || (isCurrentUserBand ? userProfile?.band_id : null) || baseTarget?.id;
                              if (bandUUID) {
@@ -3656,24 +3674,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   );
                 })()}
 
-                {/* Affiliated Projects & Public Entities Section for Industry Pro & Personal Profiles */}
-                {(() => {
-                  const targetRoleStr = (effTarget?.portalRole || effTarget?.role || effTarget?.account_type || '').toLowerCase();
-                  const isTargetBand = !!(
-                    effTarget?.isBandProfile ||
-                    effTarget?.type === 'band' ||
-                    ((targetRoleStr.includes('artist') || targetRoleStr.includes('band')) && !effTarget?.isPersonal && effTarget?.type !== 'user' && !targetRoleStr.includes('industry') && !targetRoleStr.includes('creative') && !targetRoleStr.includes('pro'))
-                  );
-                  if (isTargetBand) return null;
-                  return (
-                    <AffiliatedEntitiesSection
-                      userProfile={userProfile}
-                      isOwnProfile={Boolean(effTarget?.isYou)}
-                      triggerNotification={triggerNotification}
-                    />
-                  );
-                })()}
-
               {/* Ever-Present Embedded Player Card */}
               {(() => {
                 const r = (selectedUserProfile?.role || '').toLowerCase();
@@ -3843,7 +3843,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                 onClick={() => {
                                   saveProfileData(true);
                                   setIsEditingTopSong(false);
-                                  triggerNotification?.("💾 Anthem updated.");
                                 }}
                                 className="px-2 py-0.5 bg-[#39ff14]/10 hover:bg-[#39ff14]/20 border border-[#39ff14]/40 text-[#39ff14] text-[9.5px] font-mono font-bold rounded flex items-center gap-1 transition-all"
                               >
@@ -3876,7 +3875,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               }}
                               onBlur={() => {
                                 saveProfileData(true);
-                                triggerNotification?.("💾 Band/Artist name updated.");
                               }}
                               placeholder="e.g. Dying Fetus"
                               className="w-full bg-black/80 border border-zinc-800 focus:border-emerald-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
@@ -3908,7 +3906,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               }}
                               onBlur={() => {
                                 saveProfileData(true);
-                                triggerNotification?.("💾 Song/Track title updated.");
                               }}
                               placeholder="e.g. Liege of Inveracity"
                               className="w-full bg-black/80 border border-zinc-800 focus:border-emerald-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
@@ -3942,7 +3939,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             }}
                             onBlur={() => {
                               saveProfileData(true);
-                              triggerNotification?.("💾 Embed URL updated.");
                             }}
                             placeholder="https://www.youtube.com/watch?v=... or Spotify link"
                             className="w-full bg-black/80 border border-zinc-800 focus:border-emerald-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
@@ -4085,9 +4081,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           <div className="mt-2">
                             <SonicFootprint 
                               profile={selectedUserProfile} 
-                              onActionClick={(actionLabel) => {
-                                triggerNotification?.(`⚡ Navigating to ${actionLabel}...`);
-                              }} 
+                              onActionClick={() => {}} 
                             />
                           </div>
                         )}
@@ -4171,7 +4165,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       </div>
                       {selectedUserProfile.isYou && (
                         <button
-                          onClick={() => triggerNotification?.("Add new portfolio project modal opened.")}
+                          onClick={() => {}}
                           className="px-2.5 py-1 bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-400 border border-fuchsia-500/30 rounded text-[10px] font-mono font-bold transition-colors flex items-center gap-1"
                         >
                           <Plus className="w-3 h-3" /> Add Project
@@ -4234,7 +4228,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       </div>
                       {selectedUserProfile.isYou && (
                         <button
-                          onClick={() => triggerNotification?.("Create new ticket listing modal opened.")}
+                          onClick={() => {}}
                           className="px-2.5 py-1 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 border border-yellow-500/30 rounded text-[10px] font-mono font-bold transition-colors flex items-center gap-1"
                         >
                           <Plus className="w-3 h-3" /> List Event Tickets
@@ -4272,7 +4266,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             <button
                               onClick={() => {
                                 openCheckout?.('ticket', { name: event.title, price: parseFloat(event.price.replace('$','')), venue: event.venue });
-                                triggerNotification?.(`Adding ticket for ${event.title} to checkout...`);
                               }}
                               className="mt-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded text-[10px] uppercase font-mono transition-colors shadow-lg"
                             >
@@ -4546,7 +4539,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           value={selectedLabelBand}
                           onChange={(e) => {
                             setSelectedLabelBand(e.target.value);
-                            triggerNotification?.(`Loading ${e.target.value}'s catalog matrix...`);
                           }}
                           className="bg-zinc-950 text-orange-400 text-[11px] font-black font-mono px-2 py-1 rounded-lg border border-orange-950/50 outline-none focus:border-orange-500/50 cursor-pointer"
                         >
@@ -4599,9 +4591,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                 {currentAlbum.tracks?.map((track: any, trackIdx: number) => (
                                   <div
                                     key={track.id ? `track-${track.id}-${trackIdx}` : `track-${trackIdx}`}
-                                    onClick={() => {
-                                      triggerNotification?.(`Playing preview of "${track.title}" by ${selectedLabelBand}...`);
-                                    }}
+                                    onClick={() => {}}
                                     className="flex items-center justify-between py-2 px-3 hover:bg-zinc-900/60 rounded-md cursor-pointer group/track transition-all"
                                   >
                                     <div className="flex items-center gap-2.5 min-w-0">
@@ -5044,7 +5034,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           </p>
                           {selectedUserProfile.isYou && (
                             <button
-                              onClick={() => triggerNotification?.("Catalog release manager opened.")}
+                              onClick={() => {}}
                               className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded text-xs font-mono font-bold transition-colors inline-flex items-center gap-1.5"
                             >
                               <Plus className="w-3.5 h-3.5" /> Upload Release Catalog
@@ -5110,7 +5100,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             setProfileActivePlaybackTrackId(firstTrack);
                             setProfileIsPlaying(true);
                             setProfilePlaybackProgress(0);
-                            triggerNotification?.(`Loading ${e.target.value}'s catalog matrix...`);
                           }}
                           className="bg-black border border-orange-500/30 text-orange-400 text-[10px] uppercase font-bold tracking-widest pl-3 pr-7 py-1.5 rounded-full outline-none cursor-pointer appearance-none min-w-[120px] text-center shadow-[0_0_10px_rgba(255,153,0,0.1)]"
                         >
@@ -5227,7 +5216,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             sizes: [],
                             bandName: selectedLabelBand
                           });
-                          triggerNotification?.(`Adding ${selectedLabelBand} - ${currentAlbum.albumName} (${link.format}) to order...`);
                         }}
                         className="flex flex-col items-center justify-center p-3 rounded-xl border border-zinc-800 hover:border-orange-500/40 bg-zinc-950 hover:bg-orange-950/20 text-center transition-all cursor-pointer group/btn shadow-inner"
                       >

@@ -3,6 +3,7 @@ import { getSupabase } from './clientService';
 import { labelCatalogStore } from '../utils/indexedDB';
 import { uploadBase64ToStorage } from './storageService';
 import { ensureUUID, executeWithSchemaResilience, registerSchemaSanitizers } from './schemaResilienceService';
+import { authFetch, getSupabaseAccessToken } from '../utils/apiConfig';
 
 
 
@@ -196,8 +197,8 @@ export async function persistReleasesLocallyAndServer(releases: any[]): Promise<
 
   // 3. Server-side persistence via /api/releases
   try {
-    if (typeof fetch !== 'undefined') {
-      await fetch('/api/releases', {
+    if (typeof fetch !== 'undefined' && (await getSupabaseAccessToken())) {
+      await authFetch('/api/releases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ releases })
@@ -288,7 +289,7 @@ export async function fetchReleasesFromDatabase(portalType?: 'band' | 'promoter'
   // Fallback 1: Server-side cache (/api/releases)
   if (typeof fetch !== 'undefined') {
     try {
-      const res = await fetch('/api/releases');
+      const res = await authFetch('/api/releases');
       if (res.ok) {
         const json = await res.json();
         if (json && Array.isArray(json.releases) && json.releases.length > 0) {
@@ -808,11 +809,11 @@ export async function deleteReleaseFromDatabase(
 
     // 3. Delete from server-side cache
     try {
-      if (typeof fetch !== 'undefined') {
+      if (typeof fetch !== 'undefined' && (await getSupabaseAccessToken())) {
         if (cleanId) {
-          await fetch(`/api/releases/${cleanId}`, { method: 'DELETE' });
+          await authFetch(`/api/releases/${cleanId}`, { method: 'DELETE' });
         }
-        await fetch('/api/releases/delete', {
+        await authFetch('/api/releases/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

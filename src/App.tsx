@@ -431,7 +431,44 @@ export default function App() {
     registerNotificationsOnStartup();
     initializeSonicActivityListeners();
     pushManager.requestPermission().catch(() => {});
+
+    // Handle deep-link URL params when opened from a closed-app push notification click
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const openTab = params.get('openTab');
+      const chatWith = params.get('chatWith');
+      if (openTab || chatWith) {
+        setTimeout(() => {
+          if (openTab) {
+            window.dispatchEvent(new CustomEvent('nexus_navigate_tab', { detail: openTab }));
+          }
+          if (chatWith) {
+            window.dispatchEvent(
+              new CustomEvent('nexus_open_chat', {
+                detail: { profile_id: chatWith, name: 'Direct Message', username: 'Direct Message' },
+              })
+            );
+          }
+        }, 600);
+        params.delete('openTab');
+        params.delete('chatWith');
+        const cleanedSearch = params.toString();
+        const cleanedUrl = window.location.pathname + (cleanedSearch ? `?${cleanedSearch}` : '') + window.location.hash;
+        window.history.replaceState(null, '', cleanedUrl);
+      }
+    } catch (_) {}
   }, []);
+
+  // Keep Web Push / native token mapped to the active user's ID and email whenever they sign in or hydrate
+  useEffect(() => {
+    if (!userProfile?.id && !userProfile?.email) return;
+    pushManager
+      .ensureUserPushSubscription({
+        id: userProfile?.id,
+        email: userProfile?.email,
+      })
+      .catch(() => {});
+  }, [userProfile?.id, userProfile?.email]);
 
   // Suppress "Invalid Refresh Token" from Supabase, Vite HMR WebSocket errors, and benign SW/storage race conditions
   useEffect(() => {
@@ -2588,7 +2625,6 @@ export default function App() {
     });
     
     addLog(`Registered new roster artist "${newBand.name}" and generated starter tour dataset.`);
-    triggerNotification(`Active artist switched to: ${newBand.name}`);
   };
 
   const handleOpenMyProfile = () => {
@@ -3087,7 +3123,6 @@ export default function App() {
       }
       setNotes(prev => [newNote, ...prev]);
       setActiveNoteIndex(0);
-      triggerNotification(`Notes updated!`);
     }
   };
 

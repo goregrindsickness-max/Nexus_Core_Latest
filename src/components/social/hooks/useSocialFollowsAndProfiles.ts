@@ -6,7 +6,14 @@ import { getSupabase, executeWithSchemaResilience, sanitizeBandPayload } from '.
 import { isMiguelNameOrProfile } from '../utils/profileUtils';
 import { communityBandManager, isDeletedOrZombieBand } from '../../../lib/communityBands';
 import { isCommunityBandRecord } from '../../../lib/seedBandsData';
-import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
+import {
+  isProfileFollowedGlobally,
+  saveFollowStateGlobally,
+  FOLLOW_EVENT_NAME,
+  getScopedFollowsMap,
+  syncScopedFollowsFromServer,
+  isEntityTargetObject
+} from '../../../utils/followSyncService';
 
 const isValidUUID = (str: string | null | undefined): boolean => {
   return typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
@@ -64,7 +71,12 @@ export function useSocialFollowsAndProfiles({
           return prev.map(p => {
             const saved = data.find((d: any) => d.id === p.id);
             if (saved) {
-              return { ...p, followed: saved.followed, followedBack: saved.followedBack, notificationsEnabled: saved.notificationsEnabled };
+              return {
+                ...p,
+                followed: isProfileFollowedGlobally({ ...p, followed: undefined, isFollowed: undefined, isFollowedByMe: undefined }, undefined, userProfile?.id),
+                followedBack: saved.followedBack,
+                notificationsEnabled: saved.notificationsEnabled
+              };
             }
             return p;
           });
@@ -86,10 +98,9 @@ export function useSocialFollowsAndProfiles({
       let whoFollowsUs: string[] = [];
       const supabaseClient = getSupabase();
 
-      let localFollows: Record<string, boolean> = {};
-      try {
-        localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
-      } catch (e) {}
+      let localFollows: Record<string, boolean> = getScopedFollowsMap(userProfile?.id);
+      let resolvedFollowerUid: string | undefined = extractUUID(userProfile?.id) || undefined;
+      let authoritativeFollowsForCheck: any[] | undefined = undefined;
 
       if (supabaseClient && userProfile) {
         try {
@@ -108,23 +119,25 @@ export function useSocialFollowsAndProfiles({
           }
 
           if (extractedUid) {
-            const { data: followsData } = await supabaseClient
+            resolvedFollowerUid = extractedUid;
+            const { data: followsData, error: fErr } = await supabaseClient
               .from('follows')
-              .select('followed_id')
+              .select('follower_id, followed_id')
               .eq('follower_id', extractedUid);
-            if (followsData) {
-              followedArtistIds = followsData.map((f: any) => String(f.followed_id || '').toLowerCase().trim());
-              try {
-                const raw = localStorage.getItem('nexus_local_follows_v1');
-                const local = raw ? JSON.parse(raw) : {};
-                followsData.forEach((f: any) => {
-                  const fid = String(f.followed_id || '').toLowerCase().trim();
-                  if (fid && local[fid] === undefined) {
-                    local[fid] = true;
-                  }
-                });
-                localStorage.setItem('nexus_local_follows_v1', JSON.stringify(local));
-              } catch (_) {}
+            if (!fErr && followsData) {
+              followedArtistIds = followsData
+                .map((f: any) => String(f.followed_id || '').toLowerCase().trim())
+                .filter(Boolean);
+              syncScopedFollowsFromServer(followedArtistIds, extractedUid);
+              localFollows = getScopedFollowsMap(extractedUid);
+              const mappedFollows = followsData.map((f: any) => ({
+                follower_id: f.follower_id || extractedUid,
+                followed_id: f.followed_id,
+                fan_profile_id: f.follower_id || extractedUid,
+                artist_id: f.followed_id
+              }));
+              authoritativeFollowsForCheck = mappedFollows;
+              setAllFollows(mappedFollows);
             }
 
             const myNames = [
@@ -156,10 +169,13 @@ export function useSocialFollowsAndProfiles({
         }
       }
 
+      const followsPoolForCheck = authoritativeFollowsForCheck ?? allFollows;
+
       setDiscoverProfiles(prev => prev.map(dp => {
         const dpNameLower = (dp?.name || "User").toLowerCase().trim();
         const dpIdLower = String(dp.id || '').toLowerCase().trim();
-        const isFollowed = isProfileFollowedGlobally(dp, allFollows);
+        const cleanDp = { ...dp, followed: undefined, isFollowed: undefined, isFollowedByMe: undefined };
+        const isFollowed = isProfileFollowedGlobally(cleanDp, followsPoolForCheck, resolvedFollowerUid);
         const isFollowedBack = whoFollowsUs.includes(dpNameLower) || whoFollowsUs.includes(dpIdLower);
         return { ...dp, followed: isFollowed, followedBack: isFollowedBack };
       }));
@@ -199,10 +215,12 @@ export function useSocialFollowsAndProfiles({
                 name: bandName.trim(),
                 role: 'Band',
                 category: 'bands',
+                type: 'band',
+                isBandProfile: true,
                 desc: 'Official roster artist signed to our label',
                 avatar: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=200',
                 image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=200',
-                followed: true,
+                followed: isProfileFollowedGlobally({ name: bandName.trim(), role: 'Band', type: 'band', isBandProfile: true }, followsPoolForCheck, resolvedFollowerUid),
                 isYou: false
               });
             }
@@ -628,15 +646,23 @@ export function useSocialFollowsAndProfiles({
       const extracted = extractUUID(target);
       if (extracted && isValidUUID(extracted)) return extracted;
     } else if (typeof target === 'object') {
-      const candidateFields = [
-        target.raw_id,
-        target.band_id,
-        target.user_id,
-        target.profile_id,
-        target.creator_id,
-        target.owner_id,
-        target.id
-      ];
+      const isEntity = isEntityTargetObject(target);
+      const candidateFields = isEntity
+        ? [
+            target.raw_id,
+            target.band_id,
+            target.label_id,
+            target.promoter_id,
+            target.creative_id,
+            target.id
+          ]
+        : [
+            target.raw_id,
+            target.band_id,
+            target.user_id,
+            target.profile_id,
+            target.id
+          ];
       for (const field of candidateFields) {
         if (field) {
           const extracted = extractUUID(String(field));
@@ -735,8 +761,15 @@ export function useSocialFollowsAndProfiles({
       )
     ) || (typeof targetInput === 'string' && targetInput.startsWith('real-b-')));
 
-    // 3. Resolve Target ID and Name
-    let targetUserId = extractUUID(typeof targetInput === 'object' ? (targetInput?.band_id || targetInput?.raw_id || targetInput?.id || targetInput?.user_id || targetInput?.creator_id || targetInput?.owner_id) : targetInput) || resolveProfileUUID(targetInput, allProfiles);
+    // 3. Resolve Target ID and Name (never use creator_id / owner_id / user_id on band/entity objects)
+    const isEntity = isBand || isEntityTargetObject(targetInput);
+    let targetUserId = extractUUID(
+      typeof targetInput === 'object'
+        ? (isEntity
+            ? (targetInput?.band_id || targetInput?.raw_id || targetInput?.id)
+            : (targetInput?.band_id || targetInput?.raw_id || targetInput?.id || targetInput?.user_id || targetInput?.profile_id))
+        : targetInput
+    ) || resolveProfileUUID(targetInput, allProfiles);
     const targetName = typeof targetInput === 'string'
       ? targetInput.replace(/^real-[pb]-/, '').replace('real-', '')
       : targetInput?.band_name || targetInput?.bandName || targetInput?.name || targetInput?.full_name || targetInput?.console_handle || 'User';
@@ -855,20 +888,22 @@ export function useSocialFollowsAndProfiles({
 
     const targetNameLower = targetName.toLowerCase().trim();
 
-    let currentlyFollowed = isProfileFollowedGlobally(targetInput, allFollows);
+    const cleanTargetCheck = typeof targetInput === 'object' && targetInput
+      ? { ...targetInput, followed: undefined, isFollowed: undefined, isFollowedByMe: undefined }
+      : targetInput;
+    let currentlyFollowed = isProfileFollowedGlobally(cleanTargetCheck, allFollows, followerId);
     if (!currentlyFollowed && finalTargetId) {
-      currentlyFollowed = isProfileFollowedGlobally(finalTargetId, allFollows);
+      currentlyFollowed = isProfileFollowedGlobally(finalTargetId, allFollows, followerId);
     }
     if (!currentlyFollowed && targetName) {
-      currentlyFollowed = isProfileFollowedGlobally(targetName, allFollows);
+      currentlyFollowed = isProfileFollowedGlobally(targetName, allFollows, followerId);
     }
 
     const nextAction = forceAction ? forceAction : (currentlyFollowed ? 'unfollow' : 'follow');
     const isNowFollowed = nextAction === 'follow';
 
-    // Persist to localStorage via followSyncService
+    // Persist to user-scoped localStorage via followSyncService
     saveFollowStateGlobally(targetInput, isNowFollowed, followerId);
-    if (targetName) saveFollowStateGlobally(targetName, isNowFollowed, followerId);
     if (finalTargetId) saveFollowStateGlobally(finalTargetId, isNowFollowed, followerId);
 
     if (supabaseClient && followerId && finalTargetId && isValidUUID(followerId) && isValidUUID(finalTargetId)) {

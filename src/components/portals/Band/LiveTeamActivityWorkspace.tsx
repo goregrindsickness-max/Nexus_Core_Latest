@@ -3,6 +3,7 @@ import {
   Users, UserPlus, ShieldAlert, RefreshCw, X, Check, Mail, AlertTriangle, 
   Radio, Activity, Clock, Sparkles, UserCheck, Shield, ChevronDown, ChevronRight
 } from 'lucide-react';
+import { authFetch, isClientAdmin } from '../../../utils/apiConfig';
 
 interface TeamMember {
   id: string;
@@ -151,8 +152,9 @@ export default function LiveTeamActivityWorkspace({
   }, [pendingInvites, bandId]);
 
   const fetchEmailLogs = async () => {
+    if (!isClientAdmin(userProfile)) return;
     try {
-      const res = await fetch('/api/emails/dispatch-logs');
+      const res = await authFetch('/api/emails/dispatch-logs');
       if (res.ok) {
         const data = await res.json();
         setLiveEmailLogs(data.logs || []);
@@ -163,8 +165,9 @@ export default function LiveTeamActivityWorkspace({
   };
 
   const fetchEmailDiagnostics = async () => {
+    if (!isClientAdmin(userProfile)) return;
     try {
-      const res = await fetch('/api/emails/test-connectivity');
+      const res = await authFetch('/api/emails/test-connectivity');
       if (res.ok) {
         const data = await res.json();
         setDiagnosticKeyInfo(data);
@@ -211,7 +214,7 @@ export default function LiveTeamActivityWorkspace({
     }
 
     try {
-      const response = await fetch('/api/emails/invite', {
+      const response = await authFetch('/api/emails/invite', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -289,7 +292,7 @@ export default function LiveTeamActivityWorkspace({
     setDiagnosticResult(null);
 
     try {
-      const response = await fetch('/api/emails/send-test', {
+      const response = await authFetch('/api/emails/send-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

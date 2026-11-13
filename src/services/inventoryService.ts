@@ -2,6 +2,7 @@ import { getSupabase, ensureValidSupabaseAuthSession } from './clientService';
 import { compressAndTranscodeImageToWebP, base64ToBlob } from './storageService';
 import { sanitizeInventoryItemForDb, executeWithSchemaResilience, generateUUID } from './schemaResilienceService';
 import { InventoryItem } from '../types';
+import { authFetch, getSupabaseAccessToken } from '../utils/apiConfig';
 
 export const INVENTORY_STORAGE_BUCKET = 'inventory-items';
 export const DEFAULT_INVENTORY_IMAGE = 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=200&auto=format&fit=crop';
@@ -147,24 +148,26 @@ export async function uploadInventoryItemImage(
     // 2. Server upload fallback (routes through server service role to bypass browser restrictions)
     if (base64DataStr || typeof fileOrData === 'string') {
       try {
-        const rawBase64 = base64DataStr || (fileOrData as string);
-        const apiRes = await fetch(getApiUrl('/api/upload'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            base64Data: rawBase64,
-            bucket: INVENTORY_STORAGE_BUCKET,
-            userId: bandId || 'band_inventory',
-            fileNameToken: cleanId
-          })
-        });
-        if (apiRes.ok) {
-          const apiJson = await apiRes.json();
-          if (apiJson?.publicUrl) {
-            return {
-              publicUrl: apiJson.publicUrl,
-              imagePath: storagePath
-            };
+        if (await getSupabaseAccessToken()) {
+          const rawBase64 = base64DataStr || (fileOrData as string);
+          const apiRes = await authFetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              base64Data: rawBase64,
+              bucket: INVENTORY_STORAGE_BUCKET,
+              userId: bandId || 'band_inventory',
+              fileNameToken: cleanId
+            })
+          });
+          if (apiRes.ok) {
+            const apiJson = await apiRes.json();
+            if (apiJson?.publicUrl) {
+              return {
+                publicUrl: apiJson.publicUrl,
+                imagePath: storagePath
+              };
+            }
           }
         }
       } catch (srvErr) {
@@ -222,7 +225,7 @@ export async function fetchInventoryItems(bandId?: string): Promise<InventoryIte
   // 2. Fetch from server API global cache
   try {
     const endpoint = bandId ? `/api/inventory?band_id=${encodeURIComponent(bandId)}` : '/api/inventory';
-    const res = await fetch(getApiUrl(endpoint));
+    const res = await authFetch(endpoint);
     if (res.ok) {
       const json = await res.json();
       if (json?.items && Array.isArray(json.items)) {
@@ -316,22 +319,24 @@ export async function saveInventoryItem(
 
   // 3. Persist to server API endpoint (guarantees cross-device persistence globally)
   try {
-    const apiRes = await fetch(getApiUrl('/api/inventory'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item: payload })
-    });
-    if (apiRes.ok) {
-      const apiJson = await apiRes.json();
-      if (apiJson?.items && apiJson.items[0]) {
-        const srvItem = apiJson.items[0];
-        savedRecord = {
-          ...payload,
-          ...srvItem,
-          image_url: resolveInventoryImageUrl(srvItem),
-          image_path: srvItem.image_path || finalImagePath
-        } as InventoryItem;
-        saveError = null; // Cleared error since server persisted successfully
+    if (await getSupabaseAccessToken()) {
+      const apiRes = await authFetch('/api/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: payload })
+      });
+      if (apiRes.ok) {
+        const apiJson = await apiRes.json();
+        if (apiJson?.items && apiJson.items[0]) {
+          const srvItem = apiJson.items[0];
+          savedRecord = {
+            ...payload,
+            ...srvItem,
+            image_url: resolveInventoryImageUrl(srvItem),
+            image_path: srvItem.image_path || finalImagePath
+          } as InventoryItem;
+          saveError = null; // Cleared error since server persisted successfully
+        }
       }
     }
   } catch (srvErr) {
@@ -369,7 +374,9 @@ export async function deleteInventoryItem(itemId: string, imagePath?: string): P
   }
 
   try {
-    await fetch(getApiUrl(`/api/inventory/${encodeURIComponent(itemId)}`), { method: 'DELETE' });
+    if (await getSupabaseAccessToken()) {
+      await authFetch(`/api/inventory/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
+    }
   } catch (_) {}
 
   return { error: delError };

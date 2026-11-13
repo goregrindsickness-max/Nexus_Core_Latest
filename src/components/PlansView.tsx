@@ -19,6 +19,7 @@ import {
 import { UserReview } from '../types';
 import { BAND_PORTAL_BILLING } from '../config/billingMatrix';
 import { safeSetLocalStorageItem } from '../utils/safeStorage';
+import { authFetch } from '../utils/apiConfig';
 
 interface PlansViewProps {
   onBack: () => void;
@@ -133,13 +134,12 @@ export default function PlansView({
     else selectedProductName = 'Per Show';
 
     addLog(`[STRI_CONN] Handshaking Stripe billing session for plan "${tierId}"...`);
-    triggerNotification(`Initializing gateway session for ${selectedProductName}...`);
 
     try {
       const stripeCustomerId = userProfile?.creative_metadata?.stripe_customer_id || userProfile?.stripe_customer_id || null;
       const stripeAccountId = userProfile?.creative_metadata?.stripe_account_id || userProfile?.stripe_connect_id || null;
 
-      const response = await fetch('/api/payments/create-billing-checkout', {
+      const response = await authFetch('/api/payments/create-billing-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -180,7 +180,6 @@ export default function PlansView({
 
     setCancelLoading(true);
     addLog(`[SYSTEM] INITIALIZING CONTRACT REVERT PROTOCOL FOR DISMANTLING TIERS...`);
-    triggerNotification(`Sending teardown payload...`);
 
     try {
       if (onSelectPlan) {
@@ -967,7 +966,6 @@ export default function PlansView({
                   const uniqueId = userProfile?.id || userProfile?.uid || userProfile?.email?.split('@')[0] || userProfile?.creative_metadata?.band_name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'partner';
                   const referralLink = `https://nexusmerch.com/refer?ref=${encodeURIComponent(String(uniqueId).toLowerCase())}`;
                   navigator.clipboard.writeText(referralLink);
-                  triggerNotification('Account-tied referral link copied to clipboard!');
                   addLog(`[REFERRAL] Copied unique referral link: ${referralLink}`);
                 }}
                 className="bg-[#00F2FE] text-black font-extrabold text-[10px] tracking-wider uppercase py-2.5 px-4 rounded-lg hover:bg-[#3bf5ff] transition-all cursor-pointer flex items-center gap-1.5 font-mono"

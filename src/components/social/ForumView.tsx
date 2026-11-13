@@ -797,7 +797,6 @@ export const ForumView: React.FC<ForumViewProps> = ({
     }
 
     setEditingThreadId(null);
-    triggerNotification?.('Thread updated successfully!');
   };
 
   const handleDeleteThread = async (threadId: string, threadTitle: string) => {
@@ -820,8 +819,6 @@ export const ForumView: React.FC<ForumViewProps> = ({
         console.warn('Error deleting thread in Supabase:', e);
       }
     }
-
-    triggerNotification?.('Thread deleted.');
   };
 
   // Editing Comments State
@@ -856,8 +853,6 @@ export const ForumView: React.FC<ForumViewProps> = ({
         console.warn('Error updating comment in Supabase:', e);
       }
     }
-
-    triggerNotification?.('Comment updated.');
   };
 
   const handleDeleteComment = async (threadId: string, commentId: string) => {
@@ -883,8 +878,6 @@ export const ForumView: React.FC<ForumViewProps> = ({
         console.warn('Error deleting comment in Supabase:', e);
       }
     }
-
-    triggerNotification?.('Comment deleted.');
   };
 
   // Editing Replies State
@@ -927,8 +920,6 @@ export const ForumView: React.FC<ForumViewProps> = ({
         console.warn('Error updating reply in Supabase:', e);
       }
     }
-
-    triggerNotification?.('Reply updated.');
   };
 
   const handleDeleteReply = async (threadId: string, commentId: string, replyId: string) => {
@@ -961,8 +952,6 @@ export const ForumView: React.FC<ForumViewProps> = ({
         console.warn('Error deleting reply in Supabase:', e);
       }
     }
-
-    triggerNotification?.('Reply deleted.');
   };
 
   // Comment & Reply inputs
@@ -1196,7 +1185,6 @@ export const ForumView: React.FC<ForumViewProps> = ({
     setNewThreadMicroGenre('Death Metal');
     setShowCreateThread(false);
     setExpandedThreadId(null);
-    triggerNotification?.('Thread published successfully!');
   };
 
   const handleVote = async (threadId: string, type: 'up' | 'down') => {
@@ -1322,7 +1310,6 @@ export const ForumView: React.FC<ForumViewProps> = ({
     );
 
     setThreadCommentInput('');
-    triggerNotification?.('Comment posted!');
   };
 
   const handleAddThreadReply = async (threadId: string, commentId: string) => {
@@ -1402,7 +1389,6 @@ export const ForumView: React.FC<ForumViewProps> = ({
 
     setThreadReplyInputs((prev) => ({ ...prev, [commentId]: '' }));
     setActiveThreadReplyCommentId(null);
-    triggerNotification?.('Reply posted!');
   };
 
   const handleVoteThreadComment = (threadId: string, commentId: string, type: 'up' | 'down') => {
@@ -1741,7 +1727,6 @@ export const ForumView: React.FC<ForumViewProps> = ({
                     onChange={(e) => {
                       setForumPrimaryGenre(e.target.value);
                       setForumMicroGenre('All');
-                      triggerNotification?.(`Switched primary circle to ${e.target.value}`);
                     }}
                     className="w-full sm:w-auto bg-zinc-900 border border-zinc-800 text-[10px] font-bold text-white rounded-xl px-3 py-2 focus:outline-none hover:border-zinc-700 transition-colors cursor-pointer uppercase tracking-wider min-w-[130px]"
                   >
@@ -1756,7 +1741,6 @@ export const ForumView: React.FC<ForumViewProps> = ({
                       value={forumMicroGenre}
                       onChange={(e) => {
                         setForumMicroGenre(e.target.value);
-                        triggerNotification?.(`Switched to ${e.target.value}`);
                       }}
                       className="w-full sm:w-auto bg-zinc-900 border border-zinc-800 text-[10px] font-bold text-white rounded-xl px-3 py-2 focus:outline-none hover:border-zinc-700 transition-colors cursor-pointer uppercase tracking-wider min-w-[130px]"
                     >

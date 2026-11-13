@@ -5,6 +5,7 @@
 
 import { savePostReaction, ReactionCounts } from '../components/social/utils/reactionStore';
 import { getSupabase } from './clientService';
+import { authFetch, getSupabaseAccessToken } from '../utils/apiConfig';
 
 export interface GlobalComment {
   id: string;
@@ -125,7 +126,7 @@ export async function fetchGlobalInteractions(forceRefresh = false): Promise<Pos
   let serverReactions: Record<string, any> = {};
 
   try {
-    const res = await fetch('/api/posts/interactions');
+    const res = await authFetch('/api/posts/interactions');
     if (res.ok) {
       const data: PostInteractionsResponse = await res.json();
       if (data && data.success) {
@@ -339,7 +340,16 @@ export async function submitGlobalComment(
 
   // Send to persistent Express server endpoint if available
   try {
-    const res = await fetch('/api/posts/comments', {
+    const token = await getSupabaseAccessToken();
+    if (!token) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nexus_comment_added', {
+          detail: { postId, comment: commentObj }
+        }));
+      }
+      return { success: true, comment: commentObj };
+    }
+    const res = await authFetch('/api/posts/comments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -527,7 +537,8 @@ export async function updateGlobalComment(
   }
 
   try {
-    await fetch(`/api/posts/comments/${encodeURIComponent(commentId)}`, {
+    if (await getSupabaseAccessToken()) {
+      await authFetch(`/api/posts/comments/${encodeURIComponent(commentId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -539,7 +550,8 @@ export async function updateGlobalComment(
         avatar: targetComment?.avatar,
         userId: targetComment?.user_id || targetComment?.userId
       })
-    });
+      });
+    }
   } catch (_) {}
 
   return { success: true, comment: targetComment || undefined };
@@ -607,9 +619,11 @@ export async function deleteGlobalComment(
   }
 
   try {
-    await fetch(`/api/posts/comments/${encodeURIComponent(commentId)}`, {
-      method: 'DELETE'
-    });
+    if (await getSupabaseAccessToken()) {
+      await authFetch(`/api/posts/comments/${encodeURIComponent(commentId)}`, {
+        method: 'DELETE'
+      });
+    }
   } catch (_) {}
 
   return { success: true };
@@ -722,7 +736,9 @@ export async function submitGlobalReaction(
   syncReactionToSupabase(postId, userId, normalizedKey, reactorInfo);
 
   try {
-    const res = await fetch('/api/posts/reactions', {
+    const token = await getSupabaseAccessToken();
+    if (!token) return { success: true };
+    const res = await authFetch('/api/posts/reactions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -462,7 +462,6 @@ export default function MerchandisePrintersView({
           likes: isUpvoted ? (p.likes || 0) + 1 : Math.max(0, (p.likes || 0) - 1)
         };
         uploadPrinterToCloud(updated);
-        triggerNotification(isUpvoted ? 'Upvoted shop recommendation recommendation!' : 'Removed shop upvote.');
         return updated;
       }
       return p;
@@ -519,7 +518,6 @@ export default function MerchandisePrintersView({
           finished_works: updated_works
         };
         uploadPrinterToCloud(updated);
-        triggerNotification('Crowd-sourced finished work photo liked! ❤️');
         return updated;
       }
       return p;

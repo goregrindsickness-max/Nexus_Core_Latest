@@ -336,7 +336,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     if (saveProfileData) {
       saveProfileData(true);
     }
-    triggerNotification?.("⚡ Live profile marquee update saved!");
   };
 
   const isTargetExplicitSelf = Boolean(
@@ -1207,7 +1206,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         <button
                           onClick={async () => {
                             if (isYou) {
-                              triggerNotification?.("Profile Preview: Follow button is active for your audience.");
                               return;
                             }
                             const isCurrentlyFollowed = isProfileFollowedGlobally(effTarget) || isProfileFollowedGlobally(selectedUserProfile);
@@ -1246,7 +1244,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               };
                               await handleFollowProfile(targetToFollow, nextFollowed ? 'follow' : 'unfollow');
                             }
-                            triggerNotification?.(nextFollowed ? `✓ Following ${effTarget?.name || selectedUserProfile?.name || 'Creative'}` : `Unfollowed ${effTarget?.name || selectedUserProfile?.name || 'Creative'}`);
                           }}
                           className={`w-full py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-colors uppercase font-mono cursor-pointer ${
                             selectedUserProfile?.isFollowed 
@@ -1272,7 +1269,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             e.preventDefault();
 
                             if (isYou) {
-                              triggerNotification?.("Profile Preview: Direct Message button is active for visitors.");
                               return;
                             }
 
@@ -1304,7 +1300,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             if (openFloatingChat) {
                               openFloatingChat(targetId, effTarget);
                             }
-                            triggerNotification?.(`💬 Opening chat with ${targetName}...`);
                           }}
                           className="w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-colors uppercase font-mono cursor-pointer"
                           title="Secure Direct Message"
@@ -1832,7 +1827,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           bio: isVirulentExcision ? 'V.E. is brutal death metal, fusing old-school NYDM weight with modern technical slam. Driven by themes of biological reconfiguration and systemic depopulation, the project stands as an uncompromising, heavy-hitting soundtrack to humanity’s extinction..' : (matchingBandProfile?.bio || lbd?.bio || lbd?.description || targetBandProfile?.bio || `Official Nexus Artist Profile for ${name}.`)
                         };
                         setSelectedUserProfile(bandProfileObj);
-                        triggerNotification?.(`🎸 Opening Public Band Profile for ${name}...`);
                       }
                     });
                   }
@@ -1931,7 +1925,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           bio: effTarget.bio || `Official Promoter & Booking entity for ${name}.`
                         };
                         setSelectedUserProfile(promoterProfileObj);
-                        triggerNotification?.(`🎪 Opening Promoter Profile for ${name}...`);
                       }
                     });
                   }
@@ -2038,7 +2031,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           bio: matchingCreativeProfile?.bio || effTarget.bio || `Official Creative Specialist Profile for ${creativeName}.`
                         };
                         setSelectedUserProfile(creativeProfileObj);
-                        triggerNotification?.(`🎨 Opening Creative Profile for ${creativeName}...`);
                       }
                     });
                   }
@@ -2119,7 +2111,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           bio: effTarget.bio || `Official Record Label Profile for ${name}.`
                         };
                         setSelectedUserProfile(labelProfileObj);
-                        triggerNotification?.(`🏷️ Opening Record Label Profile for ${name}...`);
                       }
                     });
                   }
@@ -2305,7 +2296,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         setSelectedUserProfile(null);
                         window.dispatchEvent(new CustomEvent('nexus_open_chat', { detail: { profile_id: targetUser?.email || targetUser?.name, name: targetUser?.name, username: targetUser?.name, avatar_url: targetUser?.avatar } }));
                         window.dispatchEvent(new CustomEvent('nexus_open_chat_thread', { detail: { profile_id: targetUser?.email || targetUser?.name, name: targetUser?.name, username: targetUser?.name, avatar_url: targetUser?.avatar } }));
-                        triggerNotification?.(`⚡ Opened encrypted channel with ${targetUser?.name || 'Unknown Label'}`);
                       }}
                       className="flex items-center justify-center gap-1.5 py-2 px-3 bg-orange-600/10 hover:bg-orange-600/20 border border-orange-500/30 hover:border-orange-500/60 text-orange-400 text-[10px] font-black rounded-xl uppercase tracking-wider font-mono transition-all cursor-pointer shadow-sm"
                     >
@@ -2314,7 +2304,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     <button
                       onClick={() => {
                         setShowSubmitEpkModal?.(true);
-                        triggerNotification?.("⚡ EPK Submission Terminal active");
                       }}
                       className="flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/30 hover:border-emerald-500/60 text-emerald-400 text-[10px] font-black rounded-xl uppercase tracking-wider font-mono transition-all cursor-pointer shadow-sm"
                     >
@@ -2348,7 +2337,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                  setFetchedCreativeData((prev: any) => prev ? { ...prev, bio: profileBlurb, biography: profileBlurb } : { bio: profileBlurb });
                                }
                              }
-                             triggerNotification?.("💾 Bio updated in your node matrix.");
                            }}
                            className="px-2 py-0.5 bg-[#39ff14]/10 hover:bg-[#39ff14]/20 border border-[#39ff14]/40 text-[#39ff14] text-[9.5px] font-mono font-bold rounded flex items-center gap-1 transition-all cursor-pointer"
                          >
@@ -2847,7 +2835,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                       highlight_track_url: songUrlVal
                                     } : null);
                                   }
-                                  triggerNotification?.("💾 Highlight track updated.");
                                 }}
                                 className="px-2 py-0.5 bg-[#39ff14]/10 hover:bg-[#39ff14]/20 border border-[#39ff14]/40 text-[#39ff14] text-[9.5px] font-mono font-bold rounded flex items-center gap-1 transition-all cursor-pointer"
                               >
@@ -2888,7 +2875,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                     }).or(`id.eq.${validUUID},creator_id.eq.${validUUID},user_id.eq.${validUUID}`).then();
                                   }
                                 }
-                                triggerNotification?.("💾 Artist / Creator name updated.");
                               }}
                               placeholder={isCreative ? "e.g. Gorgasm" : "e.g. Dying Fetus"}
                               className="w-full bg-black/80 border border-zinc-800 focus:border-emerald-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
@@ -2928,7 +2914,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                     }).or(`id.eq.${validUUID},creator_id.eq.${validUUID},user_id.eq.${validUUID}`).then();
                                   }
                                 }
-                                triggerNotification?.("💾 Track title updated.");
                               }}
                               placeholder={isCreative ? "e.g. Bleeding Profusely" : "e.g. Liege of Inveracity"}
                               className="w-full bg-black/80 border border-zinc-800 focus:border-emerald-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
@@ -2970,7 +2955,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                   }).or(`id.eq.${validUUID},creator_id.eq.${validUUID},user_id.eq.${validUUID}`).then();
                                 }
                               }
-                              triggerNotification?.("💾 Media embed URL updated.");
                             }}
                             placeholder="https://www.youtube.com/watch?v=... or Spotify / SoundCloud link"
                             className="w-full bg-black/80 border border-zinc-800 focus:border-emerald-500 rounded px-2 py-1 text-xs text-white font-mono outline-none"
@@ -3367,7 +3351,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       </div>
                       {selectedUserProfile.isYou && (
                         <button
-                          onClick={() => triggerNotification?.("Add new portfolio project modal opened.")}
+                          onClick={() => {}}
                           className="px-2.5 py-1 bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-400 border border-fuchsia-500/30 rounded text-[10px] font-mono font-bold transition-colors flex items-center gap-1"
                         >
                           <Plus className="w-3 h-3" /> Add Project
@@ -3587,7 +3571,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                       </div>
                       {selectedUserProfile.isYou && (
                         <button
-                          onClick={() => triggerNotification?.("Create new ticket listing modal opened.")}
+                          onClick={() => {}}
                           className="px-2.5 py-1 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 border border-yellow-500/30 rounded text-[10px] font-mono font-bold transition-colors flex items-center gap-1"
                         >
                           <Plus className="w-3 h-3" /> List Event Tickets
@@ -3625,7 +3609,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             <button
                               onClick={() => {
                                 openCheckout?.('ticket', { name: event.title, price: parseFloat(event.price.replace('$','')), venue: event.venue });
-                                triggerNotification?.(`Adding ticket for ${event.title} to checkout...`);
                               }}
                               className="mt-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded text-[10px] uppercase font-mono transition-colors shadow-lg"
                             >
@@ -3867,7 +3850,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           value={selectedLabelBand}
                           onChange={(e) => {
                             setSelectedLabelBand(e.target.value);
-                            triggerNotification?.(`Loading ${e.target.value}'s catalog matrix...`);
                           }}
                           className="bg-zinc-950 text-orange-400 text-[11px] font-black font-mono px-2 py-1 rounded-lg border border-orange-950/50 outline-none focus:border-orange-500/50 cursor-pointer"
                         >
@@ -3920,9 +3902,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                                 {currentAlbum.tracks?.map((track: any, trackIdx: number) => (
                                   <div
                                     key={`creative-track-${track.id || track.title || trackIdx}-${trackIdx}`}
-                                    onClick={() => {
-                                      triggerNotification?.(`Playing preview of "${track.title}" by ${selectedLabelBand}...`);
-                                    }}
+                                    onClick={() => {}}
                                     className="flex items-center justify-between py-2 px-3 hover:bg-zinc-900/60 rounded-md cursor-pointer group/track transition-all"
                                   >
                                     <div className="flex items-center gap-2.5 min-w-0">
@@ -4150,7 +4130,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                         </p>
                         {selectedUserProfile.isYou && (
                           <button
-                            onClick={() => triggerNotification?.("Catalog release manager opened.")}
+                            onClick={() => {}}
                             className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded text-xs font-mono font-bold transition-colors inline-flex items-center gap-1.5"
                           >
                             <Plus className="w-3.5 h-3.5" /> Upload Release Catalog
@@ -4215,7 +4195,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             setProfileActivePlaybackTrackId(firstTrack);
                             setProfileIsPlaying(true);
                             setProfilePlaybackProgress(0);
-                            triggerNotification?.(`Loading ${e.target.value}'s catalog matrix...`);
                           }}
                           className="bg-black border border-orange-500/30 text-orange-400 text-[10px] uppercase font-bold tracking-widest pl-3 pr-7 py-1.5 rounded-full outline-none cursor-pointer appearance-none min-w-[120px] text-center shadow-[0_0_10px_rgba(255,153,0,0.1)]"
                         >
@@ -4332,7 +4311,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             sizes: [],
                             bandName: selectedLabelBand
                           });
-                          triggerNotification?.(`Adding ${selectedLabelBand} - ${currentAlbum.albumName} (${link.format}) to order...`);
                         }}
                         className="flex flex-col items-center justify-center p-3 rounded-xl border border-zinc-800 hover:border-orange-500/40 bg-zinc-950 hover:bg-orange-950/20 text-center transition-all cursor-pointer group/btn shadow-inner"
                       >

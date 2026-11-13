@@ -10,6 +10,7 @@ import {
 } from '../utils/clipsPersistenceService';
 import { ensureProfileRowExists } from '../utils/postSyncUtils';
 import { pushManager } from '../../../lib/pushNotifications';
+import { authFetch, getSupabaseAccessToken } from '../../../utils/apiConfig';
 
 interface UploadClipModalProps {
   showUploadClipModal: boolean;
@@ -245,7 +246,6 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
       setSelectedClipFile(null);
       setShowUploadClipModal(false);
       setIsUploadingClip(false);
-      triggerNotification?.("🚀 Clip posted! Uploading to clips storage bucket in background...");
 
       // Dispatch Clip Drop real-time push notification
       pushManager.sendPushToServer({
@@ -281,11 +281,13 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
             }
 
             try {
-              await fetch('/api/clips', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...newClipObj, video_url: remoteUrl, videoUrl: remoteUrl }),
-              });
+              if (await getSupabaseAccessToken()) {
+                await authFetch('/api/clips', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ...newClipObj, video_url: remoteUrl, videoUrl: remoteUrl }),
+                });
+              }
             } catch (_) {}
 
             // Update local state with permanent Supabase Storage URL
@@ -308,7 +310,6 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
                 }
               }
             } catch (_) {}
-            triggerNotification?.("✅ Clip uploaded to clips storage bucket and synced globally!");
           }
         } catch (bgErr) {
           console.warn("[UploadClipModal] Background upload completion error:", bgErr);
@@ -347,11 +348,13 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
       await persistClipToSupabase(isRemotePermanent ? remoteUrl : activeClipUrl);
 
       try {
-        await fetch('/api/clips', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newClipObj),
-        });
+        if (await getSupabaseAccessToken()) {
+          await authFetch('/api/clips', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newClipObj),
+          });
+        }
       } catch (_) {}
 
       setUploadProgress(100);
@@ -370,7 +373,6 @@ export const UploadClipModal: React.FC<UploadClipModalProps> = ({
       setNewClipVideoUrl('');
       setSelectedClipFile(null);
       setShowUploadClipModal(false);
-      triggerNotification?.("Clip published and saved to clips storage successfully!");
     } catch (err: any) {
       console.error("Failed to upload clip:", err);
       triggerNotification?.(`Error posting clip: ${err.message || err}`);

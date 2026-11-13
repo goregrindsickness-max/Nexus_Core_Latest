@@ -15,7 +15,6 @@ self.addEventListener('push', function(event) {
     body: data.body || 'New operational update from Nexus Core.',
     icon: data.icon || '/icon-192.png',
     badge: data.badge || '/icon-192.png',
-    image: data.image || undefined,
     tag: data.tag || 'nexus-alert-' + Date.now(),
     renotify: data.renotify !== false,
     vibrate: data.vibrate || [200, 100, 200, 100, 300],
@@ -24,6 +23,8 @@ self.addEventListener('push', function(event) {
       targetTab: data.targetTab,
       category: data.category,
       workspace: data.workspace,
+      senderId: data.senderId || data.data?.senderId,
+      senderName: data.senderName || data.data?.senderName,
       timestamp: Date.now(),
       ...data
     },
@@ -32,6 +33,9 @@ self.addEventListener('push', function(event) {
       { action: 'dismiss', title: 'Dismiss' }
     ]
   };
+  if (data.image) {
+    options.image = data.image;
+  }
 
   // Update Home Screen App Icon Badge Counter
   if ('setAppBadge' in navigator) {
@@ -51,8 +55,19 @@ self.addEventListener('notificationclick', function(event) {
     return;
   }
 
-  const targetUrl = event.notification.data?.url || '/';
-  const targetTab = event.notification.data?.targetTab;
+  const notifData = event.notification.data || {};
+  const baseTargetUrl = notifData.url || '/';
+  const targetTab = notifData.targetTab;
+  const senderId = notifData.senderId || notifData.data?.senderId;
+  const senderName = notifData.senderName || notifData.data?.senderName || event.notification.title;
+
+  let deepLinkUrl = baseTargetUrl;
+  try {
+    const parsedUrl = new URL(baseTargetUrl, self.location.origin);
+    if (targetTab) parsedUrl.searchParams.set('openTab', String(targetTab));
+    if (senderId) parsedUrl.searchParams.set('chatWith', String(senderId));
+    deepLinkUrl = parsedUrl.pathname + parsedUrl.search;
+  } catch (_) {}
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
@@ -60,26 +75,26 @@ self.addEventListener('notificationclick', function(event) {
       for (let i = 0; i < clientList.length; i++) {
         const client = clientList[i];
         if ('focus' in client) {
-          if (event.notification.data?.senderId) {
+          if (senderId) {
             client.postMessage({
               type: 'NEXUS_OPEN_CHAT',
-              senderId: event.notification.data.senderId,
-              name: event.notification.title
+              senderId: senderId,
+              name: senderName
             });
           }
           if (targetTab) {
             client.postMessage({
               type: 'NEXUS_PUSH_NAVIGATE',
               targetTab: targetTab,
-              data: event.notification.data
+              data: notifData
             });
           }
           return client.focus();
         }
       }
-      // If no window is open, open a new one
+      // If no window is open, open a new one with deep-link params
       if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
+        return clients.openWindow(deepLinkUrl);
       }
     })
   );

@@ -224,29 +224,23 @@ export const GENRE_CLUSTERS = [
 export async function ensureAutoFollowMiguel(supabase: any, newUserId: string) {
   if (!supabase || !newUserId) return;
   try {
-    // Query profiles for Miguel / goregrindsickness / industry pro
-    const { data: proProfiles, error } = await supabase
+    // Query profiles strictly for Miguel / goregrindsickness personal account
+    const { data: proProfiles } = await supabase
       .from('profiles')
-      .select('id, email, name, account_type')
-      .or('email.ilike.%goregrindsickness%,name.ilike.%miguel%,account_type.eq.industry pro');
+      .select('id, email, full_name, console_handle, account_type')
+      .or('email.ilike.%goregrindsickness%,full_name.ilike.%miguel medina%,console_handle.ilike.%bdmceo%');
 
     let targetId: string | null = null;
     if (proProfiles && proProfiles.length > 0) {
-      const match = proProfiles.find((p: any) => p.email?.toLowerCase().includes('goregrindsickness') || p.name?.toLowerCase().includes('miguel')) || proProfiles[0];
+      const match =
+        proProfiles.find(
+          (p: any) =>
+            p.email?.toLowerCase().includes('goregrindsickness') ||
+            p.console_handle?.toLowerCase().includes('bdmceo') ||
+            p.full_name?.toLowerCase().includes('miguel')
+        ) || proProfiles[0];
       if (match?.id) {
         targetId = match.id;
-      }
-    }
-
-    if (!targetId) {
-      const { data: fallbackProfiles } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('account_type', 'industry pro')
-        .limit(5);
-      if (fallbackProfiles && fallbackProfiles.length > 0) {
-        const validFallback = fallbackProfiles.find((p: any) => p.id !== newUserId);
-        if (validFallback) targetId = validFallback.id;
       }
     }
 
@@ -263,10 +257,15 @@ export async function ensureAutoFollowMiguel(supabase: any, newUserId: string) {
     await supabase.from('follows').upsert([payload], { onConflict: 'follower_id,followed_id' });
 
     try {
-      const localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
-      if (!localFollows[newUserId]) localFollows[newUserId] = {};
-      localFollows[newUserId][targetId] = true;
-      localStorage.setItem('nexus_local_follows_v1', JSON.stringify(localFollows));
+      const raw = localStorage.getItem('nexus_local_follows_v2');
+      const store = raw ? JSON.parse(raw) : {};
+      const cleanFollower = String(newUserId).toLowerCase().trim();
+      const cleanTarget = String(targetId).toLowerCase().trim();
+      if (!store[cleanFollower] || typeof store[cleanFollower] !== 'object') {
+        store[cleanFollower] = {};
+      }
+      store[cleanFollower][cleanTarget] = true;
+      localStorage.setItem('nexus_local_follows_v2', JSON.stringify(store));
     } catch (e) {
       // ignore
     }

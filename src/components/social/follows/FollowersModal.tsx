@@ -291,7 +291,6 @@ export const FollowersModal: React.FC<FollowersModalProps> = ({
     }
 
     setSelectedUserProfile(profileData);
-    triggerNotification?.(`⚡ Loading ${user.display_name}'s profile...`);
   };
 
   const getCategoryBadge = (category: string, roleStr?: string) => {

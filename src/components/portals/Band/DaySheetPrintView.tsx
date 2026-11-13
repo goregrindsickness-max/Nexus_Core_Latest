@@ -1070,7 +1070,7 @@ export default function DaySheetPrintView({
               {show.wifi_network && (
                 <div className="flex justify-between items-center bg-zinc-900/50 p-2.5 rounded border border-zinc-800/80">
                   <span className="text-zinc-500 uppercase text-[9px]">SSID Network</span>
-                  <span className="text-emerald-400 font-black tracking-wide select-all cursor-pointer hover:underline" onClick={() => { navigator.clipboard.writeText(show.wifi_network || ''); triggerNotification("Copied WiFi Network name!"); }}>
+                  <span className="text-emerald-400 font-black tracking-wide select-all cursor-pointer hover:underline" onClick={() => { navigator.clipboard.writeText(show.wifi_network || ''); }}>
                     {show.wifi_network}
                   </span>
                 </div>
@@ -1078,7 +1078,7 @@ export default function DaySheetPrintView({
               {show.wifi_password && (
                 <div className="flex justify-between items-center bg-zinc-900/50 p-2.5 rounded border border-zinc-800/80">
                   <span className="text-zinc-500 uppercase text-[9px]">WPA2 Password</span>
-                  <span className="text-zinc-100 font-black tracking-wide select-all cursor-pointer hover:underline" onClick={() => { navigator.clipboard.writeText(show.wifi_password || ''); triggerNotification("Copied WiFi Password!"); }}>
+                  <span className="text-zinc-100 font-black tracking-wide select-all cursor-pointer hover:underline" onClick={() => { navigator.clipboard.writeText(show.wifi_password || ''); }}>
                     {show.wifi_password}
                   </span>
                 </div>
@@ -1352,7 +1352,6 @@ export default function DaySheetPrintView({
             <button
               onClick={() => {
                 setViewMode('mobile');
-                triggerNotification("Switched to mobile-friendly day-sheet.");
               }}
               className={`flex-1 py-2.5 text-[10px] sm:text-xs font-mono font-black tracking-wider uppercase rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
                 viewMode === 'mobile'
@@ -1366,7 +1365,6 @@ export default function DaySheetPrintView({
             <button
               onClick={() => {
                 setViewMode('document');
-                triggerNotification("Switched to standard 8.5x11 PDF preview.");
               }}
               className={`flex-1 py-2.5 text-[10px] sm:text-xs font-mono font-black tracking-wider uppercase rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
                 viewMode === 'document'

@@ -11,6 +11,7 @@ import {
 import { InventoryItem, LoyaltyMember, StagedDistroItem } from '../../../types';
 import { getSupabase } from '../../../supabase';
 import DevBandDistroDeck from './DevBandDistroDeck';
+import { authFetch } from '../../../utils/apiConfig';
 
 interface PromoHubViewProps {
   inventory: InventoryItem[];
@@ -340,7 +341,6 @@ export default function PromoHubView({
       const randomChoice = pool[Math.floor(Math.random() * pool.length)];
       setGeneratedCaption(randomChoice);
     }
-    triggerNotification('Generated fresh promo copy!');
   };
 
   // Run initial caption populate
@@ -381,7 +381,6 @@ export default function PromoHubView({
         if (uploadEvent.target?.result) {
           setBgImage(uploadEvent.target.result as string);
           setBgType('image');
-          triggerNotification('Custom story background loaded successfully!');
           addLog(`Uploaded custom social story background image (${file.name})`);
         }
       };
@@ -398,7 +397,6 @@ export default function PromoHubView({
 
   const copyCaptionToClipboard = () => {
     navigator.clipboard.writeText(generatedCaption);
-    triggerNotification('Caption copied to clipboard!');
   };
 
   // Loyalty handler functions
@@ -437,7 +435,7 @@ export default function PromoHubView({
     };
 
     try {
-      const response = await fetch('/api/emails/vip-loyalty', {
+      const response = await authFetch('/api/emails/vip-loyalty', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -503,7 +501,6 @@ export default function PromoHubView({
     }
     const emailStr = optInList.map(m => `"${m.name}" <${m.email}>`).join(', ');
     navigator.clipboard.writeText(emailStr);
-    triggerNotification(`📋 Copied ${optInList.length} opted-in emails to Clipboard!`);
     addLog(`Copied ${optInList.length} promotional club emails for newsletter broadcast.`);
   };
 
@@ -727,7 +724,6 @@ export default function PromoHubView({
                     type="button"
                     onClick={() => {
                       setPromoType(mode.id as any);
-                      triggerNotification(`Switched story mode to ${mode.label}!`);
                     }}
                     className={`flex-1 sm:flex-initial text-[10px] font-mono uppercase px-3.5 py-1.5 rounded-lg transition-all font-black cursor-pointer ${
                       promoType === mode.id ? 'bg-[#00ffcc] text-black shadow-[0_0_15px_rgba(0,255,204,0.3)]' : 'text-zinc-400 hover:text-white hover:bg-zinc-900/30'
@@ -1356,7 +1352,6 @@ export default function PromoHubView({
                       type="button"
                       onClick={() => {
                         setColorFilter(item.id as any);
-                        triggerNotification(`Applied ${item.label} vibe mask!`);
                       }}
                       className={`p-2 border rounded-xl flex flex-col items-center gap-1.5 transition cursor-pointer select-none ${
                         colorFilter === item.id ? 'border-[#00ffcc] bg-[#1a2130]' : 'border-zinc-850 bg-zinc-950/60'
@@ -1482,7 +1477,6 @@ export default function PromoHubView({
                           } else {
                             setQrOverlayUrl(`${window.location.origin}`);
                           }
-                          triggerNotification(`Set QR code link destination!`);
                         }}
                         className="bg-zinc-950 p-1 border border-zinc-850 rounded text-[9px] text-white focus:outline-none focus:border-teal-400 font-mono w-full"
                       >

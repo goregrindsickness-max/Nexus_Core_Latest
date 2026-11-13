@@ -13,6 +13,7 @@ import { mergePostWithReactions } from './utils/reactionStore';
 import { isMiguelNameOrProfile } from './utils/profileUtils';
 import { resolveCreativeLogo, resolvePromoterLogo, resolveBandLogo } from '../../utils/bandProfileUtils';
 import { generateValidUUID } from '../../services/postInteractionsService';
+import { isProfileFollowedGlobally } from '../../utils/followSyncService';
 
 export const FeedViewRouter: React.FC<any> = (props) => {
   const [feedStreamScope, setFeedStreamScope] = React.useState<'all' | 'workspace'>('all');
@@ -466,16 +467,18 @@ export const FeedViewRouter: React.FC<any> = (props) => {
               const authorId = post?.author?.id || post?.author_id || post?.profile_id || post?.user_id || post?.band_id;
               const authorHandle = (post?.author?.handle || post?.handle || post?.console_handle || '').toLowerCase().trim().replace(/^@/, '');
 
-              // Check local storage follows
-              let localFollows: Record<string, boolean> = {};
-              try {
-                localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
-              } catch (e) {}
-
-              const isLocallyFollowed = Boolean(
-                (authorId && localFollows[authorId]) ||
-                (authorName && localFollows[authorName]) ||
-                (authorHandle && localFollows[authorHandle])
+              const isLocallyFollowed = isProfileFollowedGlobally(
+                {
+                  id: authorId,
+                  band_id: post?.band_id,
+                  name: authorName,
+                  band_name: post?.band_id ? authorName : undefined,
+                  handle: authorHandle,
+                  type: post?.band_id ? 'band' : undefined,
+                  isBandProfile: Boolean(post?.band_id),
+                },
+                undefined,
+                userProfile?.id
               );
 
               const isDiscoverFollowed = (discoverProfiles || []).some(p => {
@@ -607,6 +610,11 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                 : (p.albumData || p.tag === 'ALBUM RELEASE' ? 'ARTIST' : 'FAN')
             ),
             location: p.location || p.venue || p.scraped_location || p.tagged_venue || p.author?.location || p.author_location,
+            taggedVenue: p.taggedVenue || p.tagged_venue || p.venue || p.eventData?.venue || p.eventData?.locationName || p.event_data?.venue || p.event_data?.locationName || p.festivalData?.venueName || p.festival_data?.venueName || '',
+            tagged_venue: p.tagged_venue || p.taggedVenue || p.venue || '',
+            venue: p.venue,
+            groundedVenue: p.groundedVenue || p.grounded_venue,
+            grounded_venue: p.grounded_venue || p.groundedVenue,
             message: p.content || p.message || '',
             image_url: p.image || p.image_url || (p.images && p.images[0]),
             images: p.images || (p.image ? [p.image] : p.image_url ? [p.image_url] : undefined),

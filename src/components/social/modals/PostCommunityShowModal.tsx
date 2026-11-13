@@ -134,18 +134,14 @@ export function PostCommunityShowModal({
       try {
         const raw = reader.result as string;
         const compressed = await compressImageInSocialFeed(raw, 1080, 1080, 0.8);
-        triggerNotification?.('⏳ Uploading flyer to storage...');
         const uploadedUrl = await uploadBase64ToStorage(compressed, 'archives', 'community_show', 'flyer');
         if (uploadedUrl && !uploadedUrl.startsWith('data:')) {
           onSuccess(uploadedUrl);
-          triggerNotification?.('✅ Flyer stored in cloud');
         } else {
           onSuccess(compressed);
-          triggerNotification?.('✅ Flyer attached');
         }
       } catch {
         onSuccess(reader.result as string);
-        triggerNotification?.('✅ Flyer attached');
       }
     };
     reader.readAsDataURL(file);
@@ -198,7 +194,6 @@ export function PostCommunityShowModal({
     };
 
     setTourStops(prev => [...prev, newStop]);
-    triggerNotification?.(`📍 Added stop: ${newStop.city}, ${newStop.state} @ ${newStop.venue_name}`);
 
     setStopCity('');
     setStopState('');

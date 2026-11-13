@@ -55,7 +55,6 @@ export function useTourNotes({
     }
     setNotes(prev => prev.filter(n => n.id !== id));
     setActiveNoteIndex(0);
-    triggerNotification('Note removed.');
   };
 
   // Update Note helper
@@ -64,7 +63,6 @@ export function useTourNotes({
     
     // Optimistic update locally
     setNotes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
-    triggerNotification('Note updated.');
     addLog(`Note [${id}] updated locally.`);
 
     if (supabase && isOnline) {
@@ -131,7 +129,6 @@ export function useTourNotes({
           const nextState = !item.completed;
           const status = nextState ? 'COMPLETED' : 'REOPENED';
           addLog(`Checklist task: "${item.text}" marked as ${status}`);
-          triggerNotification(`Task ${status.toLowerCase()}!`);
           return { ...item, completed: nextState };
         }
         return item;

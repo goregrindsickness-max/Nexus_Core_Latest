@@ -169,7 +169,6 @@ export default function EventWorkspaceView({
       return `${i+1}. ${b.custom_name} - Set: ${setTime}${loadIn} (Status: ${b.status})`;
     }).join('\n');
     navigator.clipboard.writeText(`RUNNING ORDER:\n${text}`);
-    if (triggerNotification) triggerNotification('Running order copied to clipboard!');
     playLocalBeep(900, 'sine', 0.05);
   };
 

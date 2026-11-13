@@ -193,7 +193,7 @@ export const ClipsOverlaysModal: React.FC<ClipsOverlaysModalProps> = ({
                         </div>
                         <div className="w-full sm:w-auto mt-2 sm:mt-0 flex sm:flex-col gap-2 shrink-0">
                           <button 
-                            onClick={() => triggerNotification?.(`Clip boosted across trending reels!`)}
+                            onClick={() => {}}
                             className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-[10px] uppercase font-bold text-white px-3 py-2 rounded-lg transition-colors text-center"
                           >
                             Boost
@@ -399,7 +399,6 @@ export const ClipsOverlaysModal: React.FC<ClipsOverlaysModalProps> = ({
                   <img src={userProfile?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'} className="w-8 h-8 rounded-full border border-zinc-800" alt="" />
                   <input type="text" placeholder="Add a comment..." className="flex-1 bg-zinc-900 border border-zinc-800 rounded-full px-4 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500/50" />
                   <button onClick={() => {
-                    triggerNotification?.("Comment posted!");
                     setActiveClipComments(null);
                   }} className="bg-cyan-600 hover:bg-cyan-500 text-white rounded-full p-2 transition-colors">
                     <Send className="w-4 h-4" />
@@ -430,25 +429,25 @@ export const ClipsOverlaysModal: React.FC<ClipsOverlaysModalProps> = ({
                 </button>
               </div>
               <div className="p-6 grid grid-cols-4 gap-4 bg-zinc-950 text-center">
-                <button onClick={() => { triggerNotification?.("Link copied to clipboard!"); setActiveClipShare(null); }} className="flex flex-col items-center gap-2 group">
+                <button onClick={() => { setActiveClipShare(null); }} className="flex flex-col items-center gap-2 group">
                   <div className="w-12 h-12 rounded-full bg-zinc-900 flex items-center justify-center group-hover:bg-cyan-900/40 group-hover:text-cyan-400 transition-colors border border-zinc-800">
                     <LinkIcon className="w-5 h-5" />
                   </div>
                   <span className="text-[10px] font-bold text-zinc-400 group-hover:text-white">Copy Link</span>
                 </button>
-                <button onClick={() => { triggerNotification?.("Sent via Direct Message"); setActiveClipShare(null); }} className="flex flex-col items-center gap-2 group">
+                <button onClick={() => { setActiveClipShare(null); }} className="flex flex-col items-center gap-2 group">
                   <div className="w-12 h-12 rounded-full bg-zinc-900 flex items-center justify-center group-hover:bg-cyan-900/40 group-hover:text-cyan-400 transition-colors border border-zinc-800">
                     <Send className="w-5 h-5" />
                   </div>
                   <span className="text-[10px] font-bold text-zinc-400 group-hover:text-white">Message</span>
                 </button>
-                <button onClick={() => { triggerNotification?.("Shared to your Story"); setActiveClipShare(null); }} className="flex flex-col items-center gap-2 group">
+                <button onClick={() => { setActiveClipShare(null); }} className="flex flex-col items-center gap-2 group">
                   <div className="w-12 h-12 rounded-full bg-zinc-900 flex items-center justify-center group-hover:bg-purple-900/40 group-hover:text-purple-400 transition-colors border border-zinc-800">
                     <Plus className="w-5 h-5" />
                   </div>
                   <span className="text-[10px] font-bold text-zinc-400 group-hover:text-white">Add Story</span>
                 </button>
-                <button onClick={() => { triggerNotification?.("Cross-posted to other socials"); setActiveClipShare(null); }} className="flex flex-col items-center gap-2 group">
+                <button onClick={() => { setActiveClipShare(null); }} className="flex flex-col items-center gap-2 group">
                   <div className="w-12 h-12 rounded-full bg-zinc-900 flex items-center justify-center group-hover:bg-rose-900/40 group-hover:text-rose-400 transition-colors border border-zinc-800">
                     <Share2 className="w-5 h-5" />
                   </div>

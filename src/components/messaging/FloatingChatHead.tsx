@@ -912,12 +912,23 @@ export const FloatingChatHead: React.FC = () => {
       } catch (e) {}
     }
 
-    // 2. Supabase DB Insert
+    // 2. Supabase DB Insert & Background Web Push Dispatch
+    let senderDisplayName = 'Nexus Contact';
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('nexus_core_user_profile') || localStorage.getItem('nexus_user');
+        if (stored) {
+          const p = JSON.parse(stored);
+          senderDisplayName = p?.full_name || p?.name || p?.console_handle || senderDisplayName;
+        }
+      } catch (_) {}
+    }
+
+    const insertSender = currentUserProfileId || senderId;
+    const insertReceiver = resolvedRecipientId;
+
     if (supabase) {
       try {
-        const insertSender = currentUserProfileId || senderId;
-        const insertReceiver = resolvedRecipientId;
-
         await supabase.from('nexus_chats').insert([{
           sender_id: insertSender,
           receiver_id: insertReceiver,
@@ -935,8 +946,9 @@ export const FloatingChatHead: React.FC = () => {
             .insert([{
               id: newNotifId,
               user_id: receiverUUID,
+              actor_id: extractUUID(insertSender) || null,
               title: '💬 NEW MESSAGE',
-              message: `New message: "${text.substring(0, 60)}"`,
+              message: `New message from ${senderDisplayName}: "${text.substring(0, 60)}"`,
               category: 'CHAT',
               type: 'chat_message',
               is_read: false,
@@ -944,6 +956,26 @@ export const FloatingChatHead: React.FC = () => {
             }]);
         }
       } catch (err) {}
+    }
+
+    if (insertReceiver && insertReceiver !== insertSender) {
+      const validPushEmail = recipientEmail && !recipientEmail.endsWith('@nexus.network') ? recipientEmail : undefined;
+      pushManager.sendPushToServer({
+        userId: insertReceiver,
+        userEmail: validPushEmail,
+        excludeUserId: insertSender,
+        excludeUserEmail: currentUserEmail || undefined,
+        title: `💬 Direct Message from ${senderDisplayName}`,
+        body: text.substring(0, 120),
+        category: 'direct_messages',
+        targetTab: 'messages',
+        priority: 'P1',
+        tag: `nexus-dm-${insertSender}`,
+        data: {
+          senderId: insertSender,
+          senderName: senderDisplayName,
+        }
+      }).catch(pErr => console.warn('[FloatingChatHead] Push send notice:', pErr));
     }
 
     window.dispatchEvent(new CustomEvent('nexus_chats_updated'));

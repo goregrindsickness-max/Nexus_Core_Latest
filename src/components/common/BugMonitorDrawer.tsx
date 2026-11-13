@@ -26,8 +26,8 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { bugMonitor, BugReport, BugStatus } from '../../services/bugMonitorService';
-import { isMiguelNameOrProfile } from '../social/utils/profileUtils';
 import { useModalStore } from '../../store/useModalStore';
+import { isClientAdmin } from '../../utils/apiConfig';
 
 interface BugMonitorDrawerProps {
   userProfile?: any;
@@ -58,21 +58,14 @@ export const BugMonitorDrawer: React.FC<BugMonitorDrawerProps> = ({
   // Mobile master-detail view state ('list' = bug list, 'detail' = active bug deep dive)
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
 
-  // Check if owner
-  const isOwner = useMemo(() => {
-    if (!userProfile) return true; // Fail-open in dev/owner context
-    if (userProfile?.email === 'goregrindsickness@gmail.com') return true;
-    if (isMiguelNameOrProfile(userProfile)) return true;
-    if (userProfile?.name && userProfile.name.toLowerCase().includes('miguel')) return true;
-    if (userProfile?.handle && (userProfile.handle.toLowerCase().includes('bdmceo') || userProfile.handle.toLowerCase().includes('goregrinder'))) return true;
-    return false;
-  }, [userProfile]);
+  // Check if owner / platform admin (fail-closed when unauthenticated or non-admin)
+  const isOwner = useMemo(() => isClientAdmin(userProfile), [userProfile]);
 
   // Keep user context updated in the background observer
   useEffect(() => {
     bugMonitor.setUserContext({
       userId: userProfile?.id || userProfile?.user_id,
-      userEmail: userProfile?.email || 'goregrindsickness@gmail.com',
+      userEmail: userProfile?.email || undefined,
       routeOrTab: activeTab || 'feed',
       activeBandName: activeBand?.name || activeBand?.band_name,
       activeBandId: activeBand?.id
@@ -81,6 +74,10 @@ export const BugMonitorDrawer: React.FC<BugMonitorDrawerProps> = ({
 
   // Initial load & subscription to live background events
   const refreshReports = useCallback(async () => {
+    if (!isOwner) {
+      setReports(bugMonitor.getCachedReports());
+      return;
+    }
     setIsRefreshing(true);
     try {
       const live = await bugMonitor.fetchReports();
@@ -90,7 +87,7 @@ export const BugMonitorDrawer: React.FC<BugMonitorDrawerProps> = ({
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [isOwner]);
 
   useEffect(() => {
     // Initial fetch

@@ -1,5 +1,6 @@
 import React from 'react';
 import { getSupabase } from '../supabase';
+import { authFetch, getSupabaseAccessToken } from './apiConfig';
 
 export const formatPostTimestamp = (
   timestampOrPost?: any,
@@ -602,7 +603,9 @@ export async function resolveBandcampMetadata(url: string): Promise<BandcampReso
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 3500);
         try {
-          const res = await fetch('/api/bandcamp/resolve', {
+          const token = await getSupabaseAccessToken();
+          if (!token) throw new Error('No session token');
+          const res = await authFetch('/api/bandcamp/resolve', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: cleanUrl }),

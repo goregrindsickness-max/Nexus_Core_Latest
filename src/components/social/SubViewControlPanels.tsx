@@ -153,6 +153,10 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
   // Local follow state tracking for instant UI responsiveness
   const [followedState, setFollowedState] = useState<Record<string, boolean>>({});
 
+  useEffect(() => {
+    setFollowedState({});
+  }, [userProfile?.id]);
+
   // Sync follow state globally across all components
   useEffect(() => {
     const handleGlobalFollowUpdate = (e: Event) => {
@@ -238,12 +242,6 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
     if (onToggleFollow) {
       onToggleFollow(targetObj);
     }
-
-    triggerNotification?.(
-      nextFollow
-        ? `✨ Now following ${entity.name}`
-        : `💔 Unfollowed ${entity.name}`
-    );
   };
 
   // Filter shows so each multi-city tour or headliner features ONLY 1 geographically closest show to avoid feed clutter

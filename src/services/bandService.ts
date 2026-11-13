@@ -639,7 +639,7 @@ registerSchemaSanitizers({ sanitizeBandPayload });
  */
 export async function upsertBandToDatabase(
   bandInput: any,
-  options?: { isNew?: boolean; triggerNotification?: (msg: string) => void }
+  options?: { isNew?: boolean; allowEmptyLineup?: boolean; triggerNotification?: (msg: string) => void }
 ): Promise<{ success: boolean; data?: any; error?: any }> {
   if (!bandInput || typeof bandInput !== 'object') {
     return { success: false, error: new Error('Invalid band input') };
@@ -655,39 +655,55 @@ export async function upsertBandToDatabase(
     cleanBand.id = ensureUUID(cleanBand.id || bandInput.id);
   }
 
+  // Decode lineup for local objects and events to preserve array representation in memory
+  let parsedLineupArray: any[] = [];
+  if (typeof cleanBand.lineup === 'string') {
+    try {
+      const parsed = JSON.parse(cleanBand.lineup);
+      if (Array.isArray(parsed)) parsedLineupArray = parsed;
+    } catch {}
+  } else if (Array.isArray(cleanBand.lineup)) {
+    parsedLineupArray = cleanBand.lineup;
+  }
+
+  const hasExplicitLineupField = bandInput.lineup !== undefined && bandInput.lineup !== null;
+
   // Sync to local storage immediately for zero-latency UI consistency
   try {
     const bandId = cleanBand.id;
     if (bandId) {
-      // Decode lineup for local objects to preserve array representation in memory
-      let parsedLineupArray: any[] = [];
-      if (typeof cleanBand.lineup === 'string') {
-        try {
-          const parsed = JSON.parse(cleanBand.lineup);
-          if (Array.isArray(parsed)) parsedLineupArray = parsed;
-        } catch {}
-      } else if (Array.isArray(cleanBand.lineup)) {
-        parsedLineupArray = cleanBand.lineup;
-      }
-
       if (parsedLineupArray.length > 0) {
-        localStorage.setItem(`nexus_core_band_lineup_${bandId}`, JSON.stringify(parsedLineupArray));
-        localStorage.setItem(`nexus_core_band_lineup_${ensureUUID(bandId)}`, JSON.stringify(parsedLineupArray));
+        const serialized = JSON.stringify(parsedLineupArray);
+        localStorage.setItem(`nexus_core_band_lineup_${bandId}`, serialized);
+        localStorage.setItem(`nexus_core_band_lineup_${ensureUUID(bandId)}`, serialized);
+        if (cleanBand.band_name) {
+          localStorage.setItem(`nexus_core_band_lineup_${String(cleanBand.band_name).toLowerCase().trim()}`, serialized);
+        }
+      } else if (options?.allowEmptyLineup && hasExplicitLineupField) {
+        localStorage.removeItem(`nexus_core_band_lineup_${bandId}`);
+        localStorage.removeItem(`nexus_core_band_lineup_${ensureUUID(bandId)}`);
+        if (cleanBand.band_name) {
+          localStorage.removeItem(`nexus_core_band_lineup_${String(cleanBand.band_name).toLowerCase().trim()}`);
+        }
       }
 
-      const memoryBand = {
+      const memoryBand: any = {
         ...cleanBand,
-        lineup: parsedLineupArray.length > 0 ? parsedLineupArray : (cleanBand.lineup || [])
       };
+      if (hasExplicitLineupField || parsedLineupArray.length > 0) {
+        memoryBand.lineup = parsedLineupArray;
+      } else {
+        delete memoryBand.lineup;
+      }
 
       // 1. Registered bands
       const regRaw = localStorage.getItem('nexus_registered_bands');
-      let registered: any[] = regRaw ? JSON.parse(regRaw) : [];
+      const registered: any[] = regRaw ? JSON.parse(regRaw) : [];
       const regIdx = registered.findIndex((b: any) => b.id === bandId || ensureUUID(b.id) === bandId);
       if (regIdx >= 0) {
         registered[regIdx] = { ...registered[regIdx], ...memoryBand };
       } else {
-        registered.push(memoryBand);
+        registered.push({ ...memoryBand, lineup: parsedLineupArray });
       }
       localStorage.setItem('nexus_registered_bands', JSON.stringify(registered));
 
@@ -706,7 +722,7 @@ export async function upsertBandToDatabase(
       const commRaw = localStorage.getItem('nexus_community_bands_v2');
       if (commRaw) {
         try {
-          let commList = JSON.parse(commRaw);
+          const commList = JSON.parse(commRaw);
           if (Array.isArray(commList)) {
             const cIdx = commList.findIndex((b: any) => b.id === bandId || ensureUUID(b.id) === bandId);
             if (cIdx >= 0) {
@@ -721,10 +737,14 @@ export async function upsertBandToDatabase(
     console.warn('[bandService] Local cache sync notice:', storageErr);
   }
 
-  // Broadcast window events to all UI listeners
+  // Broadcast window events to all UI listeners (always pass parsed array lineup, never raw JSON string)
+  const eventDetail = {
+    ...cleanBand,
+    ...(hasExplicitLineupField || parsedLineupArray.length > 0 ? { lineup: parsedLineupArray } : {})
+  };
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('nexus_active_band_updated', { detail: cleanBand }));
-    window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: cleanBand }));
+    window.dispatchEvent(new CustomEvent('nexus_active_band_updated', { detail: eventDetail }));
+    window.dispatchEvent(new CustomEvent('nexus_community_bands_updated', { detail: eventDetail }));
     if (cleanBand.logo_url) {
       verifyAndResyncBandLogo(cleanBand.logo_url, cleanBand.id);
       window.dispatchEvent(new CustomEvent('nexus_band_logo_updated', {
@@ -734,12 +754,10 @@ export async function upsertBandToDatabase(
   }
 
   if (!supabase) {
-    return { success: true, data: cleanBand };
+    return { success: true, data: eventDetail };
   }
 
   try {
-    const isExplicitNew = Boolean(options?.isNew);
-
     let existingRowId: string | null = null;
 
     // 1. Check by ID
@@ -750,7 +768,7 @@ export async function upsertBandToDatabase(
       }
     }
 
-    // 2. Check by custom_slug if not found by ID
+    // 2. Check by custom_slug if not found by ID (even if caller passed isNew: true)
     if (!existingRowId && cleanBand.custom_slug) {
       const { data: bySlug } = await supabase.from('bands').select('id').eq('custom_slug', cleanBand.custom_slug).maybeSingle();
       if (bySlug?.id) {
@@ -759,62 +777,75 @@ export async function upsertBandToDatabase(
       }
     }
 
-    if (existingRowId && !isExplicitNew) {
-      console.log(`[bandService] Record exists (${existingRowId}). Performing targeted UPDATE...`);
+    if (existingRowId) {
+      console.log(`[bandService] Record exists (${existingRowId}). Performing targeted verified UPDATE...`);
+      const updatePayload = { ...cleanBand, id: existingRowId };
       const updateRes = await executeWithSchemaResilience(
-        async (payload) => await supabase.from('bands').update(payload).eq('id', existingRowId),
-        cleanBand
+        async (payload) => await supabase.from('bands').update(payload).eq('id', existingRowId).select('id, band_name, lineup, updated_at'),
+        updatePayload
       );
 
-      if (!updateRes?.error) {
-        console.log(`[bandService] Successfully updated band record: ${cleanBand.id}`);
-        return { success: true, data: updateRes.data || cleanBand };
+      const updatedRows = Array.isArray(updateRes?.data) ? updateRes.data : (updateRes?.data ? [updateRes.data] : []);
+      if (!updateRes?.error && updatedRows.length > 0) {
+        console.log(`[bandService] Successfully updated band record: ${existingRowId}`);
+        return { success: true, data: { ...cleanBand, ...updatedRows[0], lineup: parsedLineupArray } };
       }
 
-      console.warn('[bandService] Resilient update returned error, attempting direct update:', updateRes.error);
-      const directUpdate = await supabase.from('bands').update(cleanBand).eq('id', existingRowId);
-      if (!directUpdate.error) {
-        return { success: true, data: cleanBand };
+      if (!updateRes?.error && updatedRows.length === 0) {
+        console.warn(`[bandService] Verified UPDATE affected 0 rows for ${existingRowId}, retrying direct upsert...`);
+      } else {
+        console.warn('[bandService] Resilient update returned error, attempting direct update:', updateRes?.error);
       }
 
-      const errMsg = directUpdate.error.message || JSON.stringify(directUpdate.error);
-      console.error(`[bandService] Database UPDATE failed for band ${cleanBand.id}:`, errMsg);
+      const directUpdate: any = await supabase.from('bands').update(updatePayload).eq('id', existingRowId).select('id, band_name, lineup, updated_at');
+      const directRows = Array.isArray(directUpdate?.data) ? directUpdate.data : (directUpdate?.data ? [directUpdate.data] : []);
+      if (!directUpdate?.error && directRows.length > 0) {
+        return { success: true, data: { ...cleanBand, ...directRows[0], lineup: parsedLineupArray } };
+      }
+
+      const fallbackUpsert = await supabase.from('bands').upsert([updatePayload], { onConflict: 'id' }).select('id, band_name, lineup, updated_at');
+      if (!fallbackUpsert.error) {
+        return { success: true, data: { ...cleanBand, lineup: parsedLineupArray } };
+      }
+
+      const errMsg = directUpdate.error?.message || fallbackUpsert.error?.message || JSON.stringify(directUpdate.error || fallbackUpsert.error);
+      console.error(`[bandService] Database UPDATE failed for band ${existingRowId}:`, errMsg);
       options?.triggerNotification?.(`❌ Database band update failed: ${errMsg}`);
-      return { success: false, data: cleanBand, error: errMsg };
+      return { success: false, data: eventDetail, error: errMsg };
     } else {
       console.log(`[bandService] Performing INSERT / UPSERT for band ${cleanBand.id} (Name: "${cleanBand.band_name}")...`);
-      
+
       const insertRes = await executeWithSchemaResilience(
-        async (payload) => await supabase.from('bands').insert([payload]),
+        async (payload) => await supabase.from('bands').insert([payload]).select('id, band_name, lineup, updated_at'),
         cleanBand
       );
 
       if (!insertRes?.error) {
         console.log(`[bandService] Successfully inserted band record: ${cleanBand.id}`);
-        return { success: true, data: insertRes.data || cleanBand };
+        return { success: true, data: { ...cleanBand, lineup: parsedLineupArray } };
       }
 
-      const directUpsert = await supabase.from('bands').upsert([cleanBand], { onConflict: 'custom_slug' });
+      const directUpsert = await supabase.from('bands').upsert([cleanBand], { onConflict: 'custom_slug' }).select('id, band_name, lineup, updated_at');
       if (!directUpsert.error) {
         console.log(`[bandService] Direct upsert succeeded for ${cleanBand.id}`);
-        return { success: true, data: cleanBand };
+        return { success: true, data: { ...cleanBand, lineup: parsedLineupArray } };
       }
 
-      const fallbackUpsert = await supabase.from('bands').upsert([cleanBand], { onConflict: 'id' });
+      const fallbackUpsert = await supabase.from('bands').upsert([cleanBand], { onConflict: 'id' }).select('id, band_name, lineup, updated_at');
       if (!fallbackUpsert.error) {
-        return { success: true, data: cleanBand };
+        return { success: true, data: { ...cleanBand, lineup: parsedLineupArray } };
       }
 
       const errMsg = directUpsert.error.message || insertRes.error?.message || JSON.stringify(insertRes.error);
       console.error(`[bandService] Database band save failed for ${cleanBand.id}:`, errMsg);
       options?.triggerNotification?.(`❌ Database band save failed: ${errMsg}`);
-      return { success: false, data: cleanBand, error: errMsg };
+      return { success: false, data: eventDetail, error: errMsg };
     }
   } catch (err: any) {
     const errMsg = err?.message || String(err);
     console.error('[bandService] Band database sync exception:', errMsg);
     options?.triggerNotification?.(`❌ Database sync exception: ${errMsg}`);
-    return { success: false, data: cleanBand, error: errMsg };
+    return { success: false, data: eventDetail, error: errMsg };
   }
 }
 

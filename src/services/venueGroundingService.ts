@@ -1,3 +1,5 @@
+import { authFetch } from '../utils/apiConfig';
+
 export interface GroundedVenueData {
   hasVenue: boolean;
   responseText: string;
@@ -17,7 +19,7 @@ export async function detectGroundedVenue(text: string, lat?: number, lng?: numb
   if (!text || typeof text !== 'string' || !text.trim()) return null;
 
   try {
-    const res = await fetch('/api/venue-grounding', {
+    const res = await authFetch('/api/venue-grounding', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: text.trim(), lat, lng })

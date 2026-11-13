@@ -508,7 +508,6 @@ const SingleClipPlayerCard: React.FC<{
                     e.stopPropagation();
                     const nextState = !isFollowed;
                     saveFollowStateGlobally(clipTarget, nextState);
-                    triggerNotification?.(nextState ? `✨ Now following ${clip.creator}!` : `💔 Unfollowed ${clip.creator}`);
                     if (setClips) {
                       setClips((prev) =>
                         prev.map((c) => (c.id === clip.id ? { ...c, isFollowed: nextState } : c))
@@ -599,7 +598,6 @@ const SingleClipPlayerCard: React.FC<{
               setClips((prev) =>
                 prev.map((c) => (c.id === clip.id ? { ...c, reposts: (c.reposts || 0) + 1 } : c))
               );
-              triggerNotification?.("Reposted to your feed!");
             }}
             className="flex flex-col items-center gap-1 group/btn"
           >
@@ -672,7 +670,6 @@ const SingleClipPlayerCard: React.FC<{
                     } catch (_) {}
                     return updated;
                   });
-                  triggerNotification?.("Clip deleted successfully!");
                 }
               }}
               className="flex flex-col items-center gap-1 group/btn mt-1 text-rose-500 hover:text-rose-400 cursor-pointer"
@@ -810,7 +807,6 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
     }
 
     setEditingClipModal(null);
-    triggerNotification?.("Clip tags and details updated successfully!");
   };
 
   // New clip form states
@@ -869,7 +865,6 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
         if (c.id === clipId) {
           const nextHasLiked = !c.hasLiked;
           const nextLikesCount = nextHasLiked ? (c.likes || 0) + 1 : Math.max(0, (c.likes || 1) - 1);
-          if (!c.hasLiked) triggerNotification?.("Liked clip!");
           return { ...c, hasLiked: nextHasLiked, likes: nextLikesCount, likes_count: nextLikesCount };
         }
         return c;
@@ -924,7 +919,6 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
     }
 
     setCommentInput('');
-    triggerNotification?.("Comment added to clip!");
   };
 
   return (
@@ -1157,7 +1151,6 @@ export const ClipsView: React.FC<ClipsViewProps> = ({
                     <div
                       key={track.id ? `trk-${track.id}-${trkIdx}` : `trk-${trkIdx}`}
                       onClick={() => {
-                        triggerNotification?.(`Audio "${track.title}" attached to Clip reel!`);
                         setShowSongModal(false);
                       }}
                       className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/60 hover:bg-rose-950/30 border border-zinc-800 hover:border-rose-900/50 cursor-pointer transition-all group"

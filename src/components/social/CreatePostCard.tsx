@@ -654,9 +654,6 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     }).catch(() => {
       setIsResolvingBandcamp(false);
     });
-    if (triggerNotification) {
-      triggerNotification(`🎵 Attached Bandcamp track "${track.title}" by ${track.artist}!`);
-    }
   };
 
   useEffect(() => {
@@ -1207,7 +1204,6 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
       if (setTaggedBands && !taggedBands.includes(item.name)) {
         setTaggedBands([...taggedBands, item.name]);
       }
-      if (triggerNotification) triggerNotification(`🎵 Tagged band @${item.name}`);
     } else if (item.tagType === 'venue') {
       mentionTagText = `@${item.name} `;
       if (setTaggedVenue) {
@@ -1219,16 +1215,12 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
       if (item.fullAddress && setEventAddress && !eventAddress) {
         setEventAddress(item.fullAddress);
       }
-      if (triggerNotification) triggerNotification(`📍 Tagged venue "${item.name}"`);
     } else if (item.tagType === 'promoter') {
       mentionTagText = `@${item.name} `;
-      if (triggerNotification) triggerNotification(`🎪 Tagged promoter @${item.name}`);
     } else if (item.tagType === 'creative') {
       mentionTagText = `@${item.name} `;
-      if (triggerNotification) triggerNotification(`🎨 Tagged creative @${item.name}`);
     } else if (item.tagType === 'label') {
       mentionTagText = `@${item.name} `;
-      if (triggerNotification) triggerNotification(`🏷️ Tagged record label @${item.name}`);
     } else {
       mentionTagText = `@${item.handle || item.name} `;
     }
@@ -1843,7 +1835,6 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                         setSelectedAlbum(name);
                         setNewAlbumInput('');
                         setIsCreatingNewAlbum(false);
-                        if (triggerNotification) triggerNotification(`📁 Created Photo Pit album "${name}"`);
                       }
                     }}
                     className="bg-rose-900/60 hover:bg-rose-800 text-rose-200 text-[10px] font-mono font-bold px-3 py-1.5 rounded-lg border border-rose-700 cursor-pointer"
@@ -2685,13 +2676,6 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                   type="button"
                   onClick={() => {
                     setActivePanel(null);
-                    if (triggerNotification) {
-                      triggerNotification(
-                        eventTitle
-                          ? `✓ Event details attached: "${eventTitle}"!`
-                          : 'Event panel saved.'
-                      );
-                    }
                   }}
                   className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_12px_rgba(245,158,11,0.3)] flex items-center gap-1.5"
                 >
@@ -2879,9 +2863,6 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                 type="button"
                 onClick={() => {
                   setActivePanel(null);
-                  if (triggerNotification) {
-                    triggerNotification(localClassifiedTitle ? `✓ Nailed notice attached: "${localClassifiedTitle}"!` : 'Classified notice saved.');
-                  }
                 }}
                 className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-zinc-950 text-[10px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer shadow-md flex items-center gap-1.5"
               >

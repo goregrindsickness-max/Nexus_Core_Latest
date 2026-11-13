@@ -1,5 +1,5 @@
 import { venuesStore } from '../utils/indexedDB';
-import { getApiEndpoint, getApiFallbackEndpoints } from '../utils/apiConfig';
+import { authFetch, getApiEndpoint, getApiFallbackEndpoints, getSupabaseAccessToken } from '../utils/apiConfig';
 
 export interface VenueResult {
   id: string;
@@ -2470,10 +2470,13 @@ export function saveVenueToBlackBook(venueData: {
 
   // 3. Persist to server API endpoint (sync across preview, web & APK)
   try {
-    fetch('/api/venues', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ venue: newVenueRecord })
+    getSupabaseAccessToken().then((token) => {
+      if (!token) return;
+      authFetch('/api/venues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ venue: newVenueRecord })
+      }).catch(() => {});
     }).catch(() => {});
   } catch (_) {}
 

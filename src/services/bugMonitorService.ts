@@ -1,6 +1,7 @@
 // Autonomous Shake & Instabug Bug Monitoring Engine for Web
 // Automatically captures non-UI breaking bugs, silent fetch failures, console errors,
 // unhandled rejections, user breadcrumbs, and environmental snapshots.
+import { getApiEndpoint, getAuthHeaders, getSupabaseAccessToken } from '../utils/apiConfig';
 
 export interface Breadcrumb {
   id: string;
@@ -480,9 +481,10 @@ class BugMonitorService {
   private async syncReportToServer(report: BugReport) {
     if (!this.originalFetch) return;
     try {
-      await this.originalFetch('/api/bug-reports', {
+      const headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
+      await this.originalFetch(getApiEndpoint('/api/bug-reports'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(report)
       });
     } catch {}
@@ -517,7 +519,12 @@ class BugMonitorService {
   // Fetch reports from backend (with local fallback)
   public async fetchReports(): Promise<BugReport[]> {
     try {
-      const res = await (this.originalFetch || window.fetch)('/api/bug-reports');
+      const token = await getSupabaseAccessToken();
+      if (!token) {
+        return this.getCachedReports();
+      }
+      const headers = await getAuthHeaders();
+      const res = await (this.originalFetch || window.fetch)(getApiEndpoint('/api/bug-reports'), { headers });
       if (res.ok) {
         const data = await res.json();
         if (data && Array.isArray(data.reports)) {
@@ -548,9 +555,10 @@ class BugMonitorService {
     }
 
     try {
-      await (this.originalFetch || window.fetch)(`/api/bug-reports/${id}`, {
+      const headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
+      await (this.originalFetch || window.fetch)(getApiEndpoint(`/api/bug-reports/${id}`), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ status })
       });
     } catch {}
@@ -565,8 +573,10 @@ class BugMonitorService {
     }
 
     try {
-      await (this.originalFetch || window.fetch)(`/api/bug-reports/${id}`, {
-        method: 'DELETE'
+      const headers = await getAuthHeaders();
+      await (this.originalFetch || window.fetch)(getApiEndpoint(`/api/bug-reports/${id}`), {
+        method: 'DELETE',
+        headers
       });
     } catch {}
   }
@@ -585,9 +595,10 @@ class BugMonitorService {
     }
 
     try {
-      await (this.originalFetch || window.fetch)('/api/bug-reports/clear', {
+      const headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
+      await (this.originalFetch || window.fetch)(getApiEndpoint('/api/bug-reports/clear'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ mode })
       });
     } catch {}

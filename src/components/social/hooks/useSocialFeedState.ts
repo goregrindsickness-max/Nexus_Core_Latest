@@ -563,6 +563,20 @@ export function useSocialFeedState({
               created_at: new Date().toISOString(),
             },
           ], { onConflict: 'id' });
+
+          if (validReceiverUUID !== currentActorId) {
+            pushManager.sendPushToServer({
+              userId: validReceiverUUID,
+              excludeUserId: currentActorId,
+              excludeUserEmail: currentActorEmail,
+              title: '🔥 New Reaction on Your Post',
+              body: notifItem.message,
+              category: 'artist_interactions',
+              targetTab: 'social',
+              priority: 'P1',
+              data: { postId, type: 'post_reaction', actorId: currentActorId }
+            }).catch(() => {});
+          }
         }
       } catch (e) {
         console.warn('Notice: Syncing reaction note:', e);
@@ -730,16 +744,8 @@ export function useSocialFeedState({
         window.dispatchEvent(new CustomEvent('nexus_post_deleted', { detail: { id: postId } }));
       }
 
-      if (success) {
-        if (triggerNotification) {
-          triggerNotification("🗑️ Post deleted successfully.");
-        }
-      } else {
-        if (triggerNotification) {
-          triggerNotification("🗑️ Post removed locally.");
-        } else {
-          console.warn(`Could not delete post from DB: ${errorMsg}. Post was removed from local view instead.`);
-        }
+      if (!success) {
+        console.warn(`Could not delete post from DB: ${errorMsg}. Post was removed from local view instead.`);
       }
 
       return true;
@@ -769,7 +775,6 @@ export function useSocialFeedState({
     if (!newPostText.trim() && !pendingFestivalEditionId) return;
 
     setIsSubmittingPost(true);
-    triggerNotification?.('Publishing post and uploading media...');
 
     try {
       let uploadedUrls: string[] = [];
@@ -1040,28 +1045,18 @@ export function useSocialFeedState({
         }
       }
 
-      // Auto-Ground Venue via Google Maps API before publishing if text or venue input mentions a venue
+      // Auto-Ground Venue via Google Maps API before publishing only when a venue is explicitly tagged
       let resolvedGroundedVenue: any = undefined;
-      const textToScan = [newPostText, taggedVenue, eventDataValue?.locationName, eventDataValue?.title].filter(Boolean).join(' ');
-      const lowerScan = textToScan.toLowerCase();
-      const mentionsVenueKeyword = (
-        lowerScan.includes('at ') ||
-        lowerScan.includes('venue') ||
-        lowerScan.includes('theater') ||
-        lowerScan.includes('theatre') ||
-        lowerScan.includes('hall') ||
-        lowerScan.includes('club') ||
-        lowerScan.includes('bar') ||
-        lowerScan.includes('stage') ||
-        lowerScan.includes('live at') ||
-        lowerScan.includes('fest') ||
-        lowerScan.includes('playing') ||
-        lowerScan.includes('@')
-      );
+      const explicitVenueToGround = (
+        taggedVenue ||
+        eventDataValue?.locationName ||
+        ''
+      ).trim();
 
-      if (textToScan.trim() && mentionsVenueKeyword) {
+      if (explicitVenueToGround) {
         try {
-          const groundedRes = await detectGroundedVenue(textToScan);
+          const groundingQuery = [explicitVenueToGround, eventDataValue?.address, newPostText].filter(Boolean).join(' ');
+          const groundedRes = await detectGroundedVenue(groundingQuery);
           if (groundedRes && groundedRes.hasVenue) {
             resolvedGroundedVenue = groundedRes;
           }
@@ -1142,6 +1137,8 @@ export function useSocialFeedState({
         youtubeUrl: ytUrl,
         youtube_url: ytUrl,
         location: taggedVenue || (eventDataValue ? eventDataValue.locationName : (festivalDataValue ? `${festivalDataValue.city}${festivalDataValue.state ? `, ${festivalDataValue.state}` : ''}` : undefined)),
+        taggedVenue: taggedVenue.trim() || undefined,
+        tagged_venue: taggedVenue.trim() || undefined,
         groundedVenue: resolvedGroundedVenue,
         grounded_venue: resolvedGroundedVenue,
         reactions: [{ type: 'flame', count: 0, active: false }],
@@ -1253,7 +1250,6 @@ export function useSocialFeedState({
       setShowMediaInput(false);
       setShowYoutubeInput(false);
       setShowVenueInput(false);
-      triggerNotification?.('Post published to the scene.');
     } catch (err) {
       console.error('Failed to create post:', err);
       triggerNotification?.('⚠️ Failed to publish post.');

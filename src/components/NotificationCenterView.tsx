@@ -218,9 +218,6 @@ export default function NotificationCenterView({
     playBeep(440, 'sine', 0.05);
     onMarkAsRead(notif.id);
     onNavigateToInventory();
-    if (triggerNotification) {
-      triggerNotification("Routing to Inventory discrepancy sheets...");
-    }
   };
 
   // 100% foolproof display-level deduplication layer
@@ -757,7 +754,6 @@ export default function NotificationCenterView({
                                       onClick={() => {
                                         playBeep(800, 'sine', 0.05);
                                         onMarkAsRead(notif.id);
-                                        if (triggerNotification) triggerNotification("Logged notification as read.");
                                       }}
                                       className="text-[10px] bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-white px-3 py-1.5 rounded-lg uppercase transition-all flex items-center gap-1 cursor-pointer border border-zinc-700"
                                     >

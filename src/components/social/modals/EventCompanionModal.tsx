@@ -181,16 +181,6 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
       return updated;
     });
 
-    if (triggerNotification) {
-      if (newStatus === 'going') {
-        triggerNotification('RSVP Confirmed', `You are marked as GOING to ${activeEventData.headliner}!`, '🔥');
-      } else if (newStatus === 'maybe') {
-        triggerNotification('RSVP Updated', `Marked as MAYBE for ${activeEventData.headliner}.`, '🤔');
-      } else if (newStatus === 'cant_make') {
-        triggerNotification('RSVP Updated', `Marked as CAN'T MAKE IT for this show.`, '❌');
-      }
-    }
-
     // Persist to Supabase if table exists
     const supabaseClient = getSupabase ? getSupabase() : null;
     if (supabaseClient && userProfile?.id) {
@@ -736,7 +726,6 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
                     navigator.clipboard.writeText(fullText);
                     setCopiedAddress(true);
                     setTimeout(() => setCopiedAddress(false), 2000);
-                    triggerNotification?.('📋 Address Copied', 'Venue location copied to clipboard');
                   };
 
                   return (

@@ -58,9 +58,6 @@ export const ForumHighlightCard: React.FC<ForumHighlightCardProps> = ({
     if (result) {
       setVotes(result.updatedVotes);
       setUserVote(result.newUserVote);
-      if (result.newUserVote === 'up') {
-        onTriggerNotification?.(`🔥 Upvoted forum discussion "${thread.title.slice(0, 30)}..."`);
-      }
     }
   };
 
@@ -80,7 +77,6 @@ export const ForumHighlightCard: React.FC<ForumHighlightCardProps> = ({
       setComments((prev) => [newComment, ...prev]);
       setQuickReplyText('');
       setIsQuickReplyOpen(false);
-      onTriggerNotification?.(`💬 Reply posted to "${thread.title.slice(0, 30)}..."`);
     }
     setIsSubmittingReply(false);
   };
@@ -88,7 +84,6 @@ export const ForumHighlightCard: React.FC<ForumHighlightCardProps> = ({
   const handleShare = (e: React.MouseEvent) => {
     e.stopPropagation();
     setCopiedLink(true);
-    onTriggerNotification?.(`🔗 Link copied to forum thread: "${thread.title.slice(0, 30)}..."`);
     setTimeout(() => setCopiedLink(false), 2000);
   };
 

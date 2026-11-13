@@ -14,6 +14,7 @@ import StripeConnectPayoutSection from '../../StripeConnectPayoutSection';
 import { getSupabase, uploadBase64ToStorage, sanitizeCreativePayload, formatCreativePayload, extractGlobalProfilePayload, executeWithSchemaResilience, autoSyncCreativeProfile } from '../../../supabase';
 import { COUNTRIES, US_STATES } from '../../../constants/location';
 import { CREATIVE_CORE_SKILLS, GENRE_CLUSTERS } from '../../auth/authConstants';
+import { authFetch } from '../../../utils/apiConfig';
 
 // Helper to compress uploaded images to avoid LocalStorage quota overflow
 function compressImage(base64Str: string, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<string> {
@@ -1475,7 +1476,7 @@ export default function CreativeSettingsTab({
                         onClick={async () => {
                           setIsConnectingPaypal(true);
                           try {
-                            const response = await fetch('/api/auth/paypal/url');
+                            const response = await authFetch('/api/auth/paypal/url');
                             if (!response.ok) throw new Error('Failed to fetch PayPal auth URL');
                             const { url } = await response.json();
                             const width = 600, height = 700;

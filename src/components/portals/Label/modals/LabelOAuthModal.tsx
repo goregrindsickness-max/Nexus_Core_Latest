@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CreditCard, X, RefreshCw, CheckSquare } from 'lucide-react';
 import { getSupabase } from '../../../../supabase';
+import { authFetch } from '../../../../utils/apiConfig';
 
 interface LabelOAuthModalProps {
   labelOAuthProcessor: { id: 'stripe' | 'paypal'; name: string } | null;
@@ -67,7 +68,7 @@ export const LabelOAuthModal: React.FC<LabelOAuthModalProps> = ({
                       setLabelOAuthStep(1);
                       try {
                         const urlEndpoint = labelOAuthProcessor.id === 'stripe' ? '/api/auth/stripe/url' : '/api/auth/paypal/url';
-                        const response = await fetch(urlEndpoint);
+                        const response = await authFetch(urlEndpoint);
                         if (!response.ok) throw new Error('Failed to fetch authorization URL');
                         const { url } = await response.json();
                         

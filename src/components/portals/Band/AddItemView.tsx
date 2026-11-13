@@ -135,7 +135,6 @@ export default function AddItemView({ onBack, onSave, onDelete, triggerNotificat
     setItemPhotoUrl(previewUrl);
     setPhotoCount(prev => Math.min(3, prev + 1));
     setIsUploadingImage(true);
-    triggerNotification(`Routing upload to '${INVENTORY_STORAGE_BUCKET}' storage bucket...`);
 
     try {
       const activeBandId = initialItem?.band_id || localStorage.getItem('nexus_core_active_band_id') || localStorage.getItem('nexus_active_band_id') || '';
@@ -144,7 +143,6 @@ export default function AddItemView({ onBack, onSave, onDelete, triggerNotificat
       if (result && result.publicUrl) {
         setItemPhotoUrl(result.publicUrl);
         setItemImagePath(result.imagePath);
-        triggerNotification(`Photo uploaded to Supabase '${INVENTORY_STORAGE_BUCKET}'!`);
       }
     } catch (err: any) {
       console.warn(`[AddItemView] Storage upload fallback:`, err);
@@ -1188,9 +1186,7 @@ CREATE POLICY "Allow public delete of inventory" ON public.inventory FOR DELETE 
                   <button
                     onClick={() => {
                       const sqlText = `-- Enable RLS & Write permissions globally\nALTER TABLE public.inventory ENABLE ROW LEVEL SECURITY;\n\nDROP POLICY IF EXISTS "Allow public select of inventory" ON public.inventory;\nDROP POLICY IF EXISTS "Allow public insert of inventory" ON public.inventory;\nDROP POLICY IF EXISTS "Allow public update of inventory" ON public.inventory;\nDROP POLICY IF EXISTS "Allow public delete of inventory" ON public.inventory;\n\nCREATE POLICY "Allow public select of inventory" ON public.inventory FOR SELECT USING (true);\nCREATE POLICY "Allow public insert of inventory" ON public.inventory FOR INSERT WITH CHECK (true);\nCREATE POLICY "Allow public update of inventory" ON public.inventory FOR UPDATE USING (true);\nCREATE POLICY "Allow public delete of inventory" ON public.inventory FOR DELETE USING (true);`;
-                      navigator.clipboard.writeText(sqlText).then(() => {
-                        triggerNotification("📋 SQL copied! Paste into Supabase SQL Editor");
-                      }).catch(() => {
+                      navigator.clipboard.writeText(sqlText).catch(() => {
                         triggerNotification("Failed to copy automatically.");
                       });
                     }}

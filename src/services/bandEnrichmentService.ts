@@ -1,5 +1,6 @@
 import { INITIAL_COMMUNITY_BANDS, CommunityBandRecord } from '../lib/communityBands';
 import { ROSTER_CATALOGS } from '../data/socialFeedMockData';
+import { authFetch, getSupabaseAccessToken } from '../utils/apiConfig';
 
 export interface BandEnrichedMetadata {
   founded_year?: string;
@@ -542,7 +543,11 @@ export async function enrichBandMetadataAsync(bandName: string): Promise<BandEnr
   }
 
   try {
-    const response = await fetch('/api/enrich-band', {
+    const token = await getSupabaseAccessToken();
+    if (!token) {
+      return resolvePublicBandData(bandName);
+    }
+    const response = await authFetch('/api/enrich-band', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bandName: bandName.trim() })

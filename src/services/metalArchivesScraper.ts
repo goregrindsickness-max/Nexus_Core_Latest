@@ -1,6 +1,7 @@
 import { CatalogRelease, ReleaseTrack } from './releasesService';
 import { ensureUUID } from './schemaResilienceService';
 import { resolveAuthenticReleaseYear } from '../lib/communityBands';
+import { authFetch, getSupabaseAccessToken } from '../utils/apiConfig';
 
 export interface MetalArchivesScrapeResult {
   bandName: string;
@@ -133,7 +134,9 @@ export async function scrapeMetalArchivesBand(
 
   // 2. Call server-side universal archivist endpoint
   try {
-    const response = await fetch('/api/scrape/metal-archives', {
+    const token = await getSupabaseAccessToken();
+    if (!token) throw new Error('No active session token');
+    const response = await authFetch('/api/scrape/metal-archives', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

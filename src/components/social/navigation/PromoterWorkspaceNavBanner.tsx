@@ -60,11 +60,9 @@ export function PromoterWorkspaceNavBanner({
       if (typeof window !== 'undefined') {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
-      triggerNotification?.('✨ Promoter Alliance Social Feed is currently active');
       return;
     }
 
-    triggerNotification?.(`⚡ Switching to Promoter ${itemId} Workspace...`);
     if (onNavigateToTab) {
       onNavigateToTab('promoter', itemId);
     } else if (setActiveTab) {

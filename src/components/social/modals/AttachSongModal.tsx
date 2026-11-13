@@ -87,7 +87,6 @@ export const AttachSongModal: React.FC<AttachSongModalProps> = ({
                           setAttachedSong(song);
                           setShowSongModal(false);
                           setSongSearchQuery('');
-                          triggerNotification?.(`Attached song: "${song.title}"`);
                         }}
                         className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/50 hover:bg-emerald-950/20 border border-zinc-850 hover:border-emerald-900/30 cursor-pointer group transition-all"
                       >

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { RefreshCw, CreditCard } from 'lucide-react';
 import { GENRE_CLUSTERS } from './authConstants';
 import { getSupabase } from '../../supabase';
+import { authFetch } from '../../utils/apiConfig';
 
 export interface LabelRegistrationSectionProps {
   labelSectionAOpen: boolean;
@@ -736,7 +737,7 @@ export const LabelRegistrationSection: React.FC<LabelRegistrationSectionProps> =
                 type="button"
                 onClick={async () => {
                   try {
-                    const response = await fetch('/api/auth/paypal/url');
+                    const response = await authFetch('/api/auth/paypal/url');
                     if (!response.ok) throw new Error('Failed to fetch PayPal auth URL');
                     const { url } = await response.json();
                     const width = 600, height = 700;

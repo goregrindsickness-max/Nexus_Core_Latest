@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { supabase } from '../lib/supabaseClient';
+import { authFetch } from '../utils/apiConfig';
 
 export interface StripeConnectPayoutSectionProps {
   userProfile: UserProfile | null;
@@ -219,7 +220,7 @@ export const StripeConnectPayoutSection: React.FC<StripeConnectPayoutSectionProp
       
       // Secondary fallback for standalone preview / mock sandbox environments
       try {
-        const fallbackRes = await fetch('/api/payments/create-connect-account', {
+        const fallbackRes = await authFetch('/api/payments/create-connect-account', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

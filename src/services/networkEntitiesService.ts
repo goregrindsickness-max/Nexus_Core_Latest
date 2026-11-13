@@ -890,7 +890,6 @@ export function openTaggedBandOrEntityProfile(
     };
 
     window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
-    triggerNotification?.(`${catMeta.icon} Opening ${entity.display_name} public page...`);
     return;
   }
 
@@ -928,7 +927,6 @@ export function openTaggedBandOrEntityProfile(
       bio: raw.bio || `${match.name} (${match.genre}) from ${match.location}.`,
     };
     window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
-    triggerNotification?.(`🎸 Opening ${match.name} band profile...`);
     return;
   }
 
@@ -952,7 +950,6 @@ export function openTaggedBandOrEntityProfile(
     bio: `${bandName} — Performing on ${lineupItem.stage_name || 'Main Stage'} (Day ${lineupItem.day_number || 1}).`,
   };
   window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: fallbackPayload }));
-  triggerNotification?.(`🎸 Opening ${bandName} profile card...`);
 }
 
 /**

@@ -52,6 +52,7 @@ import {
   pickBestBandImage,
   isGorgasmBand,
   isStaleGorgasmLineup,
+  parseBandLineup,
   GORGASM_OFFICIAL_LOGO,
   GORGASM_OFFICIAL_LINEUP
 } from '../../../lib/communityBands';
@@ -276,6 +277,16 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
 
   const prevIsOpenRef = useRef(false);
   const prevBandKeyRef = useRef<string | null>(null);
+  const populateReqIdRef = useRef(0);
+  const isOpenRef = useRef(isOpen);
+  const isSavingRef = useRef(false);
+  const activePageRef = useRef(activePage);
+  const selectedBandRef = useRef<CommunityBandRecord | null>(selectedBand);
+  const lineupDirtyRef = useRef(false);
+
+  isOpenRef.current = isOpen;
+  activePageRef.current = activePage;
+  selectedBandRef.current = selectedBand;
 
   useEffect(() => {
     if (isOpen) {
@@ -291,17 +302,30 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
       }
 
       if (isOpening || isDifferentBand) {
+        const currentSelected = selectedBandRef.current;
+        const curSelName = (currentSelected?.name || (currentSelected as any)?.band_name || '').toLowerCase().trim();
+        const initBandName = (initialBand?.name || (initialBand as any)?.band_name || '').toLowerCase().trim();
+        const isSameActiveBand = !isOpening && activePageRef.current === 'editor' && Boolean(
+          initialBand && currentSelected && (
+            (initialBand.id && currentSelected.id && ensureUUID(initialBand.id) === ensureUUID(currentSelected.id)) ||
+            (initBandName && curSelName && initBandName === curSelName)
+          )
+        );
+
         prevBandKeyRef.current = currentBandKey;
-        if (initialBand) {
-          populateForm(initialBand);
-          setActivePage('editor');
-        } else {
-          resetForm();
-          setActivePage('list');
+        if (!isSameActiveBand) {
+          if (initialBand) {
+            populateForm(initialBand);
+            setActivePage('editor');
+          } else {
+            resetForm();
+            setActivePage('list');
+          }
         }
       }
     } else {
       prevBandKeyRef.current = null;
+      populateReqIdRef.current++;
     }
     prevIsOpenRef.current = isOpen;
   }, [isOpen, initialBand?.id, initialBand?.name]);
@@ -313,23 +337,21 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
         setBandsList(freshList);
       }
 
-      // If user is currently editing a band in the editor, keep its details and discography in sync in real-time
-      if (selectedBand) {
-        const curId = selectedBand.id;
-        const curName = (selectedBand.name || (selectedBand as any).band_name || '').toLowerCase().trim();
+      // Update selectedBand reference without clobbering active unsaved editor inputs
+      const curSelected = selectedBandRef.current;
+      if (curSelected && !isSavingRef.current) {
+        const curId = curSelected.id;
+        const curName = (curSelected.name || (curSelected as any).band_name || '').toLowerCase().trim();
         const matched = freshList.find(b => b.id === curId || (b.name || (b as any).band_name || '').toLowerCase().trim() === curName);
         if (matched) {
           setSelectedBand(matched);
-          if (matched.founded_year) setFoundedYear(String(matched.founded_year));
-          if (matched.record_label || matched.label) setRecordLabel(matched.record_label || matched.label || '');
-          if (matched.city) setCity(matched.city);
-          if (matched.country) setCountry(matched.country);
-          if (matched.status) setBandStatus(resolveBandStatus(matched));
-          if (matched.logo_url) setAvatarUrl(matched.logo_url);
-          if (matched.cover_url) setCoverUrl(matched.cover_url);
-          if (matched.lineup && Array.isArray(matched.lineup) && matched.lineup.length > 0) setLineup(matched.lineup);
-          if (matched.discography && Array.isArray(matched.discography) && matched.discography.length > 0) {
-            setAlbums(matched.discography.sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0')));
+          selectedBandRef.current = matched;
+          if (activePageRef.current !== 'editor') {
+            const matchedLineup = parseBandLineup(matched.lineup);
+            if (matchedLineup.length > 0) setLineup(matchedLineup);
+            if (matched.discography && Array.isArray(matched.discography) && matched.discography.length > 0) {
+              setAlbums([...matched.discography].sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0')));
+            }
           }
         }
       }
@@ -399,8 +421,11 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
   }, []);
 
   const populateForm = (band: CommunityBandRecord) => {
+    const reqId = ++populateReqIdRef.current;
+    lineupDirtyRef.current = false;
     const publicDetails = resolvePublicBandData(band.name || (band as any).band_name, band);
     setSelectedBand(band);
+    selectedBandRef.current = band;
     setIsCreatingNew(false);
     setName(band.name || (band as any).band_name || '');
     const bandMicro = band.micro_genres || band.subgenres || publicDetails.micro_genres || [];
@@ -441,6 +466,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     // Asynchronous background prefill for any remaining empty fields
     if (!band.founded_year || !band.record_label || !band.city) {
       enrichBandMetadataAsync(band.name || (band as any).band_name).then(asyncDetails => {
+        if (!isOpenRef.current || populateReqIdRef.current !== reqId || isSavingRef.current) return;
         if (asyncDetails) {
           if (asyncDetails.founded_year) setFoundedYear(prev => prev || asyncDetails.founded_year || '');
           if (asyncDetails.record_label) setRecordLabel(prev => prev || asyncDetails.record_label || '');
@@ -454,36 +480,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     }
 
     // Resilient lineup resolution
-    let loadedLineup: LineupMember[] = [];
-    if (Array.isArray(band.lineup) && band.lineup.length > 0) {
-      loadedLineup = band.lineup;
-    } else if (typeof band.lineup === 'string' && (band.lineup as string).trim()) {
-      try {
-        const parsed = JSON.parse(band.lineup);
-        if (Array.isArray(parsed) && parsed.length > 0) loadedLineup = parsed;
-      } catch {
-        const parts = (band.lineup as string).split(',').map(s => s.trim()).filter(Boolean);
-        loadedLineup = parts.map((part, idx) => {
-          const match = part.match(/^(.*?)\s*\((.*?)\)$/);
-          if (match) {
-            return {
-              id: `mem-${idx}`,
-              name: match[1].trim(),
-              role: match[2].trim() || 'Musician',
-              status: 'active' as const,
-              years: 'Present'
-            };
-          }
-          return {
-            id: `mem-${idx}`,
-            name: part,
-            role: 'Musician',
-            status: 'active' as const,
-            years: 'Present'
-          };
-        });
-      }
-    }
+    let loadedLineup: LineupMember[] = parseBandLineup(band.lineup);
     if (loadedLineup.length === 0) {
       const bId = band.id || '';
       const bUUID = bId ? ensureUUID(bId) : '';
@@ -574,6 +571,9 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
           Promise.resolve(bQuery.maybeSingle()).catch(() => ({ data: null })),
           Promise.resolve(rQuery).catch(() => ({ data: [] }))
         ]).then(([{ data: liveBand }, { data: liveReleases }]: any) => {
+          if (!isOpenRef.current || populateReqIdRef.current !== reqId || isSavingRef.current) return;
+
+          let parsedLiveLineup: LineupMember[] = [];
           if (liveBand) {
             if (liveBand.founded_year) setFoundedYear(String(liveBand.founded_year));
             if (liveBand.record_label) setRecordLabel(liveBand.record_label);
@@ -593,17 +593,10 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
             if (liveBand.bandcamp) setBandcampUrl(liveBand.bandcamp);
             if (liveBand.metal_archives_url) setMetalArchivesUrl(liveBand.metal_archives_url);
             if (liveBand.featured_youtube_url) setYoutubeUrl(liveBand.featured_youtube_url);
-            if (liveBand.lineup) {
-              let parsedL: LineupMember[] = [];
-              if (Array.isArray(liveBand.lineup)) parsedL = liveBand.lineup;
-              else if (typeof liveBand.lineup === 'string') {
-                try {
-                  const p = JSON.parse(liveBand.lineup);
-                  if (Array.isArray(p)) parsedL = p;
-                } catch {}
-              }
-              const cleanLiveLineup = deduplicateLineup(parsedL);
-              if (isGorgasm && isStaleGorgasmLineup(cleanLiveLineup)) {
+
+            parsedLiveLineup = parseBandLineup(liveBand.lineup);
+            if (!lineupDirtyRef.current) {
+              if (isGorgasm && isStaleGorgasmLineup(parsedLiveLineup)) {
                 setLineup(GORGASM_OFFICIAL_LINEUP);
               } else if (isBirdflesh) {
                 setLineup([
@@ -611,8 +604,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                   { id: 'bf-2', name: 'Joakim Svensson', role: 'Bass, Vocals', status: 'active', years: '2007–present' },
                   { id: 'bf-3', name: 'Elis Edin Markskog', role: 'Guitars, Vocals', status: 'active', years: '2011–present' }
                 ]);
-              } else if (cleanLiveLineup.length > 0) {
-                setLineup(cleanLiveLineup);
+              } else if (parsedLiveLineup.length > 0) {
+                setLineup(parsedLiveLineup);
               }
             }
           }
@@ -644,16 +637,19 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
           }
 
           if (liveBand) {
+            const effectiveLineup = parsedLiveLineup.length > 0 ? parsedLiveLineup : cleanLineup;
             const refreshedBand: CommunityBandRecord = {
               ...band,
               ...liveBand,
               name: liveBand.band_name || liveBand.name || band.name,
               band_name: liveBand.band_name || liveBand.name || band.name,
               status: liveBand.status || ((liveBand as any).is_split_up ? 'split-up' : band.status),
+              lineup: (isGorgasm && isStaleGorgasmLineup(effectiveLineup)) ? GORGASM_OFFICIAL_LINEUP : effectiveLineup,
               discography: (liveReleases && liveReleases.length > 0) ? deduplicateDiscography([...initialAlbums, ...liveReleases], bandName) : band.discography
             };
-            communityBandManager.upsertBand(refreshedBand);
+            communityBandManager.upsertBand(refreshedBand, { isNew: false, skipRemoteSync: true });
             setSelectedBand(refreshedBand);
+            selectedBandRef.current = refreshedBand;
           }
         }).catch(() => {});
       }
@@ -695,7 +691,10 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
   };
 
   const resetForm = () => {
+    populateReqIdRef.current++;
+    lineupDirtyRef.current = false;
     setSelectedBand(null);
+    selectedBandRef.current = null;
     setIsCreatingNew(true);
     setName('');
     setGenre('Extreme Metal');
@@ -740,6 +739,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
   // Lineup Handlers
   const handleAddOrUpdateMember = () => {
     if (!newMemberName.trim()) return;
+    lineupDirtyRef.current = true;
 
     if (editingMemberIdx !== null) {
       const updated = [...lineup];
@@ -779,6 +779,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
   };
 
   const handleRemoveMember = (idx: number) => {
+    lineupDirtyRef.current = true;
     setLineup(lineup.filter((_, i) => i !== idx));
     if (editingMemberIdx === idx) {
       setEditingMemberIdx(null);
@@ -880,9 +881,11 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
 
   // Full Save to Supabase and Local Storage
   const handleSave = async () => {
-    if (isSaving || !name.trim()) return;
+    if (isSaving || isSavingRef.current || !name.trim()) return;
 
+    isSavingRef.current = true;
     setIsSaving(true);
+    populateReqIdRef.current++;
 
     try {
       // Auto-commit any currently typed lineup member in the input fields
@@ -952,7 +955,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
         ? generateUUID()
         : (selectedBand?.id ? ensureUUID(selectedBand.id) : generateUUID());
 
-      const finalLineupToSave = finalLineup;
+      const finalLineupToSave = deduplicateLineup(finalLineup);
       const finalAlbumsToSave = finalAlbums;
 
       const bandPayload: Partial<CommunityBandRecord> & { band_name: string } = {
@@ -990,44 +993,64 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
         verification_status: selectedBand?.verification_status || 'community_archive'
       };
 
-      const savedRecord = communityBandManager.upsertCommunityBand(bandPayload, { isNew: isCreatingNew });
+      // Update local state/cache immediately without triggering a competing background Supabase sync
+      const savedRecord = communityBandManager.upsertCommunityBand(bandPayload, {
+        isNew: isCreatingNew,
+        skipRemoteSync: true,
+        allowEmptyLineup: true
+      });
 
-      // Cache lineup to localStorage for immediate cross-portal availability
+      // Cache or clear lineup in localStorage for immediate cross-portal availability
       try {
-        const serializedLineup = JSON.stringify(finalLineup);
-        localStorage.setItem(`nexus_core_band_lineup_${bandId}`, serializedLineup);
-        localStorage.setItem(`nexus_core_band_lineup_${ensureUUID(bandId)}`, serializedLineup);
-        if (savedRecord?.id) {
-          localStorage.setItem(`nexus_core_band_lineup_${savedRecord.id}`, serializedLineup);
-          localStorage.setItem(`nexus_core_band_lineup_${ensureUUID(savedRecord.id)}`, serializedLineup);
-        }
-        if (name.trim()) {
-          localStorage.setItem(`nexus_core_band_lineup_${name.trim().toLowerCase()}`, serializedLineup);
+        const nameKey = name.trim().toLowerCase();
+        const lineupKeys = Array.from(new Set([
+          `nexus_core_band_lineup_${bandId}`,
+          `nexus_core_band_lineup_${ensureUUID(bandId)}`,
+          savedRecord?.id ? `nexus_core_band_lineup_${savedRecord.id}` : null,
+          savedRecord?.id ? `nexus_core_band_lineup_${ensureUUID(savedRecord.id)}` : null,
+          nameKey ? `nexus_core_band_lineup_${nameKey}` : null,
+          nameKey ? `nexus_core_band_lineup_${nameKey.replace(/[^a-z0-9]/g, '_')}` : null,
+          nameKey ? `nexus_core_band_lineup_${nameKey.replace(/[^a-z0-9]/g, '-')}` : null
+        ].filter(Boolean) as string[]));
+
+        if (finalLineupToSave.length > 0) {
+          const serializedLineup = JSON.stringify(finalLineupToSave);
+          lineupKeys.forEach(k => localStorage.setItem(k, serializedLineup));
+        } else {
+          lineupKeys.forEach(k => localStorage.removeItem(k));
         }
         window.dispatchEvent(new CustomEvent('nexus_band_lineup_updated', {
-          detail: { bandId: savedRecord?.id || bandId, lineup: finalLineup }
+          detail: { bandId: savedRecord?.id || bandId, lineup: finalLineupToSave }
         }));
       } catch {}
 
       // Cache discography to localStorage and memory for permanent resilience
       try {
-        saveBandDiscographyToCache(bandId, name, finalAlbums);
+        saveBandDiscographyToCache(bandId, name, finalAlbumsToSave);
         if (savedRecord?.id) {
-          saveBandDiscographyToCache(savedRecord.id, name, finalAlbums);
+          saveBandDiscographyToCache(savedRecord.id, name, finalAlbumsToSave);
         }
         window.dispatchEvent(new CustomEvent('nexus_band_discography_updated', {
-          detail: { bandId: savedRecord?.id || bandId, discography: finalAlbums }
+          detail: { bandId: savedRecord?.id || bandId, discography: finalAlbumsToSave }
         }));
       } catch {}
 
-      // Attempt Supabase sync with explicit isNew configuration
+      // Single serialized Supabase sync (awaits completion with explicit lineup intent)
       try {
-        const syncRes = await communityBandManager.syncToSupabaseTables(savedRecord, { isNew: isCreatingNew });
+        const syncPayload: CommunityBandRecord = {
+          ...savedRecord,
+          lineup: finalLineupToSave,
+          discography: finalAlbumsToSave
+        };
+        const syncRes = await communityBandManager.syncToSupabaseTables(syncPayload, {
+          isNew: isCreatingNew,
+          allowEmptyLineup: true
+        });
         if (!syncRes.success && syncRes.error) {
           console.error('[CommunityBandCuratorModal] Remote Supabase sync error:', syncRes.error);
           triggerNotification?.(`⚠️ Saved locally, cloud sync notice: ${syncRes.error}`);
         } else {
-          triggerNotification?.(`⚡ Saved & synchronized "${savedRecord.name}" (${finalLineup.length} members, ${finalAlbums.length} releases) to cloud archive!`);
+          triggerNotification?.(`⚡ Saved & synchronized "${savedRecord.name}" (${finalLineupToSave.length} members, ${finalAlbumsToSave.length} releases) to cloud archive!`);
         }
       } catch (syncErr: any) {
         console.warn('[CommunityBandCuratorModal] Remote Supabase sync deferred (offline / offline queue active):', syncErr);
@@ -1037,16 +1060,27 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
       setSavedFeedback(true);
       setTimeout(() => setSavedFeedback(false), 3000);
 
+      // Re-fetch authoritative record ID/fields after sync without re-running populateForm's racy async re-clobber
+      const canonicalSaved = communityBandManager.findByName(savedRecord.name || name.trim()) || savedRecord;
+      const normalizedSaved: CommunityBandRecord = {
+        ...canonicalSaved,
+        lineup: finalLineupToSave,
+        discography: finalAlbumsToSave
+      };
+      setIsCreatingNew(false);
+      setSelectedBand(normalizedSaved);
+      selectedBandRef.current = normalizedSaved;
+      lineupDirtyRef.current = false;
+      prevBandKeyRef.current = `${normalizedSaved.id || ''}:${normalizedSaved.name || ''}`;
+      setLineup(finalLineupToSave);
+      setAlbums(finalAlbumsToSave);
       loadBands();
-      populateForm({
-        ...savedRecord,
-        lineup: finalLineup
-      });
-      onSaved?.(savedRecord);
+      onSaved?.(normalizedSaved);
     } catch (error) {
       console.error('Failed to save archive:', error);
       triggerNotification?.(`❌ Failed to save band archive: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
   };
@@ -1287,7 +1321,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                           const discoCount = combined.length;
                           return <span>💿 {discoCount} {discoCount === 1 ? 'release' : 'releases'}</span>;
                         })()}
-                        <span>👥 {band.lineup?.length || 0} members</span>
+                        <span>👥 {parseBandLineup(band.lineup).length} members</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="text-amber-400 font-bold group-hover:underline text-xs">Edit →</span>
@@ -2460,7 +2494,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
               </div>
 
               <p className="text-xs text-zinc-300 font-mono leading-relaxed bg-red-950/20 border border-red-900/30 rounded-xl p-3">
-                Permanently delete <strong className="text-white font-bold">&quot;{confirmDeleteBand.name}&quot;</strong> ({confirmDeleteBand.discography?.length || 0} releases, {confirmDeleteBand.lineup?.length || 0} members)? This will remove it from all community band archives.
+                Permanently delete <strong className="text-white font-bold">&quot;{confirmDeleteBand.name}&quot;</strong> ({confirmDeleteBand.discography?.length || 0} releases, {parseBandLineup(confirmDeleteBand.lineup).length} members)? This will remove it from all community band archives.
               </p>
 
               <div className="flex items-center justify-end gap-3 pt-2">

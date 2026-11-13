@@ -1162,13 +1162,11 @@ export default function CreativeDashboardViewV2({
     setNewPortTitle('');
     setNewPortClient('');
     setNewPortLink('');
-    triggerNotification('🎨 Portfolio asset published to directory stream.');
     safeAddLog(`Published new portfolio work "${newItem.title}" to public profile.`);
   };
 
   const handleDeletePortfolio = (id: string) => {
     setPortfolioItems(prev => prev.filter(item => item.id !== id));
-    triggerNotification('Portfolio item removed.');
   };
 
   const handleAddGalleryItem = async (e: React.FormEvent) => {
@@ -1208,7 +1206,6 @@ export default function CreativeDashboardViewV2({
       setNewGalTitle('');
       setNewGalSubtitle('');
       setExternalEmbedUrl('');
-      triggerNotification('🚀 Direct streaming reference published to dynamic lookbook feed!');
       safeAddLog(`Linked external ${embed.type} streaming reference "${newGalTitle}" is now live.`);
       return;
     }
@@ -1270,7 +1267,6 @@ export default function CreativeDashboardViewV2({
     setNewGalSubtitle('');
     setNewGalYear('2026');
     if (fileInputRef.current) fileInputRef.current.value = '';
-    triggerNotification('📸 Added new showcase items to your professional media gallery!');
     safeAddLog(`Published new media showcase "${newGalTitle}" with genre ${newGalGenre} (${newGalMicroGenre}) to digital portfolio.`);
   };
 
@@ -1289,8 +1285,6 @@ export default function CreativeDashboardViewV2({
       localStorage.setItem(key, JSON.stringify(filtered));
       setActiveLookbookItemIds(prev => prev.filter(itemId => itemId !== id));
     } catch (_) {}
-
-    triggerNotification('Showcase gallery item deleted.');
   };
 
   const handleProposalStatus = (id: string, status: 'accepted' | 'declined') => {
@@ -1680,7 +1674,6 @@ export default function CreativeDashboardViewV2({
                                     if (supabase && userProfile.id) {
                                       supabase.from('profiles').update({ account_type: targetAcc, active_workspace: portal.key }).eq('id', userProfile.id).then(() => {});
                                     }
-                                    triggerNotification?.(`⚡ Switched to ${portal.name}.`);
                                   }}
                                   className={`w-full flex items-center justify-between p-2 rounded-xl bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 ${portal.hoverBorderClass} text-zinc-400 hover:text-white transition-all cursor-pointer group`}
                                 >
@@ -2832,7 +2825,6 @@ export default function CreativeDashboardViewV2({
                                       if (supabase) {
                                         supabase.from('creative_lookbook_feed').delete().eq('id', item.id).then(({error}) => { if (error) console.log(error) });
                                       }
-                                      triggerNotification('Removed showcase highlight from public Lookbook.');
                                       safeAddLog(`Removed "${item.title}" from active lookbook selection.`);
                                     } else {
                                       // Toggle on: Check limit of 5 concurrent
@@ -2865,7 +2857,6 @@ export default function CreativeDashboardViewV2({
                                             media_type: (item as any).mediaType || 'image'
                                         }).then(({error}) => { if (error) console.log(error) });
                                       }
-                                      triggerNotification('⭐ Showcase asset highlighted in primary Lookbook!');
                                       safeAddLog(`Highlighted "${item.title}" to public Lookbook.`);
                                     }
                                   } catch (err) {

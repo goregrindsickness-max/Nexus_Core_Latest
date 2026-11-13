@@ -83,7 +83,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { getSupabase, subscribeToTable, executeWithSchemaResilience, uploadBase64ToStorage, normalizeLoadedProfile, createShopMerchItem, fetchShopMerchItems, sanitizeMicroGenres, formatBandLocation, sanitizeShowForDb, ensureUUID } from '../../supabase';
 import { uploadFeedMedia } from '../../lib/storage';
 import { communityBandManager, pickBestBandImage, isGorgasmBand, GORGASM_OFFICIAL_LOGO } from '../../lib/communityBands';
-import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../utils/followSyncService';
+import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME, getScopedFollowsMap, isEntityTargetObject } from '../../utils/followSyncService';
 import { hasRegisteredWorkspace } from '../../types';
 import { tourPackageManager } from '../../lib/tourPackageManager';
 import Barcode from 'react-barcode';
@@ -1047,10 +1047,7 @@ export function UniversalSocialFeed({
       if (!supabaseClient) return;
 
       try {
-        let localFollows: Record<string, boolean> = {};
-        try {
-          localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
-        } catch (e) {}
+        const localFollows: Record<string, boolean> = getScopedFollowsMap(userProfile?.id);
 
         let extendedMap: Record<string, any> = {};
         try {
@@ -1929,14 +1926,13 @@ export function UniversalSocialFeed({
       }
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      triggerNotification?.(`🚀 Scene Radio track loaded into Post Creator! Edit & click Post when ready.`);
     };
 
     window.addEventListener('nexus_share_radio_track', handleRadioShare);
     return () => {
       window.removeEventListener('nexus_share_radio_track', handleRadioShare);
     };
-  }, [setNewPostText, setYoutubeUrl, setShowYoutubeInput, setNewPostTag, triggerNotification]);
+  }, [setNewPostText, setYoutubeUrl, setShowYoutubeInput, setNewPostTag]);
 
   // Retro Tape Player hook
   const {
@@ -2682,7 +2678,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
           if (isValidUUID(selProfAny.raw_id)) targetId = selProfAny.raw_id;
           else if (isValidUUID(selProfAny.band_id)) targetId = selProfAny.band_id;
           else if (isValidUUID(selProfAny.id)) targetId = selProfAny.id;
-          else if (isValidUUID(selProfAny.user_id)) targetId = selProfAny.user_id;
+          else if (!isEntityTargetObject(selProfAny) && isValidUUID(selProfAny.user_id)) targetId = selProfAny.user_id;
         }
 
         const targetName = (
@@ -2764,6 +2760,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
         }
 
         let isFollowedByMe = false;
+        let checkedFollowsInDb = false;
         if (targetId && isValidUUID(targetId)) {
           let myId = resolveProfileUUID(userProfile, allProfiles) || userProfile?.id;
           if (!myId && supabase) {
@@ -2772,6 +2769,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
           }
 
           if (myId && isValidUUID(myId)) {
+            checkedFollowsInDb = true;
             const { data: followRecord } = await supabase
               .from('follows')
               .select('id')
@@ -2782,7 +2780,14 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
           }
         }
         const targetForCheck = profileData ? { ...profileData, id: targetId } : (selectedUserProfile || targetId);
-        isFollowedByMe = isProfileFollowedGlobally(targetForCheck, isFollowedByMe ? [{ followed_id: targetId }] : allFollows);
+        const cleanTargetForCheck = typeof targetForCheck === 'object' && targetForCheck
+          ? { ...targetForCheck, followed: undefined, isFollowed: undefined, isFollowedByMe: undefined }
+          : targetForCheck;
+        isFollowedByMe = isProfileFollowedGlobally(
+          cleanTargetForCheck,
+          checkedFollowsInDb ? (isFollowedByMe ? [{ followed_id: targetId }] : []) : allFollows,
+          userProfile?.id
+        );
 
         if (active) {
           if (profileData) {
@@ -3171,13 +3176,8 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
         }
 
         if (viewingFollowersOrFollowing === 'followers') {
-          // Read local storage saved follows
-          let localFollows: Record<string, boolean> = {};
-          try {
-            localFollows = JSON.parse(localStorage.getItem('nexus_local_follows_v1') || '{}');
-          } catch (e) {}
-
-          const isLocallyFollowed = (activeId && localFollows[activeId]) === true;
+          const localFollows: Record<string, boolean> = getScopedFollowsMap(userProfile?.id);
+          const isLocallyFollowed = (activeId && localFollows[String(activeId).toLowerCase()]) === true;
 
           // Query official records in Supabase 'follows' table where followed_id = activeId or artist_id = activeId
           let followsData: any[] = [];
@@ -3632,8 +3632,8 @@ const getProfileForUser = (userParam: any) => {
       followersCount: 2900,
       followingCount: 45,
       hasProAccess: true,
-      isFollowed: isProfileFollowedGlobally({ id: 'promoter-nexus-live-official', name: 'Nexus Live Productions' }, allFollows),
-      isFollowedByMe: isProfileFollowedGlobally({ id: 'promoter-nexus-live-official', name: 'Nexus Live Productions' }, allFollows)
+      isFollowed: isProfileFollowedGlobally({ id: 'promoter-nexus-live-official', name: 'Nexus Live Productions', type: 'promoter', isPromoterProfile: true }, allFollows, userProfile?.id),
+      isFollowedByMe: isProfileFollowedGlobally({ id: 'promoter-nexus-live-official', name: 'Nexus Live Productions', type: 'promoter', isPromoterProfile: true }, allFollows, userProfile?.id)
     };
   }
 
@@ -4061,8 +4061,8 @@ const getProfileForUser = (userParam: any) => {
       is_verified: bandObj?.verification_status === 'verified_official' || (bandObj as any)?.is_verified === true,
       is_community_archive: bandObj?.verification_status === 'community_archive',
       musicCatalog: bandObj?.discography || [],
-      isFollowed: isProfileFollowedGlobally({ id: bandId, name: bandName, raw_id: bandObj?.id || bandId, band_id: bandObj?.id || bandId }, allFollows),
-      isFollowedByMe: isProfileFollowedGlobally({ id: bandId, name: bandName, raw_id: bandObj?.id || bandId, band_id: bandObj?.id || bandId }, allFollows)
+      isFollowed: isProfileFollowedGlobally({ id: bandId, name: bandName, raw_id: bandObj?.id || bandId, band_id: bandObj?.id || bandId, type: 'band', isBandProfile: true }, allFollows, userProfile?.id),
+      isFollowedByMe: isProfileFollowedGlobally({ id: bandId, name: bandName, raw_id: bandObj?.id || bandId, band_id: bandObj?.id || bandId, type: 'band', isBandProfile: true }, allFollows, userProfile?.id)
     };
   }
 
@@ -4089,7 +4089,7 @@ const getProfileForUser = (userParam: any) => {
     // Check discover profiles for auxiliary assets
     const discoverProf = discoverProfiles.find(p => (p?.name || "User").toLowerCase() === (user?.name || "User").toLowerCase());
     // Unified global follow check
-    const isFollowed = isProfileFollowedGlobally(userParam || user, allFollows);
+    const isFollowed = isProfileFollowedGlobally(userParam || user, allFollows, userProfile?.id);
 
     // Predefined biographies & details
     const profileRegistry = PROFILE_REGISTRY;

@@ -66,9 +66,6 @@ export function useTapePlayer({
         if (!tapeBand.trim() && userProfile?.name) {
           setTapeBand(userProfile.name);
         }
-        if (typeof triggerNotification === 'function') {
-          triggerNotification("Audio tape attached: " + cleanName);
-        }
       } else {
         // Data URL fallback if storage bucket is unreachable
         const reader = new FileReader();
@@ -79,7 +76,6 @@ export function useTapePlayer({
             const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
             if (!tapeTitle.trim()) setTapeTitle(cleanName);
             if (!tapeBand.trim() && userProfile?.name) setTapeBand(userProfile.name);
-            if (typeof triggerNotification === 'function') triggerNotification("Audio tape attached locally!");
           }
         };
         reader.readAsDataURL(file);
@@ -95,7 +91,6 @@ export function useTapePlayer({
           const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
           if (!tapeTitle.trim()) setTapeTitle(cleanName);
           if (!tapeBand.trim() && userProfile?.name) setTapeBand(userProfile.name);
-          if (typeof triggerNotification === 'function') triggerNotification("Audio tape attached locally!");
         }
       };
       reader.readAsDataURL(file);

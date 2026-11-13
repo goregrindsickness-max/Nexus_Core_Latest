@@ -174,18 +174,6 @@ export function useNexusMessaging({ userProfile, setAllProfiles, setAllFollows }
         setAllProfiles(normalizedProfiles);
       }
 
-      if (setAllFollows) {
-        const { data: followsData, error: fErr } = await supabaseClient
-          .from('follows')
-          .select('follower_id, followed_id');
-        if (!fErr && followsData) {
-          setAllFollows(followsData.map((f: any) => ({
-            fan_profile_id: f.follower_id,
-            artist_id: f.followed_id
-          })));
-        }
-      }
-
       let myUuid = extractUUID(userProfile.id) || userProfile.id;
       let authUid = '';
       try {
@@ -200,6 +188,30 @@ export function useNexusMessaging({ userProfile, setAllProfiles, setAllFollows }
         myUuid,
         authUid
       ].filter(Boolean)));
+
+      const isValidUUIDFollow = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+      const validFollowerUuids = myIds.filter(id => typeof id === 'string' && isValidUUIDFollow(id));
+
+      if (setAllFollows) {
+        if (validFollowerUuids.length > 0) {
+          const { data: followsData, error: fErr } = await supabaseClient
+            .from('follows')
+            .select('follower_id, followed_id')
+            .in('follower_id', validFollowerUuids);
+          if (!fErr && followsData) {
+            setAllFollows(followsData.map((f: any) => ({
+              follower_id: f.follower_id,
+              followed_id: f.followed_id,
+              fan_profile_id: f.follower_id,
+              artist_id: f.followed_id
+            })));
+          } else if (!fErr) {
+            setAllFollows([]);
+          }
+        } else {
+          setAllFollows([]);
+        }
+      }
 
       // 2. Fetch all relational messages involving current user
       let messages: any[] = [];
@@ -436,28 +448,36 @@ export function useNexusMessaging({ userProfile, setAllProfiles, setAllFollows }
       if (!activeChat) return;
 
       const rawRecipientEmail = await getRecipientEmail(activeChat);
-      if (!rawRecipientEmail) {
-        console.warn("Recipient email not found for chat:", activeChat?.name);
-        return;
-      }
-
-      const recipientEmail = rawRecipientEmail.toLowerCase().trim();
+      const recipientEmail = rawRecipientEmail ? rawRecipientEmail.toLowerCase().trim() : '';
 
       try {
         const senderId = userProfile?.id || (await getValidUserId(supabaseClient));
 
-        const { data: profileData } = await supabaseClient
-          .from('profiles')
-          .select('id')
-          .eq('email', recipientEmail)
-          .maybeSingle();
+        let profileData: { id?: string; email?: string } | null = null;
+        if (recipientEmail) {
+          const { data } = await supabaseClient
+            .from('profiles')
+            .select('id, email')
+            .eq('email', recipientEmail)
+            .maybeSingle();
+          profileData = data;
+        } else if (activeChat.id) {
+          const chatUuid = extractUUID(activeChat.id);
+          const { data } = await supabaseClient
+            .from('profiles')
+            .select('id, email')
+            .eq(chatUuid ? 'id' : 'console_handle', chatUuid || activeChat.id)
+            .maybeSingle();
+          profileData = data;
+        }
 
-        const receiverId = profileData?.id || extractUUID(recipientEmail) || recipientEmail;
+        const resolvedEmail = (profileData?.email || recipientEmail || '').toLowerCase().trim() || undefined;
+        const receiverId = profileData?.id || extractUUID(activeChat.id) || extractUUID(recipientEmail) || recipientEmail || activeChat.id;
 
-        if (senderId && receiverId) {
+        if (senderId && receiverId && senderId !== receiverId) {
           const msgContent = newMessage.text || 'Sent an attachment';
 
-          const { data: chatData, error: insertErr } = await sendDirectMessage(senderId, receiverId, msgContent);
+          const { data: chatData, error: insertErr } = await sendDirectMessage(senderId, receiverId, msgContent, { skipPush: true });
 
           if (insertErr) {
             console.error('[Chat Engine] Failed to write message to Supabase:', insertErr);
@@ -474,6 +494,7 @@ export function useNexusMessaging({ userProfile, setAllProfiles, setAllFollows }
               .insert([{
                 id: newNotifId,
                 user_id: receiverUUID,
+                actor_id: extractUUID(senderId) || null,
                 title: '💬 NEW MESSAGE',
                 message: `New message from ${userProfile.name || userProfile.full_name || 'Nexus Contact'}: "${(newMessage.text || 'Sent an attachment').substring(0, 60)}"`,
                 category: 'CHAT',
@@ -486,13 +507,16 @@ export function useNexusMessaging({ userProfile, setAllProfiles, setAllFollows }
           // Trigger real-time device push notification to the recipient
           const senderDisplayName = userProfile?.name || userProfile?.full_name || userProfile?.console_handle || 'Nexus Contact';
           pushManager.sendPushToServer({
-            userId: receiverUUID || recipientEmail,
-            userEmail: recipientEmail,
+            userId: receiverUUID || receiverId,
+            userEmail: resolvedEmail,
+            excludeUserId: senderId,
+            excludeUserEmail: userProfile?.email,
             title: `💬 Direct Message from ${senderDisplayName}`,
             body: (newMessage.text || 'Sent an attachment').substring(0, 120),
             category: 'direct_messages',
             targetTab: 'messages',
             priority: 'P1',
+            tag: `nexus-dm-${senderId}`,
             data: {
               senderId: senderId,
               senderName: senderDisplayName

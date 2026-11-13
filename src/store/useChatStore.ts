@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getSupabase } from '../supabase';
 import { markChatAsRead, handleMarkAllAsRead } from '../lib/chat';
+import { pushManager } from '../lib/pushNotifications';
 
 
 /**
@@ -62,7 +63,12 @@ export const getValidUserId = async (client?: any): Promise<string> => {
 /**
  * Direct Raw Database Message Dispatcher
  */
-export const sendDirectMessage = async (senderId: string, recipientId: string, text: string) => {
+export const sendDirectMessage = async (
+  senderId: string,
+  recipientId: string,
+  text: string,
+  options?: { skipPush?: boolean; senderName?: string; recipientEmail?: string }
+) => {
   console.warn('=== [SEND MESSAGE DIAGNOSTIC] ===');
   console.warn('1. Sender ID:', senderId);
   console.warn('2. Recipient ID:', recipientId);
@@ -132,6 +138,39 @@ export const sendDirectMessage = async (senderId: string, recipientId: string, t
     }
   } catch (notifErr: any) {
     console.warn('[Direct Chat] Notification write exception:', notifErr?.message || notifErr);
+  }
+
+  if (!options?.skipPush && senderId !== recipientId) {
+    let senderName = options?.senderName || '';
+    let senderEmail = '';
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const savedProf = localStorage.getItem('nexus_core_user_profile') || localStorage.getItem('nexus_user');
+        if (savedProf) {
+          const parsed = JSON.parse(savedProf);
+          if (!senderName) senderName = parsed?.full_name || parsed?.name || parsed?.console_handle || '';
+          if (parsed?.email) senderEmail = parsed.email;
+        }
+      } catch (_) {}
+    }
+    const displaySender = senderName || 'Nexus Contact';
+    const recipientEmail = options?.recipientEmail || (recipientId.includes('@') ? recipientId : undefined);
+    pushManager.sendPushToServer({
+      userId: recipientId,
+      userEmail: recipientEmail,
+      excludeUserId: senderId,
+      excludeUserEmail: senderEmail || undefined,
+      title: `💬 Direct Message from ${displaySender}`,
+      body: trimmed.substring(0, 120),
+      category: 'direct_messages',
+      targetTab: 'messages',
+      priority: 'P1',
+      tag: `nexus-dm-${senderId}`,
+      data: {
+        senderId,
+        senderName: displaySender,
+      },
+    }).catch(() => {});
   }
 
   if (typeof window !== 'undefined') {

@@ -41,8 +41,10 @@ import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME }
 import { bugMonitor } from "../../../services/bugMonitorService";
 import { useModalStore } from "../../../store/useModalStore";
 import { handleImageErrorWithCache } from "../../../services/profileImageCacheService";
+import { AffiliatedEntitiesSection } from '../cards/AffiliatedEntitiesSection';
+import { hasRegisteredWorkspace } from '../../../types';
 import {
-  X, Check, User, Shield, ShieldAlert, Key, Sparkles, MapPin, Calendar, Building,
+  X, Check, User, Shield, ShieldAlert, Key, Sparkles, MapPin, Calendar, Building, Building2,
   Camera, Globe, Instagram, Music2, Mail, Lock, Settings, LogOut, ChevronRight,
   ChevronDown, Edit3, Save, Flame, Zap, Award, Terminal, Sliders, Eye, EyeOff, Layers, Radio,
   FileText, Send, Plus, Trash2, ExternalLink, HelpCircle, Ticket, Barcode as BarcodeIcon,
@@ -723,6 +725,28 @@ if (!leftDrawerOpen) return null;
                           </button>
                         )}
 
+                        {/* Public Pages & Festival Entities */}
+                        <button
+                          type="button"
+                          onClick={() => setDrawerCurrentView('public_entities')}
+                          className="w-full flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/60 hover:bg-zinc-900/90 border border-zinc-900 hover:border-amber-500/40 transition-all duration-200 group cursor-pointer text-left"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:border-amber-500/40 group-hover:bg-amber-500/15 group-hover:shadow-[0_0_10px_rgba(245,158,11,0.25)] transition-all shrink-0">
+                              <Building2 className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors truncate">
+                                Public Pages & Entities
+                              </span>
+                              <span className="text-[10px] text-zinc-500 group-hover:text-zinc-400 font-mono transition-colors truncate">
+                                Festivals, labels & collectives
+                              </span>
+                            </div>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                        </button>
+
                         {/* Autonomous Bug Diagnostics (Shake & Instabug Mode) - Located right under Band Archivist */}
                         {isOwner && (
                           <button 
@@ -1053,7 +1077,6 @@ if (!leftDrawerOpen) return null;
                                     value={profileFavoriteSong}
                                     onChange={(e) => {
                                       setProfileFavoriteSong(e.target.value);
-                                      triggerNotification?.(`📊 Popular track updated to: ${e.target.value}`);
                                     }}
                                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-white focus:border-orange-500 focus:outline-none font-medium cursor-pointer"
                                   >
@@ -1225,7 +1248,6 @@ if (!leftDrawerOpen) return null;
                                             e.preventDefault();
                                             e.stopPropagation();
                                             setProfileAvatarUrl(null);
-                                            triggerNotification?.("Profile avatar removed!");
                                             if (avatarFileInputRef.current) avatarFileInputRef.current.value = '';
                                           }}
                                           className="absolute -top-1 -right-1 bg-red-600 hover:bg-red-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold border border-zinc-950 z-20 cursor-pointer shadow-md"
@@ -1260,7 +1282,6 @@ if (!leftDrawerOpen) return null;
                                         type="button"
                                         onClick={() => {
                                           setProfileAvatarUrl(preset.url);
-                                          triggerNotification?.(`Avatar set to ${preset.name}!`);
                                         }}
                                         className={`px-1 py-0.5 text-[8px] font-mono border rounded transition-all cursor-pointer whitespace-nowrap ${
                                           profileAvatarUrl === preset.url
@@ -1310,7 +1331,6 @@ if (!leftDrawerOpen) return null;
                                           e.preventDefault();
                                           e.stopPropagation();
                                           setProfileCoverUrl(null);
-                                          triggerNotification?.("Profile cover banner removed!");
                                           if (coverFileInputRef.current) coverFileInputRef.current.value = '';
                                         }}
                                         className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold border border-zinc-950 z-20 cursor-pointer shadow-md"
@@ -1345,7 +1365,6 @@ if (!leftDrawerOpen) return null;
                                         type="button"
                                         onClick={() => {
                                           setProfileCoverUrl(preset.url);
-                                          triggerNotification?.(`Cover set to ${preset.name}!`);
                                         }}
                                         className={`px-1 py-0.5 text-[8px] font-mono border rounded transition-all cursor-pointer whitespace-nowrap ${
                                           profileCoverUrl === preset.url
@@ -1602,7 +1621,6 @@ if (!leftDrawerOpen) return null;
                                             setProfileTopSongArtist(item.artist);
                                             setProfileTopSongTitle(item.title);
                                             setProfileFavoriteSong(`${item.artist} - ${item.title}`);
-                                            triggerNotification?.(`📊 Auto-selected track: ${item.artist} - ${item.title}`);
                                           }}
                                           className="px-2 py-1.5 bg-zinc-900 hover:bg-zinc-850 text-emerald-400 border border-zinc-800 rounded-xl text-[9px] font-bold font-mono transition-colors uppercase shrink-0"
                                           title="Auto-select track"
@@ -1804,7 +1822,6 @@ if (!leftDrawerOpen) return null;
                                   onClick={() => {
                                     const nextVal = !filterShowFollowedOnly;
                                     setFilterShowFollowedOnly(nextVal);
-                                    triggerNotification?.(nextVal ? "✨ Feed set to Followed Accounts only!" : "🌎 Feed set to show all community updates!");
                                   }}
                                   className={`w-9 h-5 rounded-full p-0.5 transition-colors shrink-0 ${filterShowFollowedOnly ? 'bg-rose-600' : 'bg-zinc-800'}`}
                                 >
@@ -1954,7 +1971,32 @@ if (!leftDrawerOpen) return null;
                         </div>
                         )
                       )}
-                      
+
+                      {drawerCurrentView === 'public_entities' && (
+                        <div className="space-y-4 pb-8">
+                          <div className="flex items-center justify-between gap-2 border-b border-zinc-900 pb-3">
+                            <div>
+                              <h3 className="text-sm font-black text-amber-400 uppercase tracking-widest font-display">
+                                Public Pages & Entities
+                              </h3>
+                              <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                                Create & manage festivals, labels, collectives & brand links
+                              </p>
+                            </div>
+                          </div>
+                          <AffiliatedEntitiesSection
+                            variant="manage"
+                            userProfile={userProfile}
+                            setUserProfile={setUserProfile}
+                            isOwnProfile={true}
+                            showPromoterWorkspacePointer={Boolean(
+                              isPromoter || hasRegisteredWorkspace(userProfile, 'promoter')
+                            )}
+                            triggerNotification={triggerNotification}
+                          />
+                        </div>
+                      )}
+
                       {drawerCurrentView === 'payment' && (
                         <div className="space-y-4">
                           <PaymentMethodsSettings
@@ -2854,7 +2896,6 @@ if (!leftDrawerOpen) return null;
                                                       type="button"
                                                       onClick={() => {
                                                         setCollPlayerRatings(prev => ({ ...prev, [activeMusicItem.id]: star }));
-                                                        triggerNotification?.(`Rated "${activeMusicItem.data.title || activeMusicItem.data.name}" ${star} Stars`);
                                                       }}
                                                       className="hover:scale-110 transition-transform cursor-pointer"
                                                     >
@@ -3025,7 +3066,6 @@ if (!leftDrawerOpen) return null;
                                                 setCollPlayerActiveTrackId(`${item.id}_t1`);
                                                 setCollPlayerProgress(0);
                                                 setCollPlayerIsPlaying(true);
-                                                triggerNotification?.(`Loaded ${item.data.title || item.data.name} into playback deck.`);
                                               }}
                                               className={`bg-[#0c0d10] border rounded-xl overflow-hidden relative cursor-pointer group transition-all duration-300 ${isActive ? 'border-rose-500/80 shadow-[0_0_15px_rgba(244,63,94,0.15)] ring-1 ring-rose-500/30' : 'border-zinc-850 hover:border-zinc-700'}`}
                                             >
@@ -3066,7 +3106,6 @@ if (!leftDrawerOpen) return null;
                                                 <button 
                                                   onClick={(e) => {
                                                     e.stopPropagation();
-                                                    triggerNotification?.(`Downloading HD lossless audio bundle for "${item.data.title || item.data.name}"...`);
                                                   }}
                                                   className="w-8 h-8 rounded-full border border-zinc-800 hover:border-zinc-700 text-zinc-500 hover:text-rose-400 flex items-center justify-center hover:bg-zinc-900 transition-all active:scale-90 shadow-md"
                                                   title="Download WAV Bundle"
@@ -3226,8 +3265,8 @@ if (!leftDrawerOpen) return null;
                         const toggleFollowProfile = (profileId: string, name: string) => {
                           const profileObj = discoverProfiles?.find(p => p.id === profileId || p.name === name);
                           const target = profileObj || { id: profileId, name };
-                          const isFollowedNow = isProfileFollowedGlobally(target, discoverProfiles);
-                          saveFollowStateGlobally(target, !isFollowedNow);
+                          const isFollowedNow = isProfileFollowedGlobally(target);
+                          saveFollowStateGlobally(target, !isFollowedNow, userProfile?.id);
                           handleFollowProfile(profileObj || target || name, !isFollowedNow ? 'follow' : 'unfollow');
                         };
 
@@ -3372,7 +3411,6 @@ if (!leftDrawerOpen) return null;
                                   onClick={() => {
                                     const nextVal = !filterShowFollowedOnly;
                                     setFilterShowFollowedOnly(nextVal);
-                                    triggerNotification?.(nextVal ? "✨ Feed set to Followed Accounts only!" : "🌎 Feed set to show all community updates!");
                                   }}
                                   className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase transition-all shrink-0 ${filterShowFollowedOnly ? 'bg-rose-950/60 border border-rose-500/30 text-rose-400' : 'bg-zinc-900 border border-zinc-850 text-zinc-500 hover:text-zinc-300'}`}
                                 >
@@ -3444,7 +3482,6 @@ if (!leftDrawerOpen) return null;
                                             onClick={() => {
                                               setActiveTab('feed');
                                               setLeftDrawerOpen(false);
-                                              triggerNotification?.(`🎧 Tuning in to ${profile?.name}'s tracks on your feed!`);
                                             }}
                                             title="View Tracks"
                                             className="w-6 h-6 rounded bg-zinc-950 border border-zinc-900 flex items-center justify-center text-rose-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
@@ -3458,7 +3495,6 @@ if (!leftDrawerOpen) return null;
                                             onClick={() => {
                                               setActiveTab('feed');
                                               setLeftDrawerOpen(false);
-                                              triggerNotification?.(`🎫 Opening ${profile?.name} schedule on the community dashboard!`);
                                             }}
                                             title="View Gigs"
                                             className="w-6 h-6 rounded bg-zinc-950 border border-zinc-900 flex items-center justify-center text-rose-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
@@ -3468,7 +3504,7 @@ if (!leftDrawerOpen) return null;
                                         )}
                                         {profile.role?.toLowerCase().includes('artist') && (
                                           <button 
-                                            onClick={() => triggerNotification?.(`🎵 ${profile?.name} added to queue`)}
+                                            onClick={() => {}}
                                             title="Listen"
                                             className="w-6 h-6 rounded bg-zinc-950 border border-zinc-900 flex items-center justify-center text-rose-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
                                           >
@@ -3483,8 +3519,6 @@ if (!leftDrawerOpen) return null;
                                               window.dispatchEvent(new CustomEvent('nexus_open_chat', { detail: { profile_id: profile?.name, name: profile?.name, username: profile?.name, avatar_url: profile.image } }));
                                               window.dispatchEvent(new CustomEvent('nexus_open_chat_thread', { detail: { profile_id: profile?.name, name: profile?.name, username: profile?.name, avatar_url: profile.image } }));
                                               setLeftDrawerOpen(false);
-                                              triggerNotification?.(`💬 DM with ${profile?.name} opened.`);
-
                                             }}
                                             title="Direct Message"
                                             className="w-6 h-6 rounded bg-zinc-950 border border-zinc-900 flex items-center justify-center text-rose-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
@@ -3649,7 +3683,6 @@ if (!leftDrawerOpen) return null;
                   setCropperOpen(false);
                   setCropperImageSrc('');
                   try {
-                    triggerNotification?.("⏳ Processing and optimizing image...");
                     const userProfileId = userProfile?.id || 'profile_anonymous';
                     const bucket = cropperType === 'avatar' ? 'avatars' : 'bannersv2';
                     const token = cropperType === 'avatar' ? 'profile-avatar' : 'profile-banner';
@@ -3821,8 +3854,6 @@ if (!leftDrawerOpen) return null;
                         }
                       }));
                     }
-
-                    triggerNotification?.(`✨ ${cropperType === 'avatar' ? 'Profile Avatar' : 'Cover Banner'} updated & synchronized!`);
                   } catch (err: any) {
                     console.error("Failed to upload cropped image to storage:", err);
                     triggerNotification?.("⚠️ Failed to upload image to storage bucket.");

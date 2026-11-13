@@ -147,7 +147,6 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
             onClick={() => {
               setActiveTab('home-v2');
               if (setDashboardV2ActiveNav) setDashboardV2ActiveNav('EVENTS');
-              triggerNotification?.('Navigated to Home Dashboard');
             }}
             className="flex items-center select-none shrink-0 cursor-pointer hover:opacity-85 active:scale-98 transition-all focus:outline-none"
             title="Return to Home Dashboard"
@@ -217,11 +216,6 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
           <button
             onClick={() => {
               setActiveTab('plans');
-              if (!isRosterOwner) {
-                triggerNotification?.('Viewing organization active sponsorship plan details.');
-              } else {
-                triggerNotification?.('Opening subscription & billing plans...');
-              }
             }}
             className={`rounded-xl px-2.5 py-1 flex items-center gap-2 transition cursor-pointer shadow-sm active:scale-95 shrink-0 ${
               !isRosterOwner
@@ -428,7 +422,6 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                             bio: bandBio
                           };
                           window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
-                          triggerNotification?.("⚡ Opening Band Public Profile...");
                         } else if (handleOpenMyProfile) {
                           handleOpenMyProfile();
                         }
@@ -523,7 +516,6 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                                           localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated));
                                           window.dispatchEvent(new CustomEvent('nexus_core_user_profile_updated', { detail: updated }));
                                         } catch {}
-                                        triggerNotification?.(`🎸 Switched to Band Member (${prevRole}) Mode for ${activeBand.name}.`);
                                       }}
                                       className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700 hover:border-zinc-500 text-zinc-200 hover:text-white rounded-lg text-[9px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm active:scale-95"
                                       title="Switch identity back to Artist / Band Member mode"
@@ -563,7 +555,6 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                                       } catch {}
                                       setActiveTab('home-v2');
                                       if (setDashboardV2ActiveNav) setDashboardV2ActiveNav('EVENTS');
-                                      triggerNotification?.(`🧭 Switched to Tour Manager & Booking Agent Mode for ${activeBand.name}. Executive tour suite active.`);
                                     }}
                                     className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-gradient-to-r from-amber-500/20 via-amber-500/15 to-amber-600/20 hover:from-amber-500/30 hover:to-amber-600/30 border border-amber-500/40 hover:border-amber-400 text-amber-300 hover:text-white rounded-lg text-[9px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm active:scale-95"
                                     title="Switch to Tour Manager & Booking Agent executive identity"
@@ -588,7 +579,6 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                                   onClick={() => {
                                     setRoleMenuOpen(false);
                                     setActiveTab('plans');
-                                    triggerNotification?.('Opening band roster manager. Register another band/artist here.');
                                   }}
                                   className="w-full mt-2 flex items-center justify-center gap-1.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/50 text-[#00ffcc] hover:text-white rounded-lg text-[9px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer"
                                 >
@@ -677,7 +667,6 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                                   } else if (portal.key === 'label') {
                                     setActiveTab('label');
                                   }
-                                  triggerNotification?.(`⚡ Switched to ${portal.name}.`);
                                 }}
                                 className="w-full flex items-center justify-between p-2 rounded-xl bg-zinc-900/50 hover:bg-zinc-800 border border-transparent hover:border-zinc-700 text-zinc-400 hover:text-white transition-all cursor-pointer group"
                               >
@@ -703,7 +692,6 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                                 if (typeof window !== 'undefined') {
                                   localStorage.setItem('nexus_target_register_workspace', portal.key);
                                 }
-                                triggerNotification?.(`Opening secure registration gateway for ${portal.name}...`);
                                 if (onUpgradeToPro) onUpgradeToPro();
                               }}
                               className="w-full flex items-center justify-between p-2 rounded-xl bg-zinc-950/40 border border-zinc-900/50 text-zinc-650 hover:text-zinc-500 transition-all cursor-pointer group"
@@ -800,7 +788,6 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                           } else {
                             setActiveTab('plans');
                           }
-                          triggerNotification?.('Opening system settings...');
                         }}
                         className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-zinc-300 hover:text-white hover:bg-zinc-900/60 rounded-xl transition-colors text-left cursor-pointer"
                       >
@@ -814,7 +801,6 @@ export const NexusTopBar: React.FC<NexusTopBarProps> = ({
                           localStorage.removeItem('nexus_core_user_profile'); 
                           if (setUserProfile) setUserProfile(null); 
                           window.location.reload();
-                          triggerNotification?.("Session terminated. Signed out successfully.");
                         }}
                         className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-rose-500 hover:text-rose-400 hover:bg-rose-950/20 rounded-xl transition-colors text-left cursor-pointer"
                       >

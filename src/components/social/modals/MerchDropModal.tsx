@@ -100,7 +100,6 @@ export const MerchDropModal: React.FC<MerchDropModalProps> = ({
     const remaining = activeImages.filter((_, i) => i !== index);
     const reordered = [target, ...remaining];
     updateImages(reordered);
-    triggerNotification?.(`Set photo #${index + 1} as primary cover.`);
   };
 
   const handleRemoveImage = (index: number) => {
@@ -110,7 +109,6 @@ export const MerchDropModal: React.FC<MerchDropModalProps> = ({
     }
     const filtered = activeImages.filter((_, i) => i !== index);
     updateImages(filtered);
-    triggerNotification?.('Photo removed.');
   };
 
   const handleProcessFiles = async (files: FileList | File[]) => {
@@ -126,8 +124,6 @@ export const MerchDropModal: React.FC<MerchDropModalProps> = ({
     const toProcess = fileList.slice(0, availableSlots);
     if (fileList.length > availableSlots) {
       triggerNotification?.(`⚠️ Capped at 3 photos max. Adding first ${availableSlots} photo(s)...`);
-    } else {
-      triggerNotification?.(`⏳ Compressing ${toProcess.length} photo(s)...`);
     }
 
     setIsProcessingPhotos(true);
@@ -150,7 +146,6 @@ export const MerchDropModal: React.FC<MerchDropModalProps> = ({
 
       if (compressedList.length > 0) {
         updateImages([...activeImages, ...compressedList]);
-        triggerNotification?.(`✅ Added ${compressedList.length} photo(s).`);
       }
     } catch (err) {
       console.error('Error processing photos:', err);
@@ -171,7 +166,6 @@ export const MerchDropModal: React.FC<MerchDropModalProps> = ({
     updateImages([...activeImages, trimmed]);
     setImageUrlInput('');
     setShowUrlInput(false);
-    triggerNotification?.('✅ Photo URL added.');
   };
 
   const handleAddVariant = (e?: React.FormEvent) => {
@@ -196,7 +190,6 @@ export const MerchDropModal: React.FC<MerchDropModalProps> = ({
 
   const handleApplyPreset = (presetVariants: string[]) => {
     setMerchDropVariants?.(presetVariants);
-    triggerNotification?.(`Loaded ${presetVariants.length} variants.`);
   };
 
   return (
@@ -773,7 +766,6 @@ export const MerchDropModal: React.FC<MerchDropModalProps> = ({
                         'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Origin%20Destroyer%20T-Shirt%20copy.jpg',
                         'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Destroy%20the%20Opps.webp'
                       ]);
-                      triggerNotification?.('Loaded 3 sample merch photos.');
                     }}
                     className="ml-auto text-[9px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer flex items-center gap-1"
                     title="Load sample 3 angles for testing"
@@ -825,7 +817,6 @@ export const MerchDropModal: React.FC<MerchDropModalProps> = ({
                     return;
                   }
                   onClose();
-                  triggerNotification?.('Merch Drop attachment configured. Click Post to publish.');
                 }}
                 className="flex-1 bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 text-white font-mono font-black text-xs uppercase tracking-wider py-2.5 rounded-xl shadow-lg shadow-rose-900/30 transition-all cursor-pointer"
               >

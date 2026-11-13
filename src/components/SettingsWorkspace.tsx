@@ -668,7 +668,6 @@ export default function SettingsWorkspace(props: any) {
                         onClick={() => {
                           if (props.setSelectedMicroGenres) {
                             props.setSelectedMicroGenres([]);
-                            triggerNotification?.("🧹 Cleared all selected micro-genres.");
                           }
                         }}
                         className="px-2 py-0.5 bg-rose-950/30 hover:bg-rose-900/40 text-rose-400 hover:text-rose-300 border border-rose-500/20 rounded font-bold uppercase text-[8px] tracking-wider transition-all cursor-pointer"

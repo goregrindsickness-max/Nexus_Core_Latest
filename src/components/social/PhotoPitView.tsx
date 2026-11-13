@@ -681,8 +681,6 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    triggerNotification?.(`⏳ Compressing and loading ${files.length} image${files.length > 1 ? 's' : ''}...`);
-
     const fileList = Array.from(files);
     const compressedList: string[] = [];
     let processedCount = 0;
@@ -705,7 +703,6 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
             setPendingPhotos(compressedList);
             setPendingFolder(selectedFolder !== 'All Photos' ? selectedFolder : 'Profile Pics');
             setPendingCaption('');
-            triggerNotification?.(`⚡ ${compressedList.length} image${compressedList.length > 1 ? 's' : ''} ready! Please set folder & feed options.`);
           }
         }
       };
@@ -727,7 +724,6 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
         let finalImage = photo;
         if (uploadBase64ToStorage) {
           try {
-            triggerNotification?.(`⏳ Uploading memory ${i + 1}/${pendingPhotos.length} to storage...`);
             const publicUrl = await uploadBase64ToStorage(
               photo,
               'photo-pit',
@@ -830,11 +826,6 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
 
       setPendingPhotos([]);
       setPendingCaption('');
-      triggerNotification?.(
-        postToFeed
-          ? `⚡ ${uploadedUrls.length} photo(s) filed in "${pendingFolder}" & broadcast to feed!`
-          : `🔒 ${uploadedUrls.length} photo(s) quietly saved to Photo Pit vault "${pendingFolder}"!`
-      );
     } catch (err) {
       console.error("Failed to submit photo pit items:", err);
       triggerNotification?.("⚠️ Error uploading photos. Please try again.");
@@ -867,8 +858,6 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
       const targetCreativeId = userProfile?.creative_id || (userProfile as any)?.registered_creative_id || currentUserId || 'creative_vault';
       const creativeName = userProfile?.creative_metadata?.business_name || (userProfile as any)?.creative_name || (userProfile as any)?.creative_business_name || userProfile?.name || 'Creative Studio';
       const creativeAvatar = userProfile?.creative_avatar || userProfile?.creative_metadata?.creative_avatar || profileAvatarUrl || userProfile?.avatar || userProfile?.avatar_url || '';
-
-      triggerNotification?.(`⏳ Duplicating ${sourcePhotos.length} photo(s) to Creative Workspace under "${targetFolder}"...`);
 
       const supabase = getSupabase();
       const duplicatedPostObjs: any[] = [];
@@ -951,7 +940,6 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
       }
 
       setAlbumToDuplicate(null);
-      triggerNotification?.(`✨ Successfully duplicated ${sourcePhotos.length} photo(s) into Creative Workspace folder "${targetFolder}"!`);
     } catch (err) {
       console.error("Failed to duplicate album to Creative Workspace:", err);
       triggerNotification?.("⚠️ Error duplicating album to Creative Workspace.");
@@ -985,7 +973,6 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
     }
 
     setFolderToDelete(null);
-    triggerNotification?.(`🗑️ Deleted folder "${folderName}". Photos remain safely in All Photos.`);
   };
 
   // Delete individual photo function
@@ -1163,7 +1150,6 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
     }
 
     setPhotoToDelete(null);
-    triggerNotification?.('🗑️ Photo permanently removed.');
   };
 
   // Replace / Re-upload a photo on an existing post without losing captions or metadata
@@ -1172,7 +1158,6 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
     if (!file || !selectedGalleryItem) return;
 
     setIsReplacingPhoto(true);
-    triggerNotification?.('⏳ Uploading replacement photo to photo-pit storage...');
 
     try {
       const reader = new FileReader();
@@ -1344,9 +1329,7 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
         setSelectedGalleryItem((prev: any) => (prev ? { ...prev, url: newImageUrl } : null));
         
         const isRemoteUrl = newImageUrl && (newImageUrl.startsWith('http://') || newImageUrl.startsWith('https://'));
-        if (isRemoteUrl) {
-          triggerNotification?.('✨ Photo successfully uploaded to photo-pit storage bucket! Caption and folder preserved.');
-        } else {
+        if (!isRemoteUrl) {
           triggerNotification?.('⚠️ Supabase Storage permissions blocked direct bucket upload. Image saved as local fallback. Check storage connection.');
         }
         setIsReplacingPhoto(false);
@@ -1379,14 +1362,12 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
     setSelectedFolder(trimmed);
     setNewFolderName('');
     setShowFolderCreator(false);
-    triggerNotification?.(`📁 Created new folder: "${trimmed}"`);
   };
 
   // Full re-sync of Photo Pit & Profile Card gallery with Supabase database
   const [isResyncingProfile, setIsResyncingProfile] = useState<boolean>(false);
   const handleFullResyncWithProfile = async () => {
     setIsResyncingProfile(true);
-    triggerNotification?.('⏳ Synchronizing Photo Pit and Public Profile Card with Supabase...');
     try {
       const supabase = getSupabase();
       const userProfileId = currentUserId || userProfile?.id || userProfile?.uuid || 'guest';
@@ -1439,7 +1420,6 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('nexus_photos_updated'));
       }
-      triggerNotification?.('✨ Photo Pit and Public Profile Card re-synchronized with latest photos!');
     } catch (err) {
       console.warn('[handleFullResyncWithProfile] Sync error:', err);
       triggerNotification?.('⚠️ Sync completed with local cache.');
@@ -2180,9 +2160,7 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        triggerNotification?.("❤️ Marked photo as favorite!");
-                      }}
+                      onClick={() => {}}
                       className="flex-1 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-white rounded-xl py-2.5 text-xs font-black uppercase tracking-wider transition-colors cursor-pointer"
                     >
                       Like
@@ -2192,7 +2170,6 @@ export const PhotoPitView: React.FC<PhotoPitViewProps> = ({
                       onClick={() => {
                         setSelectedGalleryItem(null);
                         if (setActiveTab) setActiveTab('feed');
-                        triggerNotification?.("Navigating to source thread...");
                       }}
                       className="flex-1 bg-rose-600 hover:bg-rose-500 text-white rounded-xl py-2.5 text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
                     >

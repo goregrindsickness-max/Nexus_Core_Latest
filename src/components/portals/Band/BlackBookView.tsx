@@ -8,7 +8,7 @@ import { handleSendMessage as sendDbMessage } from '../../../store/useChatStore'
 import VenueReputationCard from './VenueReputationCard';
 import { seedVenuesForCities, classifyPlace, isIrrelevantPlace } from '../../../services/musicBrainzSeederService';
 import { getAllBlackBookVenues, BUILT_IN_BLACK_BOOK_VENUES } from '../../../services/venueSearchService';
-import { getApiEndpoint } from '../../../utils/apiConfig';
+import { authFetch, getSupabaseAccessToken } from '../../../utils/apiConfig';
 
 /**
  * Detect if an existing place record appears to be closed, defunct, or former
@@ -538,7 +538,7 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
       // Fetch server-persisted venues cache
       let serverVenues: any[] = [];
       try {
-        const res = await fetch(getApiEndpoint('/api/venues'));
+        const res = await authFetch('/api/venues');
         if (res.ok) {
           const sData = await res.json();
           if (sData.success && Array.isArray(sData.venues)) {
@@ -714,11 +714,13 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
 
     // 1. Post batch to server-side persistent endpoint (works across all devices & APK)
     try {
-      await fetch(getApiEndpoint('/api/venues/batch'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ venues: venuesList })
-      });
+      if (await getSupabaseAccessToken()) {
+        await authFetch('/api/venues/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ venues: venuesList })
+        });
+      }
     } catch (_) {}
 
     // 2. Direct Supabase venues upsert attempt
@@ -769,11 +771,12 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
       // 1. Try server-side API endpoint
       try {
         setSeedingLogs(prev => [...prev, `[SERVER] Calling /api/venues/seed-musicbrainz...`]);
-        const res = await fetch(getApiEndpoint('/api/venues/seed-musicbrainz'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cities: selectedHubs })
-        });
+        if (await getSupabaseAccessToken()) {
+          const res = await authFetch('/api/venues/seed-musicbrainz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cities: selectedHubs })
+          });
 
         if (res.ok) {
           const data = await res.json();
@@ -840,6 +843,9 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
               syncVenuesBatchToSupabase(data.venues);
             }
           }
+        }
+        } else {
+          setSeedingLogs(prev => [...prev, `[INFO] No active session token; falling back to client-side seeder.`]);
         }
       } catch (apiErr) {
         console.warn("Backend API seeder fallback to direct service:", apiErr);
@@ -1329,9 +1335,11 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
 
     // Sync deletion to server cache
     try {
-      await fetch(`/api/venues/${encodeURIComponent(id || 'none')}?name=${encodeURIComponent(name || '')}&city=${encodeURIComponent(venueObj.city || '')}`, {
-        method: 'DELETE'
-      });
+      if (await getSupabaseAccessToken()) {
+        await authFetch(`/api/venues/${encodeURIComponent(id || 'none')}?name=${encodeURIComponent(name || '')}&city=${encodeURIComponent(venueObj.city || '')}`, {
+          method: 'DELETE'
+        });
+      }
     } catch (e) {
       console.warn("Could not sync delete to server cache:", e);
     }
@@ -1506,12 +1514,15 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
       });
 
       // Sync deletion to server cache for all deleted places in this city
-      for (const place of cityPlaces) {
-        try {
-          fetch(`/api/venues/${encodeURIComponent(place.id || 'none')}?name=${encodeURIComponent(place.name || '')}&city=${encodeURIComponent(place.city || '')}`, {
-            method: 'DELETE'
-          }).catch(() => {});
-        } catch (e) {}
+      const hasToken = await getSupabaseAccessToken();
+      if (hasToken) {
+        for (const place of cityPlaces) {
+          try {
+            authFetch(`/api/venues/${encodeURIComponent(place.id || 'none')}?name=${encodeURIComponent(place.name || '')}&city=${encodeURIComponent(place.city || '')}`, {
+              method: 'DELETE'
+            }).catch(() => {});
+          } catch (e) {}
+        }
       }
 
       // Delete from Supabase if connected
@@ -1666,11 +1677,13 @@ export default function BlackBookView({ onBack, triggerNotification, userProfile
 
     // 4. Batch delete on server cache
     try {
-      await fetch('/api/venues/batch-delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: idsToPurge, keys: keysToPurge })
-      });
+      if (await getSupabaseAccessToken()) {
+        await authFetch('/api/venues/batch-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: idsToPurge, keys: keysToPurge })
+        });
+      }
     } catch (e) {
       console.warn("Could not sync batch delete to server cache:", e);
     }
@@ -1715,7 +1728,6 @@ Representing ${activeBandName}`;
   const handleCopyPitch = () => {
     if (selectedVenue) {
       navigator.clipboard.writeText(pitchText);
-      triggerNotification("Pitch copied to clipboard!");
       setIsModalOpen(false);
     }
   };

@@ -161,12 +161,10 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
         if (meta.artwork) setBcCoverArtUrl(meta.artwork);
         if (meta.streamUrl) setBcAudioUrl(meta.streamUrl);
         setBcBandcampUrl(meta.pageUrl || bandcampLinkInput);
-        triggerNotification?.(`Connected: ${meta.artist ? `${meta.artist} - ` : ''}${meta.title || 'Bandcamp'}`);
       }
     } catch (err) {
       console.warn('[UploadStoryModal] Bandcamp auto-fetch error:', err);
       setBcBandcampUrl(bandcampLinkInput);
-      triggerNotification?.('Connected Bandcamp link');
     } finally {
       setIsFetchingBandcamp(false);
     }
@@ -179,7 +177,6 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
     if (track.artworkUrl) setBcCoverArtUrl(track.artworkUrl);
     if (track.previewUrl) setBcAudioUrl(track.previewUrl);
     setBcBandcampUrl(track.url);
-    triggerNotification?.(`Connected: ${track.artist} - ${track.title}`);
   };
 
   const handleAddBandcampSticker = () => {
@@ -197,7 +194,6 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
       y: newStoryStickerY || 50
     };
     setNewStoryStickers((prev) => [...prev, newSticker]);
-    triggerNotification?.('Attached Bandcamp Player badge to story canvas!');
   };
 
   if (!showUploadStoryModal) return null;
@@ -230,7 +226,6 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
         setNewStoryImage(result);
         setNewStoryVideo('');
       }
-      triggerNotification?.(`Attached media: ${file.name}`);
     };
     reader.readAsDataURL(file);
   };
@@ -326,7 +321,6 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
       setExternalLink('');
       setStoryFilter('normal');
       setShowUploadStoryModal(false);
-      triggerNotification?.("Story published app-wide to the Scene Pit!");
     } catch (err) {
       console.error("Failed to post story:", err);
       triggerNotification?.("Failed to post story. Please try again.");
@@ -1087,7 +1081,6 @@ export const UploadStoryModal: React.FC<UploadStoryModalProps> = ({
                                   setBcCoverArtUrl(preset.cover);
                                   setBcAudioUrl(preset.audio);
                                   setBcBandcampUrl(preset.link);
-                                  triggerNotification?.(`Loaded preset: ${preset.artist}`);
                                 }}
                                 className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-left hover:border-cyan-500/50 hover:bg-zinc-800/80 transition-all cursor-pointer"
                               >

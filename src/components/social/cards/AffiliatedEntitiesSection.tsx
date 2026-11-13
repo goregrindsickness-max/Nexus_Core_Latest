@@ -32,8 +32,10 @@ import { FestivalLineupCard } from './FestivalLineupCard';
 export interface AffiliatedEntitiesSectionProps {
   userProfile?: any;
   setUserProfile?: (profile: any) => void;
+  targetProfile?: any;
   isOwnProfile?: boolean;
   showPromoterWorkspacePointer?: boolean;
+  variant?: 'manage' | 'cards';
   triggerNotification?: (msg: string) => void;
   onSelectPostAsEntity?: (entity: NetworkEntity) => void;
 }
@@ -41,8 +43,10 @@ export interface AffiliatedEntitiesSectionProps {
 export const AffiliatedEntitiesSection: React.FC<AffiliatedEntitiesSectionProps> = ({
   userProfile,
   setUserProfile,
+  targetProfile,
   isOwnProfile = true,
   showPromoterWorkspacePointer = false,
+  variant = 'manage',
   triggerNotification,
   onSelectPostAsEntity,
 }) => {
@@ -56,10 +60,43 @@ export const AffiliatedEntitiesSection: React.FC<AffiliatedEntitiesSectionProps>
   const [lineupModalEntity, setLineupModalEntity] = useState<NetworkEntity | null>(null);
   const [lineupModalEditionId, setLineupModalEditionId] = useState<string | undefined>(undefined);
 
+  const effectiveProfile = targetProfile || userProfile;
+
   const refreshEntities = () => {
-    const list = getUserManagedEntities(userProfile?.id);
+    const ownerId = isOwnProfile
+      ? (userProfile?.id || effectiveProfile?.owner_id || effectiveProfile?.user_id || effectiveProfile?.id)
+      : (effectiveProfile?.owner_id || effectiveProfile?.creator_id || effectiveProfile?.user_id || effectiveProfile?.id);
+
+    let list: NetworkEntity[] = [];
+    if (isOwnProfile || ownerId) {
+      const rawList = getUserManagedEntities(ownerId);
+      list = isOwnProfile
+        ? rawList
+        : rawList.filter((e) => e.owner_id === ownerId);
+    }
+
+    const linked = getLinkedEntityForPromoterWorkspace(effectiveProfile);
+    if (linked && !list.some((e) => e.id === linked.id)) {
+      if (
+        isOwnProfile ||
+        effectiveProfile?.linked_entity_id === linked.id ||
+        effectiveProfile?.promoter_metadata?.linked_entity_id === linked.id
+      ) {
+        list = [linked, ...list];
+      }
+    }
+
+    const selfEntityId =
+      effectiveProfile?.entityData?.id ||
+      (typeof effectiveProfile?.id === 'string' && effectiveProfile.id.startsWith('entity:')
+        ? effectiveProfile.id.replace(/^entity:/i, '')
+        : null);
+    if (variant === 'cards' && selfEntityId) {
+      list = list.filter((e) => e.id !== selfEntityId);
+    }
+
     setEntities(list);
-    setLinkedEntity(getLinkedEntityForPromoterWorkspace(userProfile));
+    setLinkedEntity(linked);
   };
 
   useEffect(() => {
@@ -67,7 +104,88 @@ export const AffiliatedEntitiesSection: React.FC<AffiliatedEntitiesSectionProps>
     const onUpdated = () => refreshEntities();
     window.addEventListener('nexus_entities_updated', onUpdated);
     return () => window.removeEventListener('nexus_entities_updated', onUpdated);
-  }, [userProfile?.id, userProfile?.linked_entity_id]);
+  }, [
+    userProfile?.id,
+    userProfile?.linked_entity_id,
+    effectiveProfile?.id,
+    effectiveProfile?.owner_id,
+    effectiveProfile?.linked_entity_id,
+    isOwnProfile,
+    variant,
+  ]);
+
+  if (variant === 'cards') {
+    if (entities.length === 0) return null;
+
+    return (
+      <div className="mt-4 text-left">
+        <div className="flex items-center justify-between mb-2 pb-1 border-b border-zinc-800/80">
+          <span className="text-[10px] font-mono font-black text-amber-300 uppercase tracking-widest flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
+            Public Pages & Entities
+          </span>
+          <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider font-semibold">
+            {entities.length} {entities.length === 1 ? 'Page' : 'Pages'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+          {entities.map((ent) => {
+            const catMeta = ENTITY_CATEGORY_META[ent.category] || ENTITY_CATEGORY_META.festival;
+            const editions = ent.category === 'festival' ? getEditionsForEntity(ent.id) : [];
+            const primaryEdition = editions[0] || null;
+            const lineupCount = primaryEdition ? getLineupForEdition(primaryEdition.id).length : 0;
+            const subtitle =
+              ent.category === 'festival' && editions.length > 0
+                ? `${editions.length} ${editions.length === 1 ? 'Edition' : 'Editions'} • ${lineupCount} Bands`
+                : ent.location || `@${ent.slug}`;
+
+            return (
+              <div
+                key={`ent-mini-${ent.id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openTaggedBandOrEntityProfile(ent, triggerNotification);
+                }}
+                className="p-1.5 sm:p-2 bg-gradient-to-r from-zinc-900/90 to-zinc-950 border border-zinc-800 hover:border-amber-400/80 rounded-lg sm:rounded-xl transition-all cursor-pointer group relative overflow-hidden flex items-center gap-1.5 sm:gap-2.5 shadow-md hover:shadow-amber-950/30 hover:scale-[1.01]"
+              >
+                <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-md sm:rounded-lg bg-zinc-950 border border-zinc-700/60 overflow-hidden shrink-0 group-hover:border-amber-400/80 transition-colors shadow-inner flex items-center justify-center">
+                  {ent.avatar_url ? (
+                    <img
+                      src={ent.avatar_url}
+                      alt={ent.display_name}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <span className="text-sm sm:text-base">{catMeta.icon}</span>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1">
+                    <span className={`text-[7px] sm:text-[8px] font-mono font-black uppercase px-1 sm:px-1.5 py-0.2 rounded border ${catMeta.badgeBg} ${catMeta.badgeText} ${catMeta.badgeBorder}`}>
+                      {catMeta.icon} {catMeta.shortLabel}
+                    </span>
+                  </div>
+                  <h5 className="text-[10px] sm:text-xs font-black text-white group-hover:text-amber-300 truncate tracking-tight mt-0.5 font-display">
+                    {ent.display_name}
+                  </h5>
+                  <p className="text-[7.5px] sm:text-[9px] font-mono text-zinc-400 truncate leading-tight">
+                    {subtitle}
+                  </p>
+                </div>
+
+                <div className="shrink-0 pr-0.5 sm:pr-1 text-zinc-500 group-hover:text-amber-300 transition-colors text-[10px] sm:text-xs font-bold hidden xs:block sm:block">
+                  →
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-3 bg-zinc-950/90 border border-zinc-800/90 rounded-xl p-3.5 space-y-3 text-left">

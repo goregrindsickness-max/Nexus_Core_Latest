@@ -150,7 +150,6 @@ export const MasterAudioUploaderModal: React.FC<MasterAudioUploaderModalProps> =
     }
 
     setUploadQueue(prev => [...prev, ...newItems]);
-    triggerNotification?.(`🎧 Added ${audioFiles.length} track master(s) to catalog queue.`);
   };
 
   // Start upload pipeline for queued items
@@ -292,7 +291,6 @@ export const MasterAudioUploaderModal: React.FC<MasterAudioUploaderModalProps> =
     }
 
     setIsBatchProcessing(false);
-    triggerNotification?.('✨ Audio Master Upload Batch completed successfully!');
   };
 
   const updateQueueItem = (id: string, updates: Partial<UploadItem>) => {

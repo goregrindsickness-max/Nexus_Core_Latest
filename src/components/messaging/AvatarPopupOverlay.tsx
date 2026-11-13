@@ -5,6 +5,7 @@ import { OPEN_AVATAR_POPUP_EVENT, OpenAvatarPopupPayload } from '../../utils/ava
 import { getSupabase } from '../../supabase';
 import { usePinchZoom } from '../../hooks/usePinchZoom';
 import { resolveCommentAvatar, DEFAULT_PERSONAL_AVATAR, MIGUEL_DEFAULT_AVATAR } from '../../utils/bandProfileUtils';
+import { authFetch, getSupabaseAccessToken } from '../../utils/apiConfig';
 
 interface Reaction {
   userId: string;
@@ -110,7 +111,7 @@ export const AvatarPopupOverlay: React.FC = () => {
         } catch (e) {}
       }
 
-      const res = await fetch(`/api/avatar-interactions/${targetId}`);
+      const res = await authFetch(`/api/avatar-interactions/${targetId}`);
       if (res.ok) {
         const data = await res.json();
         const remoteReactions = data.reactions || [];
@@ -167,7 +168,9 @@ export const AvatarPopupOverlay: React.FC = () => {
     });
 
     try {
-      const res = await fetch(`/api/avatar-interactions/${targetId}/react`, {
+      const token = await getSupabaseAccessToken();
+      if (!token) return;
+      const res = await authFetch(`/api/avatar-interactions/${targetId}/react`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -228,7 +231,9 @@ export const AvatarPopupOverlay: React.FC = () => {
 
     try {
       setSubmittingComment(true);
-      const res = await fetch(`/api/avatar-interactions/${targetId}/comment`, {
+      const token = await getSupabaseAccessToken();
+      if (!token) return;
+      const res = await authFetch(`/api/avatar-interactions/${targetId}/comment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

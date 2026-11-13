@@ -74,7 +74,6 @@ export const QuickShortcutsModal: React.FC<QuickShortcutsModalProps> = ({
                 onClick={() => {
                   setActiveTab('new-sale');
                   onClose();
-                  triggerNotification('Launching Live Sales register...');
                 }}
                 className="group flex gap-3 p-2.5 rounded-xl bg-zinc-950/70 border border-zinc-850 hover:border-[#00ffcc]/30 hover:bg-[#00ffcc]/5 text-left transition-all cursor-pointer"
               >
@@ -98,7 +97,6 @@ export const QuickShortcutsModal: React.FC<QuickShortcutsModalProps> = ({
                   setEditingItem(null);
                   setActiveTab('add-item');
                   onClose();
-                  triggerNotification('Creating new custom merch SKU...');
                 }}
                 className="group flex gap-3 p-2.5 rounded-xl bg-zinc-950/70 border border-zinc-850 hover:border-[#00ffcc]/30 hover:bg-[#00ffcc]/5 text-left transition-all cursor-pointer"
               >
@@ -122,7 +120,6 @@ export const QuickShortcutsModal: React.FC<QuickShortcutsModalProps> = ({
                   setPendingOpenShowsForm(true);
                   setActiveTab('shows');
                   onClose();
-                  triggerNotification('Opening Tour date scheduling workspace...');
                 }}
                 className="group flex gap-3 p-2.5 rounded-xl bg-zinc-950/70 border border-zinc-850 hover:border-[#00ffcc]/30 hover:bg-[#00ffcc]/5 text-left transition-all cursor-pointer"
               >

@@ -1565,9 +1565,6 @@ export default function PromoterPortalView({
     setPlannerNotes(ev.original?.notes || ev.original?.additional_notes || '');
     playLocalBeep(650, 'sine', 0.03);
     setActivePortalTab('workspace');
-    if (triggerNotification) {
-      triggerNotification(`Opened Builder Workspace for "${ev.name}"!`);
-    }
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -1747,7 +1744,6 @@ export default function PromoterPortalView({
         if (rawUrl) {
           compressImage(rawUrl, 256, (compressedUrl) => {
             setProfileFormAvatar(compressedUrl);
-            triggerNotification?.('📸 Chosen profile photo optimized successfully.');
           });
         }
       };
@@ -2149,7 +2145,6 @@ export default function PromoterPortalView({
     e.preventDefault();
     setIsUpdatingRegion(true);
     setUserProfile(prev => ({ ...prev, target_region: editingRegion }));
-    triggerNotification?.(`Promoter focus region updated to: ${editingRegion}`);
     setIsUpdatingRegion(false);
   };
 
@@ -2287,7 +2282,6 @@ export default function PromoterPortalView({
       newSet.add(beaconId);
       return newSet;
     });
-    triggerNotification?.("Routing signal dismissed from active dock.");
   };
 
   const handleInitiatePitch = (beacon: RoutingBeacon) => {
@@ -2320,7 +2314,6 @@ export default function PromoterPortalView({
     setFormNotes(`In-App booking proposal submitted in reference to routing signal beacon (Dates: ${beacon.start_date} -> ${beacon.end_date}). Flat guarantee proposal.`);
     
     setActivePortalTab('offers');
-    triggerNotification?.(`Pre-populated offer docket for ${beacon.band_name}!`);
   };
 
   const handleCreateLineup = (e: React.FormEvent) => {
@@ -2526,7 +2519,6 @@ export default function PromoterPortalView({
       setFormSetTime('21:00');
       setFormCurfewTime('23:00');
       setFormNotes("Standard flat-fee booking proposal. Hospitality rider includes standard towels, water, and greenroom amenities.");
-      triggerNotification?.("⚡ 'Club Standard' booking template applied successfully!");
     } else if (type === 'metal') {
       setFormGuarantee('2500');
       setFormAgeLimit('All Ages');
@@ -2535,7 +2527,6 @@ export default function PromoterPortalView({
       setFormSetTime('22:00');
       setFormCurfewTime('00:00');
       setFormNotes("Extreme Metal Package: Flat guarantee. Artist requires standard 4-way monitor mix, 100% compliant local venue backline support (2x Marshall 4x12, Ampeg SVT-810), and direct 15% merchandise buyout arrangement.");
-      triggerNotification?.("⚡ 'Heavy Metal' slot template applied successfully!");
     } else if (type === 'festival_headline') {
       setFormGuarantee('8000');
       setFormAgeLimit('All Ages');
@@ -2544,7 +2535,6 @@ export default function PromoterPortalView({
       setFormSetTime('20:30');
       setFormCurfewTime('23:30');
       setFormNotes("Festival Headline Docket: Premium guarantee. Co-headline billing placement, private dressing suite, 60-slot guest list allocation, production team contact mandatory.");
-      triggerNotification?.("⚡ 'Headline Circuit' template applied successfully!");
     }
   };
 
@@ -2868,7 +2858,6 @@ export default function PromoterPortalView({
                                 onClick={() => {
                                   if (setActiveBandId) {
                                     setActiveBandId(b.id);
-                                    triggerNotification?.(`⚡ Switched active artist context to: "${b.name}"`);
                                   }
                                 }}
                                 className={`w-full flex items-center justify-between p-2 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
@@ -2977,7 +2966,6 @@ export default function PromoterPortalView({
                                   setUserProfile(updated);
                                   try { localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated)); } catch (_) {}
                                   window.dispatchEvent(new CustomEvent('nexus_core_user_profile_updated', { detail: updated }));
-                                  triggerNotification?.(`⚡ Switched to ${portal.name}.`);
                                 }
                               }}
                               className={`w-full flex items-center justify-between p-2 rounded-xl bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 ${portal.theme.hoverBorderClass} text-zinc-400 hover:text-white transition-all cursor-pointer group`}
@@ -3338,7 +3326,6 @@ export default function PromoterPortalView({
                     if (setUserProfile) setUserProfile(updated);
                     localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated));
                     window.dispatchEvent(new CustomEvent('nexus_core_user_profile_updated', { detail: updated }));
-                    triggerNotification?.("⚡ Switched to Band & Artist Operations Workspace.");
                   }}
                   className={`text-[9px] font-mono font-black uppercase tracking-wider px-2 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                     isBandAllowed 
@@ -3380,7 +3367,6 @@ export default function PromoterPortalView({
                     if (setUserProfile) setUserProfile(updated);
                     localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated));
                     window.dispatchEvent(new CustomEvent('nexus_core_user_profile_updated', { detail: updated }));
-                    triggerNotification?.("⚡ Switched to Creative & Crew Workspace.");
                   }}
                   className={`text-[9px] font-mono font-black uppercase tracking-wider px-2 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                     isCreativeAllowed 
@@ -3416,7 +3402,6 @@ export default function PromoterPortalView({
                     if (setUserProfile) setUserProfile(updated);
                     localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated));
                     window.dispatchEvent(new CustomEvent('nexus_core_user_profile_updated', { detail: updated }));
-                    triggerNotification?.("⚡ Switched to Record Label HQ Terminal.");
                   }}
                   className={`text-[9px] font-mono font-black uppercase tracking-wider px-2 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                     isLabelAllowed
@@ -3436,7 +3421,6 @@ export default function PromoterPortalView({
                     if (setUserProfile) {
                       setUserProfile(prev => ({ ...prev, active_workspace: 'fan_only', account_type: 'fan' }));
                     }
-                    triggerNotification?.("⚡ Switched to Fan & Listener Portal.");
                   }}
                   className="col-span-2 text-[9px] font-mono font-black uppercase tracking-wider px-2 py-2 rounded-lg border border-rose-500/35 hover:border-rose-500/60 bg-rose-955/10 hover:bg-rose-950/25 text-rose-300 hover:text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                   title="Switch to active Fan & Listener Portal"
@@ -3675,7 +3659,6 @@ export default function PromoterPortalView({
                   disabled={!isBandAllowed}
                   onClick={() => {
                     setUserProfile(prev => ({ ...prev, active_workspace: 'band', account_type: 'industry pro' }));
-                    triggerNotification?.("⚡ Switched to Band & Artist Operations Workspace.");
                   }}
                   className={`text-[9px] font-mono font-black uppercase tracking-wider px-2.5 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
                     isBandAllowed 
@@ -3710,7 +3693,6 @@ export default function PromoterPortalView({
                         primary_category: 'Artist/Designer'
                       }
                     }));
-                    triggerNotification?.("⚡ Switched to Creative & Crew Workspace.");
                   }}
                   className={`text-[9px] font-mono font-black uppercase tracking-wider px-2.5 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
                     isCreativeAllowed 
@@ -3739,7 +3721,6 @@ export default function PromoterPortalView({
                   disabled={!isLabelAllowed}
                   onClick={() => {
                     setUserProfile(prev => ({ ...prev, active_workspace: 'label', account_type: 'industry pro' }));
-                    triggerNotification?.("⚡ Switched to Record Label HQ Terminal.");
                   }}
                   className={`text-[9px] font-mono font-black uppercase tracking-wider px-2.5 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
                     isLabelAllowed
@@ -3757,7 +3738,6 @@ export default function PromoterPortalView({
                   type="button"
                   onClick={() => {
                     setUserProfile(prev => ({ ...prev, active_workspace: 'fan_only', account_type: 'fan' }));
-                    triggerNotification?.("⚡ Switched to Fan & Listener Portal.");
                   }}
                   className="col-span-2 text-[9px] font-mono font-black uppercase tracking-wider px-2.5 py-2 rounded-xl border border-rose-500/35 hover:border-rose-500/60 bg-rose-955/10 hover:bg-rose-950/25 text-rose-300 hover:text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                   title="Switch to active Fan & Listener Portal"
@@ -5172,7 +5152,6 @@ export default function PromoterPortalView({
 
                             setPlannerLineup(prev => [...prev, newItem]);
                             playLocalBeep(720, 'sine', 0.04);
-                            triggerNotification?.(`Added "${name}" to Day ${plannerAddDay} drafting list.`);
                             setPlannerAddCustomName('');
                           }}
                           className="w-full py-2.5 bg-gradient-to-r from-emerald-950/65 to-emerald-900/80 hover:from-emerald-500 hover:to-[#00ffcc] hover:text-black border border-emerald-500/45 text-emerald-300 font-black text-[9px] uppercase tracking-widest transition-all cursor-pointer rounded-xl h-10 flex items-center justify-center gap-1.5"
@@ -5269,7 +5248,6 @@ export default function PromoterPortalView({
                                       onClick={() => {
                                         setPlannerLineup(prev => prev.filter((_, idx) => idx !== index));
                                         playLocalBeep(300, 'sawtooth', 0.06);
-                                        triggerNotification?.(`Removed "${item.band_name}" from active staging line.`);
                                       }}
                                       className="p-1 px-2 border border-red-950 text-red-400 hover:text-white bg-red-950/20 hover:bg-red-900 rounded transition-all cursor-pointer"
                                       title="Delete from roster"
@@ -5727,7 +5705,6 @@ export default function PromoterPortalView({
                       onClick={() => {
                         setSelectedFrequency(freq);
                         setSelectedSubGenre('ALL');
-                        triggerNotification?.(`Category changed: ${freq}`);
                       }}
                       className={`w-full py-2.5 px-4 rounded-lg border font-bold uppercase transition-all cursor-pointer select-none text-center ${
                         isActive
@@ -5779,7 +5756,6 @@ export default function PromoterPortalView({
                         type="button"
                         onClick={() => {
                           setSelectedSubGenre(mg.id);
-                          triggerNotification?.(`Narrowed focus to micro-genre: ${mg.label}`);
                         }}
                         className={`px-2.5 py-1 rounded bg-zinc-950 hover:bg-zinc-900/80 text-[9px] font-mono uppercase transition-all cursor-pointer whitespace-nowrap border ${
                           isSubActive
@@ -5925,7 +5901,6 @@ export default function PromoterPortalView({
                         onClick={() => {
                           setEditingRegion(ex);
                           setUserProfile(prev => ({ ...prev, target_region: ex }));
-                          triggerNotification?.(`Focus region aligned to ${ex}!`);
                         }}
                         className="px-2 py-0.5 bg-purple-950/40 hover:bg-purple-900/60 border border-purple-900/40 hover:border-[#00ffcc]/60 text-[9px] text-purple-300 hover:text-[#00ffcc] font-mono rounded uppercase transition-all duration-150 cursor-pointer"
                       >
@@ -6052,7 +6027,6 @@ export default function PromoterPortalView({
                     onClick={() => {
                       setEditingRegion('');
                       setUserProfile(prev => ({ ...prev, target_region: '' }));
-                      triggerNotification?.("Focus configuration broadened to global channels!");
                     }}
                     className="px-4 py-2 bg-purple-950/60 text-purple-300 font-mono font-bold uppercase tracking-widest rounded-lg border border-purple-700/60 hover:border-purple-400 hover:text-white text-[9px] transition-all cursor-pointer"
                   >
@@ -6268,7 +6242,6 @@ export default function PromoterPortalView({
                             setFormEventId(lineup.id);
                             setFormVenue(lineup.venue_name);
                             setFormDate(lineup.date);
-                            triggerNotification?.(`Context shifted to adding offers for ${lineup.name}`);
                           }}
                           className="px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:scale-105 transition-transform text-white font-black font-mono text-[9px] uppercase tracking-widest shadow-[0_0_15px_rgba(249,115,22,0.4)] cursor-pointer rounded"
                         >
@@ -6418,7 +6391,6 @@ export default function PromoterPortalView({
                     type="button"
                     onClick={() => {
                       applyBookingTemplate('standard');
-                      triggerNotification?.("Applied Club Standard Template");
                     }}
                     className="p-3 text-left border border-zinc-900 hover:border-purple-500 hover:bg-purple-950/15 rounded-xl transition-all cursor-pointer group"
                   >
@@ -6433,7 +6405,6 @@ export default function PromoterPortalView({
                     type="button"
                     onClick={() => {
                       applyBookingTemplate('metal');
-                      triggerNotification?.("Applied Heavy Metal Special Template");
                     }}
                     className="p-3 text-left border border-zinc-900 hover:border-purple-500 hover:bg-purple-950/15 rounded-xl transition-all cursor-pointer group"
                   >
@@ -6448,7 +6419,6 @@ export default function PromoterPortalView({
                     type="button"
                     onClick={() => {
                       applyBookingTemplate('festival_headline');
-                      triggerNotification?.("Applied Festival Hero Headline Template");
                     }}
                     className="p-3 text-left border border-zinc-900 hover:border-purple-505 hover:bg-purple-950/15 rounded-xl transition-all cursor-pointer group"
                   >
@@ -6525,7 +6495,6 @@ export default function PromoterPortalView({
                         setFormAddress(v.address || '');
                         setFormCity(v.city || '');
                         setFormState(v.state || '');
-                        triggerNotification?.("Injected active venue coordinates into contract worksheet.");
                       } else {
                         triggerNotification?.("No active venue coordinates loaded.");
                       }
@@ -6749,9 +6718,7 @@ export default function PromoterPortalView({
 
             {/* Action Buttons */}
             <div className="w-[343px] flex flex-col gap-2.5 pt-2">
-              <button type="button" onClick={() => {
-                triggerNotification?.("Simulated contract draft saved successfully.");
-              }} className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-mono text-xs py-3.5 rounded-lg cursor-pointer text-center transition-all">
+              <button type="button" onClick={() => {}} className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-mono text-xs py-3.5 rounded-lg cursor-pointer text-center transition-all">
                 [ 💾 SAVE CONTRACT DRAFT ]
               </button>
               <button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-mono font-bold text-xs py-3.5 rounded-lg uppercase tracking-widest transition-all cursor-pointer text-center">
@@ -7296,7 +7263,6 @@ export default function PromoterPortalView({
                             type="button"
                             onClick={() => {
                               setProfileFormAvatar('');
-                              triggerNotification?.('❌ Chosen profile picture cleared.');
                             }}
                             className="px-2.5 py-2 rounded-xl bg-zinc-950/40 border border-zinc-900 text-zinc-400 hover:text-red-400 font-mono text-[10px] transition-colors cursor-pointer"
                             title="Remove current avatar image"
@@ -8145,7 +8111,6 @@ export default function PromoterPortalView({
               <button 
                 onClick={() => {
                   navigator.clipboard.writeText(externalArtistLinkPopup);
-                  triggerNotification?.("Link copied to clipboard!");
                   setExternalArtistLinkPopup(null);
                 }}
                 className="px-4 py-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded hover:bg-emerald-500/40 font-bold text-xs uppercase cursor-pointer transition-colors"

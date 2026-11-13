@@ -468,7 +468,6 @@ export const ArtistManagementModal: React.FC<ArtistManagementModalProps> = ({
                               setActiveBandId(b.id);
                               onClose();
                               addLog(`Switched management client focuses to: ${b?.name} (${b.is_managed_client ? 'TM Mode' : 'Owned Mode'})`);
-                              triggerNotification(`Switched artist: ${b?.name} ${b.is_managed_client ? '(Tour Manager Mode)' : ''}`);
                             }}
                             className="flex items-center gap-3 text-left flex-grow min-w-0 cursor-pointer text-white hover:text-[#00ffcc] group"
                           >

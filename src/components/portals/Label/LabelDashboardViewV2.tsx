@@ -2193,7 +2193,6 @@ export default function LabelDashboardViewV2({
                                     setUserProfile(updated);
                                     try { localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated)); } catch (_) {}
                                     window.dispatchEvent(new CustomEvent('nexus_core_user_profile_updated', { detail: updated }));
-                                    triggerNotification?.(`⚡ Switched to ${portal.name}.`);
                                   }}
                                   className={`w-full flex items-center justify-between p-2 rounded-xl bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 ${portal.hoverBorderClass} text-zinc-400 hover:text-white transition-all cursor-pointer group`}
                                 >

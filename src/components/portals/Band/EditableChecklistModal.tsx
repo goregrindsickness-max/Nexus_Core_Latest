@@ -52,7 +52,6 @@ export default function EditableChecklistModal({
     setActiveItems(prev => [...prev, newItem]);
     setNewItemText('');
     addLog(`Added checklist item: "${trimmed}"`);
-    triggerNotification('Added checklist item');
   };
 
   // Toggle active item completion
@@ -61,7 +60,6 @@ export default function EditableChecklistModal({
       if (item.id === id) {
         const nextState = !item.completed;
         addLog(`Checklist task "${item.text}" set to ${nextState ? 'COMPLETED' : 'REOPENED'}`);
-        triggerNotification(nextState ? 'Task completed' : 'Task reopened');
         return { ...item, completed: nextState };
       }
       return item;
@@ -72,7 +70,6 @@ export default function EditableChecklistModal({
   const handleRemoveActiveItem = (id: string, text: string) => {
     setActiveItems(prev => prev.filter(item => item.id !== id));
     addLog(`Removed checklist item: "${text}"`);
-    triggerNotification('Removed from checklist');
   };
 
   // Start editing active item
@@ -91,7 +88,6 @@ export default function EditableChecklistModal({
     setActiveItems(prev => prev.map(item => item.id === id ? { ...item, text: trimmed } : item));
     setEditingActiveId(null);
     setEditingActiveText('');
-    triggerNotification('Updated checklist item');
   };
 
   // Add current active item to reusable bank
@@ -125,7 +121,6 @@ export default function EditableChecklistModal({
     };
     setActiveItems(prev => [...prev, newItem]);
     addLog(`Restored template item: "${bankItem.text}"`);
-    triggerNotification('Added from bank');
   };
 
   // Add custom item directly to bank
@@ -145,13 +140,11 @@ export default function EditableChecklistModal({
     };
     setBankItems(prev => [...prev, newBankItem]);
     setNewBankText('');
-    triggerNotification('Added directly to templates bank');
   };
 
   // Delete item from bank
-  const handleRemoveBankItem = (id: string, text: string) => {
+  const handleRemoveBankItem = (id: string, _text: string) => {
     setBankItems(prev => prev.filter(item => item.id !== id));
-    triggerNotification('Removed template');
   };
 
   // Start editing bank item
@@ -170,7 +163,6 @@ export default function EditableChecklistModal({
     setBankItems(prev => prev.map(item => item.id === id ? { ...item, text: trimmed } : item));
     setEditingBankId(null);
     setEditingBankText('');
-    triggerNotification('Updated template item');
   };
 
   // Reset active tasks back to the template defaults

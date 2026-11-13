@@ -430,7 +430,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                             bio: bandBio
                           };
                           window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
-                          triggerNotification?.("⚡ Opening Band Public Profile...");
                           return;
                         }
 
@@ -478,7 +477,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                             promoter_metadata: pm
                           };
                           window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
-                          triggerNotification?.("⚡ Opening Promoter Public Profile...");
                           return;
                         }
 
@@ -517,7 +515,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                             creative_metadata: (userProfile as any)?.creative_metadata || {}
                           };
                           window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
-                          triggerNotification?.("⚡ Opening Creative Public Profile...");
                           return;
                         }
 
@@ -554,7 +551,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                             label_metadata: (userProfile as any)?.label_metadata || {}
                           };
                           window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
-                          triggerNotification?.("⚡ Opening Label Public Profile...");
                           return;
                         }
 
@@ -594,7 +590,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                         };
 
                         window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
-                        triggerNotification?.("⚡ Opening your public profile card...");
                       }}
                       className="w-full flex items-center justify-center gap-1.5 bg-[#3b0b6c] hover:bg-[#4c0d8a] text-white py-1.5 rounded-lg text-[10px] font-bold tracking-widest uppercase transition-colors mb-2 shadow-md shadow-purple-900/20 cursor-pointer"
                     >
@@ -627,7 +622,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                               if (supabase && userProfile?.id) {
                                 await supabase.from('profiles').update({ active_workspace: 'industry_pro', account_type: 'industry pro' }).eq('id', userProfile.id);
                               }
-                              triggerNotification?.('Switched to Industry Pro Workspace');
                             }}
                             className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all ${
                               isIndustry
@@ -681,7 +675,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                               if (supabase && userProfile?.id) {
                                 await supabase.from('profiles').update({ active_workspace: 'fan_only', account_type: 'fan' }).eq('id', userProfile.id);
                               }
-                              triggerNotification?.('Switched to Fan Zone');
                             }}
                             className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all ${
                               isActive
@@ -715,7 +708,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                           <button
                             onClick={async () => {
                               if (!bandAllowed) {
-                                triggerNotification?.('Redirecting to Band Workspace Registration...');
                                 if (typeof window !== 'undefined') {
                                   localStorage.setItem('nexus_target_register_workspace', 'BAND');
                                 }
@@ -738,7 +730,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                               if (supabase && userProfile?.id) {
                                 await supabase.from('profiles').update({ active_workspace: 'band', account_type: 'industry pro' }).eq('id', userProfile.id);
                               }
-                              triggerNotification?.('Switched to Band / Artist Workspace');
                             }}
                             className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all ${
                               isActive
@@ -776,7 +767,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                           <button
                             onClick={async () => {
                               if (!promoterAllowed) {
-                                triggerNotification?.('Redirecting to Promoter Workspace Registration...');
                                 if (typeof window !== 'undefined') {
                                   localStorage.setItem('nexus_target_register_workspace', 'PROMOTER');
                                 }
@@ -797,7 +787,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                               if (supabase && userProfile?.id) {
                                 await supabase.from('profiles').update({ active_workspace: 'promoter', account_type: 'industry pro' }).eq('id', userProfile.id);
                               }
-                              triggerNotification?.('Switched to Venue Promoter Gateway');
                             }}
                             className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all ${
                               isActive
@@ -835,7 +824,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                           <button
                             onClick={async () => {
                               if (!creativeAllowed) {
-                                triggerNotification?.('Redirecting to Creative Workspace Registration...');
                                 if (typeof window !== 'undefined') {
                                   localStorage.setItem('nexus_target_register_workspace', 'CREATIVE');
                                 }
@@ -858,7 +846,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                               if (supabase && userProfile?.id) {
                                 await supabase.from('profiles').update({ active_workspace: 'creative', account_type: 'creative' }).eq('id', userProfile.id);
                               }
-                              triggerNotification?.('Switched to Creative Hub');
                             }}
                             className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all ${
                               isActive
@@ -896,7 +883,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                           <button
                             onClick={async () => {
                               if (!labelAllowed) {
-                                triggerNotification?.('Redirecting to Label Workspace Registration...');
                                 if (typeof window !== 'undefined') {
                                   localStorage.setItem('nexus_target_register_workspace', 'LABEL');
                                 }
@@ -917,7 +903,6 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
                               if (supabase && userProfile?.id) {
                                 await supabase.from('profiles').update({ active_workspace: 'label', account_type: 'industry pro' }).eq('id', userProfile.id);
                               }
-                              triggerNotification?.('Switched to Record Label Console');
                             }}
                             className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all ${
                               isActive

@@ -1,4 +1,5 @@
 import { getRawSupabase, rawClient, getSupabase, ensureValidSupabaseAuthSession } from './clientService';
+import { authFetch, getSupabaseAccessToken } from '../utils/apiConfig';
 
 /**
  * Strips EXIF coordinates/camera tags by drawing onto 2D canvas,
@@ -1005,8 +1006,8 @@ export async function uploadClipVideoFile(
         });
       }
 
-      if (base64String) {
-        const response = await fetch('/api/upload', {
+      if (base64String && (await getSupabaseAccessToken())) {
+        const response = await authFetch('/api/upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

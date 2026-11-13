@@ -139,7 +139,6 @@ export const SubmitBandToPromoterModal: React.FC<SubmitBandToPromoterModalProps>
       attachedBandId: userBandData.id,
       isBandProfileAttached: true
     }));
-    triggerNotification?.(`⚡ Attached active band profile: ${userBandData.band_name || userBandData.name}`);
   };
 
   const handleDetachBandProfile = () => {

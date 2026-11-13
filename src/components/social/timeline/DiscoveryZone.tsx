@@ -350,6 +350,10 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
 
   // Real-time synchronization of follow state across all components and portals
   useEffect(() => {
+    setLocalFollowedMap({});
+  }, [currentUserId]);
+
+  useEffect(() => {
     const handleGlobalFollowUpdate = (e: Event) => {
       const detail = (e as CustomEvent)?.detail;
       if (detail && detail.keys && Array.isArray(detail.keys)) {

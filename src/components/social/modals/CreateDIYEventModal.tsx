@@ -98,18 +98,15 @@ export const CreateDIYEventModal: React.FC<CreateDIYEventModalProps> = ({
         triggerNotification?.('⚠️ Flyer photo exceeds 10MB limit.');
         return;
       }
-      triggerNotification?.('⏳ Processing event flyer...');
       const reader = new FileReader();
       reader.onload = async () => {
         try {
           const base64 = reader.result as string;
           const compressed = await compressImageInSocialFeed(base64, 1024, 1024, 0.8);
           setEventFlyerUrl(compressed);
-          triggerNotification?.('✅ Event flyer uploaded from device!');
         } catch (err) {
           console.error('Flyer compression error:', err);
           setEventFlyerUrl(reader.result as string);
-          triggerNotification?.('✅ Event flyer uploaded!');
         }
       };
       reader.readAsDataURL(file);
@@ -125,7 +122,6 @@ export const CreateDIYEventModal: React.FC<CreateDIYEventModalProps> = ({
       return;
     }
     if (onSaveEvent) onSaveEvent();
-    triggerNotification?.('🎉 DIY Event attached to your post!');
     onClose();
   };
 

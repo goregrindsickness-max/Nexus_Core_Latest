@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { safeSetLocalStorageItem } from '../utils/safeStorage';
+import { authFetch, isClientAdmin } from '../utils/apiConfig';
 import { 
   User, 
   Mail, 
@@ -932,7 +933,7 @@ export default function SettingsView({
     }
 
     try {
-      const response = await fetch('/api/emails/invite', {
+      const response = await authFetch('/api/emails/invite', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -1028,8 +1029,9 @@ export default function SettingsView({
   } | null>(null);
 
   const fetchEmailLogs = async () => {
+    if (!isClientAdmin(userProfile)) return;
     try {
-      const res = await fetch('/api/emails/dispatch-logs');
+      const res = await authFetch('/api/emails/dispatch-logs');
       if (res.ok) {
         const data = await res.json();
         setLiveEmailLogs(data.logs || []);
@@ -1040,8 +1042,9 @@ export default function SettingsView({
   };
 
   const fetchEmailDiagnostics = async () => {
+    if (!isClientAdmin(userProfile)) return;
     try {
-      const res = await fetch('/api/emails/test-connectivity');
+      const res = await authFetch('/api/emails/test-connectivity');
       if (res.ok) {
         const data = await res.json();
         setDiagnosticKeyInfo(data);
@@ -1065,10 +1068,12 @@ export default function SettingsView({
     }
   };
 
-  // Run on mount or tab activation
+  // Run on mount or when userProfile resolves
   useEffect(() => {
-    fetchEmailDiagnostics();
-  }, []);
+    if (isClientAdmin(userProfile)) {
+      fetchEmailDiagnostics();
+    }
+  }, [userProfile?.id, userProfile?.email]);
 
   const handleSendDiagnosticTest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1081,7 +1086,7 @@ export default function SettingsView({
     setDiagnosticResult(null);
 
     try {
-      const response = await fetch('/api/emails/send-test', {
+      const response = await authFetch('/api/emails/send-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

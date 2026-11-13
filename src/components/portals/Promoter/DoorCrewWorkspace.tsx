@@ -149,7 +149,6 @@ export default function DoorCrewWorkspace({
           <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">NETWORK: SECURE</span>
           <button 
             onClick={() => {
-              triggerNotification('🔄 Syncing local ticket database...');
               playLocalBeep(880, 'sine', 0.1);
             }}
             className="bg-emerald-950/40 text-emerald-500 border border-emerald-900 hover:bg-emerald-900/50 text-xs font-mono font-bold px-4 py-1.5 rounded transition-colors flex items-center gap-2 cursor-pointer"
@@ -200,7 +199,6 @@ export default function DoorCrewWorkspace({
               onClick={() => {
                 setCameraActive(!cameraActive);
                 playLocalBeep(cameraActive ? 330 : 660, 'square', 0.1);
-                triggerNotification(cameraActive ? '📷 Camera scanner disabled.' : '📷 Camera scanner activated.');
               }}
               className="w-full bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-mono py-2 rounded-md font-bold transition-all hover:bg-zinc-800 cursor-pointer"
             >
@@ -211,7 +209,6 @@ export default function DoorCrewWorkspace({
                 hiddenInputRef.current?.focus();
                 setBluetoothScanning(true);
                 setTimeout(() => setBluetoothScanning(false), 1500);
-                triggerNotification('🔊 Bluetooth scanner ready. Waiting for input...');
                 playLocalBeep(880, 'sine', 0.1);
               }}
               className="w-full bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-mono py-2 rounded-md font-bold transition-all hover:bg-zinc-800 cursor-pointer"

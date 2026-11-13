@@ -286,31 +286,34 @@ export function useGlobalDataSync({
       // Push to Supabase if online
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
-        mutations.forEach(m => {
-          const prunedDbShow = sanitizeShowForDb(m);
-          if (!prunedDbShow.creator_id) {
-            prunedDbShow.creator_id = '24523979-7f72-422b-8fb6-85634345d81c';
-          }
-          if (!prunedDbShow.status || (prunedDbShow.status !== 'Active' && prunedDbShow.status !== 'Cancelled')) {
-            prunedDbShow.status = 'Active';
-          }
-          if (!prunedDbShow.city) {
-            prunedDbShow.city = 'Tour City';
-          }
-          if (!prunedDbShow.state_province) {
-            prunedDbShow.state_province = 'USA';
-          }
-          if (!prunedDbShow.id || prunedDbShow.id.length !== 36) {
-            const hexId = String(prunedDbShow.id || '').replace(/[^a-f0-9]/gi, '').padEnd(32, '0').slice(0, 32);
-            prunedDbShow.id = hexId.slice(0, 8) + '-' + hexId.slice(8, 12) + '-4' + hexId.slice(13, 16) + '-a' + hexId.slice(17, 20) + '-' + hexId.slice(20, 32);
-          }
-
-          supabase.from('shows').upsert(prunedDbShow, { onConflict: 'id' }).then(({ error }) => {
-            if (error) {
-              console.warn('Failed to sync show to Supabase:', error.message);
+        supabase.auth.getUser().then(({ data: authData }) => {
+          const activeAuthId = authData?.user?.id;
+          mutations.forEach(m => {
+            const prunedDbShow = sanitizeShowForDb(m);
+            if (!prunedDbShow.creator_id && activeAuthId) {
+              prunedDbShow.creator_id = activeAuthId;
             }
+            if (!prunedDbShow.status || (prunedDbShow.status !== 'Active' && prunedDbShow.status !== 'Cancelled')) {
+              prunedDbShow.status = 'Active';
+            }
+            if (!prunedDbShow.city) {
+              prunedDbShow.city = 'Tour City';
+            }
+            if (!prunedDbShow.state_province) {
+              prunedDbShow.state_province = 'USA';
+            }
+            if (!prunedDbShow.id || prunedDbShow.id.length !== 36) {
+              const hexId = String(prunedDbShow.id || '').replace(/[^a-f0-9]/gi, '').padEnd(32, '0').slice(0, 32);
+              prunedDbShow.id = hexId.slice(0, 8) + '-' + hexId.slice(8, 12) + '-4' + hexId.slice(13, 16) + '-a' + hexId.slice(17, 20) + '-' + hexId.slice(20, 32);
+            }
+
+            supabase.from('shows').upsert(prunedDbShow, { onConflict: 'id' }).then(({ error }) => {
+              if (error) {
+                console.warn('Failed to sync show to Supabase:', error.message);
+              }
+            });
           });
-        });
+        }).catch(() => {});
       }
       return updated;
     });

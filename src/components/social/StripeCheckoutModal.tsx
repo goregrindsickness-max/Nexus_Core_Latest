@@ -28,6 +28,7 @@ import { getStoredWallets, processWalletPayment, selectWalletCard, UserWalletsSt
 import { WalletOAuthModal } from './modals/WalletOAuthModal';
 import { supabase } from '../../lib/supabaseClient';
 import { pushManager } from '../../lib/pushNotifications';
+import { authFetch } from '../../utils/apiConfig';
 
 const stripePublicKey = (import.meta.env.VITE_STRIPE_PUBLIC_KEY || '').trim();
 const isRealStripeKey = typeof stripePublicKey === 'string' && stripePublicKey.startsWith('pk_') && !stripePublicKey.includes('placeholder');
@@ -272,7 +273,7 @@ export function StripeCheckoutModal({
             image: rawItem?.thumbnail || rawItem?.image || post?.merchData?.thumbnail || post?.image_url,
           };
 
-          const response = await fetch('/api/payments/create-cart-checkout', {
+          const response = await authFetch('/api/payments/create-cart-checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

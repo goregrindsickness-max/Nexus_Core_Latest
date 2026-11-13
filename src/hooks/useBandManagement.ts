@@ -179,7 +179,6 @@ export function useBandManagement({
         compressLogoImage(dataUrl, 400, async (compressedUrl) => {
           try {
             const bandIdToUse = activeBand?.id || 'band';
-            triggerNotification?.('⏳ Storing logo in community-bands bucket...');
             const publicUrl = await uploadCommunityBandMedia(compressedUrl, bandIdToUse, 'logo');
             if (publicUrl && !publicUrl.startsWith('data:')) {
               setBandLogoUrl(publicUrl);
@@ -199,7 +198,6 @@ export function useBandManagement({
               if (activeBand?.id) {
                 await upsertBandToDatabase(updated);
               }
-              triggerNotification?.('✨ Band logo stored in community-bands bucket & synced!');
             } else {
               triggerNotification?.('⚠️ Failed to store logo.');
             }
@@ -225,7 +223,6 @@ export function useBandManagement({
         compressLogoImage(dataUrl, 1000, async (compressedUrl) => {
           try {
             const bandIdToUse = activeBand?.id || 'band';
-            triggerNotification?.('⏳ Storing cover banner in community-bands bucket...');
             const publicUrl = await uploadCommunityBandMedia(compressedUrl, bandIdToUse, 'cover');
             if (publicUrl && !publicUrl.startsWith('data:')) {
               setBandCoverUrl(publicUrl);
@@ -235,7 +232,6 @@ export function useBandManagement({
               if (activeBand?.id) {
                 await upsertBandToDatabase(updated);
               }
-              triggerNotification?.('✨ Band cover banner stored in community-bands bucket & synced!');
             } else {
               triggerNotification?.('⚠️ Failed to store cover banner in community-bands bucket.');
             }
@@ -258,10 +254,8 @@ export function useBandManagement({
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string;
       if (dataUrl) {
-        triggerNotification?.('Compressing logo image...');
         compressLogoImage(dataUrl, 400, async (compressedUrl) => {
           try {
-            triggerNotification?.('⏳ Storing logo in community-bands bucket...');
             const userProfileId = userProfile?.id || editingBand?.creator_id || 'profile_anonymous';
             const publicUrl = await uploadBase64ToStorage(compressedUrl, 'community-bands', userProfileId, 'band-logo');
             const finalLogo = (publicUrl && !publicUrl.startsWith('data:')) ? publicUrl : publicUrl;
@@ -272,7 +266,6 @@ export function useBandManagement({
               setNewBandForm(prev => ({ ...prev, logo_url: finalLogo }));
               setCustomLogoPreset(-1); // Deselect preset
             }
-            triggerNotification?.('✨ Band logo uploaded and stored in community-bands bucket!');
           } catch (err) {
             console.error('Failed to upload logo:', err);
             triggerNotification?.('⚠️ Failed to upload logo.');
@@ -331,7 +324,6 @@ export function useBandManagement({
     }
 
     addLog?.(`Updated details for managed artist: ${editName.trim()}`);
-    triggerNotification?.(`Updated profile: ${editName.trim()}`);
     setEditingBand?.(null);
   };
 

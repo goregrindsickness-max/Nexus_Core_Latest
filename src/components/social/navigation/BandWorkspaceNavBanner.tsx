@@ -73,12 +73,10 @@ export function BandWorkspaceNavBanner({
       if (typeof window !== 'undefined') {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
-      triggerNotification?.('✨ Scene Social Feed is currently active');
       return;
     }
 
     if (itemId === 'STUDIO') {
-      triggerNotification?.('🎙️ Switching to Studio Workspace...');
       if (onNavigateToTab) {
         onNavigateToTab('studio');
       } else if (setActiveTab) {
@@ -90,7 +88,6 @@ export function BandWorkspaceNavBanner({
     }
 
     // EVENTS, SALES, MERCH, FINANCE, SETTINGS
-    triggerNotification?.(`⚡ Switching to Band ${itemId} Workspace...`);
     if (setDashboardV2ActiveNav) {
       setDashboardV2ActiveNav(itemId as any);
     }

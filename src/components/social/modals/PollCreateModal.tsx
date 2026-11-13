@@ -281,7 +281,6 @@ export const PollCreateModal: React.FC<PollCreateModalProps> = ({
                     return;
                   }
                   onClose();
-                  triggerNotification?.("Poll draft saved. Click Post to publish.");
                 }}
                 className={`flex-1 font-black text-xs uppercase tracking-widest py-2.5 rounded-lg shadow-lg transition-colors cursor-pointer ${
                   pollVariant === 'encore_setlist'

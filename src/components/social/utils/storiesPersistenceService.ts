@@ -1,6 +1,7 @@
 import { getSupabase } from '../../../supabase';
 import { uploadStoryMediaToStorage } from '../../../services/storageService';
 import { mockStories } from '../../../data/socialFeedMockData';
+import { authFetch, getSupabaseAccessToken } from '../../../utils/apiConfig';
 
 export interface StoryItem {
   id: string;
@@ -147,7 +148,7 @@ export async function fetchAuthoritativeStories(force = false): Promise<StoryIte
 
     // 1. Try Express backend endpoint
     try {
-      const res = await fetch('/api/stories');
+      const res = await authFetch('/api/stories');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -272,7 +273,8 @@ export async function uploadMediaToCloudStorage(
   // 3. Try /api/upload endpoint
   if (typeof media === 'string' && media.startsWith('data:')) {
     try {
-      const res = await fetch('/api/upload', {
+      if (await getSupabaseAccessToken()) {
+        const res = await authFetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -282,9 +284,10 @@ export async function uploadMediaToCloudStorage(
           fileNameToken: `story_${type}`,
         }),
       });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.publicUrl) return json.publicUrl;
+        if (res.ok) {
+          const json = await res.json();
+          if (json.publicUrl) return json.publicUrl;
+        }
       }
     } catch (e) {
       console.warn('[StoriesService] /api/upload failed:', e);
@@ -337,11 +340,13 @@ export async function publishStoryAuthoritative(
 
   // 1. Send to Express backend API
   try {
-    await fetch('/api/stories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(finalStory),
-    });
+    if (await getSupabaseAccessToken()) {
+      await authFetch('/api/stories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalStory),
+      });
+    }
   } catch (err) {
     console.warn('[StoriesService] Failed to post to /api/stories:', err);
   }
@@ -486,11 +491,13 @@ export async function syncLocalStoriesToCloud(): Promise<StoryItem[]> {
 
       // Post to /api/stories
       try {
-        await fetch('/api/stories', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedStory),
-        });
+        if (await getSupabaseAccessToken()) {
+          await authFetch('/api/stories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedStory),
+          });
+        }
       } catch (_) {}
 
       syncedStories.push(updatedStory);

@@ -529,7 +529,6 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
           title: newTitle
         });
       }
-      triggerNotification?.('Tour package title updated.');
     }
     setIsEditingTitle(false);
   };
@@ -545,7 +544,6 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       setClientBandName(selected.headlinerClientName);
       setPublicationStatus(selected.publicationStatus);
       setEmbargoUntilDate(selected.embargoUntilDate || '2026-10-01T10:00');
-      triggerNotification?.(`Switched active workspace to: "${selected.title}"`);
       addLog?.(`TM Workspace: switched to "${selected.title}"`);
     }
     setIsTourSwitcherOpen(false);
@@ -650,7 +648,6 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       return prevBands;
     });
 
-    triggerNotification?.(`👑 Selected ${cleanName} as Headliner & Client.`);
     addLog?.(`TM Mode: Selected ${cleanName} as active client / tour headliner.`);
     setIsSelectClientModal(false);
   };
@@ -672,7 +669,6 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
     const rest = updated.filter(b => b.id !== bandId);
     setBands([headliner, ...rest]);
 
-    triggerNotification?.(`👑 ${target.name} is now the Headliner & Client!`);
     addLog?.(`TM Mode: Promoted ${target.name} to Headliner & Client.`);
   };
 
@@ -719,7 +715,6 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       setBands([...bands, newBand]);
     }
 
-    triggerNotification?.(`Added ${newBand.name} to the tour package billing!`);
     addLog?.(`TM Mode: Added ${newBand.name} (${newBand.role}) to one-off package.`);
     setIsAddingBandModal(false);
 
@@ -743,7 +738,6 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
 
   const handleRemoveBand = (id: string, name: string) => {
     setBands(bands.filter(b => b.id !== id));
-    triggerNotification?.(`Removed ${name} from package.`);
     addLog?.(`TM Mode: Removed ${name} from tour package.`);
   };
 
@@ -764,7 +758,6 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
           parkingNotes: newStopParking.trim()
         });
         linkedBbId = saved.id;
-        triggerNotification?.(`Added "${newStopVenue.trim()}" to Black Book Rolodex!`);
       }
     }
 
@@ -795,7 +788,6 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
     const updated = [...stops, newStop].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     setStops(updated);
     setSelectedStopId(newStop.id);
-    triggerNotification?.(`Added ${newStop.venueName} (${newStop.city}) to tour route!`);
     addLog?.(`TM Mode: Added ${newStop.venueName} routing stop.`);
     setIsAddingStopModal(false);
 
@@ -815,18 +807,15 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
     const updated = [...stops, newStop].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     setStops(updated);
     setSelectedStopId(newStop.id);
-    triggerNotification?.(`Added ${newStop.venueName} (${newStop.city}) to tour route!`);
     addLog?.(`TM Mode: Added ${newStop.venueName} routing stop.`);
   };
 
-  const handleRemoveStop = (id: string, venue: string) => {
+  const handleRemoveStop = (id: string, _venue: string) => {
     setStops(stops.filter(s => s.id !== id));
-    triggerNotification?.(`Removed ${venue} from route.`);
   };
 
   const handleToggleAdvancing = (id: string) => {
     setStops(stops.map(s => s.id === id ? { ...s, advancingDone: !s.advancingDone } : s));
-    triggerNotification?.('Advancing checklist status updated.');
   };
 
   // Complete editability handlers
@@ -835,7 +824,6 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
     if (updatedBand.role === 'headliner') {
       setClientBandName(updatedBand.name);
     }
-    triggerNotification?.(`Updated details for ${updatedBand.name}.`);
     addLog?.(`TM Mode: Updated details for ${updatedBand.name}.`);
   };
 
@@ -860,7 +848,6 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       }
       return nextStops;
     });
-    triggerNotification?.(`Updated stop details for ${updatedStop.venueName}.`);
     addLog?.(`TM Mode: Updated stop ${updatedStop.venueName}.`);
   };
 
@@ -871,43 +858,36 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
       id: `veh-${Date.now()}`
     };
     setVehicles(prev => [...prev, created]);
-    triggerNotification?.(`Added ${created.name} to tour fleet.`);
     addLog?.(`TM Mode: Added vehicle ${created.name}.`);
   };
 
   const handleUpdateVehicle = (updatedVeh: TourVehicle) => {
     setVehicles(prev => prev.map(v => v.id === updatedVeh.id ? updatedVeh : v));
-    triggerNotification?.(`Updated vehicle ${updatedVeh.name}.`);
     addLog?.(`TM Mode: Updated vehicle ${updatedVeh.name}.`);
   };
 
   const handleDeleteVehicle = (id: string, name: string) => {
     setVehicles(prev => prev.filter(v => v.id !== id));
-    triggerNotification?.(`Removed ${name} from tour fleet.`);
     addLog?.(`TM Mode: Removed vehicle ${name}.`);
   };
 
   // Backline & splits handlers
   const handleUpdateBacklineConfig = (newCfg: SharedBacklineConfig) => {
     setBacklineConfig(newCfg);
-    triggerNotification?.('Updated shared backline and cargo trailer setup.');
     addLog?.(`TM Mode: Updated shared backline config.`);
   };
 
   const handleUpdateBandGearNotes = (bandId: string, notes: string) => {
     setBands(prev => prev.map(b => b.id === bandId ? { ...b, sharedGearNotes: notes } : b));
-    triggerNotification?.('Updated band gear agreement notes.');
   };
 
   const handleUpdateBandSplits = (updatedBands: TourPackageBand[]) => {
     setBands(updatedBands);
-    triggerNotification?.('Updated deals, splits and nightly guarantees.');
     addLog?.(`TM Mode: Adjusted package splits and guarantees.`);
   };
 
   const handleUpdateStopDeal = (stopId: string, grossDeal: number) => {
     setStops(prev => prev.map(s => s.id === stopId ? { ...s, grossDeal } : s));
-    triggerNotification?.('Updated show gross deal amount.');
   };
 
   const activeStop = stops.find(s => s.id === selectedStopId) || stops[0];
@@ -955,7 +935,6 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
   const handleCopyDaySheet = (stop: TourPackageStop) => {
     const text = generateFormattedDaySheetText(stop);
     navigator.clipboard.writeText(text);
-    triggerNotification?.(`📋 Copied Day Sheet for ${stop.venueName} to clipboard!`);
     addLog?.(`TM Mode: Copied Day Sheet for ${stop.venueName}.`);
   };
 
@@ -2005,7 +1984,6 @@ export const TourManagerPackageModule: React.FC<TourManagerPackageModuleProps> =
                             if (v.fullAddress) setNewStopParking(`Address: ${v.fullAddress}`);
                             setNewStopSuggestions([]);
                             setNewStopSearchQuery('');
-                            triggerNotification?.(`Inserted "${v.name}" from Black Book!`);
                           }}
                           className="p-1.5 rounded-lg bg-zinc-950 hover:bg-amber-950/50 border border-zinc-800 hover:border-amber-500/40 cursor-pointer flex items-center justify-between transition-colors"
                         >

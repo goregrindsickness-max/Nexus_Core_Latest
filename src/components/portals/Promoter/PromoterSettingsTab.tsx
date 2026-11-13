@@ -16,6 +16,8 @@ import BillingSettingsView from '../../BillingSettingsView';
 import StripeConnectPayoutSection from '../../StripeConnectPayoutSection';
 import { getSupabase, uploadBase64ToStorage, executeWithSchemaResilience } from '../../../supabase';
 import { GENRE_CLUSTERS } from '../../auth/authConstants';
+import { AffiliatedEntitiesSection } from '../../social/cards/AffiliatedEntitiesSection';
+import { authFetch } from '../../../utils/apiConfig';
 
 // Helper to compress uploaded images to avoid LocalStorage quota overflow
 function compressImage(base64Str: string, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<string> {
@@ -1689,6 +1691,25 @@ export default function PromoterSettingsTab({
             </div>
           </V2ExpandableCard>
 
+          {/* 5b. ACCORDION TAB: Public Pages & Festival Entities */}
+          <V2ExpandableCard
+            theme="yellow"
+            title="Public Pages & Festival Entities"
+            isExpanded={expandedSection === 'public_entities'}
+            onToggle={() => toggleSection('public_entities')}
+          >
+            <div className="p-5 text-left">
+              <AffiliatedEntitiesSection
+                variant="manage"
+                userProfile={userProfile}
+                setUserProfile={setUserProfile}
+                isOwnProfile={true}
+                showPromoterWorkspacePointer={true}
+                triggerNotification={showLocalToast}
+              />
+            </div>
+          </V2ExpandableCard>
+
           {/* 6. ACCORDION TAB: Payout Accounts */}
           <V2ExpandableCard 
             theme="yellow" 
@@ -1776,7 +1797,7 @@ export default function PromoterSettingsTab({
                       onClick={async () => {
                         setIsConnectingPaypal(true);
                         try {
-                          const response = await fetch('/api/auth/paypal/url');
+                          const response = await authFetch('/api/auth/paypal/url');
                           if (!response.ok) throw new Error('Failed to fetch PayPal auth URL');
                           const { url } = await response.json();
                           const width = 600, height = 700;

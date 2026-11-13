@@ -1,6 +1,7 @@
 import { PushNotifications } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
+import { authFetch, getSupabaseAccessToken } from '../utils/apiConfig';
 
 export const ANDROID_CHANNEL_ID = 'nexus_alerts';
 
@@ -149,18 +150,21 @@ export async function registerNotificationsOnStartup(): Promise<void> {
           localStorage.setItem('nexus_native_push_token', token.value);
           localStorage.setItem('nexus_native_permission', 'granted');
 
-          // Send token to server
+          // Send token to server when user session is active (pre-login tokens are synced on login)
           try {
-            await fetch('/api/push/subscribe', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                token: token.value,
-                platform: 'android',
-                userId: localStorage.getItem('nexus_auth_user_id') || undefined,
-                userEmail: localStorage.getItem('nexus_auth_user_email') || undefined,
-              }),
-            });
+            const accessToken = await getSupabaseAccessToken();
+            if (accessToken) {
+              await authFetch('/api/push/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  token: token.value,
+                  platform: 'android',
+                  userId: localStorage.getItem('nexus_auth_user_id') || undefined,
+                  userEmail: localStorage.getItem('nexus_auth_user_email') || undefined,
+                }),
+              });
+            }
           } catch (e) {
             console.warn('[NativePush] Token sync notice:', e);
           }

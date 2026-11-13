@@ -6,6 +6,7 @@ import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { triggerNativeNotification, initAndroidNotificationChannel } from '../services/pushNotificationService';
+import { authFetch, getSupabaseAccessToken } from '../utils/apiConfig';
 
 export type WorkspaceType = 'industry_pro' | 'fan_only' | 'band' | 'promoter' | 'label' | 'creative' | 'fan';
 
@@ -461,13 +462,32 @@ class DevicePushManager {
     });
   }
 
-  public async subscribeToPushServer(userInfo?: { id?: string; email?: string }): Promise<PushSubscription | null> {
+  public async subscribeToPushServer(userInfo?: { id?: string; email?: string; sendWelcome?: boolean }): Promise<PushSubscription | null> {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
       return null;
     }
 
     try {
+      let resolvedId = userInfo?.id;
+      let resolvedEmail = userInfo?.email;
+      try {
+        if (!resolvedId) resolvedId = localStorage.getItem('nexus_auth_user_id') || undefined;
+        if (!resolvedEmail) resolvedEmail = localStorage.getItem('nexus_auth_user_email') || undefined;
+        if (!resolvedId || !resolvedEmail) {
+          const savedProf = localStorage.getItem('nexus_core_user_profile') || localStorage.getItem('nexus_user');
+          if (savedProf) {
+            const parsed = JSON.parse(savedProf);
+            if (!resolvedId && parsed?.id) resolvedId = parsed.id;
+            if (!resolvedEmail && parsed?.email) resolvedEmail = parsed.email;
+          }
+        }
+      } catch (_) {}
+
       let reg = this.registration;
+      if (!reg) {
+        reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        this.registration = reg;
+      }
       if (!reg) {
         reg = await navigator.serviceWorker.ready;
         this.registration = reg;
@@ -476,7 +496,7 @@ class DevicePushManager {
       // 1. Obtain VAPID Public Key from backend API or fallback
       let publicKey = 'BFtYUwYxD4nggBN6jldwPmQ-rM209n3Cqom0TYLxoksAambfhk5PzDZ-0-FppflHkjW4P6tlvTsOnnl1kVlitiQ';
       try {
-        const res = await fetch('/api/push/vapid-public-key');
+        const res = await authFetch('/api/push/vapid-public-key');
         if (res.ok) {
           const data = await res.json();
           if (data.publicKey) publicKey = data.publicKey;
@@ -485,9 +505,23 @@ class DevicePushManager {
         console.warn('[PushManager] VAPID fetch error, using default:', err);
       }
 
-      // 2. Subscribe browser to Push Service
+      // 2. Subscribe browser to Push Service (and refresh if server VAPID key changed)
       const convertedKey = urlBase64ToUint8Array(publicKey);
       let sub = await reg.pushManager.getSubscription();
+      if (sub && sub.options?.applicationServerKey) {
+        try {
+          const existingKey = new Uint8Array(sub.options.applicationServerKey);
+          const keysMatch =
+            existingKey.length === convertedKey.length &&
+            existingKey.every((byte, idx) => byte === convertedKey[idx]);
+          if (!keysMatch) {
+            console.log('[PushManager] Server VAPID key changed; refreshing browser push subscription.');
+            await sub.unsubscribe();
+            sub = null;
+          }
+        } catch (_) {}
+      }
+
       if (!sub) {
         sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
@@ -498,11 +532,17 @@ class DevicePushManager {
       // 3. Register subscription with Nexus server
       const payload = {
         subscription: sub.toJSON ? sub.toJSON() : sub,
-        userId: userInfo?.id,
-        userEmail: userInfo?.email,
+        userId: resolvedId,
+        userEmail: resolvedEmail ? resolvedEmail.toLowerCase().trim() : undefined,
+        sendWelcome: Boolean(userInfo?.sendWelcome),
       };
 
-      await fetch('/api/push/subscribe', {
+      const token = await getSupabaseAccessToken();
+      if (!token) {
+        return sub;
+      }
+
+      await authFetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -517,19 +557,60 @@ class DevicePushManager {
     }
   }
 
+  public async ensureUserPushSubscription(userInfo: { id?: string; email?: string }): Promise<void> {
+    if (typeof window === 'undefined') return;
+    try {
+      if (userInfo?.id) localStorage.setItem('nexus_auth_user_id', String(userInfo.id));
+      if (userInfo?.email) localStorage.setItem('nexus_auth_user_email', String(userInfo.email).toLowerCase().trim());
+    } catch (_) {}
+
+    // Native Capacitor FCM token re-sync with authenticated user info
+    const nativeToken = typeof localStorage !== 'undefined' ? localStorage.getItem('nexus_native_push_token') : null;
+    if (nativeToken && (userInfo?.id || userInfo?.email)) {
+      const accessToken = await getSupabaseAccessToken();
+      if (accessToken) {
+        authFetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: nativeToken,
+            platform: 'android',
+            userId: userInfo.id,
+            userEmail: userInfo.email ? userInfo.email.toLowerCase().trim() : undefined,
+            sendWelcome: false,
+          }),
+        }).catch(() => {});
+      }
+    }
+
+    // Web Push silent sync whenever permission has already been granted
+    if ('Notification' in window && Notification.permission === 'granted') {
+      await this.subscribeToPushServer({
+        id: userInfo?.id,
+        email: userInfo?.email,
+        sendWelcome: false,
+      });
+    }
+  }
+
   public async sendPushToServer(options: {
     userId?: string;
     userEmail?: string;
+    excludeUserId?: string;
+    excludeUserEmail?: string;
     title: string;
     body: string;
     icon?: string;
     targetTab?: string;
     category?: string;
     priority?: 'P0' | 'P1';
+    tag?: string;
     data?: any;
   }): Promise<boolean> {
     try {
-      const res = await fetch('/api/push/send', {
+      const accessToken = await getSupabaseAccessToken();
+      if (!accessToken) return false;
+      const res = await authFetch('/api/push/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(options),
@@ -587,11 +668,12 @@ class DevicePushManager {
     }
 
     try {
+      const wasAlreadyGranted = Notification.permission === 'granted';
       const result = await Notification.requestPermission();
       if (result === 'granted') {
         await this.registerServiceWorker();
         await this.updatePreferences({ enabled: true }, userInfo?.id);
-        await this.subscribeToPushServer(userInfo);
+        await this.subscribeToPushServer({ ...userInfo, sendWelcome: !wasAlreadyGranted });
       }
       return result as PushPermissionStatus;
     } catch (e) {
@@ -967,8 +1049,13 @@ export async function syncShowRsvpWithServer(rsvpData: {
     const userId = rsvpData.user_id || localStorage.getItem('nexus_auth_user_id') || undefined;
     const userEmail = rsvpData.user_email || localStorage.getItem('nexus_auth_user_email') || undefined;
 
+    const accessToken = await getSupabaseAccessToken();
+    if (!accessToken) {
+      return false;
+    }
+
     if (rsvpData.action === 'cancel') {
-      const res = await fetch(`/api/shows/rsvp/${rsvpData.show_id}`, {
+      const res = await authFetch(`/api/shows/rsvp/${rsvpData.show_id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, userEmail })
@@ -990,7 +1077,7 @@ export async function syncShowRsvpWithServer(rsvpData: {
       console.warn('[PushManager] Push subscription notice during RSVP:', e);
     }
 
-    const res = await fetch('/api/shows/rsvp', {
+    const res = await authFetch('/api/shows/rsvp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1018,7 +1105,7 @@ export async function syncShowRsvpWithServer(rsvpData: {
 export async function trigger24hShowRemindersOnServer(): Promise<{ success: boolean; checked?: number; remindersSent?: number }> {
   if (typeof window === 'undefined') return { success: false };
   try {
-    const res = await fetch('/api/push/trigger-show-reminders', {
+    const res = await authFetch('/api/push/trigger-show-reminders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });

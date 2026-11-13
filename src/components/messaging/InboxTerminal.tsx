@@ -39,9 +39,11 @@ import {
 } from 'lucide-react';
 import { InboxPreferences } from './InboxPreferences';
 import { useUserPresence, presenceManager, formatPresenceStatus } from '../../lib/presence';
+import { pushManager } from '../../lib/pushNotifications';
 
 export interface InboxConversation {
   contactId: string;
+  email?: string;
   profileName: string;
   avatarUrl?: string;
   lastMessage: string;
@@ -877,6 +879,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
             
             return {
               ...thread,
+              email: profile?.email || (String(thread.contactId).includes('@') ? String(thread.contactId) : undefined),
               profileName: nameStr,
               avatarUrl: profile?.avatar_url,
               roleBadge: (profile?.account_type || 'User').toUpperCase(),
@@ -1365,6 +1368,53 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
         console.error('[InboxTerminal] Error writing message to Supabase:', error.message);
       } else if (data) {
         setThreadMessages(prev => prev.map(m => m.id === optimisticMsg.id ? data : m));
+      }
+
+      // Trigger real-time background Web Push & notification entry to recipient
+      if (selectedContact.contactId && selectedContact.contactId !== myUid) {
+        const senderDisplayName =
+          userProfile?.full_name ||
+          userProfile?.name ||
+          userProfile?.console_handle ||
+          'Nexus Contact';
+        const previewBody = (trimmed || 'Sent an attachment').substring(0, 120);
+
+        if (isValidUUID(selectedContact.contactId)) {
+          try {
+            const newNotifId =
+              typeof crypto !== 'undefined' && crypto.randomUUID
+                ? crypto.randomUUID()
+                : `notif_${Date.now()}`;
+            await supabase.from('nexus_notifications').insert([{
+              id: newNotifId,
+              user_id: selectedContact.contactId,
+              actor_id: isValidUUID(myUid) ? myUid : null,
+              title: '💬 NEW MESSAGE',
+              message: `New message from ${senderDisplayName}: "${previewBody.substring(0, 60)}"`,
+              category: 'CHAT',
+              type: 'chat_message',
+              is_read: false,
+              created_at: new Date().toISOString(),
+            }]);
+          } catch (_) {}
+        }
+
+        pushManager.sendPushToServer({
+          userId: selectedContact.contactId,
+          userEmail: selectedContact.email || (selectedContact.contactId.includes('@') ? selectedContact.contactId : undefined),
+          excludeUserId: myUid,
+          excludeUserEmail: userProfile?.email,
+          title: `💬 Direct Message from ${senderDisplayName}`,
+          body: previewBody,
+          category: 'direct_messages',
+          targetTab: 'messages',
+          priority: 'P1',
+          tag: `nexus-dm-${myUid}`,
+          data: {
+            senderId: myUid,
+            senderName: senderDisplayName,
+          },
+        }).catch(pErr => console.warn('[InboxTerminal] Push send notice:', pErr));
       }
 
       window.dispatchEvent(new CustomEvent('nexus_chats_updated'));

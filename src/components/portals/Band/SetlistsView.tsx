@@ -446,7 +446,6 @@ export default function SetlistsView({
       songs: [...activeSetlist.songs, newSong]
     });
     playSetlistSynthSound('add');
-    triggerNotification(`Added "${mSong.name}" to tonight's setlist!`);
     addLog(`Assigned master song ${mSong.name} to show ID: ${selectedShowId}`);
   };
 
@@ -466,7 +465,6 @@ export default function SetlistsView({
       songs: [...activeSetlist.songs, newBreak]
     });
     playSetlistSynthSound('add');
-    triggerNotification('Added an intermission break to tonight\'s timeline!');
     addLog(`Setlist modification: Inserted a break of 2:00 minutes`);
   };
 
@@ -511,7 +509,6 @@ export default function SetlistsView({
     setNewMasterMin(4);
     setNewMasterSec(0);
     playSetlistSynthSound('success');
-    triggerNotification(`Added "${newM.name}" to global Repertoire bank!`);
     addLog(`Repertoire Bank: Saved song candidate ${newM.name}`);
   };
 
@@ -531,17 +528,15 @@ export default function SetlistsView({
 
     setMasterSongs(prev => prev.filter(m => m.id !== id));
     playSetlistSynthSound('delete');
-    triggerNotification(`Removed "${name}" from repertoire database.`);
     addLog(`Repertoire Bank: Eliminated song candidate ID: ${id}`);
   };
 
   // Delete song from active Show setlist
-  const handleDeleteFromSetlist = (songId: string, songName: string) => {
+  const handleDeleteFromSetlist = (songId: string, _songName: string) => {
     updateActiveSetlist({
       songs: activeSetlist.songs.filter(s => s.id !== songId)
     });
     playSetlistSynthSound('delete');
-    triggerNotification(`Removed "${songName}" from tonight's setlist.`);
     addLog(`Setlist modification: Removed song ID ${songId}`);
   };
 
@@ -580,7 +575,6 @@ export default function SetlistsView({
       allottedSeconds: source.allottedSeconds,
       songs: copiedSongs
     });
-    triggerNotification(`Copied ${copiedSongs.length} songs from the selected show stop!`);
     addLog(`Setlist clone: copied sequence into ${selectedShowId}`);
   };
 
@@ -601,7 +595,6 @@ export default function SetlistsView({
     updateActiveSetlist({ songs: list });
     setSwappingSongId(null);
     playSetlistSynthSound('success');
-    triggerNotification(`Successfully swapped with track "${targetMasterSong.name}"!`);
     addLog(`Setlist: Swapped slot track with Master Bank item.`);
   };
 
@@ -630,7 +623,6 @@ export default function SetlistsView({
     updateActiveSetlist({ songs: list });
     setEditingSongInSetId(null);
     playSetlistSynthSound('success');
-    triggerNotification('Song adjustments saved.');
     addLog('Adjusted setlist song parameters inline.');
   };
 
@@ -678,7 +670,6 @@ export default function SetlistsView({
     updateActiveSetlist({ songs: updatedActiveSongs });
     setEditingMasterId(null);
     playSetlistSynthSound('success');
-    triggerNotification('Master song templates updated!');
     addLog(`Master Song Bank: Adjusted template parameters for song ID: ${editingMasterId}`);
   };
 
@@ -1101,7 +1092,6 @@ export default function SetlistsView({
                               songs: activeSetlist.songs.filter((_, i) => i !== idx)
                             });
                             playSetlistSynthSound('delete');
-                            triggerNotification('Removed intermission break.');
                           }}
                           className="p-1 px-2 text-zinc-500 hover:text-red-400 bg-zinc-900 border border-zinc-850 hover:border-red-500/30 rounded transition flex items-center justify-center cursor-pointer text-[10px] shrink-0 font-bold self-start mt-0.5"
                           title="Remove break"

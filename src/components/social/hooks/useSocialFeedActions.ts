@@ -147,11 +147,6 @@ export function useSocialFeedActions({
     setFeed(prev => prev.map(post => {
       if (post.id === postId) {
         const isBookmarked = !post.bookmarked;
-        if (isBookmarked) {
-          triggerNotification?.("Post saved to bookmarks!");
-        } else {
-          triggerNotification?.("Removed from bookmarks.");
-        }
         return { ...post, bookmarked: isBookmarked };
       }
       return post;
@@ -281,9 +276,7 @@ export function useSocialFeedActions({
         data: { postId, commentId, type: 'comment' }
       }).catch(() => {});
     }
-
-    triggerNotification?.("Comment posted!");
-  }, [commentInputs, feed, userProfile, profileHandle, setFeed, setCommentInputs, triggerNotification]);
+  }, [commentInputs, feed, userProfile, profileHandle, setFeed, setCommentInputs]);
 
   // Vote comment
   const handleVoteComment = useCallback((postId: string, commentId: string, type: 'up' | 'down') => {
@@ -383,8 +376,7 @@ export function useSocialFeedActions({
 
     setReplyInputs(prev => ({ ...prev, [commentId]: '' }));
     setActiveReplyCommentId(null);
-    triggerNotification?.("Reply posted!");
-  }, [replyInputs, userProfile?.name, setFeed, setReplyInputs, setActiveReplyCommentId, triggerNotification]);
+  }, [replyInputs, userProfile?.name, setFeed, setReplyInputs, setActiveReplyCommentId]);
 
   // Toggle comments
   const toggleComments = useCallback((postId: string) => {
@@ -424,8 +416,7 @@ export function useSocialFeedActions({
     syncPostToSupabase(newSharedItem);
     setFeed(prev => [newSharedItem, ...prev]);
     setSharingPost(null);
-    triggerNotification?.("Shared to your timeline!");
-  }, [sharingPost, userProfile, setFeed, setSharingPost, triggerNotification]);
+  }, [sharingPost, userProfile, setFeed, setSharingPost]);
 
   // External Share
   const handleShareExternal = useCallback(async () => {
@@ -441,7 +432,6 @@ export function useSocialFeedActions({
           text: shareText,
           url: shareUrl
         });
-        triggerNotification?.("Shared successfully!");
         setSharingPost(null);
         return;
       } catch (err) {
@@ -452,7 +442,6 @@ export function useSocialFeedActions({
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
-        triggerNotification?.("Link copied to clipboard!");
       } else {
         const tempInput = document.createElement("input");
         tempInput.value = `${shareText}\n${shareUrl}`;
@@ -460,7 +449,6 @@ export function useSocialFeedActions({
         tempInput.select();
         document.execCommand("copy");
         document.body.removeChild(tempInput);
-        triggerNotification?.("Link copied to clipboard!");
       }
     } catch (err) {
       triggerNotification?.("Failed to copy link.");
@@ -556,13 +544,12 @@ export function useSocialFeedActions({
     setNewThreadPrimaryGenre?.('Extreme Metal');
     setNewThreadMicroGenre?.('Death Metal');
     setShowCreateThread?.(false);
-    triggerNotification?.("Thread published successfully!");
   }, [
     newThreadTitle, newThreadContent, newThreadCategory, newThreadMicroGenre,
     userProfile?.name, profileAvatarUrl, newThreadMediaUrl, newThreadYoutubeUrl,
     setForumThreads, setNotifications, setNewThreadTitle, setNewThreadContent,
     setNewThreadMediaUrl, setNewThreadYoutubeUrl, setNewThreadPrimaryGenre,
-    setNewThreadMicroGenre, setShowCreateThread, triggerNotification
+    setNewThreadMicroGenre, setShowCreateThread
   ]);
 
   // Forum: Vote Thread
@@ -614,8 +601,7 @@ export function useSocialFeedActions({
       }));
     }
     setThreadCommentInput?.('');
-    triggerNotification?.("Comment posted!");
-  }, [threadCommentInput, userProfile?.name, setForumThreads, setThreadCommentInput, triggerNotification]);
+  }, [threadCommentInput, userProfile?.name, setForumThreads, setThreadCommentInput]);
 
   // Forum: Vote Thread Comment
   const handleVoteThreadComment = useCallback((threadId: string, commentId: string, type: 'up' | 'down') => {
@@ -716,8 +702,7 @@ export function useSocialFeedActions({
     if (setActiveThreadReplyCommentId) {
       setActiveThreadReplyCommentId(null);
     }
-    triggerNotification?.("Reply posted!");
-  }, [threadReplyInputs, userProfile?.name, setForumThreads, setThreadReplyInputs, setActiveThreadReplyCommentId, triggerNotification]);
+  }, [threadReplyInputs, userProfile?.name, setForumThreads, setThreadReplyInputs, setActiveThreadReplyCommentId]);
 
   // Follow profile pass-through or wrapper
   const handleFollowProfile = useCallback(async (targetInput: any) => {
@@ -781,8 +766,7 @@ export function useSocialFeedActions({
     if (setShowSongShareModal) {
       setShowSongShareModal(false);
     }
-    triggerNotification?.(`Attached song: ${song.title || song.name || 'Track'}`);
-  }, [triggerNotification]);
+  }, []);
 
   // Sync global comment edits across active feed items
   useEffect(() => {

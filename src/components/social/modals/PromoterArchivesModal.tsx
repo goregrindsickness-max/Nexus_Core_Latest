@@ -169,7 +169,6 @@ export const PromoterArchivesModal: React.FC<PromoterArchivesModalProps> = ({
 
     try {
       setIsUploadingFlyer(true);
-      triggerNotification?.('⏳ Uploading flyer to "archives" storage bucket...');
 
       const targetId = isEditing ? (editingItem?.id || `arch_${Date.now()}`) : `arch_${Date.now()}`;
       const targetTitle = isEditing ? (editTitle || 'show') : (newTitle || 'show');
@@ -183,7 +182,6 @@ export const PromoterArchivesModal: React.FC<PromoterArchivesModalProps> = ({
         } else {
           setNewFlyerUrl(uploadedUrl);
         }
-        triggerNotification?.('🖼️ Flyer routed to "archives" bucket successfully!');
       } else {
         // Fallback to data URI if offline
         const reader = new FileReader();
@@ -198,7 +196,6 @@ export const PromoterArchivesModal: React.FC<PromoterArchivesModalProps> = ({
           }
         };
         reader.readAsDataURL(file);
-        triggerNotification?.('🖼️ Loaded flyer image for show.');
       }
     } catch (err) {
       console.warn('Error uploading flyer to archives:', err);
@@ -361,7 +358,6 @@ export const PromoterArchivesModal: React.FC<PromoterArchivesModalProps> = ({
     setArchiveShows(prev => prev.filter(item => item.id !== id));
     deleteArchiveShowFromDatabase(id, promoterUserId).catch(() => {});
 
-    triggerNotification?.(`🗑️ Removed "${title}" from archives.`);
     if (editingItem?.id === id) setEditingItem(null);
   };
 
@@ -371,7 +367,6 @@ export const PromoterArchivesModal: React.FC<PromoterArchivesModalProps> = ({
     if (res.data) {
       setArchiveShows(prev => prev.map(item => item.id === id ? res.data! : item));
     }
-    triggerNotification?.(`🔄 Reset "${title}" to original defaults.`);
     setEditingItem(null);
   };
 

@@ -19,6 +19,7 @@ import { Elements, ExpressCheckoutElement, useStripe, useElements } from '@strip
 import { getStoredWallets, processWalletPayment, selectWalletCard, UserWalletsState, WalletCard } from '../../../services/digitalWalletService';
 import { WalletOAuthModal } from './WalletOAuthModal';
 import { supabase } from '../../../lib/supabaseClient';
+import { authFetch } from '../../../utils/apiConfig';
 
 const stripePublicKey = (import.meta.env.VITE_STRIPE_PUBLIC_KEY || '').trim();
 const isRealStripeKey = typeof stripePublicKey === 'string' && stripePublicKey.startsWith('pk_') && !stripePublicKey.includes('placeholder');
@@ -79,7 +80,7 @@ export function StripeCartCheckoutModal({
       setIsLoading(true);
       
       // Call backend payment intent endpoint with fallback to Supabase Edge Function
-      fetch('/api/payments/create-payment-intent', {
+      authFetch('/api/payments/create-payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: totalAmount, currency: 'usd' })
@@ -141,7 +142,7 @@ export function StripeCartCheckoutModal({
       // If paying via Stripe / Direct Card, attempt real hosted Stripe Checkout Session first
       if (method === 'STRIPE') {
         try {
-          const response = await fetch('/api/payments/create-cart-checkout', {
+          const response = await authFetch('/api/payments/create-cart-checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

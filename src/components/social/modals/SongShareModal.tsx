@@ -126,7 +126,6 @@ export const SongShareModal: React.FC<SongShareModalProps> = ({
                     return;
                   }
                   onClose();
-                  triggerNotification?.("Song attached to draft. Click Post to publish.");
                 }}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest py-2.5 rounded-lg shadow-lg shadow-emerald-900/20 transition-colors"
               >

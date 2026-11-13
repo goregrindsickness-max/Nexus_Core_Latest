@@ -100,7 +100,6 @@ export function AppNavigationBar({
               onClick={() => {
                 setActiveTab('home-v2');
                 setDashboardV2ActiveNav('EVENTS');
-                triggerNotification('Returning to Nexus Home');
               }}
               className={`flex flex-col items-center justify-center gap-1.5 py-2 w-[90px] rounded-xl border transition-all duration-200 hover:scale-105 active:scale-95 ${
                 activeTab === 'home-v2' 
@@ -128,7 +127,6 @@ export function AppNavigationBar({
               onClick={() => {
                 setIsPttOpen(true);
                 playPttSound('static');
-                triggerNotification('PTT Walkie Channel open.');
               }}
               className={`flex flex-col items-center justify-center gap-1.5 py-2 w-[90px] rounded-xl border transition-all duration-200 hover:scale-105 active:scale-95 ${
                 isPttOpen 
@@ -274,7 +272,6 @@ export function AppNavigationBar({
                                 setActiveTab(item.tab as any);
                               }
                               setIsNavMenuOpen(false);
-                              triggerNotification(`Navigating to ${item.label}...`);
                             }}
                             className={`w-full flex items-center gap-3 px-3 py-2 rounded font-medium text-xs font-mono tracking-wide transition-all duration-150 cursor-pointer text-left ${
                               isActive 
@@ -311,7 +308,6 @@ export function AppNavigationBar({
                         setActiveTab('home-v2');
                         setDashboardV2ActiveNav('EVENTS');
                         setIsNavMenuOpen(false);
-                        triggerNotification('⚡ Switched to Band & Artist Operator Console.');
                         addLog('Switched user active session to Band console mode.');
                       }}
                       className={`w-full flex items-center justify-between px-3 py-2 rounded font-medium text-xs font-mono tracking-wide transition-all duration-150 cursor-pointer text-left ${
@@ -357,7 +353,6 @@ export function AppNavigationBar({
                         window.dispatchEvent(new CustomEvent('nexus_core_user_profile_updated', { detail: updated }));
                         setActiveTab('creative');
                         setIsNavMenuOpen(false);
-                        triggerNotification?.('⚡ Switched to Creative & Crew Showcase Portfolio.');
                         addLog?.('Switched user active session to Creative Showcase mode.');
                       }}
                       className={`w-full flex items-center justify-between px-3 py-2 rounded font-medium text-xs font-mono tracking-wide transition-all duration-150 cursor-pointer text-left ${
@@ -386,7 +381,6 @@ export function AppNavigationBar({
                         setUserProfile(updated as any);
                         localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated));
                         setIsNavMenuOpen(false);
-                        triggerNotification?.("⚡ Switched to Venue Promoter Integrated Gateway.");
                         addLog?.("Switched user active session to Promoter gateway mode.");
                       }}
                       className={`w-full flex items-center justify-between px-3 py-2 rounded font-medium text-xs font-mono tracking-wide transition-all duration-150 cursor-pointer text-left ${
@@ -415,7 +409,6 @@ export function AppNavigationBar({
                         setUserProfile(updated as any);
                         localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated));
                         setIsNavMenuOpen(false);
-                        triggerNotification?.("⚡ Switched to Record Label HQ Terminal.");
                         addLog?.("Switched user active session to Label administration mode.");
                       }}
                       className={`w-full flex items-center justify-between px-3 py-2 rounded font-medium text-xs font-mono tracking-wide transition-all duration-150 cursor-pointer text-left ${
@@ -445,7 +438,6 @@ export function AppNavigationBar({
                         localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated));
                         setActiveTab('social');
                         setIsNavMenuOpen(false);
-                        triggerNotification?.("⚡ Switched to Industry Pro.");
                         addLog?.("Switched user active session to Industry Pro mode.");
                       }}
                       className={`w-full flex items-center justify-between px-3 py-2 rounded font-medium text-xs font-mono tracking-wide transition-all duration-150 cursor-pointer text-left ${
@@ -488,7 +480,6 @@ export function AppNavigationBar({
                         else if (isBandAcc) setActiveTab('home-v2');
                         else setActiveTab('social');
                         setIsNavMenuOpen(false);
-                        triggerNotification?.("⚡ Opening your public profile...");
                         
                         // Give React a moment to render the view if it isn't already
                         setTimeout(() => {
@@ -594,7 +585,6 @@ export function AppNavigationBar({
                         setIsLoggedOut(true);
                         setShowSplash(false);
                         setIsNavMenuOpen(false);
-                        triggerNotification?.("Opening Create Account page...");
                       }}
                       className="w-full flex items-center gap-3 px-3 py-2 rounded font-medium text-xs font-mono tracking-wide transition-all duration-150 cursor-pointer text-left text-zinc-400 hover:text-emerald-300 hover:bg-emerald-950/15"
                     >
@@ -676,7 +666,6 @@ export function AppNavigationBar({
                     onClick={() => {
                       setActiveTab('distro-deck');
                       setIsNavMenuOpen(false);
-                      triggerNotification?.("Opening Our Feed & Music Alliances...");
                     }}
                     className="w-full text-left py-2 px-3 text-zinc-500 hover:text-zinc-300 font-mono text-[8.5px] uppercase tracking-wider flex items-center justify-between transition-colors group border-b border-transparent hover:border-[#39ff14]"
                   >
@@ -700,7 +689,6 @@ export function AppNavigationBar({
                     onClick={() => {
                       localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
                       setIsNavMenuOpen(false);
-                      triggerNotification?.("Session terminated. Signed out successfully.");
                     }}
                     className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-red-950/20 hover:bg-red-950/40 border border-red-900/40 hover:border-red-500/50 text-red-300 hover:text-red-200 rounded font-mono font-black text-xs uppercase tracking-wider transition-all duration-300 cursor-pointer shadow-md active:scale-[0.98]"
                     title="Terminate active session and lock console"

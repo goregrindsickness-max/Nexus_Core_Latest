@@ -42,6 +42,7 @@ import { getSupabase } from '../../../supabase';
 import { showsStore } from '../../../utils/indexedDB';
 import { resolveLocationCoordinates } from '../../../lib/geoResolution';
 import { isPastShowDate } from '../../../utils/socialFeedUtils';
+import { authFetch } from '../../../utils/apiConfig';
 
 export interface EventsDirectoryModalProps {
   isOpen: boolean;
@@ -507,7 +508,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
     }
     setIsAiParsing(true);
     try {
-      const res = await fetch('/api/parse-show-flyer', {
+      const res = await authFetch('/api/parse-show-flyer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

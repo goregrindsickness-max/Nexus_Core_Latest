@@ -54,7 +54,6 @@ export default function PromoterSettings({
             type="button"
             onClick={() => {
               navigator.clipboard.writeText(shopLink);
-              if (triggerNotification) triggerNotification('📋 Storefront URL copied to clipboard!');
               if (playLocalBeep) playLocalBeep(880, 'sine', 0.05);
             }}
             className="flex-1 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-[10px] font-mono uppercase font-black rounded-lg tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5"

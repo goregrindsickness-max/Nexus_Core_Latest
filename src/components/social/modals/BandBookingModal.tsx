@@ -27,6 +27,7 @@ import {
   Layers
 } from 'lucide-react';
 import { getSupabase, generateUUID } from '../../../supabase';
+import { pushManager } from '../../../lib/pushNotifications';
 
 export interface BandBookingModalProps {
   isOpen: boolean;
@@ -265,6 +266,21 @@ export const BandBookingModal: React.FC<BandBookingModalProps> = ({
             await supabase.from('nexus_booking_requests').insert([bookingRecord]).select();
           } catch (insertErr) {
             // Non-blocking if table is not yet provisioned
+          }
+
+          if (targetUserId && targetUserId !== userProfile?.id) {
+            pushManager.sendPushToServer({
+              userId: targetUserId,
+              userEmail: targetProfile?.email,
+              excludeUserId: userProfile?.id,
+              excludeUserEmail: userProfile?.email,
+              title: `📅 Booking Offer: ${formData.eventName}`,
+              body: `${formData.promoterName} sent a formal offer for ${formData.venueName} in ${formData.city} (${formData.guaranteeAmount} ${formData.currency}).`,
+              category: 'booking_deals',
+              targetTab: 'social',
+              priority: 'P0',
+              data: { type: 'booking_offer', eventName: formData.eventName, promoterName: formData.promoterName },
+            }).catch(() => {});
           }
         }
       } catch (err) {

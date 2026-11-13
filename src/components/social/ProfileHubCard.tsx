@@ -117,7 +117,6 @@ export const ProfileHubCard: React.FC<ProfileHubCardProps> = ({
         onClick={() => {
           setLeftDrawerOpen(true);
           setDrawerCurrentView('profile');
-          triggerNotification?.('Opening Profile Settings...');
         }}
         className={`w-full max-w-[344px] sm:max-w-2xl bg-[#050608] ${currentTheme.hoverBorderClass} border border-zinc-900 sm:rounded-2xl overflow-hidden shadow-[0_4px_30px_rgba(0,0,0,0.85)] relative group cursor-pointer transition-all duration-300 hover:scale-[1.01]`}
       >

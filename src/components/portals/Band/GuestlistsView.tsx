@@ -28,6 +28,7 @@ import { Show, GuestListItem } from '../../../types';
 import { getSupabase } from '../../../supabase';
 import { motion } from 'motion/react';
 import InfoTip from '../../InfoTip';
+import { authFetch } from '../../../utils/apiConfig';
 
 interface GuestlistsViewProps {
   shows: Show[];
@@ -380,7 +381,7 @@ export default function GuestlistsView({
     if (transmitMedium === 'email' && selectedGuest) {
       try {
         const showDateRaw = activeShow ? activeShow.date : '';
-        const response = await fetch('/api/emails/guestlist', {
+        const response = await authFetch('/api/emails/guestlist', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

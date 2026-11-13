@@ -4,6 +4,7 @@ import { detectGroundedVenue, GroundedVenueData } from '../../../services/venueG
 
 interface GroundedVenueBadgeProps {
   postText?: string;
+  taggedVenue?: string;
   initialVenueData?: GroundedVenueData | null;
   onVenueResolved?: (data: GroundedVenueData) => void;
   className?: string;
@@ -11,6 +12,7 @@ interface GroundedVenueBadgeProps {
 
 export const GroundedVenueBadge: React.FC<GroundedVenueBadgeProps> = ({
   postText = '',
+  taggedVenue = '',
   initialVenueData = null,
   onVenueResolved,
   className = ''
@@ -19,12 +21,15 @@ export const GroundedVenueBadge: React.FC<GroundedVenueBadgeProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [hasSearched, setHasSearched] = useState<boolean>(Boolean(initialVenueData));
 
+  const trimmedTaggedVenue = (taggedVenue || '').trim();
+
   const handleDetectVenue = async () => {
-    if (!postText.trim() || isLoading) return;
+    const queryText = [trimmedTaggedVenue, postText.trim()].filter(Boolean).join(' - ');
+    if (!queryText || isLoading) return;
     setIsLoading(true);
     setHasSearched(true);
     try {
-      const res = await detectGroundedVenue(postText);
+      const res = await detectGroundedVenue(queryText);
       if (res) {
         setVenueData(res);
         onVenueResolved?.(res);
@@ -36,27 +41,9 @@ export const GroundedVenueBadge: React.FC<GroundedVenueBadgeProps> = ({
     }
   };
 
-  // If no initial venue data and no search done, render compact trigger button if text seems location-related
-  const seemsLocationRelated = React.useMemo(() => {
-    const lower = postText.toLowerCase();
-    return (
-      lower.includes('at ') ||
-      lower.includes('playing ') ||
-      lower.includes('venue') ||
-      lower.includes('bar') ||
-      lower.includes('stage') ||
-      lower.includes('live at') ||
-      lower.includes('show') ||
-      lower.includes('fest') ||
-      lower.includes('hall') ||
-      lower.includes('theater') ||
-      lower.includes('theatre') ||
-      lower.includes('club')
-    );
-  }, [postText]);
-
+  // Only show the Ground Venue trigger when a venue is explicitly tagged on the post
   if (!venueData && !hasSearched) {
-    if (!seemsLocationRelated) return null;
+    if (!trimmedTaggedVenue) return null;
     return (
       <div className={`mt-2 ${className}`}>
         <button

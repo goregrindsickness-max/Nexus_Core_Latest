@@ -1510,10 +1510,32 @@ export const PostCard: React.FC<PostCardProps> = ({
             <LinkPreviewCard message={post.message} />
 
             {/* GOOGLE MAPS GROUNDED VENUE BADGE */}
-            <GroundedVenueBadge
-              postText={post.message}
-              initialVenueData={(post as any).groundedVenue || (post as any).grounded_venue}
-            />
+            {(() => {
+              const explicitTaggedVenue = String(
+                (post as any).taggedVenue ||
+                (post as any).tagged_venue ||
+                (post as any).venue ||
+                (post as any).eventData?.venue ||
+                (post as any).eventData?.locationName ||
+                (post as any).event_data?.venue ||
+                (post as any).event_data?.locationName ||
+                (post as any).festivalData?.venueName ||
+                (post as any).festival_data?.venueName ||
+                (post as any).tourData?.venue ||
+                (post as any).ticketData?.venue ||
+                ''
+              ).trim();
+
+              if (!explicitTaggedVenue) return null;
+
+              return (
+                <GroundedVenueBadge
+                  postText={post.message}
+                  taggedVenue={explicitTaggedVenue}
+                  initialVenueData={(post as any).groundedVenue || (post as any).grounded_venue}
+                />
+              );
+            })()}
           </div>
         )}
       </div>

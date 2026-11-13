@@ -164,7 +164,6 @@ export default function TourChecklistView({
     setActiveItems(prev => [...prev, newItem]);
     setNewItemText('');
     addLog(`[Checklist] Added priority ${priority} task: "${trimmed}"`);
-    triggerNotification('Added checklist task');
   };
 
   // Toggle checklist item complete state
@@ -173,7 +172,6 @@ export default function TourChecklistView({
       if (item.id === id) {
         const nextState = !item.completed;
         addLog(`[Checklist] Task "${item.text}" set to ${nextState ? 'COMPLETED' : 'REOPENED'}`);
-        triggerNotification(nextState ? 'Task completed' : 'Task reopened');
         return { ...item, completed: nextState };
       }
       return item;
@@ -184,7 +182,6 @@ export default function TourChecklistView({
   const handleRemoveTask = (id: string, text: string) => {
     setActiveItems(prev => prev.filter(item => item.id !== id));
     addLog(`[Checklist] Removed task: "${text}"`);
-    triggerNotification('Removed from checklist');
   };
 
   // Save changes to edited task
@@ -197,7 +194,6 @@ export default function TourChecklistView({
     setActiveItems(prev => prev.map(item => item.id === id ? { ...item, text: trimmed } : item));
     setEditingItemId(null);
     setEditingItemText('');
-    triggerNotification('Updated task description');
   };
 
   // Convert an active checklist item into a template to save to the reusable template bank
@@ -233,7 +229,6 @@ export default function TourChecklistView({
     savePriority(targetId, priority);
     setActiveItems(prev => [...prev, newItem]);
     addLog(`[Checklist] Import preset: "${text}"`);
-    triggerNotification('Added preset task to crew board');
   };
 
   // Add entire category bundle of preset tasks at once
@@ -267,7 +262,6 @@ export default function TourChecklistView({
 
     setActiveItems(nextActives);
     addLog(`[Checklist] Loaded complete preset bundle: "${categoryName}" (${addedCount} tasks)`);
-    triggerNotification(`Bundled ${addedCount} tasks deploy successful!`);
   };
 
   // Dynamic calculations for overall metrics

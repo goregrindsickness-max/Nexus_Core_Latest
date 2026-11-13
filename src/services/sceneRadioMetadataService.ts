@@ -14,6 +14,7 @@
 import { FRONTEND_FALLBACK_PLAYLISTS } from '../data/socialFeedMockData';
 import { getRawSupabase } from './clientService';
 import { ensureUUID } from './schemaResilienceService';
+import { authFetch } from '../utils/apiConfig';
 
 export interface RadioTrackMeta {
   videoId: string;
@@ -86,7 +87,7 @@ export async function fetchDirectVideoOEmbed(videoId: string): Promise<RadioTrac
 
   // 1. Try server proxy route /api/oembed (avoids browser 401/403/CORS network errors)
   try {
-    const res = await fetch(`/api/oembed?videoId=${encodeURIComponent(videoId)}`);
+    const res = await authFetch(`/api/oembed?videoId=${encodeURIComponent(videoId)}`);
     if (res.ok) {
       const data = await res.json();
       if (data && data.title && !data.title.startsWith('Track ') && data.title !== 'Scene Track') {
@@ -165,7 +166,7 @@ export async function getPlaylistTracksResilient(playlistId: string): Promise<Ra
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 2500); // 2.5s timeout so APK does not hang
 
-    const response = await fetch(`/api/playlist/${playlistId}`, { signal: controller.signal });
+    const response = await authFetch(`/api/playlist/${playlistId}`, { signal: controller.signal });
     clearTimeout(timeout);
 
     if (response.ok) {

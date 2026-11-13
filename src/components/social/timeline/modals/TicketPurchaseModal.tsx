@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Ticket, CheckCircle, Calendar, Rocket, Shield } from 'lucide-react';
 import { FeedPost } from '../types';
+import { authFetch } from '../../../../utils/apiConfig';
 
 interface TicketPurchaseModalProps {
   selectedTicketShow: { post: FeedPost; date: any };
@@ -108,7 +109,7 @@ export const TicketPurchaseModal: React.FC<TicketPurchaseModalProps> = ({
                       image: selectedTicketShow.post.image_url,
                     };
 
-                    const res = await fetch('/api/payments/create-cart-checkout', {
+                    const res = await authFetch('/api/payments/create-cart-checkout', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({

@@ -7,6 +7,7 @@ import {
   markClipDeleted, 
   purgeGhostClipsFromStorage 
 } from '../utils/clipsPersistenceService';
+import { authFetch, getSupabaseAccessToken } from '../../../utils/apiConfig';
 
 export interface UseSocialClipsStateParams {
   triggerNotification?: (msg: string) => void;
@@ -96,7 +97,6 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
       await clipsMediaStore.removeItem(idStr.toLowerCase());
       await clipsMediaStore.removeItem(idStr);
     } catch (_) {}
-    triggerNotification?.("Clip deleted successfully!");
     const supabaseClient = getSupabase();
     if (supabaseClient) {
       try {
@@ -106,7 +106,9 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
       }
     }
     try {
-      await fetch(`/api/clips/${encodeURIComponent(idStr)}`, { method: 'DELETE' });
+      if (await getSupabaseAccessToken()) {
+        await authFetch(`/api/clips/${encodeURIComponent(idStr)}`, { method: 'DELETE' });
+      }
     } catch (_) {}
   };
 
@@ -136,7 +138,7 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
     const fetchClips = async () => {
       let apiClips: any[] = [];
       try {
-        const aRes = await fetch('/api/clips');
+        const aRes = await authFetch('/api/clips');
         if (aRes.ok) {
           const aData = await aRes.json();
           if (Array.isArray(aData)) {

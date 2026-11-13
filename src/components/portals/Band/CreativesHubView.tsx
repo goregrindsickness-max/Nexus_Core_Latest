@@ -513,14 +513,6 @@ export default function CreativesHubView({
       localStorage.setItem("nexus_followed_creatives", JSON.stringify(updated));
       return updated;
     });
-
-    if (triggerNotification) {
-      if (!nextState) {
-        triggerNotification(`Unfollowed ${name}`);
-      } else {
-        triggerNotification(`✓ Following ${name}! Updates will appear in your feed.`);
-      }
-    }
   };
 
   const handleMessageCreative = (talent: CreativeTalent) => {
@@ -4085,11 +4077,6 @@ export default function CreativesHubView({
                                 ? 5
                                 : 10,
                           );
-                          if (triggerNotification) {
-                            triggerNotification(
-                              `Preset adjusted: "${tier.name}" preloaded!`,
-                            );
-                          }
                         }}
                         className={`border p-3 rounded-xl flex flex-col justify-between transition-all cursor-pointer group select-none text-left ${
                           isSelected
@@ -4942,11 +4929,6 @@ export default function CreativesHubView({
                             setSelectedDrawerTalent(null);
                             setIsPlayingAudio(false);
                             openHireModal(selectedDrawerTalent, tier.id);
-                            if (triggerNotification) {
-                              triggerNotification(
-                                `Preset selected: "${tier.name}" bounds preloaded!`,
-                              );
-                            }
                           }}
                           className="border border-zinc-900 bg-zinc-950/60 hover:border-violet-500/50 p-3 rounded-xl flex flex-col justify-between transition-all cursor-pointer group hover:scale-[1.02] active:scale-[0.98] relative overflow-hidden"
                         >

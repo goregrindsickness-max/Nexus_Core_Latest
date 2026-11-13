@@ -8,9 +8,25 @@ import fs from "fs";
 import webpush from "web-push";
 import { GoogleGenAI, Type } from "@google/genai";
 import { BUILT_IN_BLACK_BOOK_VENUES } from "./src/services/venueSearchService";
+import {
+  optionalAuth,
+  requireAuth,
+  requireAdmin,
+  createCorsMiddleware,
+  resolveSafeAppOrigin,
+  resolveSafeRedirectUrl,
+  getUserOwnedEntityIds,
+  assertBandOrEntityOwner,
+  hasAnyOwnershipMatch,
+  escapeHtml,
+  isAllowedBandcampUrl,
+  createRateLimiter,
+} from "./server/security";
 
 // Load environment variables (mostly for local testing, platform handles deployment env vars)
 dotenv.config();
+
+const FALLBACK_SUPABASE_URL = "https://cyjnpuneruonskfzpmqo.supabase.co";
 
 /**
  * SUPABASE SERVICE ROLE CONFIGURATION & SECURE VAULT ACCESS
@@ -18,7 +34,7 @@ dotenv.config();
 let supabaseServiceClient: any = null;
 function getSupabaseService() {
   if (!supabaseServiceClient) {
-    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
     if (url && serviceRoleKey) {
       supabaseServiceClient = createClient(url, serviceRoleKey, {
@@ -286,17 +302,18 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Enable CORS for all incoming origins (critical for Android APK WebView, Capacitor, iOS, and Web)
-  app.use((req, res, next) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin");
-    res.setHeader("Access-Control-Max-Age", "86400");
-    if (req.method === "OPTIONS") {
-      return res.sendStatus(204);
-    }
-    next();
-  });
+  // Strict CORS allowlist for Web, Cloud Run, Custom Domains, Local Dev, and Capacitor/Ionic WebViews
+  app.use(createCorsMiddleware());
+
+  // Route-scoped rate limiters
+  const uploadLimiter = createRateLimiter({ windowMs: 60_000, max: 40, keyPrefix: 'upload' });
+  const aiLimiter = createRateLimiter({ windowMs: 60_000, max: 30, keyPrefix: 'ai' });
+  const emailLimiter = createRateLimiter({ windowMs: 60_000, max: 25, keyPrefix: 'email' });
+  const paymentLimiter = createRateLimiter({ windowMs: 60_000, max: 30, keyPrefix: 'payment' });
+  const pushLimiter = createRateLimiter({ windowMs: 60_000, max: 60, keyPrefix: 'push' });
+  const scrapeLimiter = createRateLimiter({ windowMs: 60_000, max: 30, keyPrefix: 'scrape' });
+  const apiMutationLimiter = createRateLimiter({ windowMs: 60_000, max: 120, keyPrefix: 'mutation' });
+  const bugReportLimiter = createRateLimiter({ windowMs: 60_000, max: 40, keyPrefix: 'bug_report' });
 
   // Stripe webhook needs raw body parser, so place it BEFORE express.json()
   app.post("/api/webhooks/stripe", express.raw({ type: 'application/json' }), async (req: express.Request, res: express.Response) => {
@@ -310,10 +327,18 @@ async function startServer() {
     let event;
     try {
       const webhookSecret = await getVaultSecret("STRIPE_WEBHOOK_SECRET") || process.env.STRIPE_WEBHOOK_SECRET;
-      if (webhookSecret && signature) {
+      const isProduction = process.env.NODE_ENV === 'production';
+
+      if (webhookSecret) {
+        if (!signature) {
+          return res.status(400).send("Webhook Error: Missing stripe-signature header");
+        }
         event = stripe.webhooks.constructEvent(req.body, signature as string, webhookSecret);
+      } else if (isProduction) {
+        console.error("[WEBHOOK SECURITY] STRIPE_WEBHOOK_SECRET is not configured in production.");
+        return res.status(400).send("Webhook Error: Webhook signature secret not configured");
       } else {
-        // Fallback or unverified handling for testing/debugging
+        // Unsigned webhook fallback allowed ONLY in non-production local development when no secret is set
         event = JSON.parse(req.body.toString());
       }
     } catch (err: any) {
@@ -419,13 +444,19 @@ async function startServer() {
     res.json(data);
   });
 
-  app.post("/api/avatar-interactions/:profileId/react", async (req, res) => {
+  app.post("/api/avatar-interactions/:profileId/react", requireAuth, apiMutationLimiter, async (req, res) => {
+    const user = req.authUser!;
     const { profileId } = req.params;
-    const { userId, username, avatarUrl, emoji } = req.body;
+    const { userId: rawUserId, username, avatarUrl, emoji } = req.body;
 
-    if (!userId || !emoji) {
-      return res.status(400).json({ error: "Missing required fields" });
+    if (!emoji || typeof emoji !== 'string' || emoji.length > 32) {
+      return res.status(400).json({ error: "Missing or invalid emoji" });
     }
+
+    const canActAsEntity = rawUserId && rawUserId !== user.id
+      ? await assertBandOrEntityOwner(getSupabaseService(), user, String(rawUserId))
+      : false;
+    const userId = canActAsEntity ? String(rawUserId) : user.id;
 
     if (!avatarInteractions[profileId]) {
       avatarInteractions[profileId] = { reactions: [], comments: [] };
@@ -439,20 +470,26 @@ async function startServer() {
     if (existingIndex > -1) {
       interactions.reactions.splice(existingIndex, 1);
     } else {
-      interactions.reactions.push({ userId, username, avatarUrl, emoji });
+      interactions.reactions.push({ userId, username: String(username || user.email || 'Member').slice(0, 80), avatarUrl, emoji });
     }
 
     await saveAvatarInteractions();
     res.json(interactions);
   });
 
-  app.post("/api/avatar-interactions/:profileId/comment", async (req, res) => {
+  app.post("/api/avatar-interactions/:profileId/comment", requireAuth, apiMutationLimiter, async (req, res) => {
+    const user = req.authUser!;
     const { profileId } = req.params;
-    const { userId, username, avatarUrl, text } = req.body;
+    const { userId: rawUserId, username, avatarUrl, text } = req.body;
 
-    if (!userId || !text) {
-      return res.status(400).json({ error: "Missing required fields" });
+    if (!text || typeof text !== 'string' || !text.trim() || text.length > 2000) {
+      return res.status(400).json({ error: "Missing or invalid comment text" });
     }
+
+    const canActAsEntity = rawUserId && rawUserId !== user.id
+      ? await assertBandOrEntityOwner(getSupabaseService(), user, String(rawUserId))
+      : false;
+    const userId = canActAsEntity ? String(rawUserId) : user.id;
 
     if (!avatarInteractions[profileId]) {
       avatarInteractions[profileId] = { reactions: [], comments: [] };
@@ -462,9 +499,9 @@ async function startServer() {
     const newComment = {
       id: `comment_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       userId,
-      username,
+      username: String(username || user.email || 'Member').slice(0, 80),
       avatarUrl,
-      text,
+      text: text.trim(),
       createdAt: new Date().toISOString()
     };
 
@@ -473,13 +510,40 @@ async function startServer() {
     res.json(interactions);
   });
 
-  // API ROUTE: Upload file to local uploads directory (bypasses Supabase Storage RLS policies)
-  app.post("/api/upload", async (req, res) => {
+  const ALLOWED_UPLOAD_BUCKETS = new Set([
+    'avatars',
+    'photo-pit',
+    'clips',
+    'inventory-items',
+    'releases',
+    'merch',
+    'banners',
+    'flyers',
+    'assets',
+    'stories',
+  ]);
+
+  // API ROUTE: Upload file to Supabase Storage / local uploads directory (requires authenticated user)
+  app.post("/api/upload", requireAuth, uploadLimiter, async (req, res) => {
     try {
-      const { base64Data, bucket, userId, fileNameToken } = req.body;
-      if (!base64Data) {
+      const authUser = req.authUser!;
+      const { base64Data, bucket, userId: requestedUserId, fileNameToken } = req.body;
+      if (!base64Data || typeof base64Data !== 'string') {
         return res.status(400).json({ error: "Missing base64Data" });
       }
+
+      const requestedBucket = typeof bucket === 'string' && bucket.trim() ? bucket.trim() : 'avatars';
+      if (!ALLOWED_UPLOAD_BUCKETS.has(requestedBucket)) {
+        return res.status(400).json({ error: `Unsupported storage bucket: ${requestedBucket}` });
+      }
+
+      // Verify ownership if uploading under a specific entity ID
+      let safeOwnerToken = authUser.id;
+      if (requestedUserId && typeof requestedUserId === 'string' && requestedUserId.trim()) {
+        const ownsTarget = await assertBandOrEntityOwner(getSupabaseService(), authUser, requestedUserId);
+        safeOwnerToken = ownsTarget ? requestedUserId.trim() : authUser.id;
+      }
+      const sanitizedUserToken = safeOwnerToken.replace(/[^a-zA-Z0-9_-]/g, '_');
 
       // Extract raw base64 data and extension
       const matches = base64Data.match(/^data:([^;]+);base64,([\s\S]+)$/);
@@ -491,14 +555,14 @@ async function startServer() {
       const base64Image = matches[2].replace(/\s+/g, '');
       const buffer = Buffer.from(base64Image, 'base64');
       
-      const fileExt = contentType.split('/')[1] || 'webp';
+      const fileExt = (contentType.split('/')[1] || 'webp').replace(/[^a-zA-Z0-9]/g, '');
       const cleanFileNameToken = (fileNameToken || 'image').replace(/[^a-zA-Z0-9-_]/g, '_');
-      const uniqueName = `${userId || 'anonymous'}_${bucket || 'assets'}_${cleanFileNameToken}_${Date.now()}.${fileExt}`;
+      const uniqueName = `${sanitizedUserToken}_${requestedBucket}_${cleanFileNameToken}_${Date.now()}.${fileExt}`;
       
       // Try uploading to Supabase Storage first to bypass RLS policies and store persistently
       const supabase = getSupabaseService();
       if (supabase && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        const bucketName = bucket || 'avatars';
+        const bucketName = requestedBucket;
         try {
           // List existing buckets to verify/create
           const { data: buckets, error: listError } = await supabase.storage.listBuckets();
@@ -636,12 +700,36 @@ async function startServer() {
     }
   });
 
-  app.post('/api/stories', async (req, res) => {
+  app.post('/api/stories', requireAuth, apiMutationLimiter, async (req, res) => {
     try {
+      const user = req.authUser!;
       const story = req.body;
       if (!story || !story.id) {
         return res.status(400).json({ error: 'Invalid story payload' });
       }
+
+      const supabase = getSupabaseService();
+      const ownedIds = await getUserOwnedEntityIds(supabase, user);
+      const existing = await loadCachedStories();
+      const existingStory = existing.find((s: any) => s.id === story.id);
+      if (existingStory && (existingStory.profile_id || existingStory.user_id || existingStory.band_id)) {
+        const ownsExisting = hasAnyOwnershipMatch(user, ownedIds, [
+          existingStory.profile_id,
+          existingStory.user_id,
+          existingStory.band_id,
+        ]);
+        if (!ownsExisting) {
+          return res.status(403).json({ error: 'You do not have permission to overwrite this story.' });
+        }
+      }
+
+      // Stamp verified author ownership
+      const claimedProfileId = story.profile_id || story.band_id;
+      const verifiedProfileId = claimedProfileId && hasAnyOwnershipMatch(user, ownedIds, [claimedProfileId])
+        ? String(claimedProfileId)
+        : user.id;
+      story.profile_id = verifiedProfileId;
+      story.user_id = user.id;
 
       // If media is a base64 string, persist it to disk or cloud storage
       let mediaUrl = story.media_url || story.image || story.video || '';
@@ -654,7 +742,6 @@ async function startServer() {
           const buffer = Buffer.from(matches[2], 'base64');
 
           let savedUrl = '';
-          const supabase = getSupabaseService();
           if (supabase) {
             try {
               const { data: upData, error: upErr } = await supabase.storage
@@ -686,7 +773,6 @@ async function startServer() {
         }
       }
 
-      const existing = await loadCachedStories();
       const updated = [story, ...existing.filter((s: any) => s.id !== story.id)];
       await persistStoriesList(updated);
 
@@ -697,20 +783,24 @@ async function startServer() {
     }
   });
 
-  app.post('/api/stories/sync', async (req, res) => {
+  app.post('/api/stories/sync', requireAuth, apiMutationLimiter, async (req, res) => {
     try {
+      const user = req.authUser!;
       const incomingStories = Array.isArray(req.body) ? req.body : req.body?.stories;
       if (!Array.isArray(incomingStories)) {
         return res.status(400).json({ error: 'Array of stories required' });
       }
 
+      const ownedIds = await getUserOwnedEntityIds(getSupabaseService(), user);
       const current = await loadCachedStories();
       const currentMap = new Map<string, any>(current.map((s: any) => [s.id, s]));
 
       for (const item of incomingStories) {
         if (!item || !item.id) continue;
         if (!currentMap.has(item.id)) {
-          currentMap.set(item.id, item);
+          const claimed = item.profile_id || item.band_id;
+          const verifiedProfile = claimed && hasAnyOwnershipMatch(user, ownedIds, [claimed]) ? claimed : user.id;
+          currentMap.set(item.id, { ...item, profile_id: verifiedProfile, user_id: user.id });
         }
       }
 
@@ -724,10 +814,23 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/stories/:id', async (req, res) => {
+  app.delete('/api/stories/:id', requireAuth, apiMutationLimiter, async (req, res) => {
     try {
+      const user = req.authUser!;
       const { id } = req.params;
       const current = await loadCachedStories();
+      const target = current.find((s: any) => s.id === id);
+      if (target && (target.profile_id || target.user_id || target.band_id)) {
+        const ownedIds = await getUserOwnedEntityIds(getSupabaseService(), user);
+        const ownsTarget = hasAnyOwnershipMatch(user, ownedIds, [
+          target.profile_id,
+          target.user_id,
+          target.band_id,
+        ]);
+        if (!ownsTarget) {
+          return res.status(403).json({ error: 'Forbidden: you can only delete your own stories.' });
+        }
+      }
       const filtered = current.filter((s: any) => s.id !== id);
       await persistStoriesList(filtered);
       res.json({ success: true });
@@ -868,8 +971,9 @@ async function startServer() {
     }
   });
 
-  app.post('/api/clips', async (req, res) => {
+  app.post('/api/clips', requireAuth, apiMutationLimiter, async (req, res) => {
     try {
+      const user = req.authUser!;
       const clip = req.body;
       if (!clip || !clip.id) {
         return res.status(400).json({ error: 'Invalid clip payload' });
@@ -878,6 +982,22 @@ async function startServer() {
       if (isGhostServerClip(clip)) {
         return res.status(400).json({ error: 'Clip is blacklisted/ghost' });
       }
+
+      const ownedIds = await getUserOwnedEntityIds(getSupabaseService(), user);
+      const existing = await loadCachedClips();
+      const existingClip = existing.find((c: any) => String(c.id) === String(clip.id));
+      if (existingClip && (existingClip.user_id || existingClip.band_id || existingClip.bandId)) {
+        const ownsExisting = hasAnyOwnershipMatch(user, ownedIds, [
+          existingClip.user_id,
+          existingClip.band_id,
+          existingClip.bandId,
+        ]);
+        if (!ownsExisting) {
+          return res.status(403).json({ error: 'Forbidden: cannot overwrite another user clip.' });
+        }
+      }
+
+      clip.user_id = user.id;
 
       // If video or thumbnail is a base64 string, persist it to disk
       let videoUrl = clip.videoUrl || clip.video_url || '';
@@ -897,7 +1017,6 @@ async function startServer() {
         }
       }
 
-      const existing = await loadCachedClips();
       const updated = [clip, ...existing.filter((c: any) => String(c.id) !== String(clip.id))];
       await persistClipsList(updated);
 
@@ -908,8 +1027,9 @@ async function startServer() {
     }
   });
 
-  app.post('/api/clips/sync', async (req, res) => {
+  app.post('/api/clips/sync', requireAuth, apiMutationLimiter, async (req, res) => {
     try {
+      const user = req.authUser!;
       const incomingClips = Array.isArray(req.body) ? req.body : req.body?.clips;
       if (!Array.isArray(incomingClips)) {
         return res.status(400).json({ error: 'Array of clips required' });
@@ -922,7 +1042,7 @@ async function startServer() {
         if (!item || !item.id || isGhostServerClip(item)) continue;
         const idKey = String(item.id);
         if (!currentMap.has(idKey)) {
-          currentMap.set(idKey, item);
+          currentMap.set(idKey, { ...item, user_id: user.id });
         }
       }
 
@@ -936,10 +1056,23 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/clips/:id', async (req, res) => {
+  app.delete('/api/clips/:id', requireAuth, apiMutationLimiter, async (req, res) => {
     try {
+      const user = req.authUser!;
       const { id } = req.params;
       const current = await loadCachedClips();
+      const target = current.find((c: any) => String(c.id) === String(id));
+      if (target && (target.user_id || target.band_id || target.bandId)) {
+        const ownedIds = await getUserOwnedEntityIds(getSupabaseService(), user);
+        const ownsTarget = hasAnyOwnershipMatch(user, ownedIds, [
+          target.user_id,
+          target.band_id,
+          target.bandId,
+        ]);
+        if (!ownsTarget) {
+          return res.status(403).json({ error: 'Forbidden: you can only delete your own clips.' });
+        }
+      }
       const filtered = current.filter((c: any) => String(c.id) !== String(id));
       await persistClipsList(filtered);
       res.json({ success: true });
@@ -1006,7 +1139,7 @@ async function startServer() {
   }
 
   // API ROUTE: Check or auto-stub venue in Black Book (Supabase)
-  app.post("/api/venues/check-or-stub", async (req, res) => {
+  app.post("/api/venues/check-or-stub", requireAuth, apiMutationLimiter, async (req, res) => {
     try {
       const { venue_name, city, state, country, street_address } = req.body;
       if (!venue_name || !city) {
@@ -1035,7 +1168,7 @@ async function startServer() {
   });
 
   // API ROUTE: Parse tour/concert flyer with Gemini Vision
-  app.post("/api/parse-flyer", async (req, res) => {
+  app.post("/api/parse-flyer", requireAuth, aiLimiter, async (req, res) => {
     try {
       const { image, mimeType, base64Data, prompt } = req.body;
       const rawImage = image || base64Data;
@@ -1315,44 +1448,108 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   // ==========================================
   // WEB PUSH & NOTIFICATION DISPATCH ENGINE
   // ==========================================
+  const VAPID_KEYS_FILE = path.join(process.cwd(), "data", "vapid_keys.json");
+  const PUSH_SUBS_FILE = path.join(process.cwd(), "data", "push_subscriptions.json");
+
   let vapidKeys = {
     publicKey: process.env.VAPID_PUBLIC_KEY || "",
     privateKey: process.env.VAPID_PRIVATE_KEY || ""
   };
 
-  // Generate ephemeral VAPID keys dynamically if none are configured in the environment
-  if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
+  async function initVapidKeys() {
+    if (vapidKeys.publicKey && vapidKeys.privateKey) {
+      applyVapidDetails();
+      return;
+    }
+
+    // 1. Try local disk persisted keys
+    try {
+      if (fs.existsSync(VAPID_KEYS_FILE)) {
+        const saved = JSON.parse(fs.readFileSync(VAPID_KEYS_FILE, "utf-8"));
+        if (saved?.publicKey && saved?.privateKey) {
+          vapidKeys = { publicKey: saved.publicKey, privateKey: saved.privateKey };
+          applyVapidDetails();
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("[VAPID INIT] Local key read warning:", e);
+    }
+
+    // 2. Try Supabase Storage persisted keys so keys stay stable across container restarts
+    const supabase = getSupabaseService();
+    if (supabase) {
+      try {
+        const { data: dData, error: dErr } = await supabase.storage
+          .from("photo-pit")
+          .download("push/vapid_keys.json");
+        if (!dErr && dData) {
+          const parsed = JSON.parse(await dData.text());
+          if (parsed?.publicKey && parsed?.privateKey) {
+            vapidKeys = { publicKey: parsed.publicKey, privateKey: parsed.privateKey };
+            try {
+              const dir = path.dirname(VAPID_KEYS_FILE);
+              if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+              fs.writeFileSync(VAPID_KEYS_FILE, JSON.stringify(vapidKeys, null, 2), "utf-8");
+            } catch (_) {}
+            applyVapidDetails();
+            return;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Generate once and persist to disk + Supabase Storage
     try {
       const generated = webpush.generateVAPIDKeys();
       vapidKeys = generated;
+      try {
+        const dir = path.dirname(VAPID_KEYS_FILE);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(VAPID_KEYS_FILE, JSON.stringify(vapidKeys, null, 2), "utf-8");
+      } catch (_) {}
+      if (supabase) {
+        try {
+          await supabase.storage
+            .from("photo-pit")
+            .upload("push/vapid_keys.json", Buffer.from(JSON.stringify(vapidKeys, null, 2)), {
+              contentType: "application/json",
+              upsert: true,
+            });
+        } catch (_) {}
+      }
     } catch (e) {
       console.warn("[VAPID INIT] Could not generate dynamic VAPID keys:", e);
     }
+
+    applyVapidDetails();
   }
 
-  if (vapidKeys.publicKey && vapidKeys.privateKey) {
-    try {
-      let vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@thenexuscoreapp.com";
-      if (vapidSubject && !vapidSubject.startsWith("mailto:") && !vapidSubject.startsWith("http://") && !vapidSubject.startsWith("https://")) {
-        if (vapidSubject.includes("@")) {
-          vapidSubject = `mailto:${vapidSubject}`;
-        } else {
-          vapidSubject = `https://${vapidSubject}`;
+  function applyVapidDetails() {
+    if (vapidKeys.publicKey && vapidKeys.privateKey) {
+      try {
+        let vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@thenexuscoreapp.com";
+        if (vapidSubject && !vapidSubject.startsWith("mailto:") && !vapidSubject.startsWith("http://") && !vapidSubject.startsWith("https://")) {
+          if (vapidSubject.includes("@")) {
+            vapidSubject = `mailto:${vapidSubject}`;
+          } else {
+            vapidSubject = `https://${vapidSubject}`;
+          }
         }
-      }
 
-      webpush.setVapidDetails(
-        vapidSubject,
-        vapidKeys.publicKey,
-        vapidKeys.privateKey
-      );
-      console.log("[VAPID INIT] Web Push VAPID keys initialized successfully.");
-    } catch (e) {
-      console.error("[VAPID INIT ERROR]", e);
+        webpush.setVapidDetails(
+          vapidSubject,
+          vapidKeys.publicKey,
+          vapidKeys.privateKey
+        );
+        console.log("[VAPID INIT] Web Push VAPID keys initialized successfully.");
+      } catch (e) {
+        console.error("[VAPID INIT ERROR]", e);
+      }
     }
   }
 
-  const PUSH_SUBS_FILE = path.join(process.cwd(), "data", "push_subscriptions.json");
+  await initVapidKeys();
 
   interface StoredPushSubscription {
     id: string;
@@ -1362,6 +1559,8 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     created_at: string;
     last_used_at?: string;
   }
+
+  let pushSubsCloudHydrated = false;
 
   function readPushSubscriptions(): StoredPushSubscription[] {
     try {
@@ -1382,14 +1581,77 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     } catch (e) {
       console.warn("[PUSH SUBS] Could not write file:", e);
     }
+    const supabase = getSupabaseService();
+    if (supabase) {
+      supabase.storage
+        .from("photo-pit")
+        .upload("push/push_subscriptions.json", Buffer.from(JSON.stringify(subs, null, 2)), {
+          contentType: "application/json",
+          upsert: true,
+        })
+        .catch(() => {});
+    }
+  }
+
+  async function loadPushSubscriptionsAsync(): Promise<StoredPushSubscription[]> {
+    const localSubs = readPushSubscriptions();
+    if (pushSubsCloudHydrated && localSubs.length > 0) {
+      return localSubs;
+    }
+
+    const supabase = getSupabaseService();
+    if (!supabase) return localSubs;
+
+    try {
+      const { data: dData, error: dErr } = await supabase.storage
+        .from("photo-pit")
+        .download("push/push_subscriptions.json");
+      pushSubsCloudHydrated = true;
+      if (!dErr && dData) {
+        const remoteSubs = JSON.parse(await dData.text());
+        if (Array.isArray(remoteSubs)) {
+          const byEndpoint = new Map<string, StoredPushSubscription>();
+          remoteSubs.forEach((s: StoredPushSubscription) => {
+            if (s?.subscription?.endpoint) {
+              byEndpoint.set(s.subscription.endpoint, s);
+            }
+          });
+          localSubs.forEach((s: StoredPushSubscription) => {
+            if (s?.subscription?.endpoint) {
+              const existing = byEndpoint.get(s.subscription.endpoint);
+              const existingTs = existing?.last_used_at ? new Date(existing.last_used_at).getTime() : 0;
+              const localTs = s?.last_used_at ? new Date(s.last_used_at).getTime() : 0;
+              if (!existing || localTs >= existingTs) {
+                byEndpoint.set(s.subscription.endpoint, {
+                  ...existing,
+                  ...s,
+                  userId: s.userId || existing?.userId,
+                  userEmail: s.userEmail || existing?.userEmail,
+                });
+              }
+            }
+          });
+          const merged = Array.from(byEndpoint.values());
+          try {
+            const dir = path.dirname(PUSH_SUBS_FILE);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(PUSH_SUBS_FILE, JSON.stringify(merged, null, 2), "utf-8");
+          } catch (_) {}
+          return merged;
+        }
+      }
+    } catch (_) {
+      pushSubsCloudHydrated = true;
+    }
+    return localSubs;
   }
 
   app.get("/api/push/vapid-public-key", (req, res) => {
     res.json({ publicKey: vapidKeys.publicKey });
   });
 
-  app.get("/api/push/status", (req, res) => {
-    const subs = readPushSubscriptions();
+  app.get("/api/push/status", requireAdmin, async (req, res) => {
+    const subs = await loadPushSubscriptionsAsync();
     res.json({
       active: true,
       publicKey: vapidKeys.publicKey,
@@ -1398,9 +1660,10 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     });
   });
 
-  app.post("/api/push/subscribe", express.json(), async (req, res) => {
+  app.post("/api/push/subscribe", requireAuth, pushLimiter, express.json(), async (req, res) => {
     try {
-      const { subscription, token, platform, userId, userEmail } = req.body;
+      const authUser = req.authUser!;
+      const { subscription, token, platform, userId, userEmail, sendWelcome } = req.body;
       if (!subscription && !token) {
         return res.status(400).json({ error: "Missing subscription endpoint or native device token" });
       }
@@ -1412,13 +1675,18 @@ Return a valid JSON object matching the requested schema. If any field is not fo
         token,
       };
 
-      const subs = readPushSubscriptions();
+      const normalizedEmail = authUser.email || (typeof userEmail === "string" && userEmail.trim() ? userEmail.trim().toLowerCase() : undefined);
+      const ownedIds = await getUserOwnedEntityIds(getSupabaseService(), authUser);
+      const normalizedUserId = userId && ownedIds.has(String(userId).trim()) ? String(userId).trim() : authUser.id;
+
+      const subs = await loadPushSubscriptionsAsync();
       const existingIdx = subs.findIndex(s => s.subscription?.endpoint === endpoint);
+      const isNewEndpoint = existingIdx < 0;
       const entry: StoredPushSubscription = {
         id: existingIdx >= 0 ? subs[existingIdx].id : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         subscription: subObject,
-        userId: userId || (existingIdx >= 0 ? subs[existingIdx].userId : undefined),
-        userEmail: userEmail || (existingIdx >= 0 ? subs[existingIdx].userEmail : undefined),
+        userId: normalizedUserId || (existingIdx >= 0 ? subs[existingIdx].userId : undefined),
+        userEmail: normalizedEmail || (existingIdx >= 0 ? subs[existingIdx].userEmail : undefined),
         created_at: existingIdx >= 0 ? subs[existingIdx].created_at : new Date().toISOString(),
         last_used_at: new Date().toISOString()
       };
@@ -1430,10 +1698,10 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       }
 
       writePushSubscriptions(subs);
-      console.log(`[PUSH SUBSCRIBE] Registered ${subObject.platform || 'web'} endpoint for ${userEmail || userId || 'device'} (total: ${subs.length})`);
+      console.log(`[PUSH SUBSCRIBE] Registered ${subObject.platform || 'web'} endpoint for ${entry.userEmail || entry.userId || 'device'} (total: ${subs.length})`);
 
-      // Send welcome test confirmation push if WebPush
-      if (subscription && subscription.endpoint && !subscription.endpoint.startsWith('native://')) {
+      // Send welcome test confirmation push only on new explicit opt-in or when requested
+      if ((sendWelcome === true || isNewEndpoint) && sendWelcome !== false && subscription && subscription.endpoint && !subscription.endpoint.startsWith('native://')) {
         try {
           await webpush.sendNotification(subscription, JSON.stringify({
             title: "⚡ Nexus Real-Time Push Active",
@@ -1455,11 +1723,20 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     }
   });
 
-  app.post("/api/push/unsubscribe", express.json(), async (req, res) => {
+  app.post("/api/push/unsubscribe", requireAuth, pushLimiter, express.json(), async (req, res) => {
     try {
+      const authUser = req.authUser!;
       const { endpoint } = req.body;
       if (!endpoint) return res.status(400).json({ error: "Missing endpoint" });
-      let subs = readPushSubscriptions();
+      let subs = await loadPushSubscriptionsAsync();
+      const targetSub = subs.find(s => s.subscription?.endpoint === endpoint);
+      if (targetSub && !authUser.isAdmin) {
+        const subOwnerId = targetSub.userId ? String(targetSub.userId).trim() : '';
+        const subOwnerEmail = targetSub.userEmail ? String(targetSub.userEmail).trim().toLowerCase() : '';
+        if ((subOwnerId && subOwnerId !== authUser.id) || (subOwnerEmail && authUser.email && subOwnerEmail !== authUser.email)) {
+          return res.status(403).json({ error: "Forbidden: cannot unsubscribe another user's push endpoint." });
+        }
+      }
       subs = subs.filter(s => s.subscription.endpoint !== endpoint);
       writePushSubscriptions(subs);
       res.json({ success: true, count: subs.length });
@@ -1468,19 +1745,99 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     }
   });
 
-  app.post("/api/push/send", express.json(), async (req, res) => {
+  app.post("/api/push/send", requireAuth, pushLimiter, express.json(), async (req, res) => {
     try {
-      const { userId, userEmail, title, body, icon, targetTab, category, priority, data } = req.body;
+      const authUser = req.authUser!;
+      const { userId, userEmail, excludeUserId, excludeUserEmail, title, body, icon, targetTab, category, priority, tag, data } = req.body;
       if (!title || !body) {
         return res.status(400).json({ error: "Missing title or body" });
       }
 
-      const allSubs = readPushSubscriptions();
+      if (!authUser.isAdmin && !userId && !userEmail) {
+        return res.status(403).json({ error: "Targeted recipient (userId or userEmail) required for non-admin push dispatch." });
+      }
+
+      // Resolve recipient identifiers (id <-> email, or band owner id) when only one was supplied
+      const candidateIds = new Set<string>();
+      const candidateEmails = new Set<string>();
+      if (userId) {
+        const uidStr = String(userId).trim();
+        candidateIds.add(uidStr);
+        if (uidStr.includes("@")) candidateEmails.add(uidStr.toLowerCase());
+      }
+      if (userEmail) {
+        const emStr = String(userEmail).trim().toLowerCase();
+        candidateEmails.add(emStr);
+        candidateIds.add(emStr);
+      }
+
+      const supabase = getSupabaseService();
+      if (supabase && (candidateIds.size > 0 || candidateEmails.size > 0)) {
+        try {
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          const uidCandidate = userId ? String(userId).trim() : "";
+          const emailCandidate = userEmail ? String(userEmail).trim().toLowerCase() : (uidCandidate.includes("@") ? uidCandidate.toLowerCase() : "");
+
+          if (uidCandidate && uuidRegex.test(uidCandidate)) {
+            const { data: profById } = await supabase
+              .from("profiles")
+              .select("id, email")
+              .eq("id", uidCandidate)
+              .maybeSingle();
+            if (profById?.id) candidateIds.add(String(profById.id));
+            if (profById?.email) candidateEmails.add(String(profById.email).trim().toLowerCase());
+
+            // Also check if target was a band ID rather than a profile ID
+            if (!profById) {
+              const { data: bandRow } = await supabase
+                .from("bands")
+                .select("owner_id, creator_id")
+                .eq("id", uidCandidate)
+                .maybeSingle();
+              const ownerId = bandRow?.owner_id || bandRow?.creator_id;
+              if (ownerId) {
+                candidateIds.add(String(ownerId));
+                const { data: ownerProf } = await supabase
+                  .from("profiles")
+                  .select("id, email")
+                  .eq("id", ownerId)
+                  .maybeSingle();
+                if (ownerProf?.email) candidateEmails.add(String(ownerProf.email).trim().toLowerCase());
+              }
+            }
+          }
+
+          if (emailCandidate) {
+            const { data: profByEmail } = await supabase
+              .from("profiles")
+              .select("id, email")
+              .ilike("email", emailCandidate)
+              .maybeSingle();
+            if (profByEmail?.id) candidateIds.add(String(profByEmail.id));
+            if (profByEmail?.email) candidateEmails.add(String(profByEmail.email).trim().toLowerCase());
+          }
+        } catch (lookupErr) {
+          console.warn("[PUSH SEND LOOKUP NOTICE]", lookupErr);
+        }
+      }
+
+      const excludedId = excludeUserId ? String(excludeUserId).trim() : "";
+      const excludedEmail = excludeUserEmail ? String(excludeUserEmail).trim().toLowerCase() : "";
+
+      const allSubs = await loadPushSubscriptionsAsync();
       const targetSubs = allSubs.filter(s => {
-        if (userId && (s.userId === userId || s.userEmail === userId)) return true;
-        if (userEmail && (s.userEmail?.toLowerCase() === userEmail.toLowerCase() || s.userId === userEmail)) return true;
-        if (!userId && !userEmail) return true; // broadcast
-        return false;
+        const subId = s.userId ? String(s.userId).trim() : "";
+        const subEmail = s.userEmail ? String(s.userEmail).trim().toLowerCase() : "";
+
+        if (excludedId && subId && subId === excludedId) return false;
+        if (excludedEmail && subEmail && subEmail === excludedEmail) return false;
+
+        if (candidateIds.size > 0 || candidateEmails.size > 0) {
+          if (subId && (candidateIds.has(subId) || candidateEmails.has(subId.toLowerCase()))) return true;
+          if (subEmail && (candidateEmails.has(subEmail) || candidateIds.has(subEmail))) return true;
+          return false;
+        }
+        return true; // admin broadcast
       });
 
       if (targetSubs.length === 0) {
@@ -1488,14 +1845,16 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       }
 
       const payload = JSON.stringify({
-        title,
-        body,
+        title: String(title).slice(0, 140),
+        body: String(body).slice(0, 400),
         icon: icon || "/icon-192.png",
         badge: "/icon-192.png",
+        tag: tag || undefined,
         targetTab: targetTab || "social",
         category: category || "general",
         priority: priority || "P1",
-        data: data || {},
+        senderId: authUser.id,
+        data: { ...(data || {}), senderId: authUser.id },
         timestamp: Date.now()
       });
 
@@ -1514,6 +1873,8 @@ Return a valid JSON object matching the requested schema. If any field is not fo
         } catch (pushErr: any) {
           if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
             expiredEndpoints.add(entry.subscription.endpoint);
+          } else {
+            console.warn(`[PUSH SEND ERROR] Endpoint ${entry.id} failed (${pushErr?.statusCode || 'err'}):`, pushErr?.message || pushErr);
           }
         }
       }));
@@ -1631,7 +1992,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     const todayStr = now.toISOString().split('T')[0];
 
     let sentCount = 0;
-    const allSubs = readPushSubscriptions();
+    const allSubs = await loadPushSubscriptionsAsync();
 
     for (const rsvp of rsvps) {
       if (rsvp.reminder_sent_24h) continue;
@@ -1731,15 +2092,23 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   }
 
   // API ROUTE: Get all RSVPs for current user or show
-  app.get("/api/shows/rsvps", (req, res) => {
+  app.get("/api/shows/rsvps", requireAuth, (req, res) => {
     try {
+      const authUser = req.authUser!;
       const { userId, userEmail, showId } = req.query;
       let rsvps = readShowRsvps();
-      if (userId) {
-        rsvps = rsvps.filter(r => r.user_id === userId || r.user_email === userId);
-      }
-      if (userEmail) {
-        rsvps = rsvps.filter(r => r.user_email?.toLowerCase() === String(userEmail).toLowerCase());
+      if (!authUser.isAdmin) {
+        rsvps = rsvps.filter(r =>
+          r.user_id === authUser.id ||
+          (authUser.email && r.user_email?.toLowerCase() === authUser.email.toLowerCase())
+        );
+      } else {
+        if (userId) {
+          rsvps = rsvps.filter(r => r.user_id === userId || r.user_email === userId);
+        }
+        if (userEmail) {
+          rsvps = rsvps.filter(r => r.user_email?.toLowerCase() === String(userEmail).toLowerCase());
+        }
       }
       if (showId) {
         rsvps = rsvps.filter(r => r.show_id === showId);
@@ -1751,22 +2120,29 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   });
 
   // API ROUTE: Add or update RSVP in show_rsvps table & local cache
-  app.post("/api/shows/rsvp", express.json(), async (req, res) => {
+  app.post("/api/shows/rsvp", requireAuth, apiMutationLimiter, express.json(), async (req, res) => {
     try {
-      const { show_id, show_title, show_date, venue_name, city, user_id, user_email, pushSubscription } = req.body;
+      const authUser = req.authUser!;
+      const { show_id, show_title, show_date, venue_name, city, user_email, pushSubscription } = req.body;
       if (!show_id || !show_title) {
         return res.status(400).json({ error: "show_id and show_title are required" });
       }
 
+      const verifiedUserId = authUser.id;
+      const verifiedEmail = authUser.email || (typeof user_email === 'string' ? user_email.trim().toLowerCase() : undefined);
+
       const rsvps = readShowRsvps();
-      const rsvpKey = `rsvp_${show_id}_${user_id || user_email || 'anon'}`;
-      const existingIdx = rsvps.findIndex(r => r.id === rsvpKey || (r.show_id === String(show_id) && (r.user_id === user_id || r.user_email === user_email)));
+      const rsvpKey = `rsvp_${show_id}_${verifiedUserId}`;
+      const existingIdx = rsvps.findIndex(r =>
+        r.id === rsvpKey ||
+        (r.show_id === String(show_id) && (r.user_id === verifiedUserId || (verifiedEmail && r.user_email?.toLowerCase() === verifiedEmail)))
+      );
 
       const rsvpRecord: ShowRsvp = {
         id: existingIdx >= 0 ? rsvps[existingIdx].id : rsvpKey,
         show_id: String(show_id),
-        user_id: user_id || (existingIdx >= 0 ? rsvps[existingIdx].user_id : undefined),
-        user_email: user_email || (existingIdx >= 0 ? rsvps[existingIdx].user_email : undefined),
+        user_id: verifiedUserId,
+        user_email: verifiedEmail || (existingIdx >= 0 ? rsvps[existingIdx].user_email : undefined),
         show_title: String(show_title),
         show_date: String(show_date || new Date().toISOString().split('T')[0]),
         venue_name: venue_name || (existingIdx >= 0 ? rsvps[existingIdx].venue_name : undefined),
@@ -1786,14 +2162,14 @@ Return a valid JSON object matching the requested schema. If any field is not fo
 
       // Register push subscription if provided in body
       if (pushSubscription && pushSubscription.endpoint) {
-        const subs = readPushSubscriptions();
+        const subs = await loadPushSubscriptionsAsync();
         const subEndpoint = pushSubscription.endpoint;
         const subIdx = subs.findIndex(s => s.subscription?.endpoint === subEndpoint);
         const subEntry = {
           id: subIdx >= 0 ? subs[subIdx].id : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           subscription: pushSubscription,
-          userId: user_id || user_email,
-          userEmail: user_email,
+          userId: verifiedUserId,
+          userEmail: verifiedEmail,
           created_at: new Date().toISOString(),
           last_used_at: new Date().toISOString()
         };
@@ -1801,7 +2177,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
         writePushSubscriptions(subs);
       }
 
-      console.log(`[SHOW RSVP SUCCESS] Registered RSVP for "${show_title}" (ID: ${show_id}, User: ${user_email || user_id || 'anon'})`);
+      console.log(`[SHOW RSVP SUCCESS] Registered RSVP for "${show_title}" (ID: ${show_id}, User: ${verifiedEmail || verifiedUserId})`);
       res.json({ success: true, rsvp: rsvpRecord });
     } catch (err: any) {
       console.error("[SHOW RSVP ERROR]", err);
@@ -1810,17 +2186,20 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   });
 
   // API ROUTE: Cancel RSVP
-  app.delete("/api/shows/rsvp/:showId", express.json(), async (req, res) => {
+  app.delete("/api/shows/rsvp/:showId", requireAuth, apiMutationLimiter, express.json(), async (req, res) => {
     try {
+      const authUser = req.authUser!;
       const { showId } = req.params;
       const { userId, userEmail } = req.body || {};
+      const targetUserId = authUser.isAdmin && userId ? String(userId) : authUser.id;
+      const targetEmail = authUser.isAdmin && userEmail ? String(userEmail).toLowerCase() : authUser.email;
 
       let rsvps = readShowRsvps();
       rsvps = rsvps.filter(r => {
         if (r.show_id !== showId) return true;
-        if (userId && r.user_id === userId) return false;
-        if (userEmail && r.user_email?.toLowerCase() === String(userEmail).toLowerCase()) return false;
-        if (!userId && !userEmail) return false; // delete all matching showId
+        if (targetUserId && r.user_id === targetUserId) return false;
+        if (targetEmail && r.user_email?.toLowerCase() === targetEmail) return false;
+        if (authUser.isAdmin && !userId && !userEmail) return false;
         return true;
       });
 
@@ -1830,8 +2209,8 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       if (supabase) {
         try {
           let q = supabase.from('show_rsvps').delete().eq('show_id', showId);
-          if (userId) q = q.eq('user_id', userId);
-          else if (userEmail) q = q.eq('user_email', userEmail);
+          if (targetUserId) q = q.eq('user_id', targetUserId);
+          else if (targetEmail) q = q.eq('user_email', targetEmail);
           await q;
         } catch (_) {}
       }
@@ -1843,7 +2222,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   });
 
   // API ROUTE: Manually trigger 24h VAPID push reminder dispatch for show RSVPs
-  app.post("/api/push/trigger-show-reminders", async (req, res) => {
+  app.post("/api/push/trigger-show-reminders", requireAdmin, async (req, res) => {
     try {
       const result = await checkAndSend24hShowReminders();
       res.json({ success: true, ...result });
@@ -1862,7 +2241,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   }, 15 * 60 * 1000);
 
   // Bandcamp URL resolver API: resolves any Bandcamp track or album URL into an embed player URL & metadata
-  app.post("/api/bandcamp/resolve", async (req, res) => {
+  app.post("/api/bandcamp/resolve", requireAuth, scrapeLimiter, async (req, res) => {
     try {
       const { url } = req.body;
       if (!url || typeof url !== "string") {
@@ -1877,6 +2256,9 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       
       if (iframeSrcMatch || directEmbedMatch) {
         const rawEmbed = (iframeSrcMatch ? iframeSrcMatch[1] : directEmbedMatch![0]).replace(/&amp;/g, '&');
+        if (!isAllowedBandcampUrl(rawEmbed)) {
+          return res.status(400).json({ error: "Invalid Bandcamp embed URL" });
+        }
         const trackIdMatch = rawEmbed.match(/track=(\d+)/i);
         const albumIdMatch = rawEmbed.match(/album=(\d+)/i);
         return res.json({
@@ -1889,9 +2271,9 @@ Return a valid JSON object matching the requested schema. If any field is not fo
         });
       }
 
-      // Case 2: Standard Bandcamp URL (e.g., https://artist.bandcamp.com/track/name or /album/name)
-      if (!cleanUrl.toLowerCase().includes("bandcamp.com")) {
-        return res.status(400).json({ error: "Not a valid Bandcamp URL" });
+      // Case 2: Strictly validate Bandcamp HTTPS domain before fetching (prevents SSRF)
+      if (!isAllowedBandcampUrl(cleanUrl)) {
+        return res.status(400).json({ error: "Only valid HTTPS bandcamp.com URLs are permitted" });
       }
 
       const response = await fetch(cleanUrl, {
@@ -2333,7 +2715,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   });
 
   // API ROUTE: Save / update track metadata for a playlist
-  app.post("/api/playlist/:playlistId/tracks", express.json(), async (req, res) => {
+  app.post("/api/playlist/:playlistId/tracks", requireAuth, apiMutationLimiter, express.json(), async (req, res) => {
     try {
       const { playlistId } = req.params;
       const { tracks } = req.body; // Array of PlaylistTrack or single track object
@@ -2355,7 +2737,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       }
 
       for (const t of inputTracks) {
-        if (!t.videoId) continue;
+        if (!t.videoId || typeof t.videoId !== 'string' || !/^[a-zA-Z0-9_-]{5,25}$/.test(t.videoId)) continue;
         const current = trackMap.get(t.videoId);
         trackMap.set(t.videoId, {
           videoId: t.videoId,
@@ -2376,7 +2758,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   });
 
   // API ROUTE: Enrich playlist video IDs using YouTube oEmbed (No API Key required)
-  app.post("/api/playlist/:playlistId/enrich", express.json(), async (req, res) => {
+  app.post("/api/playlist/:playlistId/enrich", requireAuth, apiMutationLimiter, express.json(), async (req, res) => {
     try {
       const { playlistId } = req.params;
       const { videoIds } = req.body; // array of string video IDs from YouTube iframe API getPlaylist()
@@ -2389,6 +2771,14 @@ Return a valid JSON object matching the requested schema. If any field is not fo
         return res.status(400).json({ error: "videoIds must be a non-empty array" });
       }
 
+      const safeVideoIds = videoIds
+        .filter((id): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{5,25}$/.test(id.trim()))
+        .map(id => id.trim());
+
+      if (safeVideoIds.length === 0) {
+        return res.status(400).json({ error: "No valid videoIds provided" });
+      }
+
       const existingTracks = await getPlaylistCache(playlistId);
       const trackMap = new Map<string, PlaylistTrack>();
       for (const t of existingTracks) {
@@ -2396,7 +2786,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
       }
 
       // Filter video IDs that need oEmbed lookup (missing title or default "Track N" title)
-      const idsNeedingFetch = videoIds.filter(id => {
+      const idsNeedingFetch = safeVideoIds.filter(id => {
         const existing = trackMap.get(id);
         return !existing || !existing.title || existing.title.startsWith("Track ") || existing.author === "Unknown Artist";
       }).slice(0, 30); // Limit per batch to keep response snappy
@@ -2425,8 +2815,8 @@ Return a valid JSON object matching the requested schema. If any field is not fo
         }));
       }
 
-      // Build complete ordered track list based on input videoIds order
-      const enrichedList: PlaylistTrack[] = videoIds.map((vId, idx) => {
+      // Build complete ordered track list based on validated safeVideoIds order
+      const enrichedList: PlaylistTrack[] = safeVideoIds.map((vId, idx) => {
         const existing = trackMap.get(vId);
         return existing || {
           videoId: vId,
@@ -2478,10 +2868,9 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   });
 
   // API ROUTE: Stripe Connect OAuth URL
-  app.get('/api/auth/stripe/url', (req, res) => {
-    const host = req.get('host') || 'localhost:3000';
-    const protocol = req.protocol || 'http';
-    const redirectUri = `${protocol}://${host}/auth/stripe/callback`;
+  app.get('/api/auth/stripe/url', requireAuth, (req, res) => {
+    const safeOrigin = resolveSafeAppOrigin(req);
+    const redirectUri = `${safeOrigin}/auth/stripe/callback`;
 
     const clientId = process.env.STRIPE_CONNECT_CLIENT_ID || "";
 
@@ -2499,6 +2888,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   // API ROUTE: Stripe Connect Callback
   app.get(['/auth/stripe/callback', '/auth/stripe/callback/'], async (req, res) => {
     const { code } = req.query;
+    const safeOrigin = resolveSafeAppOrigin(req);
     let stripeUserId = "acct_stripe_oauth_fallback_" + Math.random().toString(36).substring(2, 6).toUpperCase();
 
     if (code) {
@@ -2526,7 +2916,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
             <p style="color: #94a3b8; font-size: 11px; margin: 0;">This authorization window will close automatically.</p>
             <script>
               if (window.opener) {
-                window.opener.postMessage({ type: 'STRIPE_AUTH_SUCCESS', stripeUserId: '${stripeUserId}' }, '*');
+                window.opener.postMessage({ type: 'STRIPE_AUTH_SUCCESS', stripeUserId: ${JSON.stringify(stripeUserId)} }, ${JSON.stringify(safeOrigin)});
                 setTimeout(() => window.close(), 1000);
               } else {
                 window.location.href = '/';
@@ -2538,11 +2928,10 @@ Return a valid JSON object matching the requested schema. If any field is not fo
     `);
   });
 
-  // API ROUTE: PayPal OAuth Auth URL
-  app.get('/api/auth/paypal/url', (req, res) => {
-    const host = req.get('host') || 'localhost:3000';
-    const protocol = req.protocol || 'http';
-    const redirectUri = `${protocol}://${host}/auth/paypal/callback`;
+  // API ROUTE: PayPal OAuth Auth URL (optionalAuth allows onboarding step prior to session commit)
+  app.get('/api/auth/paypal/url', optionalAuth, scrapeLimiter, (req, res) => {
+    const safeOrigin = resolveSafeAppOrigin(req);
+    const redirectUri = `${safeOrigin}/auth/paypal/callback`;
 
     const clientId = process.env.VITE_PAYPAL_CLIENT_ID || process.env.PAYPAL_CLIENT_ID || "";
 
@@ -2562,7 +2951,7 @@ Return a valid JSON object matching the requested schema. If any field is not fo
   });
 
   // API ROUTE: Automatically lookup and enrich public band metadata (Year Formed, Record Label, City, State, Country, Micro-Genres, Bio)
-  app.post('/api/enrich-band', express.json(), async (req, res) => {
+  app.post('/api/enrich-band', requireAuth, aiLimiter, express.json(), async (req, res) => {
     try {
       const { bandName } = req.body;
       if (!bandName || typeof bandName !== 'string' || !bandName.trim()) {
@@ -2828,13 +3217,12 @@ Required schema:
   // API ROUTE: PayPal OAuth Callback
   app.get(['/auth/paypal/callback', '/auth/paypal/callback/'], async (req, res) => {
     const { code } = req.query;
+    const safeOrigin = resolveSafeAppOrigin(req);
     let email = "sandbox_paypal_user@nexus.core";
 
     if (code) {
       try {
-        const host = req.get('host') || 'localhost:3000';
-        const protocol = req.protocol || 'http';
-        const redirectUri = `${protocol}://${host}/auth/paypal/callback`;
+        const redirectUri = `${safeOrigin}/auth/paypal/callback`;
 
         const clientId = process.env.VITE_PAYPAL_CLIENT_ID || process.env.PAYPAL_CLIENT_ID || "";
         const clientSecret = process.env.PAYPAL_CLIENT_SECRET || "";
@@ -2898,7 +3286,7 @@ Required schema:
             <p style="color: #94a3b8; font-size: 11px; margin: 0;">This authorization window will close automatically.</p>
             <script>
               if (window.opener) {
-                window.opener.postMessage({ type: 'PAYPAL_AUTH_SUCCESS', email: '${email}' }, '*');
+                window.opener.postMessage({ type: 'PAYPAL_AUTH_SUCCESS', email: ${JSON.stringify(email)} }, ${JSON.stringify(safeOrigin)});
                 setTimeout(() => window.close(), 1000);
               } else {
                 window.location.href = '/';
@@ -2911,7 +3299,7 @@ Required schema:
   });
 
   // API ROUTE: Test email connectivity and get API Key presence info
-  app.get("/api/emails/test-connectivity", (req, res) => {
+  app.get("/api/emails/test-connectivity", requireAdmin, (req, res) => {
     const rawKey = process.env.RESEND_API_KEY || "";
     const present = rawKey.trim().length > 0;
     
@@ -2933,19 +3321,17 @@ Required schema:
     });
   });
 
-  // API ROUTE: Get live dispatch logs for debugging
-  app.get("/api/emails/dispatch-logs", (req, res) => {
+  // API ROUTE: Get live dispatch logs for debugging (Admin Only)
+  app.get("/api/emails/dispatch-logs", requireAdmin, (req, res) => {
     res.json({ logs: emailLogs });
   });
 
-  // API ROUTE: Send a test email of any content and diagnose response
-  app.post("/api/emails/send-test", async (req, res) => {
+  // API ROUTE: Send a test email of any content and diagnose response (Admin Only)
+  app.post("/api/emails/send-test", requireAdmin, emailLimiter, async (req, res) => {
     const { toEmail, fromEmail = "info@thenexuscoreapp.com" } = req.body;
     const fromLine = `Nexus Core Test <${fromEmail}>`;
     const subject = "Nexus Core - Diagnostic Email Connectivity Test";
-    const host = req.headers.host;
-    const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-    const appUrl = process.env.APP_URL || (host ? `${protocol}://${host}` : 'http://localhost:3000');
+    const appUrl = resolveSafeAppOrigin(req);
     
     try {
       const resend = getResend();
@@ -2956,10 +3342,11 @@ Required schema:
         });
       }
 
-      if (!toEmail) {
-        return res.status(400).json({ error: "Destination email 'toEmail' is required." });
+      if (!toEmail || typeof toEmail !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail.trim())) {
+        return res.status(400).json({ error: "A valid destination email 'toEmail' is required." });
       }
 
+      const safeToEmail = escapeHtml(toEmail.trim());
       const rawHtml = `
         <h2 style="color: #ffffff; font-size: 20px; font-weight: 800; margin-top: 0; margin-bottom: 16px; font-family: 'SFMono-Regular', Consolas, monospace; text-transform: uppercase; color: #00ffcc;">[ Diagnostic Handshake Successful ]</h2>
         <p style="margin: 0 0 16px 0; color: #d4d4d8;">Hello Administrator,</p>
@@ -2974,7 +3361,7 @@ Required schema:
               <div style="color: #00ffcc; font-weight: bold; margin-bottom: 6px; font-size: 12px; text-transform: uppercase;">// HANDSHAKE METADATA //</div>
               <div style="margin-bottom: 4px;">SECURITY_GATE: ACTIVE_SUCCESS</div>
               <div style="margin-bottom: 4px;">DISPATCH_TIME: ${new Date().toISOString()}</div>
-              <div>RECIPIENT_TAG: ${toEmail}</div>
+              <div>RECIPIENT_TAG: ${safeToEmail}</div>
             </td>
           </tr>
         </table>
@@ -2986,7 +3373,7 @@ Required schema:
 
       const { data, error } = await resend.emails.send({
         from: fromLine,
-        to: toEmail,
+        to: toEmail.trim(),
         subject: subject,
         html: getNexusEmailWrapper(rawHtml, "Diagnostic connectivity handshake verification successful.", appUrl)
       });
@@ -3011,33 +3398,45 @@ Required schema:
   });
 
   // API ROUTE: Send Team Invite Email
-  app.post("/api/emails/invite", async (req, res) => {
-    const { email, role, inviterEmail, bandName, bandId } = req.body;
+  app.post("/api/emails/invite", requireAuth, emailLimiter, async (req, res) => {
+    const { email, role, bandName, bandId } = req.body;
+    const inviterEmail = req.authUser!.email || req.body.inviterEmail || 'A team manager';
     const fromLine = 'Nexus Core App <invites@thenexuscoreapp.com>';
-    const subject = `You have been invited to join ${bandName || 'a team'} on Nexus Core`;
-    const host = req.headers.host;
-    const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-    const appUrl = process.env.APP_URL || (host ? `${protocol}://${host}` : 'http://localhost:3000');
+    const subject = `You have been invited to join ${String(bandName || 'a team').replace(/[\r\n]/g, '')} on Nexus Core`;
+    const appUrl = resolveSafeAppOrigin(req);
     
     try {
+      if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        return res.status(400).json({ error: "A valid email address is required" });
+      }
+
+      if (bandId) {
+        const ownsBand = await assertBandOrEntityOwner(getSupabaseService(), req.authUser!, String(bandId));
+        if (!ownsBand) {
+          return res.status(403).json({ error: "Forbidden: You are not authorized to send team invites for this entity." });
+        }
+      }
+
       const resend = getResend();
       if (!resend) {
         recordEmailLog('invite', email || '', fromLine, subject, 'SIMULATED', { error: 'No RESEND_API_KEY config' });
         return res.json({ simulated: true, message: "Email simulation successful (no RESEND_API_KEY)" });
       }
 
-      if (!email) {
-        return res.status(400).json({ error: "Email is required" });
-      }
+      const cleanEmail = email.trim();
+      const inviteUrl = `${appUrl}/dev/dashboard?accept_invite=1&email=${encodeURIComponent(cleanEmail)}&role=${encodeURIComponent(role || '')}&band=${encodeURIComponent(bandName || '')}&band_id=${encodeURIComponent(bandId || '')}`;
 
-      const inviteUrl = `${process.env.APP_URL || 'http://localhost:3000'}/dev/dashboard?accept_invite=1&email=${encodeURIComponent(email)}&role=${encodeURIComponent(role || '')}&band=${encodeURIComponent(bandName || '')}&band_id=${encodeURIComponent(bandId || '')}`;
+      const safeInviter = escapeHtml(inviterEmail);
+      const safeBandName = escapeHtml(bandName || 'Touring Group');
+      const safeRole = escapeHtml(role || 'Staff Operator');
+      const safeRecipient = escapeHtml(cleanEmail);
 
       const rawHtml = `
         <h2 style="color: #ffffff; font-size: 20px; font-weight: 800; margin-top: 0; margin-bottom: 20px; font-family: 'SFMono-Regular', Consolas, monospace; text-transform: uppercase; color: #00ffcc;">[ Crew Invite Active ]</h2>
         <p style="margin: 0 0 16px 0; color: #d4d4d8;">Hello,</p>
         <p style="margin: 0 0 20px 0; color: #d4d4d8; line-height: 1.6;">
-          You have been authorized by <strong>${inviterEmail || 'A team manager'}</strong> to activate an operator session. 
-          You've been invited to join the <strong>${bandName || 'Touring Group'}</strong> workspace as a <strong>${role || 'Staff Operator'}</strong>.
+          You have been authorized by <strong>${safeInviter}</strong> to activate an operator session. 
+          You've been invited to join the <strong>${safeBandName}</strong> workspace as a <strong>${safeRole}</strong>.
         </p>
 
         <!-- Invite Credentials Information Card -->
@@ -3045,10 +3444,10 @@ Required schema:
           <tr>
             <td style="padding: 18px;">
               <div style="font-size: 10px; font-weight: 800; color: #8f9cae; text-transform: uppercase; font-family: 'SFMono-Regular', Consolas, monospace; margin-bottom: 6px; letter-spacing: 1px;">// INTENDED CREW RECIPIENT</div>
-              <div style="font-size: 14px; font-weight: bold; color: #ffffff; margin-bottom: 14px; font-family: sans-serif;">${email}</div>
+              <div style="font-size: 14px; font-weight: bold; color: #ffffff; margin-bottom: 14px; font-family: sans-serif;">${safeRecipient}</div>
               
               <div style="font-size: 10px; font-weight: 800; color: #8f9cae; text-transform: uppercase; font-family: 'SFMono-Regular', Consolas, monospace; margin-bottom: 4px; letter-spacing: 1px;">ROLE CONFIGURATION</div>
-              <div style="font-size: 13px; font-weight: bold; color: #a855f7; font-family: sans-serif;">${role || 'Team Member'}</div>
+              <div style="font-size: 13px; font-weight: bold; color: #a855f7; font-family: sans-serif;">${safeRole}</div>
             </td>
           </tr>
         </table>
@@ -3060,7 +3459,7 @@ Required schema:
         <table border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin-top: 10px; margin-bottom: 24px;">
           <tr>
             <td align="center" bgcolor="#00ffcc" style="border-radius: 6px;">
-              <a href="${inviteUrl}" target="_blank" style="display: inline-block; background-color: #00ffcc; color: #080a0f; font-family: 'SFMono-Regular', Consolas, Menlo, monospace; font-size: 12px; font-weight: 900; line-height: 1.2; text-decoration: none; padding: 15px 30px; border-radius: 6px; text-transform: uppercase; letter-spacing: 1.5px; border: 1px solid #00ffcc;">
+              <a href="${escapeHtml(inviteUrl)}" target="_blank" style="display: inline-block; background-color: #00ffcc; color: #080a0f; font-family: 'SFMono-Regular', Consolas, Menlo, monospace; font-size: 12px; font-weight: 900; line-height: 1.2; text-decoration: none; padding: 15px 30px; border-radius: 6px; text-transform: uppercase; letter-spacing: 1.5px; border: 1px solid #00ffcc;">
                 [ ACTIVATE CREW CONSOLE ]
               </a>
             </td>
@@ -3068,23 +3467,23 @@ Required schema:
         </table>
 
         <p style="margin: 0; font-size: 11px; color: #71717a;">
-          If you believe you received this routing invitation in error or did not ask to collaborate with ${bandName || 'this artist'}, please disregard this message safely.
+          If you believe you received this routing invitation in error or did not ask to collaborate with ${escapeHtml(bandName || 'this artist')}, please disregard this message safely.
         </p>
       `;
 
       const { data, error } = await resend.emails.send({
         from: fromLine,
-        to: email, 
+        to: cleanEmail, 
         subject: subject,
-        html: getNexusEmailWrapper(rawHtml, `Authorized invitation to join ${bandName || 'crew'} as ${role || 'operator'}.`, appUrl)
+        html: getNexusEmailWrapper(rawHtml, `Authorized invitation to join ${safeBandName} as ${safeRole}.`, appUrl)
       });
 
       if (error) {
-        recordEmailLog('invite', email, fromLine, subject, 'FAILED', error);
+        recordEmailLog('invite', cleanEmail, fromLine, subject, 'FAILED', error);
         return res.status(400).json({ error });
       }
 
-      recordEmailLog('invite', email, fromLine, subject, 'SUCCESS', data);
+      recordEmailLog('invite', cleanEmail, fromLine, subject, 'SUCCESS', data);
       res.json({ success: true, data });
     } catch (e: any) {
       console.error("Invite Email Error:", e);
@@ -3094,50 +3493,62 @@ Required schema:
   });
 
   // API ROUTE: Send Guestlist Confirmation Email
-  app.post("/api/emails/guestlist", async (req, res) => {
-    const { email, guestName, bandName, showDate, venueName, passType = 'General', additionalCount = 0 } = req.body;
+  app.post("/api/emails/guestlist", requireAuth, emailLimiter, async (req, res) => {
+    const { email, guestName, bandName, bandId, showDate, venueName, passType = 'General', additionalCount = 0 } = req.body;
     const fromLine = 'Nexus Core App <guestlist@thenexuscoreapp.com>';
-    const subject = `Your Guestlist Pass for ${bandName || 'the show'}`;
-    const host = req.headers.host;
-    const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-    const appUrl = process.env.APP_URL || (host ? `${protocol}://${host}` : 'http://localhost:3000');
+    const subject = `Your Guestlist Pass for ${String(bandName || 'the show').replace(/[\r\n]/g, '')}`;
+    const appUrl = resolveSafeAppOrigin(req);
     
     // Map dropdown option to official layout string
     let displayPassType = 'General Guest Entry Pass';
-    if (passType.toLowerCase() === 'vip') {
+    if (String(passType).toLowerCase() === 'vip') {
       displayPassType = 'VIP Access Pass';
-    } else if (passType.toLowerCase() === 'crew') {
+    } else if (String(passType).toLowerCase() === 'crew') {
       displayPassType = 'Crew Member All-Access';
-    } else if (passType.toLowerCase() === 'media' || passType.toLowerCase() === 'press') {
+    } else if (String(passType).toLowerCase() === 'media' || String(passType).toLowerCase() === 'press') {
       displayPassType = 'Media & Press Credential';
     }
     
+    const safeAddCount = Math.max(0, Math.min(20, Number(additionalCount) || 0));
     // Total headcount text
-    const headcountText = additionalCount > 0 
-      ? `${displayPassType} (+${additionalCount} Additional Guests)`
+    const headcountText = safeAddCount > 0 
+      ? `${displayPassType} (+${safeAddCount} Additional Guests)`
       : `${displayPassType} (1x)`;
 
-    const confirmationUrl = `${appUrl}/?guest_confirm=1&email=${encodeURIComponent(email || '')}&guestName=${encodeURIComponent(guestName || '')}&band=${encodeURIComponent(bandName || '')}&date=${encodeURIComponent(showDate || '')}&venue=${encodeURIComponent(venueName || '')}&pass_type=${encodeURIComponent(passType)}`;
-
     try {
+      if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        return res.status(400).json({ error: "A valid email address is required" });
+      }
+
+      if (bandId) {
+        const ownsBand = await assertBandOrEntityOwner(getSupabaseService(), req.authUser!, String(bandId));
+        if (!ownsBand) {
+          return res.status(403).json({ error: "Forbidden: You are not authorized to send guestlist passes for this entity." });
+        }
+      }
+
+      const cleanEmail = email.trim();
+      const confirmationUrl = `${appUrl}/?guest_confirm=1&email=${encodeURIComponent(cleanEmail)}&guestName=${encodeURIComponent(guestName || '')}&band=${encodeURIComponent(bandName || '')}&date=${encodeURIComponent(showDate || '')}&venue=${encodeURIComponent(venueName || '')}&pass_type=${encodeURIComponent(passType)}`;
+
       const resend = getResend();
       if (!resend) {
-        recordEmailLog('guestlist', email || '', fromLine, subject, 'SIMULATED', { error: 'No RESEND_API_KEY config' });
+        recordEmailLog('guestlist', cleanEmail, fromLine, subject, 'SIMULATED', { error: 'No RESEND_API_KEY config' });
         return res.json({ simulated: true, message: "Email simulation successful (no RESEND_API_KEY)" });
       }
 
-      if (!email) {
-        return res.status(400).json({ error: "Email is required" });
-      }
+      const safeGuest = escapeHtml(guestName || 'VIP Guest');
+      const safeBand = escapeHtml(bandName || 'the concert');
+      const safeVenue = escapeHtml(venueName || '');
+      const safeDate = escapeHtml(showDate || '');
 
       const rawHtml = `
         <h2 style="color: #00ffcc; font-size: 20px; font-weight: 800; margin-top: 0; margin-bottom: 16px; font-family: 'SFMono-Regular', Consolas, monospace; text-transform: uppercase; text-align: center;">
           [ GUESTLIST ]<br/>
           <span style="font-size: 14px; color: #ffffff; font-weight: bold; letter-spacing: 1px;">- Pass Confirmed -</span>
         </h2>
-        <p style="margin: 0 0 16px 0; color: #d4d4d8; text-align: center;">Hello <strong>${guestName || 'VIP Guest'}</strong>,</p>
+        <p style="margin: 0 0 16px 0; color: #d4d4d8; text-align: center;">Hello <strong>${safeGuest}</strong>,</p>
         <p style="margin: 0 0 24px 0; color: #d4d4d8; line-height: 1.6; text-align: center;">
-          Your credential access has been processed successfully. You are officially listed on the exclusive artist guestlist for <strong>${bandName || 'the concert'}</strong>. See confirmation details below:
+          Your credential access has been processed successfully. You are officially listed on the exclusive artist guestlist for <strong>${safeBand}</strong>. See confirmation details below:
         </p>
 
         <!-- Pass Details Table -->
@@ -3145,26 +3556,26 @@ Required schema:
           <tr>
             <td style="padding: 20px; text-align: center;" align="center">
               <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
-                ${venueName ? `
+                ${safeVenue ? `
                 <tr>
                   <td style="padding-bottom: 12px; font-family: sans-serif; text-align: center;" align="center">
                     <div style="font-size: 10px; font-weight: 800; color: #8f9cae; text-transform: uppercase; font-family: 'SFMono-Regular', Consolas, monospace; letter-spacing: 1px; text-align: center;">VENUE LOCATION</div>
-                    <div style="font-size: 14px; font-weight: bold; color: #ffffff; margin-top: 3px; text-align: center;">${venueName}</div>
+                    <div style="font-size: 14px; font-weight: bold; color: #ffffff; margin-top: 3px; text-align: center;">${safeVenue}</div>
                   </td>
                 </tr>
                 ` : ''}
-                ${showDate ? `
+                ${safeDate ? `
                 <tr>
                   <td style="padding-bottom: 12px; font-family: sans-serif; text-align: center;" align="center">
                     <div style="font-size: 10px; font-weight: 800; color: #8f9cae; text-transform: uppercase; font-family: 'SFMono-Regular', Consolas, monospace; letter-spacing: 1px; text-align: center;">EVENT DATE</div>
-                    <div style="font-size: 14px; font-weight: bold; color: #ffffff; margin-top: 3px; text-align: center;">${showDate}</div>
+                    <div style="font-size: 14px; font-weight: bold; color: #ffffff; margin-top: 3px; text-align: center;">${safeDate}</div>
                   </td>
                 </tr>
                 ` : ''}
                 <tr>
                   <td style="font-family: sans-serif; text-align: center;" align="center">
                     <div style="font-size: 10px; font-weight: 800; color: #8f9cae; text-transform: uppercase; font-family: 'SFMono-Regular', Consolas, monospace; letter-spacing: 1px; text-align: center;">CREDENTIAL / PASS TYPE</div>
-                    <div style="font-size: 14px; font-weight: bold; color: #a855f7; margin-top: 3px; text-transform: uppercase; text-align: center;">${headcountText}</div>
+                    <div style="font-size: 14px; font-weight: bold; color: #a855f7; margin-top: 3px; text-transform: uppercase; text-align: center;">${escapeHtml(headcountText)}</div>
                   </td>
                 </tr>
               </table>
@@ -3174,7 +3585,7 @@ Required schema:
 
         <!-- Security Badge Box / Clickable Verification Gate -->
         <div style="margin-top: 24px; margin-bottom: 24px; text-align: center;">
-          <a href="${confirmationUrl}" target="_blank" style="display: block; text-decoration: none; padding: 16px 12px; background-color: #080a0f; border: 1px dashed #00ffcc; text-align: center; border-radius: 8px;">
+          <a href="${escapeHtml(confirmationUrl)}" target="_blank" style="display: block; text-decoration: none; padding: 16px 12px; background-color: #080a0f; border: 1px dashed #00ffcc; text-align: center; border-radius: 8px;">
             <div style="font-size: 8px; font-family: 'SFMono-Regular', Consolas, monospace; color: #71717a; margin-bottom: 6px; letter-spacing: 2px; text-transform: uppercase;">SECURE PASS STATUS: CLICK TO ACTIVATE</div>
             <div style="font-size: 11px; font-weight: bold; letter-spacing: 1.5px; color: #00ffcc; font-family: 'SFMono-Regular', Consolas, monospace; text-transform: uppercase; white-space: nowrap;">[ GUESTLIST_ACCESS ]</div>
           </a>
@@ -3187,17 +3598,17 @@ Required schema:
 
       const { data, error } = await resend.emails.send({
         from: fromLine,
-        to: email,
+        to: cleanEmail,
         subject: subject,
-        html: getNexusEmailWrapper(rawHtml, `Your guestlist credentials for ${bandName || 'the artist'} are confirmed.`, appUrl)
+        html: getNexusEmailWrapper(rawHtml, `Your guestlist credentials for ${safeBand} are confirmed.`, appUrl)
       });
 
       if (error) {
-        recordEmailLog('guestlist', email, fromLine, subject, 'FAILED', error);
+        recordEmailLog('guestlist', cleanEmail, fromLine, subject, 'FAILED', error);
         return res.status(400).json({ error });
       }
 
-      recordEmailLog('guestlist', email, fromLine, subject, 'SUCCESS', data);
+      recordEmailLog('guestlist', cleanEmail, fromLine, subject, 'SUCCESS', data);
       res.json({ success: true, data });
     } catch (e: any) {
       console.error("Guestlist Email Error:", e);
@@ -3207,30 +3618,40 @@ Required schema:
   });
 
   // API ROUTE: Send VIP Loyalty Club Welcome Email
-  app.post("/api/emails/vip-loyalty", async (req, res) => {
-    const { email, fanName, bandName, discountCode } = req.body;
+  app.post("/api/emails/vip-loyalty", requireAuth, emailLimiter, async (req, res) => {
+    const { email, fanName, bandName, bandId, discountCode } = req.body;
     const fromLine = 'Nexus Core App <vip@thenexuscoreapp.com>';
-    const subject = `Welcome to the VIP List, ${fanName}!`;
-    const host = req.headers.host;
-    const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-    const appUrl = process.env.APP_URL || (host ? `${protocol}://${host}` : 'http://localhost:3000');
+    const subject = `Welcome to the VIP List, ${String(fanName || 'Fan').replace(/[\r\n]/g, '')}!`;
+    const appUrl = resolveSafeAppOrigin(req);
     
     try {
+      if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        return res.status(400).json({ error: "A valid email address is required" });
+      }
+
+      if (bandId) {
+        const ownsBand = await assertBandOrEntityOwner(getSupabaseService(), req.authUser!, String(bandId));
+        if (!ownsBand) {
+          return res.status(403).json({ error: "Forbidden: You are not authorized to dispatch VIP emails for this entity." });
+        }
+      }
+
+      const cleanEmail = email.trim();
       const resend = getResend();
       if (!resend) {
-        recordEmailLog('vip-loyalty', email || '', fromLine, subject, 'SIMULATED', { error: 'No RESEND_API_KEY config' });
+        recordEmailLog('vip-loyalty', cleanEmail, fromLine, subject, 'SIMULATED', { error: 'No RESEND_API_KEY config' });
         return res.json({ simulated: true, message: "Email simulation successful (no RESEND_API_KEY)" });
       }
 
-      if (!email) {
-        return res.status(400).json({ error: "Email is required" });
-      }
+      const safeFanName = escapeHtml(fanName || 'VIP Fan');
+      const safeBandName = escapeHtml(bandName || 'our touring group');
+      const safeDiscountCode = escapeHtml(discountCode || 'VIP10OFF');
 
       const rawHtml = `
         <h2 style="color: #ffffff; font-size: 20px; font-weight: 800; margin-top: 0; margin-bottom: 16px; font-family: 'SFMono-Regular', Consolas, monospace; text-transform: uppercase; color: #00ffcc;">[ VIP Fan Club Welcome ]</h2>
-        <p style="margin: 0 0 16px 0; color: #d4d4d8;">Hey <strong>${fanName}</strong>,</p>
+        <p style="margin: 0 0 16px 0; color: #d4d4d8;">Hey <strong>${safeFanName}</strong>,</p>
         <p style="margin: 0 0 24px 0; color: #d4d4d8; line-height: 1.6;">
-          You are officially registered and approved on the exclusive VIP roster update for <strong>${bandName || 'our touring group'}</strong>! We are deeply grateful for your loyalty and support.
+          You are officially registered and approved on the exclusive VIP roster update for <strong>${safeBandName}</strong>! We are deeply grateful for your loyalty and support.
         </p>
         <p style="margin: 0 0 24px 0; color: #d4d4d8; line-height: 1.6;">
           As an authorized VIP member, you will receive first-priority notifications regarding private regional tour updates, exclusive merchandise line previews, and restricted pre-sale passwords.
@@ -3242,7 +3663,7 @@ Required schema:
             <td align="center" style="padding: 24px 16px;">
               <div style="font-size: 10px; font-family: 'SFMono-Regular', Consolas, monospace; color: #71717a; margin-bottom: 8px; letter-spacing: 2px; text-transform: uppercase;">YOUR PERSONAL EXCLUSIVE TOURING DISCOUNT CODE</div>
               <div style="font-size: 28px; font-weight: 900; letter-spacing: 3px; color: #00ffcc; font-family: 'SFMono-Regular', Consolas, monospace; text-shadow: 0 0 10px rgba(0, 255, 204, 0.4); margin: 6px 0 12px 0;">
-                ${discountCode || 'VIP10OFF'}
+                ${safeDiscountCode}
               </div>
               <div style="height: 1px; width: 120px; background-color: #1f2736; margin: 0 auto 12px auto;"></div>
               <p style="margin: 0; font-size: 11px; color: #a1a1aa; font-family: sans-serif;">
@@ -3259,17 +3680,17 @@ Required schema:
 
       const { data, error } = await resend.emails.send({
         from: fromLine,
-        to: email,
+        to: cleanEmail,
         subject: subject,
-        html: getNexusEmailWrapper(rawHtml, `Welcome to the exclusive VIP List for ${bandName || 'our crew'}!`, appUrl)
+        html: getNexusEmailWrapper(rawHtml, `Welcome to the exclusive VIP List for ${safeBandName}!`, appUrl)
       });
 
       if (error) {
-        recordEmailLog('vip-loyalty', email, fromLine, subject, 'FAILED', error);
+        recordEmailLog('vip-loyalty', cleanEmail, fromLine, subject, 'FAILED', error);
         return res.status(400).json({ error });
       }
 
-      recordEmailLog('vip-loyalty', email, fromLine, subject, 'SUCCESS', data);
+      recordEmailLog('vip-loyalty', cleanEmail, fromLine, subject, 'SUCCESS', data);
       res.json({ success: true, data });
     } catch (e: any) {
       console.error("VIP Email Error:", e);
@@ -3279,23 +3700,32 @@ Required schema:
   });
 
   // API ROUTE: Stripe Checkout / Payment Intent for Escrow
-  app.post("/api/payments/create-escrow-intent", async (req, res) => {
+  app.post("/api/payments/create-escrow-intent", requireAuth, paymentLimiter, async (req, res) => {
     try {
       const { amount, currency = 'usd', connectAccountId } = req.body;
+      const numericAmount = Number(amount);
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 500000) {
+        return res.status(400).json({ error: "Invalid escrow amount." });
+      }
+      if (connectAccountId && (typeof connectAccountId !== 'string' || !/^acct_[a-zA-Z0-9_]+$/.test(connectAccountId))) {
+        return res.status(400).json({ error: "Invalid Stripe Connect account format." });
+      }
+
       const stripe = await getStripeAsync();
-      
       if (!stripe) {
         return res.status(500).json({ error: "Stripe is not configured on the server." });
       }
 
       // Step 1: Create PaymentIntent for the Escrow amount
       const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(amount * 100), // Stripe expects cents
-        currency,
-        // Optional: transferring a portion to a connected Creative Account directly
-        // transfer_data: connectAccountId ? { destination: connectAccountId } : undefined,
-        // For escrow, we might capture later:
-        capture_method: 'manual', 
+        amount: Math.max(50, Math.round(numericAmount * 100)), // Stripe expects cents
+        currency: String(currency || 'usd').toLowerCase(),
+        capture_method: 'manual',
+        metadata: {
+          userId: req.authUser!.id,
+          connectAccountId: connectAccountId ? String(connectAccountId) : '',
+          type: 'escrow'
+        }
       });
 
       res.json({ clientSecret: paymentIntent.client_secret });
@@ -3306,22 +3736,26 @@ Required schema:
   });
 
   // API ROUTE: Connect Account setup linking (Creatives getting paid via Stripe)
-  app.post("/api/payments/create-connect-account", async (req, res) => {
+  app.post("/api/payments/create-connect-account", requireAuth, paymentLimiter, async (req, res) => {
     try {
       const stripe = await getStripeAsync();
       if (!stripe) {
         return res.status(500).json({ error: "Stripe is not configured." });
       }
 
-      // In a real system, you map this to the authenticated creative's DB record
+      const safeOrigin = resolveSafeAppOrigin(req);
       const account = await stripe.accounts.create({
         type: 'express', // Express allows Stripe to handle onboarding UI
+        metadata: {
+          userId: req.authUser!.id,
+          email: req.authUser!.email || ''
+        }
       });
 
       const accountLink = await stripe.accountLinks.create({
         account: account.id,
-        refresh_url: `${req.protocol}://${req.get('host')}/dev/dashboard?connect_fail=1`,
-        return_url: `${req.protocol}://${req.get('host')}/dev/dashboard?connect_success=1`,
+        refresh_url: `${safeOrigin}/dev/dashboard?connect_fail=1`,
+        return_url: `${safeOrigin}/dev/dashboard?connect_success=1`,
         type: 'account_onboarding',
       });
 
@@ -3333,28 +3767,56 @@ Required schema:
   });
 
   // API ROUTE: Release Escrow (Transfers funds to Connected Account)
-  app.post("/api/payments/release-escrow", async (req, res) => {
+  app.post("/api/payments/release-escrow", requireAuth, paymentLimiter, async (req, res) => {
     try {
-      const { amount, connectAccountId } = req.body;
+      const { amount, connectAccountId, contractId } = req.body;
+      const numericAmount = Number(amount);
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 500000) {
+        return res.status(400).json({ error: "Invalid release amount." });
+      }
+
+      if (!connectAccountId || typeof connectAccountId !== 'string' || !/^acct_[a-zA-Z0-9_]+$/.test(connectAccountId)) {
+        return res.status(400).json({ error: "Missing or invalid connectAccountId. The creative must have a linked Stripe Connect account." });
+      }
+
+      // If contractId is provided, verify caller is an authorized party or admin
+      if (contractId && !req.authUser!.isAdmin) {
+        const sb = getSupabaseService();
+        if (sb) {
+          const { data: contract } = await sb
+            .from('creative_contracts_v1')
+            .select('id, band_id, client_id, creative_id, payer_id, created_by')
+            .eq('id', String(contractId))
+            .maybeSingle();
+
+          if (contract) {
+            const ownedIds = await getUserOwnedEntityIds(sb, req.authUser!);
+            const isParty = hasAnyOwnershipMatch(req.authUser!, ownedIds, [
+              contract.band_id,
+              contract.client_id,
+              contract.creative_id,
+              contract.payer_id,
+              contract.created_by,
+            ]);
+            if (!isParty) {
+              return res.status(403).json({ error: "Forbidden: You are not an authorized party to this escrow contract." });
+            }
+          }
+        }
+      }
+
       const stripe = await getStripeAsync();
-      
       if (!stripe) {
         return res.status(500).json({ error: "Stripe is not configured on the server." });
       }
 
-      if (!connectAccountId) {
-        return res.status(400).json({ error: "Missing connectAccountId. The creative must have a linked Stripe Connect account." });
-      }
-
-      // Instead of pulling from platform balance, we simulate the original 
-      // client (e.g. band) payment transferring to the creative's connected account
-      const amountInCents = Math.round(amount * 100);
+      const amountInCents = Math.max(50, Math.round(numericAmount * 100));
       const feeInCents = Math.round(amountInCents * 0.0777);
 
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amountInCents, // Stripe expects cents
         currency: 'usd',
-        payment_method: 'pm_card_visa', // Use test card to bypass platform balance errors in test mode
+        payment_method: 'pm_card_visa',
         confirm: true,
         automatic_payment_methods: {
           enabled: true,
@@ -3364,7 +3826,11 @@ Required schema:
           destination: connectAccountId,
         },
         application_fee_amount: feeInCents,
-        description: 'Simulated Escrow Release from Platform Client',
+        description: 'Escrow Release from Platform Client',
+        metadata: {
+          releasedByUserId: req.authUser!.id,
+          contractId: contractId ? String(contractId) : ''
+        }
       });
 
       res.json({ success: true, transferId: paymentIntent.id });
@@ -3375,21 +3841,27 @@ Required schema:
   });
 
   // API ROUTE: Create Payment Intent (For custom in-modal Card & Digital Wallet payments)
-  app.post("/api/payments/create-payment-intent", async (req, res) => {
+  app.post("/api/payments/create-payment-intent", requireAuth, paymentLimiter, async (req, res) => {
     try {
       const { amount, currency = "usd", metadata = {} } = req.body;
+      const numericAmount = Number(amount);
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 500000) {
+        return res.status(400).json({ error: "Invalid payment amount." });
+      }
+
       const stripe = await getStripeAsync();
       if (!stripe) {
         return res.status(503).json({ error: "Stripe is not configured on the server." });
       }
 
-      const amountInCents = Math.max(50, Math.round(Number(amount) * 100));
+      const amountInCents = Math.max(50, Math.round(numericAmount * 100));
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amountInCents,
-        currency: currency.toLowerCase(),
+        currency: String(currency || "usd").toLowerCase(),
         automatic_payment_methods: { enabled: true },
         metadata: {
-          ...metadata,
+          ...(metadata && typeof metadata === 'object' ? metadata : {}),
+          userId: req.authUser!.id,
           app: "Nexus-Core",
         }
       });
@@ -3405,11 +3877,10 @@ Required schema:
   });
 
   // API ROUTE: Create Cart & Tickets Checkout Session (Hosted Stripe Checkout)
-  app.post("/api/payments/create-cart-checkout", async (req, res) => {
+  app.post("/api/payments/create-cart-checkout", requireAuth, paymentLimiter, async (req, res) => {
     try {
       const {
         cartItems = [],
-        shippingAddress,
         customerEmail,
         stripeCustomerId,
         orderType = 'cart', // 'cart' | 'merch' | 'ticket'
@@ -3420,18 +3891,19 @@ Required schema:
 
       const stripe = await getStripeAsync();
 
-      const host = req.get("host") || "localhost:3000";
-      const protocol = req.protocol || "http";
-      const defaultRedirectUrl = `${protocol}://${host}`;
-
-      const resolvedSuccessUrl = successUrl || `${defaultRedirectUrl}/?checkout_success=1&order_type=${orderType}&session_id={CHECKOUT_SESSION_ID}`;
-      const resolvedCancelUrl = cancelUrl || `${defaultRedirectUrl}/?checkout_cancel=1`;
+      const defaultRedirectUrl = resolveSafeAppOrigin(req);
+      const resolvedSuccessUrl = resolveSafeRedirectUrl(
+        req,
+        successUrl,
+        `/?checkout_success=1&order_type=${encodeURIComponent(String(orderType))}&session_id={CHECKOUT_SESSION_ID}`
+      );
+      const resolvedCancelUrl = resolveSafeRedirectUrl(req, cancelUrl, `/?checkout_cancel=1`);
 
       if (!stripe) {
         // Fallback simulated checkout url if Stripe keys are not configured in environment
         const mockOrderId = `SLM-${Math.floor(100000 + Math.random() * 900000)}`;
         return res.json({
-          url: `${defaultRedirectUrl}/?checkout_success=1&order_type=${orderType}&mock=1&order_id=${mockOrderId}`,
+          url: `${defaultRedirectUrl}/?checkout_success=1&order_type=${encodeURIComponent(String(orderType))}&mock=1&order_id=${mockOrderId}`,
           sessionId: `cs_mock_${Date.now()}`,
           simulated: true
         });
@@ -3440,7 +3912,8 @@ Required schema:
       // Build valid Stripe line items
       const lineItems = (cartItems || []).map((item: any) => {
         const rawPrice = typeof item.price === 'number' ? item.price : parseFloat(String(item.price || '25').replace(/[^0-9.]/g, '')) || 25;
-        const unitAmount = Math.max(50, Math.round(rawPrice * 100)); // Minimum 50 cents in Stripe
+        const boundedPrice = Math.min(50000, Math.max(0.5, Number.isFinite(rawPrice) ? rawPrice : 25));
+        const unitAmount = Math.max(50, Math.round(boundedPrice * 100)); // Minimum 50 cents in Stripe
         const name = item.name || item.title || item.headliner || 'Tour Item';
         const description = item.description || (item.size ? `Size: ${item.size}` : undefined) || (item.venue ? `Venue: ${item.venue}` : undefined);
         
@@ -3460,7 +3933,7 @@ Required schema:
             },
             unit_amount: unitAmount,
           },
-          quantity: Math.max(1, Number(item.quantity) || 1),
+          quantity: Math.min(100, Math.max(1, Math.floor(Number(item.quantity) || 1))),
         };
       });
 
@@ -3468,6 +3941,7 @@ Required schema:
         return res.status(400).json({ error: "Cart contains no valid items." });
       }
 
+      const effectiveEmail = customerEmail || req.authUser!.email || '';
       const sessionPayload: Stripe.Checkout.SessionCreateParams = {
         payment_method_types: ['card'],
         line_items: lineItems,
@@ -3475,17 +3949,18 @@ Required schema:
         success_url: resolvedSuccessUrl,
         cancel_url: resolvedCancelUrl,
         metadata: {
-          ...metadata,
-          orderType,
-          customerEmail: customerEmail || '',
+          ...(metadata && typeof metadata === 'object' ? metadata : {}),
+          userId: req.authUser!.id,
+          orderType: String(orderType),
+          customerEmail: String(effectiveEmail),
           itemCount: String(cartItems.length),
         }
       };
 
-      if (stripeCustomerId && stripeCustomerId.startsWith('cus_') && !stripeCustomerId.includes('mock')) {
+      if (stripeCustomerId && typeof stripeCustomerId === 'string' && /^cus_[a-zA-Z0-9_]+$/.test(stripeCustomerId) && !stripeCustomerId.includes('mock')) {
         sessionPayload.customer = stripeCustomerId;
-      } else if (customerEmail && typeof customerEmail === 'string' && customerEmail.includes('@')) {
-        sessionPayload.customer_email = customerEmail;
+      } else if (effectiveEmail && typeof effectiveEmail === 'string' && effectiveEmail.includes('@')) {
+        sessionPayload.customer_email = effectiveEmail;
       }
 
       const session = await stripe.checkout.sessions.create(sessionPayload);
@@ -3497,17 +3972,18 @@ Required schema:
   });
 
   // API ROUTE: Create Billing Checkout Session for Subscriptions or Flat Passes
-  app.post("/api/payments/create-billing-checkout", async (req, res) => {
+  app.post("/api/payments/create-billing-checkout", requireAuth, paymentLimiter, async (req, res) => {
     try {
-      const { tierId, billingCycle = 'monthly', role = 'band', stripeCustomerId, stripeAccountId, email } = req.body;
+      const { tierId, billingCycle = 'monthly', stripeCustomerId, stripeAccountId, email } = req.body;
       const stripe = await getStripeAsync();
 
-      // Normalize parameters to resolve user's specified inputs
       const tier = (tierId || req.body.tier || "band_pro").toLowerCase();
       const interval = (billingCycle || req.body.interval || "monthly").toLowerCase();
 
-      // 2. DYNAMIC LOOKUP LOGIC FOR CHECKOUT PAYLOADS
-      // Use switch/case blocks to map parameters directly to Supabase Vault lookup keys
+      if (stripeAccountId && (typeof stripeAccountId !== 'string' || !/^acct_[a-zA-Z0-9_]+$/.test(stripeAccountId))) {
+        return res.status(400).json({ error: "Invalid Stripe Connect account format." });
+      }
+
       let vaultKey = "";
       switch (tier) {
         case "band_pro":
@@ -3580,30 +4056,24 @@ Required schema:
       const isFlat = tier === "per_show" || tier === "per_tour";
       const mode = isFlat ? "payment" : "subscription";
 
-      const host = req.get("host") || "localhost:3000";
-      const protocol = req.protocol || "http";
-      const redirectUrl = `${protocol}://${host}/dev/dashboard`;
+      const redirectUrl = `${resolveSafeAppOrigin(req)}/dev/dashboard`;
+      const effectiveEmail = req.authUser!.email || email || '';
 
-      // Simulating when Stripe secret key / Stripe client is not enabled
       if (!stripe) {
-        // Fallback simulated checkout url for testing and preview modes if Stripe is not initialized
         const mockSessionId = `cs_test_${Math.random().toString(36).substring(2, 10)}`;
         return res.json({ 
-          url: `${redirectUrl}?mock_checkout_success=1&session_id=${mockSessionId}&tierId=${tier}&cycle=${interval}`, 
+          url: `${redirectUrl}?mock_checkout_success=1&session_id=${mockSessionId}&tierId=${encodeURIComponent(tier)}&cycle=${encodeURIComponent(interval)}`, 
           id: mockSessionId,
           simulated: true
         });
       }
 
-      // Fetch dynamic price ID directly from the Supabase Vault utilizing get_decrypted_secret RPC and service role context
       const priceId = await getVaultSecret(vaultKey);
-      
       let session;
 
       if (priceId) {
         console.log(`[VAULT] Resolved dynamic price credentials: "${vaultKey}" -> "${priceId}"`);
 
-        // 3. STRIPE PAYLOAD INJECTION
         const sessionPayload: any = {
           payment_method_types: ["card"],
           line_items: [
@@ -3613,22 +4083,23 @@ Required schema:
             }
           ],
           mode: mode,
-          success_url: `${redirectUrl}?checkout_success=1&session_id={CHECKOUT_SESSION_ID}&tierId=${tier}&cycle=${interval}`,
+          success_url: `${redirectUrl}?checkout_success=1&session_id={CHECKOUT_SESSION_ID}&tierId=${encodeURIComponent(tier)}&cycle=${encodeURIComponent(interval)}`,
           cancel_url: `${redirectUrl}?checkout_cancel=1`,
           metadata: {
+            userId: req.authUser!.id,
             tierId: tier,
             billingCycle: interval,
-            email: email || ''
+            email: effectiveEmail
           }
         };
 
-        if (stripeCustomerId && stripeCustomerId.startsWith("cus_") && !stripeCustomerId.includes("mock")) {
+        if (stripeCustomerId && typeof stripeCustomerId === 'string' && /^cus_[a-zA-Z0-9_]+$/.test(stripeCustomerId) && !stripeCustomerId.includes("mock")) {
           sessionPayload.customer = stripeCustomerId;
-        } else if (email) {
-          sessionPayload.customer_email = email;
+        } else if (effectiveEmail) {
+          sessionPayload.customer_email = effectiveEmail;
         }
 
-        const sessionOptions = stripeAccountId && stripeAccountId.startsWith("acct_") ? { stripeAccount: stripeAccountId } : undefined;
+        const sessionOptions = stripeAccountId && /^acct_[a-zA-Z0-9_]+$/.test(stripeAccountId) ? { stripeAccount: stripeAccountId } : undefined;
 
         try {
           session = await stripe.checkout.sessions.create(sessionPayload, sessionOptions);
@@ -3637,7 +4108,6 @@ Required schema:
         }
       }
 
-      // If priceId not found or primary session creation deferred, use the inline dynamic price_data setup
       if (!session) {
         try {
           const fallbackPayload: any = {
@@ -3657,29 +4127,30 @@ Required schema:
               }
             ],
             mode: mode,
-            success_url: `${redirectUrl}?checkout_success=1&session_id={CHECKOUT_SESSION_ID}&tierId=${tier}&cycle=${interval}`,
+            success_url: `${redirectUrl}?checkout_success=1&session_id={CHECKOUT_SESSION_ID}&tierId=${encodeURIComponent(tier)}&cycle=${encodeURIComponent(interval)}`,
             cancel_url: `${redirectUrl}?checkout_cancel=1`,
             metadata: {
+              userId: req.authUser!.id,
               tierId: tier,
               billingCycle: interval,
-              email: email || ''
+              email: effectiveEmail
             }
           };
 
-          if (stripeCustomerId && stripeCustomerId.startsWith("cus_") && !stripeCustomerId.includes("mock")) {
+          if (stripeCustomerId && typeof stripeCustomerId === 'string' && /^cus_[a-zA-Z0-9_]+$/.test(stripeCustomerId) && !stripeCustomerId.includes("mock")) {
             fallbackPayload.customer = stripeCustomerId;
-          } else if (email) {
-            fallbackPayload.customer_email = email;
+          } else if (effectiveEmail) {
+            fallbackPayload.customer_email = effectiveEmail;
           }
 
-          const sessionOptions = stripeAccountId && stripeAccountId.startsWith("acct_") ? { stripeAccount: stripeAccountId } : undefined;
+          const sessionOptions = stripeAccountId && /^acct_[a-zA-Z0-9_]+$/.test(stripeAccountId) ? { stripeAccount: stripeAccountId } : undefined;
 
           session = await stripe.checkout.sessions.create(fallbackPayload, sessionOptions);
         } catch (fallbackErr: any) {
           console.log(`[STRIPE RECOVERY] Creation bypassed due to sandbox config. Generating fully simulated interactive billing session...`);
           const mockSessionId = `cs_test_${Math.random().toString(36).substring(2, 10)}`;
           return res.json({ 
-            url: `${redirectUrl}?mock_checkout_success=1&session_id=${mockSessionId}&tierId=${tier}&cycle=${interval}`, 
+            url: `${redirectUrl}?mock_checkout_success=1&session_id=${mockSessionId}&tierId=${encodeURIComponent(tier)}&cycle=${encodeURIComponent(interval)}`, 
             id: mockSessionId,
             simulated: true
           });
@@ -3694,12 +4165,15 @@ Required schema:
   });
 
   // Generic Checkout Payment Intent
-  app.post('/api/checkout/create-intent', async (req: express.Request, res: express.Response) => {
+  app.post('/api/checkout/create-intent', requireAuth, paymentLimiter, async (req: express.Request, res: express.Response) => {
     try {
       const { amount, currency = 'usd', merchantId } = req.body;
-      
-      if (!amount || amount <= 0) {
+      const numericAmount = Number(amount);
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 500000) {
         return res.status(400).json({ error: 'Invalid amount' });
+      }
+      if (merchantId && (typeof merchantId !== 'string' || !/^acct_[a-zA-Z0-9_]+$/.test(merchantId))) {
+        return res.status(400).json({ error: 'Invalid merchant Connect account ID' });
       }
 
       const stripe = await getStripeAsync();
@@ -3707,16 +4181,16 @@ Required schema:
         return res.json({ clientSecret: `pi_mock_secret_${Date.now()}`, simulated: true });
       }
 
-      const amountInCents = Math.round(amount * 100);
+      const amountInCents = Math.max(50, Math.round(numericAmount * 100));
       const feeInCents = Math.round(amountInCents * 0.0777); // 7.77% platform fee
 
       const paymentIntentParams: any = {
         amount: amountInCents,
-        currency,
+        currency: String(currency || 'usd').toLowerCase(),
+        metadata: { userId: req.authUser!.id }
       };
 
-      if (merchantId && typeof merchantId === 'string' && merchantId.startsWith('acct_')) {
-        // If a valid Stripe Connected account ID is provided
+      if (merchantId && typeof merchantId === 'string' && /^acct_[a-zA-Z0-9_]+$/.test(merchantId)) {
         paymentIntentParams.transfer_data = { destination: merchantId };
         paymentIntentParams.application_fee_amount = feeInCents;
       }
@@ -3747,7 +4221,7 @@ Required schema:
    * 3. MusicBrainz & Cover Art Archive (underground metal releases, splits, demos, catalog numbers)
    * 4. Encyclopaedia Metallum (Metal-Archives) & Discogs direct table/text paste
    */
-  app.post(['/api/scrape/metal-archives', '/api/scrape/discography'], async (req: express.Request, res: express.Response) => {
+  app.post(['/api/scrape/metal-archives', '/api/scrape/discography'], requireAuth, scrapeLimiter, async (req: express.Request, res: express.Response) => {
     try {
       const { query, rawText, source = 'all' } = req.body || {};
       const requestedSource = String(source || 'all').toLowerCase();
@@ -4341,12 +4815,16 @@ Required schema:
   });
 
   // API ROUTE: Save single venue
-  app.post('/api/venues', express.json(), async (req: express.Request, res: express.Response) => {
+  app.post('/api/venues', requireAuth, apiMutationLimiter, express.json(), async (req: express.Request, res: express.Response) => {
     try {
-      const venue = req.body?.venue || req.body;
-      if (!venue || !venue.name) {
+      const rawVenue = req.body?.venue || req.body;
+      if (!rawVenue || !rawVenue.name) {
         return res.status(400).json({ error: 'Venue name is required' });
       }
+      const venue = {
+        ...rawVenue,
+        created_by: rawVenue.created_by || req.authUser!.id,
+      };
       await saveCachedVenues([venue]);
       const updated = await loadCachedVenues();
       res.json({ success: true, count: updated.length, venue });
@@ -4356,12 +4834,16 @@ Required schema:
   });
 
   // API ROUTE: Batch save venues
-  app.post('/api/venues/batch', express.json(), async (req: express.Request, res: express.Response) => {
+  app.post('/api/venues/batch', requireAuth, apiMutationLimiter, express.json(), async (req: express.Request, res: express.Response) => {
     try {
-      const venues = req.body?.venues || (Array.isArray(req.body) ? req.body : []);
-      if (!Array.isArray(venues) || venues.length === 0) {
+      const rawVenues = req.body?.venues || (Array.isArray(req.body) ? req.body : []);
+      if (!Array.isArray(rawVenues) || rawVenues.length === 0) {
         return res.status(400).json({ error: 'Array of venues is required' });
       }
+      const venues = rawVenues.map((v: any) => ({
+        ...v,
+        created_by: v?.created_by || req.authUser!.id,
+      }));
       await saveCachedVenues(venues);
       const updated = await loadCachedVenues();
       res.json({ success: true, count: updated.length, total: updated.length });
@@ -4371,7 +4853,7 @@ Required schema:
   });
 
   // API ROUTE: Batch delete venues by IDs and/or Keys
-  app.post('/api/venues/batch-delete', async (req: express.Request, res: express.Response) => {
+  app.post('/api/venues/batch-delete', requireAuth, apiMutationLimiter, async (req: express.Request, res: express.Response) => {
     try {
       const { ids = [], keys = [] } = req.body || {};
       const idSet = new Set((ids as string[]).map((id: string) => String(id).trim().toLowerCase()));
@@ -4380,9 +4862,16 @@ Required schema:
       const existing = await loadCachedVenues();
       const filtered = existing.filter((v: any) => {
         if (!v) return false;
-        if (v.id && idSet.has(String(v.id).trim().toLowerCase())) return false;
+        const matchedById = v.id && idSet.has(String(v.id).trim().toLowerCase());
         const key = `${(v.name || '').trim().toLowerCase()}_${(v.city || '').trim().toLowerCase()}`;
-        if (keySet.has(key)) return false;
+        const matchedByKey = keySet.has(key);
+        if (matchedById || matchedByKey) {
+          // Only creator or admin can delete user-created custom venues
+          if (v.created_by && v.created_by !== req.authUser!.id && !req.authUser!.isAdmin) {
+            return true;
+          }
+          return false;
+        }
         return true;
       });
 
@@ -4394,20 +4883,31 @@ Required schema:
   });
 
   // API ROUTE: Delete single venue by ID and/or Name+City
-  app.delete('/api/venues/:id', async (req: express.Request, res: express.Response) => {
+  app.delete('/api/venues/:id', requireAuth, apiMutationLimiter, async (req: express.Request, res: express.Response) => {
     try {
       const venueId = req.params.id;
       const venueName = (req.query.name as string || '').trim().toLowerCase();
       const venueCity = (req.query.city as string || '').trim().toLowerCase();
 
       const existing = await loadCachedVenues();
+      const target = existing.find((v: any) => {
+        if (!v) return false;
+        if (venueId && venueId !== 'undefined' && venueId !== 'null' && v.id === venueId) return true;
+        if (venueName && venueCity && v.name && v.city) {
+          return v.name.trim().toLowerCase() === venueName && v.city.trim().toLowerCase() === venueCity;
+        }
+        return false;
+      });
+
+      if (target && target.created_by && target.created_by !== req.authUser!.id && !req.authUser!.isAdmin) {
+        return res.status(403).json({ error: 'Forbidden: Only the venue creator or admin may remove this venue.' });
+      }
+
       const filtered = existing.filter((v: any) => {
         if (!v) return false;
-        // Match by ID if valid
         if (venueId && venueId !== 'undefined' && venueId !== 'null' && v.id === venueId) {
           return false;
         }
-        // Match by exact Name + City
         if (venueName && venueCity && v.name && v.city) {
           if (v.name.trim().toLowerCase() === venueName && v.city.trim().toLowerCase() === venueCity) {
             return false;
@@ -4497,18 +4997,61 @@ Required schema:
     }
   }
 
-  // API ROUTE: Get all tour packages
-  app.get('/api/tour-packages', async (_req: express.Request, res: express.Response) => {
+  // API ROUTE: Get tour packages scoped by ownership, tour participation, or public_announced status
+  app.get('/api/tour-packages', requireAuth, async (req: express.Request, res: express.Response) => {
     try {
-      const tours = await loadCachedTourPackages();
-      res.json({ success: true, tours });
+      const allTours = await loadCachedTourPackages();
+      const user = req.authUser!;
+      if (user.isAdmin) {
+        return res.json({ success: true, tours: allTours });
+      }
+
+      const supabase = getSupabaseService();
+      const ownedIds = await getUserOwnedEntityIds(supabase, user);
+
+      const visibleTours = allTours
+        .filter((tour: any) => {
+          const isParticipant = hasAnyOwnershipMatch(user, ownedIds, [
+            tour.creator_id,
+            tour.owner_id,
+            tour.promoterId,
+            tour.headlinerClientId,
+            ...(Array.isArray(tour.bands) ? tour.bands.flatMap((b: any) => [b?.id, b?.bandId]) : []),
+          ]);
+          return isParticipant || tour.publicationStatus === 'public_announced';
+        })
+        .map((tour: any) => {
+          const isParticipant = hasAnyOwnershipMatch(user, ownedIds, [
+            tour.creator_id,
+            tour.owner_id,
+            tour.promoterId,
+            tour.headlinerClientId,
+            ...(Array.isArray(tour.bands) ? tour.bands.flatMap((b: any) => [b?.id, b?.bandId]) : []),
+          ]);
+          if (isParticipant) return tour;
+
+          // Redact private booking/financial fields for public viewers
+          return {
+            ...tour,
+            stops: Array.isArray(tour.stops)
+              ? tour.stops.map((s: any) => ({
+                  ...s,
+                  venueContactEmail: undefined,
+                  venueContactPhone: undefined,
+                  grossDeal: undefined,
+                }))
+              : [],
+          };
+        });
+
+      res.json({ success: true, tours: visibleTours });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to load tour packages' });
     }
   });
 
   // API ROUTE: Save or update tour package(s)
-  app.post('/api/tour-packages', express.json(), async (req: express.Request, res: express.Response) => {
+  app.post('/api/tour-packages', requireAuth, apiMutationLimiter, express.json(), async (req: express.Request, res: express.Response) => {
     try {
       const payload = req.body?.tour || req.body?.tours || req.body;
       const toursToSave = Array.isArray(payload) ? payload : [payload];
@@ -4516,12 +5059,39 @@ Required schema:
         return res.status(400).json({ error: 'Valid tour package is required' });
       }
 
-      await saveCachedTourPackages(toursToSave);
-
-      // Async sync stops into Supabase shows table
+      const user = req.authUser!;
       const supabase = getSupabaseService();
+      const ownedIds = await getUserOwnedEntityIds(supabase, user);
+      const existingTours = await loadCachedTourPackages();
+      const existingMap = new Map(existingTours.map((t: any) => [t.id, t]));
+
+      const authorizedToursToSave: any[] = [];
+      for (const tour of toursToSave) {
+        if (!tour || !tour.id) continue;
+        const existing = existingMap.get(tour.id);
+        if (existing) {
+          const isOwner = hasAnyOwnershipMatch(user, ownedIds, [
+            existing.creator_id,
+            existing.owner_id,
+            existing.promoterId,
+            existing.headlinerClientId,
+          ]);
+          if (!isOwner) {
+            return res.status(403).json({ error: `Forbidden: Not authorized to modify tour package ${tour.id}` });
+          }
+        }
+        authorizedToursToSave.push({
+          ...tour,
+          creator_id: existing?.creator_id || user.id,
+          owner_id: existing?.owner_id || user.id,
+        });
+      }
+
+      await saveCachedTourPackages(authorizedToursToSave);
+
+      // Async sync stops into Supabase shows table using verified creator_id
       if (supabase) {
-        for (const tour of toursToSave) {
+        for (const tour of authorizedToursToSave) {
           if (Array.isArray(tour.stops)) {
             for (const stop of tour.stops) {
               try {
@@ -4531,7 +5101,7 @@ Required schema:
                 const isEmbargoed = tour.publicationStatus === 'embargoed_private';
                 const showRecord = {
                   id: stopUuid,
-                  creator_id: '24523979-7f72-422b-8fb6-85634345d81c',
+                  creator_id: tour.creator_id || user.id,
                   show_name: (tour.title || 'Tour') + ' - ' + (stop.city || 'Tour Stop'),
                   headliner: tour.headlinerClientName || 'Headliner Band',
                   date: stop.date,
@@ -4573,17 +5143,31 @@ Required schema:
       }
 
       const updated = await loadCachedTourPackages();
-      res.json({ success: true, count: updated.length, tours: updated });
+      res.json({ success: true, count: updated.length, tours: authorizedToursToSave });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to save tour package' });
     }
   });
 
   // API ROUTE: Delete tour package
-  app.delete('/api/tour-packages/:id', async (req: express.Request, res: express.Response) => {
+  app.delete('/api/tour-packages/:id', requireAuth, apiMutationLimiter, async (req: express.Request, res: express.Response) => {
     try {
       const tourId = req.params.id;
       const existing = await loadCachedTourPackages();
+      const target = existing.find((t: any) => t.id === tourId);
+      if (target) {
+        const ownedIds = await getUserOwnedEntityIds(getSupabaseService(), req.authUser!);
+        const isOwner = hasAnyOwnershipMatch(req.authUser!, ownedIds, [
+          target.creator_id,
+          target.owner_id,
+          target.promoterId,
+          target.headlinerClientId,
+        ]);
+        if (!isOwner) {
+          return res.status(403).json({ error: 'Forbidden: Only the tour creator or authorized manager can delete this tour package.' });
+        }
+      }
+
       const filtered = existing.filter((t: any) => t.id !== tourId);
       await fs.promises.writeFile(tourPackagesCacheFile, JSON.stringify(filtered, null, 2), 'utf8');
       res.json({ success: true, count: filtered.length });
@@ -4668,7 +5252,7 @@ Required schema:
   });
 
   // POST /api/inventory
-  app.post('/api/inventory', express.json({ limit: '25mb' }), async (req: express.Request, res: express.Response) => {
+  app.post('/api/inventory', requireAuth, apiMutationLimiter, express.json({ limit: '25mb' }), async (req: express.Request, res: express.Response) => {
     try {
       const payload = req.body?.item || req.body?.items || req.body;
       const itemsToSave = Array.isArray(payload) ? payload : [payload];
@@ -4676,8 +5260,13 @@ Required schema:
         return res.status(400).json({ error: 'Valid inventory item is required' });
       }
 
-      const processedItems: any[] = [];
+      const user = req.authUser!;
       const supabase = getSupabaseService();
+      const ownedIds = await getUserOwnedEntityIds(supabase, user);
+      const existingCache = await loadCachedInventory();
+      const existingMap = new Map(existingCache.map((i: any) => [i.id, i]));
+
+      const processedItems: any[] = [];
 
       for (const rawItem of itemsToSave) {
         if (!rawItem) continue;
@@ -4685,6 +5274,21 @@ Required schema:
         if (!item.id || item.id.startsWith('temp_')) {
           item.id = generateServerUuid();
         }
+
+        const existingItem = existingMap.get(item.id);
+        if (existingItem) {
+          const isOwner = hasAnyOwnershipMatch(user, ownedIds, [existingItem.owner_id, existingItem.band_id]);
+          if (!isOwner) {
+            return res.status(403).json({ error: 'Forbidden: You do not own this inventory item.' });
+          }
+        }
+        if (item.band_id) {
+          const ownsBand = await assertBandOrEntityOwner(supabase, user, String(item.band_id));
+          if (!ownsBand) {
+            return res.status(403).json({ error: 'Forbidden: You cannot modify inventory for an entity you do not own.' });
+          }
+        }
+        item.owner_id = existingItem?.owner_id || user.id;
 
         // Process image base64 if present
         if (item.image_url && (item.image_url.startsWith('data:') || item.image_url.startsWith('blob:'))) {
@@ -4775,14 +5379,31 @@ Required schema:
   });
 
   // DELETE /api/inventory/:id
-  app.delete('/api/inventory/:id', async (req: express.Request, res: express.Response) => {
+  app.delete('/api/inventory/:id', requireAuth, apiMutationLimiter, async (req: express.Request, res: express.Response) => {
     try {
       const itemId = req.params.id;
       const existing = await loadCachedInventory();
+      const target = existing.find((i: any) => i.id === itemId);
+
+      const user = req.authUser!;
+      const supabase = getSupabaseService();
+      const ownedIds = await getUserOwnedEntityIds(supabase, user);
+
+      if (target) {
+        const isOwner = hasAnyOwnershipMatch(user, ownedIds, [target.owner_id, target.band_id]);
+        if (!isOwner) {
+          return res.status(403).json({ error: 'Forbidden: You do not own this inventory item.' });
+        }
+      } else if (supabase && !user.isAdmin) {
+        const { data: dbItem } = await supabase.from('inventory').select('band_id').eq('id', itemId).maybeSingle();
+        if (dbItem && dbItem.band_id && !hasAnyOwnershipMatch(user, ownedIds, [dbItem.band_id])) {
+          return res.status(403).json({ error: 'Forbidden: You do not own this inventory item.' });
+        }
+      }
+
       const filtered = existing.filter((i: any) => i.id !== itemId);
       await fs.promises.writeFile(inventoryCacheFile, JSON.stringify(filtered, null, 2), 'utf8');
 
-      const supabase = getSupabaseService();
       if (supabase) {
         try {
           await supabase.from('inventory').delete().eq('id', itemId);
@@ -4941,18 +5562,48 @@ Required schema:
   });
 
   // POST /api/releases
-  app.post('/api/releases', express.json({ limit: '25mb' }), async (req: express.Request, res: express.Response) => {
+  app.post('/api/releases', requireAuth, apiMutationLimiter, express.json({ limit: '25mb' }), async (req: express.Request, res: express.Response) => {
     try {
       const payload = req.body?.release || req.body?.releases || req.body;
-      const listToSave = Array.isArray(payload) ? payload : (payload ? [payload] : []);
-      if (listToSave.length === 0) {
+      const rawListToSave = Array.isArray(payload) ? payload : (payload ? [payload] : []);
+      if (rawListToSave.length === 0) {
         return res.status(400).json({ error: 'Valid release payload is required' });
+      }
+
+      const user = req.authUser!;
+      const supabase = getSupabaseService();
+      const ownedIds = await getUserOwnedEntityIds(supabase, user);
+      const existingReleases = await loadCachedReleases();
+      const existingMap = new Map(existingReleases.map((r: any) => [r.id, r]));
+
+      const listToSave: any[] = [];
+      for (const rel of rawListToSave) {
+        if (!rel) continue;
+        const existing = existingMap.get(rel.id);
+        if (existing) {
+          const isOwner = hasAnyOwnershipMatch(user, ownedIds, [existing.created_by, existing.band_id, existing.label_id]);
+          if (!isOwner) {
+            return res.status(403).json({ error: `Forbidden: You do not own release ${rel.id}.` });
+          }
+        }
+        if (rel.band_id) {
+          const ownsBand = await assertBandOrEntityOwner(supabase, user, String(rel.band_id));
+          if (!ownsBand) {
+            return res.status(403).json({ error: 'Forbidden: You cannot modify releases for a band you do not own.' });
+          }
+        }
+        if (rel.label_id && !hasAnyOwnershipMatch(user, ownedIds, [rel.label_id])) {
+          return res.status(403).json({ error: 'Forbidden: You cannot modify releases for a label you do not own.' });
+        }
+        listToSave.push({
+          ...rel,
+          created_by: existing?.created_by || user.id,
+        });
       }
 
       await saveCachedReleases(listToSave);
 
       // Opportunistically sync to Supabase if permissions allow
-      const supabase = getSupabaseService();
       if (supabase) {
         try {
           const sanitizedForDb = listToSave.map(r => ({
@@ -4984,15 +5635,32 @@ Required schema:
   });
 
   // DELETE /api/releases/:id
-  app.delete('/api/releases/:id', async (req: express.Request, res: express.Response) => {
+  app.delete('/api/releases/:id', requireAuth, apiMutationLimiter, async (req: express.Request, res: express.Response) => {
     try {
       const releaseId = req.params.id;
       const existing = await loadCachedReleases();
+      const target = existing.find((r: any) => r && r.id === releaseId);
+
+      const user = req.authUser!;
+      const supabase = getSupabaseService();
+      const ownedIds = await getUserOwnedEntityIds(supabase, user);
+
+      if (target) {
+        const isOwner = hasAnyOwnershipMatch(user, ownedIds, [target.created_by, target.band_id, target.label_id]);
+        if (!isOwner) {
+          return res.status(403).json({ error: 'Forbidden: You do not own this release.' });
+        }
+      } else if (supabase && !user.isAdmin) {
+        const { data: dbRel } = await supabase.from('releases').select('band_id').eq('id', releaseId).maybeSingle();
+        if (dbRel && dbRel.band_id && !hasAnyOwnershipMatch(user, ownedIds, [dbRel.band_id])) {
+          return res.status(403).json({ error: 'Forbidden: You do not own this release.' });
+        }
+      }
+
       const filtered = existing.filter((r: any) => r && r.id !== releaseId);
       await atomicWriteJsonFile(primaryReleasesFile, filtered);
       await atomicWriteJsonFile(uploadsReleasesFile, filtered);
 
-      const supabase = getSupabaseService();
       if (supabase) {
         try {
           await supabase.from('releases').delete().eq('id', releaseId);
@@ -5006,7 +5674,7 @@ Required schema:
   });
 
   // POST /api/releases/delete (Deletes by ID or Title & Band)
-  app.post('/api/releases/delete', express.json(), async (req: express.Request, res: express.Response) => {
+  app.post('/api/releases/delete', requireAuth, apiMutationLimiter, express.json(), async (req: express.Request, res: express.Response) => {
     try {
       const { id, bandId, bandName, title } = req.body || {};
       const releaseId = (id || '').trim();
@@ -5014,10 +5682,18 @@ Required schema:
       const bId = (bandId || '').toLowerCase().trim();
       const bName = (bandName || '').toLowerCase().trim();
 
+      const user = req.authUser!;
+      const supabase = getSupabaseService();
+      const ownedIds = await getUserOwnedEntityIds(supabase, user);
+
+      if (bandId && !hasAnyOwnershipMatch(user, ownedIds, [bandId])) {
+        return res.status(403).json({ error: 'Forbidden: You do not own releases for this band.' });
+      }
+
       const existing = await loadCachedReleases();
-      const filtered = existing.filter((r: any) => {
+      const matched = existing.filter((r: any) => {
         if (!r) return false;
-        if (releaseId && r.id === releaseId) return false;
+        if (releaseId && r.id === releaseId) return true;
         if (relTitle) {
           const rTitle = (r.title || '').toLowerCase().trim();
           const rBandId = String(r.band_id || '').toLowerCase().trim();
@@ -5028,15 +5704,22 @@ Required schema:
             : (bId && (rBandId === bId || rBandId.replace(/-/g, '') === bId.replace(/-/g, ''))) ||
               (bName && (rBandName === bName || rBandName.includes(bName) || bName.includes(rBandName)));
 
-          if (rTitle === relTitle && matchesBand) return false;
+          if (rTitle === relTitle && matchesBand) return true;
         }
-        return true;
+        return false;
       });
+
+      const unauthorized = matched.some((r: any) => !hasAnyOwnershipMatch(user, ownedIds, [r.created_by, r.band_id, r.label_id]));
+      if (unauthorized) {
+        return res.status(403).json({ error: 'Forbidden: You are not authorized to delete one or more matched releases.' });
+      }
+
+      const matchedIds = new Set(matched.map((m: any) => m.id));
+      const filtered = existing.filter((r: any) => r && !matchedIds.has(r.id));
 
       await atomicWriteJsonFile(primaryReleasesFile, filtered);
       await atomicWriteJsonFile(uploadsReleasesFile, filtered);
 
-      const supabase = getSupabaseService();
       if (supabase) {
         try {
           if (releaseId) {
@@ -5057,7 +5740,7 @@ Required schema:
    * MUSICBRAINZ VENUE SEEDING & GEOLOCATION API
    * Pre-seeds regional hub venues with coordinates for tour routing
    */
-  app.post('/api/venues/seed-musicbrainz', express.json(), async (req: express.Request, res: express.Response) => {
+  app.post('/api/venues/seed-musicbrainz', requireAuth, scrapeLimiter, express.json(), async (req: express.Request, res: express.Response) => {
     try {
       const requestedCities = req.body?.cities && Array.isArray(req.body.cities) && req.body.cities.length > 0
         ? req.body.cities
@@ -5331,7 +6014,7 @@ Required schema:
    * AI FLYER & SHOW ANNOUNCEMENT PARSER ENDPOINT
    * Uses Gemini 3.8 Flash to extract structured event details from flyer images or pasted text
    */
-  app.post("/api/parse-show-flyer", async (req, res) => {
+  app.post("/api/parse-show-flyer", requireAuth, aiLimiter, async (req, res) => {
     try {
       const { imageBase64, mimeType, rawText } = req.body;
       if (!imageBase64 && !rawText) {
@@ -5414,7 +6097,7 @@ Required schema:
   // ==========================================
   // GEMINI GOOGLE MAPS GROUNDED VENUE DETECTION API
   // ==========================================
-  app.post("/api/venue-grounding", async (req: express.Request, res: express.Response) => {
+  app.post("/api/venue-grounding", requireAuth, aiLimiter, async (req: express.Request, res: express.Response) => {
     const { text, lat, lng } = req.body || {};
     if (!text || typeof text !== "string" || !text.trim()) {
       return res.status(400).json({ error: "Text content is required for venue grounding" });
@@ -5577,8 +6260,8 @@ Required schema:
     }
   }
 
-  // GET /api/bug-reports
-  app.get('/api/bug-reports', async (req: express.Request, res: express.Response) => {
+  // GET /api/bug-reports (Admin Only)
+  app.get('/api/bug-reports', requireAdmin, async (req: express.Request, res: express.Response) => {
     try {
       const reports = await loadCachedBugReports();
       const { status, category, search } = req.query;
@@ -5604,8 +6287,8 @@ Required schema:
     }
   });
 
-  // POST /api/bug-reports
-  app.post('/api/bug-reports', express.json({ limit: '10mb' }), async (req: express.Request, res: express.Response) => {
+  // POST /api/bug-reports (Rate limited; attaches authenticated identity if present)
+  app.post('/api/bug-reports', optionalAuth, bugReportLimiter, express.json({ limit: '10mb' }), async (req: express.Request, res: express.Response) => {
     try {
       const newReport = req.body;
       if (!newReport || !newReport.message) {
@@ -5647,7 +6330,7 @@ Required schema:
           occurrences: newReport.occurrences || 1,
           firstSeenAt: newReport.firstSeenAt || new Date().toISOString(),
           lastSeenAt: newReport.lastSeenAt || new Date().toISOString(),
-          status: newReport.status || 'new',
+          status: 'new',
           stack: newReport.stack || '',
           componentStack: newReport.componentStack || '',
           endpoint: newReport.endpoint || '',
@@ -5658,8 +6341,8 @@ Required schema:
           routeOrTab: newReport.routeOrTab || '',
           activeBandName: newReport.activeBandName || '',
           activeBandId: newReport.activeBandId || '',
-          userEmail: newReport.userEmail || '',
-          userId: newReport.userId || '',
+          userEmail: req.authUser?.email || newReport.userEmail || '',
+          userId: req.authUser?.id || newReport.userId || '',
           userAgent: newReport.userAgent || '',
           viewport: newReport.viewport || { width: 0, height: 0 },
           online: newReport.online !== undefined ? newReport.online : true,
@@ -5677,8 +6360,8 @@ Required schema:
     }
   });
 
-  // PATCH /api/bug-reports/:id
-  app.patch('/api/bug-reports/:id', express.json(), async (req: express.Request, res: express.Response) => {
+  // PATCH /api/bug-reports/:id (Admin Only)
+  app.patch('/api/bug-reports/:id', requireAdmin, express.json(), async (req: express.Request, res: express.Response) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -5693,8 +6376,8 @@ Required schema:
     }
   });
 
-  // DELETE /api/bug-reports/:id
-  app.delete('/api/bug-reports/:id', async (req: express.Request, res: express.Response) => {
+  // DELETE /api/bug-reports/:id (Admin Only)
+  app.delete('/api/bug-reports/:id', requireAdmin, async (req: express.Request, res: express.Response) => {
     try {
       const { id } = req.params;
       let reports = await loadCachedBugReports();
@@ -5706,8 +6389,8 @@ Required schema:
     }
   });
 
-  // POST /api/bug-reports/clear
-  app.post('/api/bug-reports/clear', express.json(), async (req: express.Request, res: express.Response) => {
+  // POST /api/bug-reports/clear (Admin Only)
+  app.post('/api/bug-reports/clear', requireAdmin, express.json(), async (req: express.Request, res: express.Response) => {
     try {
       const { mode } = req.body || {};
       let reports = await loadCachedBugReports();
@@ -5834,12 +6517,21 @@ Required schema:
   });
 
   // POST /api/posts/comments
-  app.post('/api/posts/comments', express.json(), async (req: express.Request, res: express.Response) => {
+  app.post('/api/posts/comments', requireAuth, apiMutationLimiter, express.json(), async (req: express.Request, res: express.Response) => {
     try {
       const { postId, comment } = req.body || {};
       if (!postId || !comment || (!comment.text && !comment.content)) {
         return res.status(400).json({ error: 'Missing postId or comment content' });
       }
+
+      const authUser = req.authUser!;
+      const sb = getSupabaseService();
+      const ownedIds = await getUserOwnedEntityIds(sb, authUser);
+
+      const requestedActorId = comment.userId || comment.user_id || authUser.id;
+      const userId = hasAnyOwnershipMatch(authUser, ownedIds, [requestedActorId])
+        ? requestedActorId
+        : authUser.id;
 
       const interactions = await loadCachedInteractions();
       if (!interactions.comments[postId]) {
@@ -5853,7 +6545,6 @@ Required schema:
         : (typeof crypto !== 'undefined' && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `00000000-0000-4000-8000-${Date.now().toString(16).padStart(12, '0').slice(-12)}`);
 
       const text = (comment.text || comment.content || '').trim();
-      const userId = comment.userId || comment.user_id || 'anonymous';
       const author = comment.username || comment.author || 'Fan';
       const nowIso = comment.created_at || new Date().toISOString();
 
@@ -5861,6 +6552,7 @@ Required schema:
         id: validId,
         post_id: postId,
         user_id: userId,
+        auth_user_id: authUser.id,
         username: author,
         author: author,
         text: text,
@@ -5872,10 +6564,14 @@ Required schema:
         timestamp: nowIso
       };
 
-      // Add to array if not duplicate
       const existingIdx = interactions.comments[postId].findIndex((c: any) => c.id === validId);
       if (existingIdx >= 0) {
-        interactions.comments[postId][existingIdx] = newCommentObj;
+        const existingComment = interactions.comments[postId][existingIdx];
+        const canEdit = existingComment.auth_user_id === authUser.id || hasAnyOwnershipMatch(authUser, ownedIds, [existingComment.user_id]);
+        if (!canEdit) {
+          return res.status(403).json({ error: 'Forbidden: You cannot overwrite another user\'s comment.' });
+        }
+        interactions.comments[postId][existingIdx] = { ...existingComment, ...newCommentObj };
       } else {
         interactions.comments[postId].push(newCommentObj);
       }
@@ -5889,7 +6585,6 @@ Required schema:
         let postAuthorId: string | null = null;
         let postAuthorEmail: string | null = null;
 
-        const sb = getSupabaseService();
         if (sb && isUUID) {
           const { data: pData } = await sb.from('nexus_posts').select('profile_id, data').eq('id', cleanPostId).limit(1);
           if (pData && pData.length > 0) {
@@ -5898,7 +6593,6 @@ Required schema:
             postAuthorEmail = pObj.author?.email || pObj.email || null;
             if (!postAuthorId) postAuthorId = pObj.author?.id || pObj.author_id || null;
 
-            // Also ensure comment is synced into nexus_posts in Supabase from backend
             const existingComments: any[] = Array.isArray(pObj.comments) ? pObj.comments : [];
             const updatedComments = [...existingComments.filter((c: any) => c.id !== validId), newCommentObj];
             await sb.from('nexus_posts').update({ data: { ...pObj, comments: updatedComments } }).eq('id', pData[0].id);
@@ -5918,8 +6612,8 @@ Required schema:
         }
 
         // Only send push if the commenter is not the author of the post
-        if (postAuthorId && postAuthorId !== userId) {
-          const allSubs = readPushSubscriptions();
+        if (postAuthorId && postAuthorId !== userId && postAuthorId !== authUser.id) {
+          const allSubs = await loadPushSubscriptionsAsync();
           const targetSubs = allSubs.filter(s => {
             if (s.userId && s.userId === postAuthorId) return true;
             if (postAuthorEmail && s.userEmail && s.userEmail.toLowerCase() === postAuthorEmail.toLowerCase()) return true;
@@ -5963,7 +6657,7 @@ Required schema:
   });
 
   // PUT /api/posts/comments/:commentId (Edit comment)
-  app.put('/api/posts/comments/:commentId', express.json(), async (req: express.Request, res: express.Response) => {
+  app.put('/api/posts/comments/:commentId', requireAuth, apiMutationLimiter, express.json(), async (req: express.Request, res: express.Response) => {
     try {
       const { commentId } = req.params;
       const { text, content, postId, author, username, avatar, user_id, userId } = req.body || {};
@@ -5973,12 +6667,22 @@ Required schema:
         return res.status(400).json({ error: 'Comment text cannot be empty' });
       }
 
+      const authUser = req.authUser!;
+      const sb = getSupabaseService();
+      const ownedIds = await getUserOwnedEntityIds(sb, authUser);
+
       const interactions = await loadCachedInteractions();
       let updatedComment: any = null;
+      let unauthorized = false;
 
       Object.keys(interactions.comments).forEach((pId) => {
         const comment = interactions.comments[pId].find((c: any) => c.id === commentId);
         if (comment) {
+          const isOwner = comment.auth_user_id === authUser.id || hasAnyOwnershipMatch(authUser, ownedIds, [comment.user_id]);
+          if (!isOwner) {
+            unauthorized = true;
+            return;
+          }
           comment.text = newText;
           comment.content = newText;
           comment.updated_at = new Date().toISOString();
@@ -5987,16 +6691,46 @@ Required schema:
         }
       });
 
+      if (unauthorized) {
+        return res.status(403).json({ error: 'Forbidden: Only the comment author or admin can edit this comment.' });
+      }
+
       if (!updatedComment && postId) {
+        // Verify ownership if editing a Supabase-only comment not yet cached on disk
+        let authorizedToCreateEdit = false;
+        const requestedActor = userId || user_id;
+        if (!requestedActor || hasAnyOwnershipMatch(authUser, ownedIds, [requestedActor])) {
+          if (sb) {
+            const { data: existingSbComment } = await sb
+              .from('nexus_post_comments')
+              .select('user_id')
+              .eq('id', commentId)
+              .maybeSingle();
+            if (!existingSbComment || hasAnyOwnershipMatch(authUser, ownedIds, [existingSbComment.user_id])) {
+              authorizedToCreateEdit = true;
+            }
+          } else {
+            authorizedToCreateEdit = true;
+          }
+        }
+
+        if (!authorizedToCreateEdit) {
+          return res.status(403).json({ error: 'Forbidden: You cannot edit another user\'s comment.' });
+        }
+
         if (!interactions.comments[postId]) {
           interactions.comments[postId] = [];
         }
+        const resolvedActorId = requestedActor && hasAnyOwnershipMatch(authUser, ownedIds, [requestedActor])
+          ? requestedActor
+          : authUser.id;
         const authorName = username || author || 'Fan';
         const nowIso = new Date().toISOString();
         updatedComment = {
           id: commentId,
           post_id: postId,
-          user_id: userId || user_id || 'anonymous',
+          user_id: resolvedActorId,
+          auth_user_id: authUser.id,
           username: authorName,
           author: authorName,
           avatar: avatar || '',
@@ -6016,8 +6750,6 @@ Required schema:
       if (updatedComment) {
         await saveCachedInteractions(interactions);
 
-        // Also push the update to Supabase directly from backend
-        const sb = getSupabaseService();
         if (sb && postId) {
           try {
             const cleanPostId = String(postId).replace(/^nexus_post_/, '');
@@ -6063,20 +6795,45 @@ Required schema:
   });
 
   // DELETE /api/posts/comments/:commentId
-  app.delete('/api/posts/comments/:commentId', async (req: express.Request, res: express.Response) => {
+  app.delete('/api/posts/comments/:commentId', requireAuth, apiMutationLimiter, async (req: express.Request, res: express.Response) => {
     try {
       const { commentId } = req.params;
+      const authUser = req.authUser!;
+      const sb = getSupabaseService();
+      const ownedIds = await getUserOwnedEntityIds(sb, authUser);
+
       const interactions = await loadCachedInteractions();
       let modified = false;
+      let unauthorized = false;
 
-      Object.keys(interactions.comments).forEach((pId) => {
-        const prevLen = interactions.comments[pId].length;
-        // Delete comment and any replies referencing this comment as parent
-        interactions.comments[pId] = interactions.comments[pId].filter(
-          (c: any) => c.id !== commentId && c.parent_comment_id !== commentId
-        );
-        if (interactions.comments[pId].length !== prevLen) modified = true;
-      });
+      for (const pId of Object.keys(interactions.comments)) {
+        const targetComment = interactions.comments[pId].find((c: any) => c.id === commentId);
+        if (targetComment) {
+          let isAuthorized = targetComment.auth_user_id === authUser.id || hasAnyOwnershipMatch(authUser, ownedIds, [targetComment.user_id]);
+          if (!isAuthorized && sb) {
+            const cleanPostId = String(pId).replace(/^nexus_post_/, '');
+            if (/^[0-9a-f-]{36}$/i.test(cleanPostId)) {
+              const { data: postRow } = await sb.from('nexus_posts').select('profile_id').eq('id', cleanPostId).maybeSingle();
+              if (postRow && hasAnyOwnershipMatch(authUser, ownedIds, [postRow.profile_id])) {
+                isAuthorized = true;
+              }
+            }
+          }
+          if (!isAuthorized) {
+            unauthorized = true;
+            break;
+          }
+          const prevLen = interactions.comments[pId].length;
+          interactions.comments[pId] = interactions.comments[pId].filter(
+            (c: any) => c.id !== commentId && c.parent_comment_id !== commentId
+          );
+          if (interactions.comments[pId].length !== prevLen) modified = true;
+        }
+      }
+
+      if (unauthorized) {
+        return res.status(403).json({ error: 'Forbidden: Only the comment author, post owner, or admin can delete this comment.' });
+      }
 
       if (modified) {
         await saveCachedInteractions(interactions);
@@ -6089,11 +6846,11 @@ Required schema:
   });
 
   // POST /api/posts/reactions
-  app.post('/api/posts/reactions', express.json(), async (req: express.Request, res: express.Response) => {
+  app.post('/api/posts/reactions', requireAuth, apiMutationLimiter, express.json(), async (req: express.Request, res: express.Response) => {
     try {
       const {
         postId,
-        userId = 'anonymous',
+        userId: requestedUserId,
         reactionType = 'likes',
         userName,
         userAvatar,
@@ -6103,6 +6860,12 @@ Required schema:
       if (!postId) {
         return res.status(400).json({ error: 'Missing postId' });
       }
+
+      const authUser = req.authUser!;
+      const ownedIds = await getUserOwnedEntityIds(getSupabaseService(), authUser);
+      const userId = requestedUserId && hasAnyOwnershipMatch(authUser, ownedIds, [requestedUserId])
+        ? requestedUserId
+        : authUser.id;
 
       const keyMap: Record<string, string> = {
         like: 'likes',

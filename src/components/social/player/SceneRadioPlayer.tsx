@@ -32,6 +32,7 @@ import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME }
 import { getSupabase } from '../../../supabase';
 import { RADIO_PLAYLISTS, FRONTEND_FALLBACK_PLAYLISTS } from '../../../data/socialFeedMockData';
 import { FirstTimeTooltip } from '../../common/FirstTimeTooltip';
+import { authFetch, getSupabaseAccessToken } from '../../../utils/apiConfig';
 import {
   getPlaylistTracksResilient,
   enrichTrackBatchDirect,
@@ -474,12 +475,6 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     const nextState = !isFollowingMatched;
     setIsFollowingMatched(nextState);
     saveFollowStateGlobally(matchedBandProfile, nextState);
-
-    triggerNotification?.(
-      nextState
-        ? `🔥 Now following ${matchedBandProfile.name} on Nexus Core!`
-        : `Unfollowed ${matchedBandProfile.name}`
-    );
   };
 
   // Re-sync follow state in real-time when global follow event fires
@@ -539,10 +534,8 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
       const isLiked = next.has(videoId);
       if (isLiked) {
         next.delete(videoId);
-        triggerNotification?.(`💔 Removed "${trackTitle || 'Track'}" from favorites`);
       } else {
         next.add(videoId);
-        triggerNotification?.(`❤️ Liked "${trackTitle || 'Track'}"! Saved to favorites`);
       }
       try {
         localStorage.setItem('nexus_liked_radio_tracks', JSON.stringify(Array.from(next)));
@@ -577,8 +570,6 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       navigator.clipboard.writeText(ytUrl).catch(() => {});
     }
-
-    triggerNotification?.(`🚀 Track "${track.title}" loaded into Post Creator! Edit & Post to publish.`);
   };
 
   const ytPlayerRef = useRef<any>(null);
@@ -750,9 +741,11 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
       console.warn("[RADIO PLAYER] Direct batch enrichment note:", e);
     }
 
-    // 2. Also attempt server-side batch route if running with active Node backend
+    // 2. Also attempt server-side batch route if running with active Node backend and authenticated session
     try {
-      const resp = await fetch(`/api/playlist/${playlistId}/enrich`, {
+      const token = await getSupabaseAccessToken();
+      if (!token) return;
+      const resp = await authFetch(`/api/playlist/${playlistId}/enrich`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ videoIds: nativeIds })
@@ -803,10 +796,13 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
            // Persist retrieved track metadata directly to cache and Supabase
            if (videoData.title && !videoData.title.startsWith("Track ")) {
              persistSingleTrackMeta(currentPlaylistId, updatedTrack);
-             fetch(`/api/playlist/${currentPlaylistId}/tracks`, {
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ tracks: [updatedTrack] })
+             getSupabaseAccessToken().then((token) => {
+               if (!token) return;
+               authFetch(`/api/playlist/${currentPlaylistId}/tracks`, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ tracks: [updatedTrack] })
+               }).catch(() => {});
              }).catch(() => {});
            }
          }
