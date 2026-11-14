@@ -453,48 +453,16 @@ export const LoginView: React.FC<LoginViewProps> = ({
         } catch (_) {}
       }
 
-      // Attempt to establish a native Supabase auth session if credentials match auth.users
+      // Attempt to establish a native Supabase auth session using the user's entered PIN/password
       try {
         const cleanEmail = email.trim().toLowerCase();
         const cleanPin = enteredPin;
-        const storedPin = (normalizedProfile.pin || '').trim();
-        const storedPass = (normalizedProfile.password || '').trim();
 
-        // Allow 4-digit or custom PIN lengths and passwords to establish valid JWT session token
         const passCandidates = Array.from(new Set([
           cleanPin,
-          (cleanPin + "000000").slice(0, 6),
-          cleanPin.padEnd(6, '0'),
-          cleanPin.padStart(6, '0'),
-          cleanPin.slice(0, 4),
-          cleanPin.slice(0, 4).padEnd(6, '0'),
-          cleanPin.repeat(2),
-          cleanPin + '00',
-          dbPin,
-          (dbPin + "000000").slice(0, 6),
-          dbPin.padEnd(6, '0'),
-          dbPin.padStart(6, '0'),
-          dbPin.repeat(2),
-          dbPin + '00',
-          storedPass,
-          storedPin,
-          storedPin ? (storedPin + "000000").slice(0, 6) : null,
-          storedPin ? storedPin.padEnd(6, '0') : null,
-          storedPin ? storedPin.padStart(6, '0') : null,
-          storedPin ? storedPin.repeat(2) : null,
-          cleanEmail,
-          cleanEmail.split('@')[0],
-          '000000',
-          '123456',
-          '123400',
-          '001234',
-          'password',
-          'password123',
-          'nexus-core-2025',
-          'tour-hq-2024'
+          cleanPin.length < 6 ? cleanPin.padEnd(6, '0') : null
         ])).filter((p): p is string => Boolean(p) && p.length >= 6);
 
-        let sessionEstablished = false;
         for (const pass of passCandidates) {
           const { data: authResult } = await supabase.auth.signInWithPassword({
             email: cleanEmail,
@@ -502,41 +470,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
           });
           if (authResult?.session) {
             console.log('[Supabase Auth] Successfully established active auth session for:', cleanEmail);
-            sessionEstablished = true;
             break;
           }
-        }
-
-        // If no candidate password signed in, try provisioning auth user via signUp
-        if (!sessionEstablished) {
-          const autoPass = cleanPin.length >= 6 ? cleanPin : cleanPin.padEnd(6, '0');
-          const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
-            email: cleanEmail,
-            password: autoPass,
-            options: {
-              data: {
-                full_name: normalizedProfile.full_name || normalizedProfile.name,
-                pin: cleanPin
-              }
-            }
-          });
-          if (signUpData?.session) {
-            sessionEstablished = true;
-            console.log('[Supabase Auth] Established active session via automatic signUp provisioning for:', cleanEmail);
-          } else if (!signUpErr) {
-            const { data: retryRes } = await supabase.auth.signInWithPassword({
-              email: cleanEmail,
-              password: autoPass
-            });
-            if (retryRes?.session) {
-              sessionEstablished = true;
-              console.log('[Supabase Auth] Established active session via post-signUp login for:', cleanEmail);
-            }
-          }
-        }
-
-        if (!sessionEstablished) {
-          console.warn('[Supabase Auth] Session auto-login skipped - no matching auth password candidate.');
         }
       } catch (aErr) {
         console.warn('[Supabase Auth] Session auto-login exception:', aErr);
@@ -843,24 +778,27 @@ export const LoginView: React.FC<LoginViewProps> = ({
     const hasPromoter = activeUserRoles.includes('PROMOTER');
     const resolvedBandLogo = bandLogoUrl || bandLogo || undefined;
     const resolvedBandBanner = bandBannerUrl || bandBanner || undefined;
+    const existingBaseProfile = isUpgradeMode ? userProfile : null;
     // Personal avatar should ONLY come from personal profile avatar inputs, never overwritten by entity logos (promoter/band/label)
     const uploadedAvatarUrl = avatarUrl || null;
-    const existingAvatarUrl = (profileAvatar && !profileAvatar.includes('Nexus%20Icon%20Circuits.png')) ? profileAvatar : (userProfile?.avatar_url || null);
+    const existingAvatarUrl = (profileAvatar && !profileAvatar.includes('Nexus%20Icon%20Circuits.png')) ? profileAvatar : (existingBaseProfile?.avatar_url || null);
     const resolvedAvatar = uploadedAvatarUrl || existingAvatarUrl || undefined;
 
     const uploadedBannerUrl = bannerUrl || null;
-    const existingBannerUrl = (profileBanner && !profileBanner.includes('Nexus%20Icon%20Circuits.png')) ? profileBanner : (userProfile?.banner_url || userProfile?.cover_url || null);
+    const existingBannerUrl = (profileBanner && !profileBanner.includes('Nexus%20Icon%20Circuits.png')) ? profileBanner : (existingBaseProfile?.banner_url || existingBaseProfile?.cover_url || null);
     const resolvedBanner = uploadedBannerUrl || existingBannerUrl || undefined;
-    const finalProfileId = explicitUserId || ((isUpgradeMode && userProfile?.id) ? userProfile.id : (newUserId || generateUUID()));
+    const finalProfileId = explicitUserId || ((isUpgradeMode && existingBaseProfile?.id) ? existingBaseProfile.id : (newUserId || generateUUID()));
     const finalScreenName = screenName.trim() || creativeHandle.trim() || 'user';
     const finalLegalName = legalName.trim() || creativeLegalFullName.trim() || fullName;
     const allowedWorkspaces = activeUserRoles.map(r => r.toLowerCase());
     const finalGenre = bandGenre === 'Other' ? (customGenre.trim() || 'Other') : (bandSubGenre !== 'ALL' ? bandSubGenre : bandGenre);
 
-    const activeBandIdToUse = explicitBandId || registeredBandId || (userProfile as any)?.band_id || (hasBand ? generateUUID() : undefined);
-    const activeCreativeIdToUse = registeredCreativeId || (hasCreative ? generateUUID() : undefined);
-    const activeLabelIdToUse = registeredLabelId || (hasLabel ? generateUUID() : undefined);
-    const activePromoterIdToUse = registeredPromoterId || (hasPromoter ? generateUUID() : undefined);
+    const activeBandIdToUse = hasBand
+      ? (explicitBandId || registeredBandId || (existingBaseProfile as any)?.band_id || generateUUID())
+      : (isUpgradeMode ? (existingBaseProfile as any)?.band_id : undefined);
+    const activeCreativeIdToUse = registeredCreativeId || (hasCreative ? generateUUID() : (isUpgradeMode ? existingBaseProfile?.creative_id : undefined));
+    const activeLabelIdToUse = registeredLabelId || (hasLabel ? generateUUID() : (isUpgradeMode ? existingBaseProfile?.label_id : undefined));
+    const activePromoterIdToUse = registeredPromoterId || (hasPromoter ? generateUUID() : (isUpgradeMode ? existingBaseProfile?.promoter_id : undefined));
 
     const registeredRefs: RegisteredWorkspaceRef[] = [];
     if (hasBand && activeBandIdToUse) {
@@ -926,10 +864,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
       banner_url: labelBannerUrl || labelBanner || undefined
     } : undefined;
 
-    const isOwnerMiguel = isMiguelNameOrProfile({ id: userProfile?.id, email: userProfile?.email || signupEmail, name: userProfile?.name || fullName, full_name: userProfile?.full_name || fullName });
+    const isOwnerMiguel = isMiguelNameOrProfile({ id: existingBaseProfile?.id, email: existingBaseProfile?.email || signupEmail, name: existingBaseProfile?.name || fullName, full_name: existingBaseProfile?.full_name || fullName });
     const promoterAgencyName = promoterAgency.trim() || (isOwnerMiguel ? 'Nexus Live Productions' : (fullName ? `${fullName} Productions` : 'Promoter Operations'));
     const promoterMetadata = hasPromoter ? {
-      ...(userProfile?.promoter_metadata || {}),
+      ...(existingBaseProfile?.promoter_metadata || {}),
       agency_name: promoterAgencyName,
       brand_name: promoterAgencyName,
       promoter_name: promoterAgencyName,
@@ -959,37 +897,37 @@ export const LoginView: React.FC<LoginViewProps> = ({
       tech_rider: promoterTechRider.trim(),
       security_map: promoterSecurityMap ? promoterSecurityMap.trim() : undefined,
       defer_tech_specs: promoterDeferTechSpecs,
-      logo_url: promoterLogoUrl || promoterLogo || userProfile?.promoter_logo || (userProfile?.promoter_metadata as any)?.logo_url || undefined,
-      cover_url: promoterCoverUrl || promoterCoverImage || userProfile?.promoter_cover_image || (userProfile?.promoter_metadata as any)?.cover_url || undefined,
-      banner_url: promoterCoverUrl || promoterCoverImage || userProfile?.promoter_cover_image || (userProfile?.promoter_metadata as any)?.banner_url || undefined,
+      logo_url: promoterLogoUrl || promoterLogo || existingBaseProfile?.promoter_logo || (existingBaseProfile?.promoter_metadata as any)?.logo_url || undefined,
+      cover_url: promoterCoverUrl || promoterCoverImage || existingBaseProfile?.promoter_cover_image || (existingBaseProfile?.promoter_metadata as any)?.cover_url || undefined,
+      banner_url: promoterCoverUrl || promoterCoverImage || existingBaseProfile?.promoter_cover_image || (existingBaseProfile?.promoter_metadata as any)?.banner_url || undefined,
       stripe_connected: promoterStripeConnected,
       paypal_connected: promoterPaypalConnected,
       home_venue: {
-        ...(userProfile?.promoter_metadata?.home_venue || {}),
+        ...(existingBaseProfile?.promoter_metadata?.home_venue || {}),
         name: promoterAgencyName,
         address: promoterStreetAddress.trim(),
         city: promoterCity.trim(),
         state_province: promoterState.trim(),
         country: promoterCountry || 'USA',
         capacity: promoterCapacity ? (Number(promoterCapacity) || promoterCapacity) : undefined,
-        load_in_time: userProfile?.promoter_metadata?.home_venue?.load_in_time || '16:00',
-        doors_time: userProfile?.promoter_metadata?.home_venue?.doors_time || '19:00',
-        set_time: userProfile?.promoter_metadata?.home_venue?.set_time || '21:00',
-        curfew_time: userProfile?.promoter_metadata?.home_venue?.curfew_time || '23:30',
+        load_in_time: existingBaseProfile?.promoter_metadata?.home_venue?.load_in_time || '16:00',
+        doors_time: existingBaseProfile?.promoter_metadata?.home_venue?.doors_time || '19:00',
+        set_time: existingBaseProfile?.promoter_metadata?.home_venue?.set_time || '21:00',
+        curfew_time: existingBaseProfile?.promoter_metadata?.home_venue?.curfew_time || '23:30',
         expected_attendance: (Number(promoterCapacity) > 700 ? '700+' : Number(promoterCapacity) > 300 ? '300-700' : Number(promoterCapacity) > 100 ? '100-300' : '+100') as any,
-        age_restriction: userProfile?.promoter_metadata?.home_venue?.age_restriction || 'All Ages',
+        age_restriction: existingBaseProfile?.promoter_metadata?.home_venue?.age_restriction || 'All Ages',
         additional_notes: `Venue Class: ${promoterVenueClass || 'General'}. Pipeline: ${promoterPipeline || 'subscription'}`,
-        gear_provided: promoterTechRider.trim() || userProfile?.promoter_metadata?.home_venue?.gear_provided || '',
-        audio_requirements: promoterTechRider.trim() || userProfile?.promoter_metadata?.home_venue?.audio_requirements || '',
-        backline_requirements: promoterSecurityMap ? promoterSecurityMap.trim() : (userProfile?.promoter_metadata?.home_venue?.backline_requirements || ''),
-        wifi_network: userProfile?.promoter_metadata?.home_venue?.wifi_network || '',
-        wifi_password: userProfile?.promoter_metadata?.home_venue?.wifi_password || '',
-        soundcheck_time: userProfile?.promoter_metadata?.home_venue?.soundcheck_time || '18:00',
-        merch_call_time: userProfile?.promoter_metadata?.home_venue?.merch_call_time || '17:00',
-        stages: userProfile?.promoter_metadata?.home_venue?.stages || []
+        gear_provided: promoterTechRider.trim() || existingBaseProfile?.promoter_metadata?.home_venue?.gear_provided || '',
+        audio_requirements: promoterTechRider.trim() || existingBaseProfile?.promoter_metadata?.home_venue?.audio_requirements || '',
+        backline_requirements: promoterSecurityMap ? promoterSecurityMap.trim() : (existingBaseProfile?.promoter_metadata?.home_venue?.backline_requirements || ''),
+        wifi_network: existingBaseProfile?.promoter_metadata?.home_venue?.wifi_network || '',
+        wifi_password: existingBaseProfile?.promoter_metadata?.home_venue?.wifi_password || '',
+        soundcheck_time: existingBaseProfile?.promoter_metadata?.home_venue?.soundcheck_time || '18:00',
+        merch_call_time: existingBaseProfile?.promoter_metadata?.home_venue?.merch_call_time || '17:00',
+        stages: existingBaseProfile?.promoter_metadata?.home_venue?.stages || []
       },
-      saved_venues: userProfile?.promoter_metadata?.saved_venues || []
-    } : (userProfile?.promoter_metadata || undefined);
+      saved_venues: existingBaseProfile?.promoter_metadata?.saved_venues || []
+    } : (existingBaseProfile?.promoter_metadata || undefined);
 
     const creativeLocationParts = [creativeCity.trim(), creativeState.trim(), creativeCountry.trim()].filter(Boolean);
     const creativeFormattedLocation = creativeLocationParts.join(', ');
@@ -1065,9 +1003,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
     } : undefined;
 
     const resPayload: any = {
-      ...(isUpgradeMode ? userProfile : {}),
+      ...(existingBaseProfile || {}),
       id: finalProfileId,
-      full_name: isUpgradeMode ? (userProfile?.full_name || legalName.trim() || fullName.trim() || 'New User') : (legalName.trim() || fullName.trim() || 'New User'),
+      full_name: existingBaseProfile ? (existingBaseProfile.full_name || legalName.trim() || fullName.trim() || 'New User') : (legalName.trim() || fullName.trim() || 'New User'),
       name: (hasPromoter && promoterAgencyName)
         ? promoterAgencyName
         : (hasLabel && labelCompanyName.trim())
@@ -1076,25 +1014,25 @@ export const LoginView: React.FC<LoginViewProps> = ({
             ? (creativeBusinessName.trim() || creativeHandle.trim())
             : (hasBand && bandName.trim())
               ? bandName.trim()
-              : isUpgradeMode
-                ? (userProfile?.name || userProfile?.full_name || fullName.trim() || finalScreenName.trim() || 'Operator')
+              : existingBaseProfile
+                ? (existingBaseProfile.name || existingBaseProfile.full_name || fullName.trim() || finalScreenName.trim() || 'Operator')
                 : (finalScreenName.trim() || fullName.trim() || 'Operator'),
       email: signupEmail.trim() || 'operator@nexus.core',
       pin: signUpUnlockPin.trim() || signUpPassword.trim() || '0000',
-      avatar_url: resolvedAvatar || (isUpgradeMode ? userProfile?.avatar_url : undefined),
-      banner_url: resolvedBanner || (isUpgradeMode ? userProfile?.banner_url : undefined),
-      cover_url: resolvedBanner || (isUpgradeMode ? userProfile?.cover_url : undefined),
-      bandName: hasBand ? (bandName.trim() || userProfile?.bandName || userProfile?.band_name) : (userProfile?.bandName || userProfile?.band_name || undefined),
-      band_name: hasBand ? (bandName.trim() || userProfile?.band_name || userProfile?.bandName) : (userProfile?.band_name || userProfile?.bandName || undefined),
-      band_id: hasBand ? activeBandIdToUse : (activeBandIdToUse || userProfile?.band_id || undefined),
-      band_logo: hasBand ? resolvedBandLogo : (userProfile?.band_logo || (userProfile?.band_metadata as any)?.logo_url || undefined),
-      band_banner: hasBand ? resolvedBandBanner : (userProfile?.band_banner || (userProfile?.band_metadata as any)?.banner_url || undefined),
+      avatar_url: resolvedAvatar || existingBaseProfile?.avatar_url,
+      banner_url: resolvedBanner || existingBaseProfile?.banner_url,
+      cover_url: resolvedBanner || existingBaseProfile?.cover_url,
+      bandName: hasBand ? (bandName.trim() || existingBaseProfile?.bandName || existingBaseProfile?.band_name) : (existingBaseProfile?.bandName || existingBaseProfile?.band_name || undefined),
+      band_name: hasBand ? (bandName.trim() || existingBaseProfile?.band_name || existingBaseProfile?.bandName) : (existingBaseProfile?.band_name || existingBaseProfile?.bandName || undefined),
+      band_id: hasBand ? activeBandIdToUse : (existingBaseProfile?.band_id || undefined),
+      band_logo: hasBand ? resolvedBandLogo : (existingBaseProfile?.band_logo || (existingBaseProfile?.band_metadata as any)?.logo_url || undefined),
+      band_banner: hasBand ? resolvedBandBanner : (existingBaseProfile?.band_banner || (existingBaseProfile?.band_metadata as any)?.banner_url || undefined),
       account_type: isWorkspaceRegistration 
         ? 'industry pro'
         : (accountTypeToggle === 'Industry Pro' ? 'pro' : 'fan'),
       active_workspace: (accountTypeToggle === 'Industry Pro' || isWorkspaceRegistration) ? 'industry_pro' : 'fan_only',
-      sub_tier: isUpgradeMode ? (userProfile?.sub_tier || 'free_for_life') : 'free_for_life',
-      console_handle: isUpgradeMode ? (userProfile?.console_handle || consoleHandle.trim() || handle.trim() || finalScreenName.trim() || 'user') : (
+      sub_tier: existingBaseProfile ? (existingBaseProfile.sub_tier || 'free_for_life') : 'free_for_life',
+      console_handle: existingBaseProfile ? (existingBaseProfile.console_handle || consoleHandle.trim() || handle.trim() || finalScreenName.trim() || 'user') : (
         hasLabel ? labelUrlSlug.trim()
         : hasCreative ? creativeHandle.trim()
         : hasBand ? profileSlug.trim()
@@ -1106,18 +1044,18 @@ export const LoginView: React.FC<LoginViewProps> = ({
         : ['fan'],
       registered_workspaces: normalizeRegisteredWorkspaces(
         (isWorkspaceRegistration || accountTypeToggle === 'Industry Pro')
-          ? (userProfile?.registered_workspaces || []).filter((w: any) => {
+          ? (existingBaseProfile?.registered_workspaces || []).filter((w: any) => {
               const str = typeof w === 'string' ? w.toLowerCase().trim() : (w?.type || '').toLowerCase().trim();
               return str !== 'fan' && str !== 'fan_only';
             })
-          : (userProfile?.registered_workspaces || []),
+          : (existingBaseProfile?.registered_workspaces || []),
         (isWorkspaceRegistration || accountTypeToggle === 'Industry Pro')
           ? [
               'industry pro',
-              ...(hasBand || userProfile?.band_id ? ['band'] : []),
-              ...(hasCreative || userProfile?.creative_id ? ['creative'] : []),
-              ...(hasPromoter || userProfile?.promoter_id ? ['promoter'] : []),
-              ...(hasLabel || userProfile?.label_id ? ['label'] : [])
+              ...(hasBand || existingBaseProfile?.band_id ? ['band'] : []),
+              ...(hasCreative || existingBaseProfile?.creative_id ? ['creative'] : []),
+              ...(hasPromoter || existingBaseProfile?.promoter_id ? ['promoter'] : []),
+              ...(hasLabel || existingBaseProfile?.label_id ? ['label'] : [])
             ]
           : ['fan']
       ),
@@ -1132,24 +1070,24 @@ export const LoginView: React.FC<LoginViewProps> = ({
       // JSONB Metadata Objects to guarantee zero data loss and clean column isolation
       label_metadata: labelMetadata,
       promoter_metadata: promoterMetadata,
-      band_metadata: hasBand ? bandMetadata : (userProfile?.band_metadata || undefined),
+      band_metadata: hasBand ? bandMetadata : (existingBaseProfile?.band_metadata || undefined),
       creative_metadata: creativeMetadata,
-      label_id: hasLabel ? (registeredLabelId || userProfile?.label_id) : (userProfile?.label_id || undefined),
-      promoter_id: hasPromoter ? (registeredPromoterId || userProfile?.promoter_id) : (userProfile?.promoter_id || undefined),
-      promoter_agency: hasPromoter ? promoterAgencyName : (userProfile?.promoter_agency || undefined),
-      promoter_brand: hasPromoter ? promoterAgencyName : (userProfile?.promoter_brand || undefined),
-      promoter_name: hasPromoter ? promoterAgencyName : (userProfile?.promoter_name || undefined),
-      agency_name: hasPromoter ? promoterAgencyName : (userProfile?.agency_name || undefined),
-      promoter_logo: hasPromoter ? (promoterLogoUrl || promoterLogo || userProfile?.promoter_logo) : (userProfile?.promoter_logo || undefined),
-      promoter_cover_image: hasPromoter ? (promoterCoverUrl || promoterCoverImage || userProfile?.promoter_cover_image) : (userProfile?.promoter_cover_image || undefined),
-      target_region: hasPromoter ? (promoterRegion.trim() || userProfile?.target_region) : (userProfile?.target_region || undefined),
-      promoter_region: hasPromoter ? (promoterRegion.trim() || userProfile?.promoter_region) : (userProfile?.promoter_region || undefined),
-      creative_id: hasCreative ? (registeredCreativeId || userProfile?.creative_id) : (userProfile?.creative_id || undefined),
-      creative_name: hasCreative ? (creativeBusinessName.trim() || creativeHandle.trim() || userProfile?.creative_name) : (userProfile?.creative_name || undefined),
-      creative_business_name: hasCreative ? (creativeBusinessName.trim() || userProfile?.creative_business_name) : (userProfile?.creative_business_name || undefined),
-      creative_handle: hasCreative ? (creativeHandle.trim() || userProfile?.creative_handle) : (userProfile?.creative_handle || undefined),
-      creative_avatar: hasCreative ? (creativeAvatarUrl || creativeAvatar || userProfile?.creative_avatar) : (userProfile?.creative_avatar || undefined),
-      creative_banner: hasCreative ? (creativeBannerUrl || creativeBanner || userProfile?.creative_banner) : (userProfile?.creative_banner || undefined),
+      label_id: hasLabel ? (registeredLabelId || existingBaseProfile?.label_id) : (existingBaseProfile?.label_id || undefined),
+      promoter_id: hasPromoter ? (registeredPromoterId || existingBaseProfile?.promoter_id) : (existingBaseProfile?.promoter_id || undefined),
+      promoter_agency: hasPromoter ? promoterAgencyName : (existingBaseProfile?.promoter_agency || undefined),
+      promoter_brand: hasPromoter ? promoterAgencyName : (existingBaseProfile?.promoter_brand || undefined),
+      promoter_name: hasPromoter ? promoterAgencyName : (existingBaseProfile?.promoter_name || undefined),
+      agency_name: hasPromoter ? promoterAgencyName : (existingBaseProfile?.agency_name || undefined),
+      promoter_logo: hasPromoter ? (promoterLogoUrl || promoterLogo || existingBaseProfile?.promoter_logo) : (existingBaseProfile?.promoter_logo || undefined),
+      promoter_cover_image: hasPromoter ? (promoterCoverUrl || promoterCoverImage || existingBaseProfile?.promoter_cover_image) : (existingBaseProfile?.promoter_cover_image || undefined),
+      target_region: hasPromoter ? (promoterRegion.trim() || existingBaseProfile?.target_region) : (existingBaseProfile?.target_region || undefined),
+      promoter_region: hasPromoter ? (promoterRegion.trim() || existingBaseProfile?.promoter_region) : (existingBaseProfile?.promoter_region || undefined),
+      creative_id: hasCreative ? (registeredCreativeId || existingBaseProfile?.creative_id) : (existingBaseProfile?.creative_id || undefined),
+      creative_name: hasCreative ? (creativeBusinessName.trim() || creativeHandle.trim() || existingBaseProfile?.creative_name) : (existingBaseProfile?.creative_name || undefined),
+      creative_business_name: hasCreative ? (creativeBusinessName.trim() || existingBaseProfile?.creative_business_name) : (existingBaseProfile?.creative_business_name || undefined),
+      creative_handle: hasCreative ? (creativeHandle.trim() || existingBaseProfile?.creative_handle) : (existingBaseProfile?.creative_handle || undefined),
+      creative_avatar: hasCreative ? (creativeAvatarUrl || creativeAvatar || existingBaseProfile?.creative_avatar) : (existingBaseProfile?.creative_avatar || undefined),
+      creative_banner: hasCreative ? (creativeBannerUrl || creativeBanner || existingBaseProfile?.creative_banner) : (existingBaseProfile?.creative_banner || undefined),
     };
 
     return sanitizeProfilePayload(resPayload);
@@ -1286,7 +1224,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
     const hasPromoter = activeUserRoles.includes('PROMOTER');
     if (!hasPromoter) return undefined;
     const finalProfileId = explicitUserId || ((isUpgradeMode && userProfile?.id) ? userProfile.id : (newUserId || generateUUID()));
-    const idToUse = explicitPromoterId || registeredPromoterId || (userProfile?.promoter_id) || generateUUID();
+    const idToUse = explicitPromoterId || registeredPromoterId || (isUpgradeMode ? userProfile?.promoter_id : undefined) || generateUUID();
     const isOwnerMiguel = isMiguelNameOrProfile({ id: userProfile?.id, email: userProfile?.email || signupEmail, name: userProfile?.name || fullName, full_name: userProfile?.full_name || fullName });
     const pName = promoterAgency.trim() || (isOwnerMiguel ? 'Nexus Live Productions' : (userProfile?.name || fullName ? `${userProfile?.name || fullName} Productions` : 'Promoter Operations'));
     const resolvedLogo = logoUrlOverride || promoterLogo || (userProfile?.promoter_logo) || (userProfile?.promoter_metadata as any)?.logo_url || undefined;
@@ -1586,8 +1524,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
           console.error('Failed to create initial profile:', profileRes.error);
           throw new Error(`Profile registration error: ${profileRes.error.message || 'Database error creating profile'}`);
         }
-
-        await ensureAutoFollowMiguel(supabase, newProfileId);
 
         if (hasBand && initialBand) {
           const bandRes = await executeWithSchemaResilience(async (payload) => supabase.from('bands').upsert(payload), initialBand);

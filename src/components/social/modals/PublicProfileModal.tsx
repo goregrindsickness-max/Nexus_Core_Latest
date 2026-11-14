@@ -1,9 +1,18 @@
-import React from 'react';
-import { ProfileCard as BandProfileCard } from '../../portals/Band/ProfileCard';
-import { ProfileCard as CreativeProfileCard } from '../../portals/Creative/ProfileCard';
-import { ProfileCard as LabelProfileCard } from '../../portals/Label/ProfileCard';
-import { ProfileCard as PromoterProfileCard } from '../../portals/Promoter/ProfileCard';
+import React, { Suspense } from 'react';
 import { CheckCircle, MapPin } from 'lucide-react';
+
+const BandProfileCard = React.lazy(() =>
+  import('../../portals/Band/ProfileCard').then((m) => ({ default: m.ProfileCard }))
+);
+const CreativeProfileCard = React.lazy(() =>
+  import('../../portals/Creative/ProfileCard').then((m) => ({ default: m.ProfileCard }))
+);
+const LabelProfileCard = React.lazy(() =>
+  import('../../portals/Label/ProfileCard').then((m) => ({ default: m.ProfileCard }))
+);
+const PromoterProfileCard = React.lazy(() =>
+  import('../../portals/Promoter/ProfileCard').then((m) => ({ default: m.ProfileCard }))
+);
 import { SonicFootprint } from '../../profile/SonicFootprint';
 import { formatLocationDisplay } from '../../../constants/location';
 import { useUserPresence } from '../../../lib/presence';
@@ -266,7 +275,11 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = (props) => 
   );
 
   if (isCreative) {
-    return <CreativeProfileCard {...props} />;
+    return (
+      <Suspense fallback={null}>
+        <CreativeProfileCard {...props} />
+      </Suspense>
+    );
   }
 
   // 2. Explicit Promoter Profile / Workspace check
@@ -290,7 +303,11 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = (props) => 
   );
 
   if (isPromoter) {
-    return <PromoterProfileCard {...props} />;
+    return (
+      <Suspense fallback={null}>
+        <PromoterProfileCard {...props} />
+      </Suspense>
+    );
   }
 
   // 3. Explicit Record Label Profile / Workspace check
@@ -304,7 +321,11 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = (props) => 
   );
 
   if (isLabel) {
-    return <LabelProfileCard {...props} />;
+    return (
+      <Suspense fallback={null}>
+        <LabelProfileCard {...props} />
+      </Suspense>
+    );
   }
 
   // 4. Explicit Band / Artist Profile check
@@ -323,11 +344,19 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = (props) => 
   );
 
   if (isArtistOrBand) {
-    return <BandProfileCard {...props} />;
+    return (
+      <Suspense fallback={null}>
+        <BandProfileCard {...props} />
+      </Suspense>
+    );
   }
   
   // Default (Fan Only and Industry Pro Personal profile cards)
-  return <BandProfileCard {...props} />;
+  return (
+    <Suspense fallback={null}>
+      <BandProfileCard {...props} />
+    </Suspense>
+  );
 };
 
 export default PublicProfileModal;

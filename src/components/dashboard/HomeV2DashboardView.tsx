@@ -1,22 +1,22 @@
-
 import { V2ExpandableCard } from "../V2ExpandableCard";
-import DevBandDistroDeck from "../portals/Band/DevBandDistroDeck";
-import MerchandisePrintersView from "../portals/Band/MerchandisePrintersView";
 import { getShowWeatherAndWarnings } from "../portals/Band/ShowsView";
 import { getShowCoordinates, calculateHaversineDistance } from "../../utils/geoUtils";
 const concertBg = "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/High%20energy%20concert%202.png";
-import React from "react";
+import React, { Suspense } from "react";
 import { useBandState } from "../../hooks/useBandState";
 import { useInventoryState } from "../../hooks/useInventoryState";
 import { useOffersManagement } from "../../hooks/useOffersManagement";
 import { LegacyMetricsCarousel } from "./LegacyMetricsCarousel";
 import { Calendar, ShoppingCart, Tag, TrendingUp, Globe, Settings, Sparkles, ChevronUp, ChevronDown, Lock, Mic } from "lucide-react";
-import PromoHubView from "../portals/Band/PromoHubView";
-import EventsWorkspace from "../portals/Band/EventsWorkspace";
-import SalesWorkspace from "../portals/Band/SalesWorkspace";
-import MerchWorkspaceWrapper from "../portals/Band/MerchWorkspaceWrapper";
-import FinanceWorkspace from "../portals/Band/FinanceWorkspace";
-import SettingsWorkspace from "../SettingsWorkspace";
+
+const DevBandDistroDeck = React.lazy(() => import("../portals/Band/DevBandDistroDeck"));
+const MerchandisePrintersView = React.lazy(() => import("../portals/Band/MerchandisePrintersView"));
+const PromoHubView = React.lazy(() => import("../portals/Band/PromoHubView"));
+const EventsWorkspace = React.lazy(() => import("../portals/Band/EventsWorkspace"));
+const SalesWorkspace = React.lazy(() => import("../portals/Band/SalesWorkspace"));
+const MerchWorkspaceWrapper = React.lazy(() => import("../portals/Band/MerchWorkspaceWrapper"));
+const FinanceWorkspace = React.lazy(() => import("../portals/Band/FinanceWorkspace"));
+const SettingsWorkspace = React.lazy(() => import("../SettingsWorkspace"));
 
 export function HomeV2DashboardView(props: any & { renderTourNotesCard: any; renderCashDrawerLedgerSection: any; renderDecoupledLiveInventorySection: any; renderDecoupledLiveTeamActivitySection: any; renderRecentSalesFeed: any; renderDecoupledFinanceCards: any; supabaseUrl?: string; supabaseKey?: string; }) {
   const { bands, setBands, activeBandId, setActiveBandId, currentLoadedBandId, setCurrentLoadedBandId, editingBand, setEditingBand, deletingBandId, setDeletingBandId, bandLineup, setBandLineup, crewMembers, setCrewMembers, bandLogoUrl, setBandLogoUrl, bandCoverUrl, setBandCoverUrl, selectedMicroGenres, setSelectedMicroGenres, bandJoinRequests, setBandJoinRequests } = useBandState();
@@ -839,26 +839,28 @@ export function HomeV2DashboardView(props: any & { renderTourNotesCard: any; ren
                 </button>
                 {isV2StoryCreatorExpanded && (
                   <div className="bg-black">
-                    <PromoHubView
-                      inventory={filteredInventory}
-                      onBack={() => {}}
-                      triggerNotification={triggerNotification}
-                      addLog={addLog}
-                      activeBandName={activeBand?.name || 'Artist'}
-                      stagedDistroItems={stagedDistroItems}
-                      setStagedDistroItems={setStagedDistroItems}
-                      initialSubTab="stories"
-                      subTabMode="stories_only"
-                      onCollapse={() => {
-                        setIsV2StoryCreatorExpanded(false);
-                        setTimeout(() => {
-                          const container = document.getElementById('v2-dashboard-scroll-container');
-                          if (container) {
-                            container.scrollTo({ top: 0, behavior: 'smooth' });
-                          }
-                        }, 50);
-                      }}
-                    />
+                    <Suspense fallback={null}>
+                      <PromoHubView
+                        inventory={filteredInventory}
+                        onBack={() => {}}
+                        triggerNotification={triggerNotification}
+                        addLog={addLog}
+                        activeBandName={activeBand?.name || 'Artist'}
+                        stagedDistroItems={stagedDistroItems}
+                        setStagedDistroItems={setStagedDistroItems}
+                        initialSubTab="stories"
+                        subTabMode="stories_only"
+                        onCollapse={() => {
+                          setIsV2StoryCreatorExpanded(false);
+                          setTimeout(() => {
+                            const container = document.getElementById('v2-dashboard-scroll-container');
+                            if (container) {
+                              container.scrollTo({ top: 0, behavior: 'smooth' });
+                            }
+                          }, 50);
+                        }}
+                      />
+                    </Suspense>
                   </div>
                 )}
               </div>
@@ -906,7 +908,7 @@ export function HomeV2DashboardView(props: any & { renderTourNotesCard: any; ren
                    </div>
                  </div>
                ) : (
-                 <>
+                 <Suspense fallback={null}>
                    {dashboardV2ActiveNav === 'EVENTS' && (
 <EventsWorkspace 
   activeBand={activeBand}
@@ -1211,7 +1213,7 @@ export function HomeV2DashboardView(props: any & { renderTourNotesCard: any; ren
                    supabaseKey={supabaseKey}
                  />
                )}
-                 </>
+                 </Suspense>
                )}
             </div>
           </div>

@@ -4,8 +4,7 @@ import { loadDiscoverProfilesCache, saveDiscoverProfilesCache } from '../utils/f
 import { extractUUID } from '../../../utils/socialFeedUtils';
 import { getSupabase, executeWithSchemaResilience, sanitizeBandPayload } from '../../../supabase';
 import { isMiguelNameOrProfile } from '../utils/profileUtils';
-import { communityBandManager, isDeletedOrZombieBand } from '../../../lib/communityBands';
-import { isCommunityBandRecord } from '../../../lib/seedBandsData';
+import { communityBandManager, isDeletedOrZombieBand, isCommunityBandRecord } from '../../../lib/communityBands';
 import {
   isProfileFollowedGlobally,
   saveFollowStateGlobally,
@@ -261,25 +260,40 @@ export function useSocialFollowsAndProfiles({
 
               const isMiguel = (p.email || '').toLowerCase().trim() === 'goregrindsickness@gmail.com' || (p.email || '').toLowerCase().trim() === 'admin@nexus.com' || String(p.id || '').toLowerCase().trim() === '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
 
-              if (p.account_type === 'label' || p.label_company_name) {
+              const accTypeLower = String(p.account_type || '').toLowerCase().trim();
+              const activeWsLower = String(p.active_workspace || '').toLowerCase().trim();
+              const isExplicitIndustryPro =
+                accTypeLower === 'industry_pro' ||
+                accTypeLower === 'industry pro' ||
+                activeWsLower === 'industry_pro';
+              const rawBandName = String(p.bandName || p.band_name || '').trim();
+              const isBandEntityRow =
+                !isExplicitIndustryPro &&
+                !isMiguel &&
+                (
+                  (!p.full_name && (Boolean(rawBandName) || accTypeLower === 'band')) ||
+                  (accTypeLower === 'band' && Boolean(rawBandName) && p.full_name?.trim().toLowerCase() === rawBandName.toLowerCase())
+                );
+
+              if (accTypeLower === 'label' || p.label_company_name) {
                 profileName = p.label_company_name || profileName;
                 profileAvatar = p.label_avatar || profileAvatar;
                 profileBanner = p.label_banner || profileBanner;
                 profileRole = 'Label';
                 category = 'labels';
-              } else if (p.account_type === 'band' || (!p.full_name && p.bandName)) {
-                profileName = p.bandName || profileName;
+              } else if (isBandEntityRow) {
+                profileName = rawBandName || profileName;
                 profileAvatar = p.avatar_url || profileAvatar;
                 profileBanner = p.banner_url || profileBanner;
                 profileRole = 'Band';
                 category = 'bands';
-              } else if (p.account_type === 'creative') {
+              } else if (accTypeLower === 'creative') {
                 profileName = p.creative_name || p.creative_metadata?.business_name || profileName;
                 profileAvatar = p.creative_avatar || profileAvatar;
                 profileBanner = p.creative_banner || profileBanner;
                 profileRole = 'Creative';
                 category = 'creatives';
-              } else if (p.account_type === 'promoter') {
+              } else if (accTypeLower === 'promoter') {
                 if (isMiguel) {
                   profileRole = 'Member';
                   category = 'friends';
@@ -294,6 +308,12 @@ export function useSocialFollowsAndProfiles({
                   profileRole = 'Promoter';
                   category = 'venues';
                 }
+              } else if (
+                isExplicitIndustryPro ||
+                ((accTypeLower === 'band' || String(p.role || '').toLowerCase().trim() === 'band') && Boolean(p.full_name))
+              ) {
+                profileRole = 'Industry Pro';
+                category = 'friends';
               }
 
               const rawRegWs = Array.isArray(p.registered_workspaces) ? p.registered_workspaces : [];
@@ -343,7 +363,9 @@ export function useSocialFollowsAndProfiles({
                 avatar: profileAvatar,
                 image: profileAvatar,
                 banner: profileBanner,
-                followed: followedArtistIds.includes(String(p.id || '').toLowerCase().trim()) || followedArtistIds.includes(profileName.toLowerCase()) || !!localFollows[p.id] || !!localFollows[profileName.toLowerCase()],
+                followed: authoritativeFollowsForCheck !== undefined
+                  ? (followedArtistIds.includes(String(p.id || '').toLowerCase().trim()) || followedArtistIds.includes(profileName.toLowerCase()))
+                  : (followedArtistIds.includes(String(p.id || '').toLowerCase().trim()) || followedArtistIds.includes(profileName.toLowerCase()) || !!localFollows[p.id] || !!localFollows[profileName.toLowerCase()]),
                 isYou: false,
                 email: p.email,
                 registered_workspaces: cleanRegWs,
@@ -396,7 +418,9 @@ export function useSocialFollowsAndProfiles({
                 cover_url: b.cover_url || b.banner_url || '',
                 banner_url: b.banner_url || b.cover_url || '',
                 banner: b.cover_url || b.banner_url || '',
-                followed: followedArtistIds.includes(String(b.id || '').toLowerCase().trim()) || followedArtistIds.includes(bName.toLowerCase()) || !!localFollows[b.id] || !!localFollows[bName.toLowerCase()],
+                followed: authoritativeFollowsForCheck !== undefined
+                  ? (followedArtistIds.includes(String(b.id || '').toLowerCase().trim()) || followedArtistIds.includes(bName.toLowerCase()))
+                  : (followedArtistIds.includes(String(b.id || '').toLowerCase().trim()) || followedArtistIds.includes(bName.toLowerCase()) || !!localFollows[b.id] || !!localFollows[bName.toLowerCase()]),
                 isYou: false
               });
             });
@@ -440,7 +464,9 @@ export function useSocialFollowsAndProfiles({
               followers_count: cb.followers_count || 120,
               discography: cb.discography || [],
               curated_by: cb.curated_by,
-              followed: !!localFollows[cb.id] || !!localFollows[cb.name.toLowerCase()],
+              followed: authoritativeFollowsForCheck !== undefined
+                ? (followedArtistIds.includes(String(cb.id || '').toLowerCase().trim()) || followedArtistIds.includes(cb.name.toLowerCase()))
+                : (!!localFollows[cb.id] || !!localFollows[cb.name.toLowerCase()]),
               isYou: false
             });
           });
@@ -486,7 +512,9 @@ export function useSocialFollowsAndProfiles({
                 creative_avatar: cAvatar,
                 banner: cBanner,
                 creative_banner: cBanner,
-                followed: followedArtistIds.includes(String(c.id || '').toLowerCase().trim()) || followedArtistIds.includes(cName.toLowerCase()) || !!localFollows[c.id] || !!localFollows[cName.toLowerCase()],
+                followed: authoritativeFollowsForCheck !== undefined
+                  ? (followedArtistIds.includes(String(c.id || '').toLowerCase().trim()) || followedArtistIds.includes(cName.toLowerCase()))
+                  : (followedArtistIds.includes(String(c.id || '').toLowerCase().trim()) || followedArtistIds.includes(cName.toLowerCase()) || !!localFollows[c.id] || !!localFollows[cName.toLowerCase()]),
                 isYou: false
               });
             });
@@ -530,7 +558,9 @@ export function useSocialFollowsAndProfiles({
                 image: lAvatar,
                 label_avatar: lAvatar,
                 banner: lBanner,
-                followed: followedArtistIds.includes(String(l.id || '').toLowerCase().trim()) || followedArtistIds.includes(lName.toLowerCase()) || !!localFollows[l.id] || !!localFollows[lName.toLowerCase()],
+                followed: authoritativeFollowsForCheck !== undefined
+                  ? (followedArtistIds.includes(String(l.id || '').toLowerCase().trim()) || followedArtistIds.includes(lName.toLowerCase()))
+                  : (followedArtistIds.includes(String(l.id || '').toLowerCase().trim()) || followedArtistIds.includes(lName.toLowerCase()) || !!localFollows[l.id] || !!localFollows[lName.toLowerCase()]),
                 isYou: false
               });
             });
@@ -574,7 +604,9 @@ export function useSocialFollowsAndProfiles({
                 avatar: pAvatar,
                 image: pAvatar,
                 banner: pBanner,
-                followed: followedArtistIds.includes(String(p.id || '').toLowerCase().trim()) || followedArtistIds.includes(pName.toLowerCase()) || !!localFollows[p.id] || !!localFollows[pName.toLowerCase()],
+                followed: authoritativeFollowsForCheck !== undefined
+                  ? (followedArtistIds.includes(String(p.id || '').toLowerCase().trim()) || followedArtistIds.includes(pName.toLowerCase()))
+                  : (followedArtistIds.includes(String(p.id || '').toLowerCase().trim()) || followedArtistIds.includes(pName.toLowerCase()) || !!localFollows[p.id] || !!localFollows[pName.toLowerCase()]),
                 isYou: false
               });
             });

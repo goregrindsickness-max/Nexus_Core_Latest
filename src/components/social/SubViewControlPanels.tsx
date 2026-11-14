@@ -1,7 +1,6 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { ChevronDown, MapPin, Ticket, Filter, Map as MapIcon, SlidersHorizontal, Calendar, Star, Clock, Trash2, History, UserPlus, Check, Sparkles, Building2, Palette, Music, Disc, Plus } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, MapPin, Ticket, Building2, Star, Clock, Plus } from 'lucide-react';
 import { formatTimeTo12h, hasGigTickets, isPastShowDate } from '../../utils/socialFeedUtils';
-import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME, getTargetFollowKeys } from '../../utils/followSyncService';
 
 export interface LiveTonightGig {
   id: string;
@@ -49,97 +48,16 @@ export interface SubViewControlPanelsProps {
   triggerNotification?: (msg: string) => void;
 }
 
-const DEFAULT_CURATED_DISCOVERY = [
-  {
-    id: 'scene-band-cordyceps',
-    name: 'Cordyceps',
-    role: 'Band',
-    handle: '@cordyceps_bdm',
-    genre: 'Brutal Death Metal',
-    avatar: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'scene-label-unique-leader',
-    name: 'Unique Leader Records',
-    role: 'Record Label',
-    handle: '@uniqueleaderrec',
-    genre: 'Extreme Metal Distro',
-    avatar: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=150&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'scene-creative-bloodshed',
-    name: 'Bloodshed Visuals',
-    role: 'Creative',
-    handle: '@bloodshed_art',
-    genre: 'Album Art & Stage FX',
-    avatar: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=150&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'scene-promoter-heavy-mtn',
-    name: 'Heavy Mountain Bookings',
-    role: 'Promoter',
-    handle: '@heavymtn_tours',
-    genre: 'Northwest Metal Tours',
-    avatar: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=150&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'scene-band-nile',
-    name: 'Nile',
-    role: 'Band',
-    handle: '@nile_official',
-    genre: 'Technical Death Metal',
-    avatar: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=150&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'scene-label-relapse',
-    name: 'Relapse Records',
-    role: 'Record Label',
-    handle: '@relapserecords',
-    genre: 'Underground Metal',
-    avatar: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=150&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'scene-creative-rotten-graphics',
-    name: 'Rotten Graphics',
-    role: 'Creative',
-    handle: '@rottengraphics',
-    genre: 'Merch & Poster Design',
-    avatar: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=150&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'scene-promoter-denver-collective',
-    name: 'Denver Metal Collective',
-    role: 'Promoter',
-    handle: '@denvermetal',
-    genre: 'Rocky Mountain Gigs',
-    avatar: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=150&auto=format&fit=crop&q=80',
-  }
-];
-
 export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
   isLiveTonightOpen,
   setIsLiveTonightOpen,
   liveEvents = [],
   onSelectLiveTonight,
   onCheckoutTicket,
-  filterHideTicketPresales = false,
-  setFilterHideTicketPresales,
-  filterShowFollowedOnly = false,
-  setFilterShowFollowedOnly,
-  filterShowMerchDropsOnlyFromFollowed = false,
-  setFilterShowMerchDropsOnlyFromFollowed,
   onOpenMapModal,
-  onOpenArchivesModal,
   onOpenShowCreator,
-  onEditShow,
-  onDeleteGig,
   portalRole = 'band',
   userProfile,
-  discoverProfiles = [],
-  allProfiles = [],
-  onToggleFollow,
-  onSelectProfile,
-  triggerNotification,
 }) => {
   const activeWorkspace = (userProfile?.active_workspace || portalRole || '').toLowerCase();
   const isBand = activeWorkspace === 'band' || portalRole === 'band';
@@ -149,100 +67,6 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const isHoveredRef = React.useRef(false);
-
-  // Local follow state tracking for instant UI responsiveness
-  const [followedState, setFollowedState] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    setFollowedState({});
-  }, [userProfile?.id]);
-
-  // Sync follow state globally across all components
-  useEffect(() => {
-    const handleGlobalFollowUpdate = (e: Event) => {
-      const detail = (e as CustomEvent)?.detail;
-      if (detail && detail.keys && Array.isArray(detail.keys)) {
-        setFollowedState(prev => {
-          const next = { ...prev };
-          detail.keys.forEach((k: string) => {
-            next[k] = Boolean(detail.isFollowed);
-          });
-          return next;
-        });
-      } else {
-        setFollowedState(prev => ({ ...prev }));
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener(FOLLOW_EVENT_NAME, handleGlobalFollowUpdate);
-      window.addEventListener('storage', handleGlobalFollowUpdate);
-      return () => {
-        window.removeEventListener(FOLLOW_EVENT_NAME, handleGlobalFollowUpdate);
-        window.removeEventListener('storage', handleGlobalFollowUpdate);
-      };
-    }
-  }, []);
-
-  // Combine discoverProfiles & curated scene profiles for the ticker
-  const tickerProfiles = useMemo(() => {
-    const list: any[] = [];
-    const seenNames = new Set<string>();
-
-    // 1. Add active discoverProfiles
-    if (discoverProfiles && Array.isArray(discoverProfiles)) {
-      discoverProfiles.forEach((p) => {
-        const name = (p.name || '').trim();
-        if (name && !seenNames.has(name.toLowerCase())) {
-          seenNames.add(name.toLowerCase());
-          list.push({
-            id: p.id || `disc-${name}`,
-            name: p.name,
-            role: p.role || 'Creator',
-            handle: p.handle || `@${name.toLowerCase().replace(/\s+/g, '')}`,
-            genre: p.genre || p.bio || 'Scene Creator',
-            avatar: p.avatar || p.logo_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80',
-            followed: isProfileFollowedGlobally(p),
-            rawProfile: p,
-          });
-        }
-      });
-    }
-
-    // 2. Add curated scene entities to ensure diverse mix of Band, Label, Creative, Promoter
-    DEFAULT_CURATED_DISCOVERY.forEach((curated) => {
-      if (!seenNames.has(curated.name.toLowerCase())) {
-        seenNames.add(curated.name.toLowerCase());
-        list.push({
-          ...curated,
-          followed: isProfileFollowedGlobally(curated),
-          rawProfile: curated,
-        });
-      }
-    });
-
-    return list;
-  }, [discoverProfiles, followedState]);
-
-  const handleEntityFollowClick = (e: React.MouseEvent, entity: any) => {
-    e.stopPropagation();
-    const targetObj = entity.rawProfile || entity;
-    const currentFollow = isProfileFollowedGlobally(targetObj);
-    const nextFollow = !currentFollow;
-
-    saveFollowStateGlobally(targetObj, nextFollow);
-
-    const keys = getTargetFollowKeys(targetObj);
-    setFollowedState((prev) => {
-      const next = { ...prev };
-      keys.forEach(k => { next[k] = nextFollow; });
-      return next;
-    });
-
-    if (onToggleFollow) {
-      onToggleFollow(targetObj);
-    }
-  };
 
   // Filter shows so each multi-city tour or headliner features ONLY 1 geographically closest show to avoid feed clutter
   const uniqueLiveEvents = useMemo(() => {
@@ -386,14 +210,14 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
     <div className="w-full bg-black/60 border-b border-zinc-900">
       {/* Upcoming Shows Near You Strip */}
       <div className="py-2.5 pl-1 sm:pl-0 border-t border-zinc-900/60">
-        {/* Title Header Row with Collapse Chevron */}
+        {/* Title Header Row with All Events Link & Collapse Chevron */}
         <div
-          className="px-4 mb-2 flex items-center justify-between cursor-pointer select-none"
+          className="px-4 mb-2 flex items-center justify-between gap-2 cursor-pointer select-none"
           onClick={() => setIsLiveTonightOpen(!isLiveTonightOpen)}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <div
-              className={`w-2.5 h-2.5 rounded-full ${
+              className={`w-2.5 h-2.5 rounded-full shrink-0 ${
                 isLiveTonightOpen
                   ? isBand
                     ? 'bg-[#39ff14] shadow-[0_0_8px_#39ff14] animate-pulse'
@@ -406,7 +230,7 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
               }`}
             />
             <span
-              className={`text-xs font-black uppercase tracking-widest ${
+              className={`text-xs font-black uppercase tracking-widest truncate ${
                 isLiveTonightOpen
                   ? isBand
                     ? 'text-[#39ff14]'
@@ -422,20 +246,35 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
             </span>
           </div>
 
-          <ChevronDown
-            className={`w-4 h-4 text-zinc-400 transition-transform duration-300 ${
-              isLiveTonightOpen ? 'rotate-180' : ''
-            }`}
-          />
+          <div className="flex items-center gap-2.5 shrink-0">
+            {onOpenMapModal && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenMapModal();
+                }}
+                className="inline-flex items-center gap-0.5 text-[10px] font-mono font-bold uppercase tracking-wider text-cyan-400/85 hover:text-cyan-300 transition-colors cursor-pointer whitespace-nowrap"
+                title="Explore all upcoming events, single shows, multi-city tours, and scene archives"
+              >
+                <span>All Events</span>
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            )}
+            <ChevronDown
+              className={`w-4 h-4 text-zinc-400 transition-transform duration-300 ${
+                isLiveTonightOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </div>
         </div>
 
-        {/* Controls Row: All Cities Dropdown (left) and View All Events (right) on the SAME SINGLE LINE */}
-        <div className="px-4 mb-2.5 flex items-center justify-between gap-2">
-          {/* Hometown / City Filter Pill Dropdown */}
+        {/* Single Consolidated Control Row: All Cities Dropdown (left) & High-Contrast + Post Show (right) */}
+        <div className="px-4 mb-2.5 flex items-center justify-between gap-2.5">
           {availableCities.length > 0 ? (
             <div
               onClick={(e) => e.stopPropagation()}
-              className="flex-1 flex items-center bg-zinc-900/90 border border-amber-500/50 hover:border-amber-400 rounded-lg px-2.5 py-1 text-[11px] font-mono font-bold text-amber-300 shadow-sm transition-all min-w-0"
+              className="flex-1 flex items-center bg-zinc-900/90 border border-amber-500/50 hover:border-amber-400 rounded-lg px-2.5 py-1.5 text-[11px] font-mono font-bold text-amber-300 shadow-sm transition-all min-w-0"
             >
               <select
                 value={selectedCity}
@@ -448,41 +287,24 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                 ))}
               </select>
             </div>
-          ) : <div />}
-
-          {/* View All Events Button (on the same single line) */}
-          {onOpenMapModal && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenMapModal();
-              }}
-              className="text-[11px] font-mono uppercase font-bold text-cyan-300 hover:text-black bg-cyan-950/70 hover:bg-cyan-400 border border-cyan-800/90 hover:border-cyan-400 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0 whitespace-nowrap"
-              title="Explore all upcoming events, single shows, multi-city tours, and scene archives"
-            >
-              <Calendar className="w-3.5 h-3.5 text-cyan-400 group-hover:text-black" />
-              <span>View All Events</span>
-            </button>
+          ) : (
+            <div />
           )}
-        </div>
 
-        {/* Full-Width + Post Show Button */}
-        {onOpenShowCreator && (
-          <div className="px-4 mb-3">
+          {onOpenShowCreator && (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenShowCreator();
               }}
-              className="w-full text-xs font-mono uppercase font-black text-[#00ffcc] hover:text-black hover:bg-[#00ffcc] bg-zinc-900/90 border border-[#00ffcc]/50 hover:border-[#00ffcc] px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-[#00ffcc]/10 active:scale-[0.99] group"
+              className="shrink-0 inline-flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-[11px] font-mono font-black uppercase tracking-wider text-black bg-[#00ffcc] hover:bg-[#33ffd6] border border-[#00ffcc] shadow-[0_0_14px_rgba(0,255,204,0.32)] transition-all cursor-pointer active:scale-95 whitespace-nowrap"
             >
-              <Plus className="w-4 h-4 text-[#00ffcc] group-hover:text-black transition-colors" />
-              <span>+ Post Show</span>
+              <Plus className="w-3.5 h-3.5 shrink-0" strokeWidth={2.75} />
+              <span>Post Show</span>
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {isLiveTonightOpen && (
           <>
@@ -640,119 +462,10 @@ export const SubViewControlPanels: React.FC<SubViewControlPanelsProps> = ({
                     </div>
                   );
                 })}
-
-                {/* Hometown Scout End Card */}
-                {onOpenShowCreator && (
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenShowCreator();
-                    }}
-                    className="shrink-0 bg-gradient-to-r from-amber-950/40 via-[#140d02] to-[#0a0c10] border border-amber-500/60 hover:border-amber-400 rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-lg shadow-black/50 transition-all cursor-pointer group select-none"
-                  >
-                    <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-300 shrink-0">
-                      <Plus className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-                    </div>
-                    <div className="space-y-0.5 text-left min-w-[150px]">
-                      <div className="text-xs font-black text-amber-300 uppercase tracking-wide flex items-center gap-1">
-                        <span>+ Add Hometown Show</span>
-                      </div>
-                      <div className="text-[9px] text-zinc-400 font-mono">
-                        {selectedCity !== 'ALL' ? `Know a show in ${selectedCity}? Post it!` : 'Post local venue flyers or tour dates!'}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </>
         )}
-      </div>
-
-      {/* Interactive Discover & Follow Scene Ticker Module */}
-      <div className="px-3 py-1.5 bg-zinc-950/90 border-t border-zinc-900/80 flex items-center gap-2.5 overflow-hidden text-[9px] font-mono select-none">
-        {/* Module Label Badge */}
-        <div className="flex items-center gap-1.5 shrink-0 text-[8.5px] font-mono font-black text-rose-400 uppercase tracking-wider bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-500/30 shadow-[0_0_10px_rgba(244,63,94,0.15)]">
-          <Sparkles className="w-2.5 h-2.5 text-rose-400 animate-pulse" />
-          <span>SCENE FEED</span>
-        </div>
-
-        {/* Continuous Scrolling Ticker */}
-        <div className="flex-1 overflow-hidden relative flex items-center">
-          <div className="animate-scene-follow-ticker flex items-center gap-2.5 shrink-0">
-            {tickerProfiles.concat(tickerProfiles).map((item, idx) => {
-              const profileKeys = getTargetFollowKeys(item.rawProfile || item);
-              let isFollowed = false;
-              let localOverride: boolean | undefined = undefined;
-              for (const k of profileKeys) {
-                if (followedState[k] !== undefined) {
-                  localOverride = followedState[k];
-                  break;
-                }
-              }
-              if (localOverride !== undefined) {
-                isFollowed = localOverride;
-              } else {
-                isFollowed = isProfileFollowedGlobally(item.rawProfile || item);
-              }
-              const roleColor =
-                item.role?.toLowerCase().includes('label')
-                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                  : item.role?.toLowerCase().includes('promoter')
-                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                  : item.role?.toLowerCase().includes('creative')
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
-
-              return (
-                <div
-                  key={`${item.id}-${idx}`}
-                  onClick={() => onSelectProfile && onSelectProfile(item.rawProfile || item)}
-                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-900/90 hover:bg-zinc-800/90 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer shrink-0 shadow-sm group/item"
-                >
-                  <span className={`text-[7px] font-mono font-black px-1.5 py-0.2 rounded uppercase tracking-wider border ${roleColor}`}>
-                    {item.role?.toUpperCase().replace('RECORD ', '') || 'ARTIST'}
-                  </span>
-
-                  <img
-                    src={item.avatar}
-                    alt={item.name}
-                    className="w-3.5 h-3.5 rounded-full object-cover border border-zinc-700 shrink-0"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-
-                  <span className="text-[9.5px] font-bold text-zinc-200 group-hover/item:text-white truncate max-w-[110px]">
-                    {item.name}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={(e) => handleEntityFollowClick(e, item)}
-                    className={`flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[8px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                      isFollowed
-                        ? 'bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
-                        : 'bg-zinc-800 hover:bg-rose-900/60 border border-zinc-700 hover:border-rose-500/60 text-zinc-300 hover:text-white'
-                    }`}
-                  >
-                    {isFollowed ? (
-                      <>
-                        <Check className="w-2.5 h-2.5 text-emerald-400" />
-                        <span>Following</span>
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="w-2.5 h-2.5 text-rose-400" />
-                        <span>Follow</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
       </div>
     </div>
   );

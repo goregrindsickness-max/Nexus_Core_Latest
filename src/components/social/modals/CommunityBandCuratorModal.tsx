@@ -1208,12 +1208,19 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                   type="button"
                   onClick={async () => {
                     triggerNotification?.('🔄 Fetching latest community bands from Supabase cloud...');
-                    const remote = await communityBandManager.fetchFromSupabase();
-                    if (remote && remote.length > 0) {
-                      setBandsList(remote);
-                      triggerNotification?.(`✅ Synced ${remote.length} community bands from Supabase cloud!`);
-                    } else {
-                      triggerNotification?.('⚠️ No remote records returned or offline.');
+                    try {
+                      const remote = await communityBandManager.fetchFromSupabase();
+                      const freshList = communityBandManager.getAll();
+                      setBandsList(freshList);
+                      if (remote && remote.length > 0) {
+                        triggerNotification?.(`✅ Synced ${remote.length} community bands from Supabase cloud!`);
+                      } else {
+                        triggerNotification?.(`✅ Loaded ${freshList.length} community bands from local archives.`);
+                      }
+                    } catch (err: any) {
+                      const fallbackList = communityBandManager.getAll();
+                      setBandsList(fallbackList);
+                      triggerNotification?.(`✅ Loaded ${fallbackList.length} community bands.`);
                     }
                   }}
                   className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-sky-400 hover:text-sky-300 border border-sky-500/30 font-mono font-bold text-xs uppercase flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow active:scale-95"

@@ -3,36 +3,21 @@ import { cacheProfileMetadata, cacheProfileImage, hydrateProfileWithCache } from
 import { usePromoterOffers } from './hooks/usePromoterOffers';
 import { useTourNotes } from './hooks/useTourNotes';
 import { useGlobalDataSync } from './hooks/useGlobalDataSync';
-import { AppNavigationBar } from './components/navigation/AppNavigationBar';
-import { HomeDashboardView } from "./components/dashboard/HomeDashboardView";
-import SalesWorkspace from './components/portals/Band/SalesWorkspace';
-import FinanceWorkspace from './components/portals/Band/FinanceWorkspace';
-import EventsWorkspace from './components/portals/Band/EventsWorkspace';
-import LoginView from "./components/LoginView";
-import WorkspaceRegistrationWizard from "./components/WorkspaceRegistrationWizard";
-import RecentSalesFeed from './components/portals/Band/RecentSalesFeed';
 import { useBandManagement } from './hooks/useBandManagement';
 import { useTourLogistics } from './hooks/useTourLogistics';
-import { MetricsSplitCard, FinanceCarouselCard, FourCardAutoCarousel, DecoupledFinanceCards, TourNotesWidget, TourNotesCard, BlackBookWidget, BlackBookCard } from './components/dashboard/cards';
-import { LiveInventoryCard } from './components/dashboard/LiveInventoryCard';
-import { LiveTeamActivityCard } from './components/dashboard/LiveTeamActivityCard';
-import { CashDrawerLedgerCard } from './components/dashboard/CashDrawerLedgerCard';
-import { HomeV2DashboardView } from './components/dashboard/HomeV2DashboardView';
-import { BrandNavigationHeader } from './components/navigation/BrandNavigationHeader';
-import { NexusTopBar } from './components/navigation/NexusTopBar';
-import { GlobalModalsContainer } from './components/modals/GlobalModalsContainer';
-import { BugMonitorDrawer } from './components/common/BugMonitorDrawer';
-import { SceneRadioPlayer } from './components/social/player/SceneRadioPlayer';
 import { useModalStore } from './store/useModalStore';
-import { MainTabRouter } from './components/views/MainTabRouter';
-import { AnimatedCount, AnimatedText } from "./components/AnimatedElements";
 import { BAND_PORTAL_BILLING } from './config/billingMatrix';
 import { useBandState } from "./hooks/useBandState";
 import { useInventoryState } from "./hooks/useInventoryState";
 import { useOffersManagement } from "./hooks/useOffersManagement";
+import { useAuthSession } from "./hooks/useAuthSession";
+import { useFeedPosts } from "./hooks/useFeedPosts";
+import { useShows } from "./hooks/useShows";
+import { useUserEntities } from "./hooks/useUserEntities";
+import { IndustryProPortal } from "./components/portals/IndustryProPortal";
+import { FanPortal } from "./components/portals/FanPortal";
 import { tourPackageManager } from './lib/tourPackageManager';
-import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
-import InteractiveRoutePreview from './components/portals/Band/InteractiveRoutePreview';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, Suspense } from 'react';
 import { inventoryStore, posSalesStore, itinerariesStore, socialFeedStore, reviewsStore, showsStore, registrationStagingStore, venuesStore, offersStore, routingBeaconsStore, creativeNodesStore, expensesStore, profileStore } from './utils/indexedDB';
 import { safeSetLocalStorageItem } from './utils/safeStorage';
 import { registerNotificationsOnStartup } from './services/pushNotificationService';
@@ -147,51 +132,41 @@ import {
   resolvePromoterLocation
 } from './utils/bandProfileUtils';
 import { initOfflineQueue, getSupabase, testSupabaseConnection, getSupabaseUrl, getSupabaseAnonKey, subscribeToTable, sanitizeInventoryItemForDb, executeWithSchemaResilience, getOfflineQueue, processOfflineQueue, isBypassRequiredError, handleDatabaseFailover, saveToFailoverCache, generateUUID, uploadBase64ToStorage, fetchUserBands, sanitizeBandPayload, ensureValidSupabaseAuthSession, autoSyncCreativeProfile, autoSyncPromoterProfile, normalizeLoadedProfile, fetchUserCreatives, resolveInventoryImageUrl, fetchInventoryItems } from './supabase';
-import AlbumArt from './components/AlbumArt';
 import { useOfflineSync } from './hooks/useOfflineSync';
 import { useSubscriptionTimer } from './hooks/useSubscriptionTimer';
-import InventoryView from './components/portals/Band/InventoryView';
-import MerchWorkspaceWrapper from './components/portals/Band/MerchWorkspaceWrapper';
-import NotificationCenterView from './components/NotificationCenterView';
-import ShowsView, { getShowWeatherAndWarnings } from './components/portals/Band/ShowsView';
-import SalesDashboardView from './components/sales/SalesDashboardView';
-import SettingsView from './components/SettingsView';
-import SettingsWorkspace from './components/SettingsWorkspace';
-import TourNotesView from './components/portals/Band/TourNotesView';
-import SetlistsView from './components/portals/Band/SetlistsView';
-import ReportsView from './components/portals/Band/ReportsView';
-import GuestlistsView from './components/portals/Band/GuestlistsView';
-import AddItemView from './components/portals/Band/AddItemView';
-import CashDrawerView from './components/portals/Band/CashDrawerView';
-import TourChecklistView from './components/portals/Band/TourChecklistView';
-import PromoHubView from './components/portals/Band/PromoHubView';
-import PlansView from './components/PlansView';
-import TermsOfServiceView from './components/TermsOfServiceView';
-import BlackBookView from './components/portals/Band/BlackBookView';
-import MerchandisePrintersView from './components/portals/Band/MerchandisePrintersView';
 import SplashView from './components/SplashView';
-import CreativeDashboardViewV2 from './components/portals/Creative/CreativeDashboardViewV2';
-import CreativesHubView from './components/portals/Band/CreativesHubView';
-import HelpDeskView from './components/HelpDeskView';
-import CustomerPayView from './components/sales/CustomerPayView';
-import PremiumGate from './components/PremiumGate';
-import PromoterPortalView from './components/portals/Promoter/PromoterPortalView';
-import PromoterDashboardViewV2 from './components/portals/Promoter/PromoterDashboardViewV2';
-import CoOpRouteStagingView from './components/portals/Band/CoOpRouteStagingView';
-import RoutingBeaconForm from './components/portals/Promoter/RoutingBeaconForm';
-import PublicVIPKioskView from './components/portals/Band/PublicVIPKioskView';
-import LandingView from './components/LandingView';
-import GuestPassConfirmView from './components/GuestPassConfirmView';
-import OnRouteEssentialsView from './components/portals/Band/OnRouteEssentialsView';
-import DevBandDistroDeck from './components/portals/Band/DevBandDistroDeck';
-import { V2ExpandableCard } from './components/V2ExpandableCard';
-import LabelDashboardViewV2 from './components/portals/Label/LabelDashboardViewV2';
-import { UniversalSocialFeed, GENRE_REACTION_MATRICES } from './components/social/UniversalSocialFeed';
-import StudioWorkspaceWrapper from './components/studio/StudioWorkspaceWrapper';
+import { GENRE_REACTION_MATRICES } from './data/socialFeedMockData';
 import { FloatingChatHead } from './components/messaging/FloatingChatHead';
 import { AvatarPopupOverlay } from './components/messaging/AvatarPopupOverlay';
-import LiveTeamActivityWorkspace from './components/portals/Band/LiveTeamActivityWorkspace';
 import { FLAGS } from './types';
+
+const ArtistBandPortal = React.lazy(() =>
+  import('./components/portals/ArtistBandPortal').then((m) => ({ default: m.ArtistBandPortal }))
+);
+const PromoterVenuePortal = React.lazy(() =>
+  import('./components/portals/PromoterVenuePortal').then((m) => ({ default: m.PromoterVenuePortal }))
+);
+const CreativeDashboardViewV2 = React.lazy(() => import('./components/portals/Creative/CreativeDashboardViewV2'));
+const LabelDashboardViewV2 = React.lazy(() => import('./components/portals/Label/LabelDashboardViewV2'));
+const LoginView = React.lazy(() => import('./components/LoginView'));
+const NotificationCenterView = React.lazy(() => import('./components/NotificationCenterView'));
+const CustomerPayView = React.lazy(() => import('./components/sales/CustomerPayView'));
+const PublicVIPKioskView = React.lazy(() => import('./components/portals/Band/PublicVIPKioskView'));
+const LandingView = React.lazy(() => import('./components/LandingView'));
+const GuestPassConfirmView = React.lazy(() => import('./components/GuestPassConfirmView'));
+const AppNavigationBar = React.lazy(() =>
+  import('./components/navigation/AppNavigationBar').then((m) => ({ default: m.AppNavigationBar }))
+);
+const GlobalModalsContainer = React.lazy(() =>
+  import('./components/modals/GlobalModalsContainer').then((m) => ({ default: m.GlobalModalsContainer }))
+);
+const BugMonitorDrawer = React.lazy(() =>
+  import('./components/common/BugMonitorDrawer').then((m) => ({ default: m.BugMonitorDrawer }))
+);
+const SceneRadioPlayer = React.lazy(() =>
+  import('./components/social/player/SceneRadioPlayer').then((m) => ({ default: m.SceneRadioPlayer }))
+);
+
 const concertBg = "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/High%20energy%20concert%202.png";
 
 
@@ -1737,18 +1712,20 @@ export default function App() {
               ...prev,
               ...normalized,
               active_workspace: normalized.active_workspace || prev.active_workspace || 'industry_pro',
-              account_type: prev.account_type || normalized.account_type || 'industry pro',
-              promoter_id: normalized.promoter_id || prev.promoter_id,
-              promoter_name: normalized.promoter_name || prev.promoter_name,
-              promoter_agency: normalized.promoter_agency || prev.promoter_agency,
-              promoter_brand: normalized.promoter_brand || prev.promoter_brand,
-              promoter_logo: normalized.promoter_logo || prev.promoter_logo,
-              promoter_cover_image: normalized.promoter_cover_image || prev.promoter_cover_image,
-              promoter_bio: normalized.promoter_bio || prev.promoter_bio,
-              promoter_metadata: {
-                ...(prev.promoter_metadata || {}),
-                ...(normalized.promoter_metadata || {})
-              }
+              account_type: normalized.account_type || prev.account_type || 'industry pro',
+              promoter_id: normalized.promoter_id ?? prev.promoter_id,
+              promoter_name: normalized.promoter_name ?? prev.promoter_name,
+              promoter_agency: normalized.promoter_agency ?? prev.promoter_agency,
+              promoter_brand: normalized.promoter_brand ?? prev.promoter_brand,
+              promoter_logo: normalized.promoter_logo ?? prev.promoter_logo,
+              promoter_cover_image: normalized.promoter_cover_image ?? prev.promoter_cover_image,
+              promoter_bio: normalized.promoter_bio ?? prev.promoter_bio,
+              promoter_metadata: normalized.promoter_metadata !== undefined
+                ? {
+                    ...(prev.promoter_metadata || {}),
+                    ...(normalized.promoter_metadata || {})
+                  }
+                : prev.promoter_metadata
             };
             try {
               profileStore.setItem('nexus_core_user_profile', merged);
@@ -2084,7 +2061,16 @@ export default function App() {
           }
         }
 
-        let userActiveId = 'cbddb810-259b-4230-9968-3d402dfdb872';
+        let userActiveId = '';
+        if (isOwnerMiguel) {
+          userActiveId = 'cbddb810-259b-4230-9968-3d402dfdb872';
+        } else if (cachedActiveBandIdStr && userBands.some((b: any) => String(b.id) === String(cachedActiveBandIdStr))) {
+          userActiveId = String(cachedActiveBandIdStr);
+        } else if (userProfile?.band_id && userBands.some((b: any) => String(b.id) === String(userProfile.band_id))) {
+          userActiveId = String(userProfile.band_id);
+        } else if (userBands.length > 0 && userBands[0]?.id) {
+          userActiveId = String(userBands[0].id);
+        }
         setActiveBandId(userActiveId);
         currentActiveBandId = userActiveId;
       }
@@ -2208,102 +2194,121 @@ export default function App() {
 
   const activeBand = useMemo(() => {
     if (!isBandRegistered) return null;
-    const veBand = bands.find(b => b.id === 'cbddb810-259b-4230-9968-3d402dfdb872' || (b.name || '').toLowerCase().includes('virulent excision')) || bands[0];
-    if (veBand && (veBand.id === 'cbddb810-259b-4230-9968-3d402dfdb872' || (veBand.name || veBand.band_name || '').toLowerCase().includes('virulent excision'))) {
-      return veBand;
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+    if (isOwnerMiguel) {
+      const veBand = bands.find(b => b.id === 'cbddb810-259b-4230-9968-3d402dfdb872' || (b.name || '').toLowerCase().includes('virulent excision')) || bands[0];
+      if (veBand && (veBand.id === 'cbddb810-259b-4230-9968-3d402dfdb872' || (veBand.name || veBand.band_name || '').toLowerCase().includes('virulent excision'))) {
+        return veBand;
+      }
+      return {
+        id: 'cbddb810-259b-4230-9968-3d402dfdb872',
+        name: 'Virulent Excision',
+        band_name: 'Virulent Excision',
+        genre: 'Brutal Death Metal',
+        logo_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396',
+        cover_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-cover_1787467851123.jpg?t=1787467851123',
+        owner_id: userProfile?.id
+      };
     }
-    return {
-      id: 'cbddb810-259b-4230-9968-3d402dfdb872',
-      name: 'Virulent Excision',
-      band_name: 'Virulent Excision',
-      genre: 'Brutal Death Metal',
-      logo_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396',
-      cover_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-cover_1787467851123.jpg?t=1787467851123',
-      owner_id: userProfile?.id
-    };
-  }, [bands, isBandRegistered, userProfile?.id]);
+
+    if (!bands || bands.length === 0) return null;
+    if (activeBandId) {
+      const matched = bands.find(b => String(b.id) === String(activeBandId));
+      if (matched) return matched;
+    }
+    if (userProfile?.band_id) {
+      const matchedByProfile = bands.find(b => String(b.id) === String(userProfile.band_id));
+      if (matchedByProfile) return matchedByProfile;
+    }
+    return bands[0] || null;
+  }, [bands, activeBandId, isBandRegistered, userProfile]);
 
 
-  // 1. When activeBand changes, load its specific data into state and set currentLoadedBandId
+  // 1. When activeBand changes, load its authoritative Supabase data first, falling back to localStorage only when DB fields are undefined
   useEffect(() => {
     if (!activeBand) return;
     const bandId = activeBand.id;
-    
-    // Load lineup
-    const savedLineup = localStorage.getItem(`nexus_core_band_lineup_${bandId}`);
+    const isOnlineNow = typeof navigator === 'undefined' || navigator.onLine !== false;
+
+    // Load lineup: prioritize authoritative activeBand.lineup from Supabase (including explicit empty array [])
     let loadedLineup: any[] | null = null;
+    const rawLineup = (activeBand as any).lineup;
+    const hasExplicitBandLineup = rawLineup !== undefined && rawLineup !== null && String(rawLineup).trim() !== '';
 
-    if (savedLineup) {
-      try {
-        const parsed = JSON.parse(savedLineup);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          loadedLineup = parsed.map((m: any, idx: number) => ({
-            ...m,
-            clearanceLevel: m.clearanceLevel || (idx === 0 ? 5 : idx === 1 ? 4 : idx === 2 ? 3 : 2)
-          }));
-        }
-      } catch (_) {}
-    }
-
-    if (!loadedLineup && (activeBand as any).lineup) {
-      const rawLineup = (activeBand as any).lineup;
+    if (hasExplicitBandLineup) {
       if (Array.isArray(rawLineup)) {
-        loadedLineup = rawLineup;
+        loadedLineup = rawLineup.map((m: any, idx: number) => ({
+          ...m,
+          clearanceLevel: m.clearanceLevel || (idx === 0 ? 5 : idx === 1 ? 4 : idx === 2 ? 3 : 2)
+        }));
       } else if (typeof rawLineup === 'string') {
         try {
           const parsed = JSON.parse(rawLineup);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            loadedLineup = parsed;
+          if (Array.isArray(parsed)) {
+            loadedLineup = parsed.map((m: any, idx: number) => ({
+              ...m,
+              clearanceLevel: m.clearanceLevel || (idx === 0 ? 5 : idx === 1 ? 4 : idx === 2 ? 3 : 2)
+            }));
           }
         } catch (_) {
           const parts = rawLineup.split(',').map((s: string) => s.trim()).filter(Boolean);
-          if (parts.length > 0) {
-            loadedLineup = parts.map((part: string, idx: number) => ({
-              id: `l_${Date.now()}_${idx}`,
-              name: part,
-              role: 'Member',
-              clearanceLevel: idx === 0 ? 5 : 4,
-              inviteStatus: 'accepted'
-            }));
-          }
+          loadedLineup = parts.map((part: string, idx: number) => ({
+            id: `l_${Date.now()}_${idx}`,
+            name: part,
+            role: 'Member',
+            clearanceLevel: idx === 0 ? 5 : 4,
+            inviteStatus: 'accepted'
+          }));
         }
       }
     }
 
-    if (loadedLineup && loadedLineup.length > 0) {
-      setBandLineup(loadedLineup);
-    } else {
-      setBandLineup([
-        { id: 'l1', name: 'Band Member 1', role: 'Vocals', clearanceLevel: 5, inviteStatus: 'accepted' },
-        { id: 'l2', name: 'Frank Butcher', role: 'Guitars', clearanceLevel: 4, inviteStatus: 'accepted' },
-        { id: 'l3', name: 'Alex Decay', role: 'Bass', clearanceLevel: 3, inviteStatus: 'pending' },
-        { id: 'l4', name: 'Jack Ripper', role: 'Drums', clearanceLevel: 2, inviteStatus: 'none' }
-      ]);
+    if (loadedLineup === null) {
+      const savedLineup = localStorage.getItem(`nexus_core_band_lineup_${bandId}`);
+      if (savedLineup !== null && savedLineup !== undefined && String(savedLineup).trim() !== '') {
+        try {
+          const parsed = JSON.parse(savedLineup);
+          if (Array.isArray(parsed)) {
+            loadedLineup = parsed.map((m: any, idx: number) => ({
+              ...m,
+              clearanceLevel: m.clearanceLevel || (idx === 0 ? 5 : idx === 1 ? 4 : idx === 2 ? 3 : 2)
+            }));
+          }
+        } catch (_) {}
+      }
     }
 
-    // Load cover
-    const savedCover = localStorage.getItem(`nexus_core_band_cover_${bandId}`) || activeBand.cover_url || '';
+    setBandLineup(loadedLineup ?? []);
+
+    // Load cover: prioritize activeBand.cover_url from Supabase when online
+    const dbCover = activeBand.cover_url || (activeBand as any).banner_url || '';
+    const savedCover = isOnlineNow
+      ? (dbCover || localStorage.getItem(`nexus_core_band_cover_${bandId}`) || '')
+      : (localStorage.getItem(`nexus_core_band_cover_${bandId}`) || dbCover || '');
     setBandCoverUrl(savedCover);
 
-    // Load logo
-    const savedLogo = localStorage.getItem(`nexus_core_band_logo_${bandId}`) || activeBand.logo_url || activeBand.avatar_url || (activeBand as any).avatar || '';
+    // Load logo: prioritize activeBand.logo_url from Supabase when online
+    const dbLogo = activeBand.logo_url || activeBand.avatar_url || (activeBand as any).avatar || '';
+    const savedLogo = isOnlineNow
+      ? (dbLogo || localStorage.getItem(`nexus_core_band_logo_${bandId}`) || '')
+      : (localStorage.getItem(`nexus_core_band_logo_${bandId}`) || dbLogo || '');
     setBandLogoUrl(savedLogo);
 
-    // Load crew
+    // Load crew: never inject fake placeholder crew members
     const savedCrew = localStorage.getItem(`nexus_core_crew_members_${bandId}`);
     if (savedCrew) {
       try {
-        setCrewMembers(JSON.parse(savedCrew));
-      } catch (_) {}
+        const parsedCrew = JSON.parse(savedCrew);
+        setCrewMembers(Array.isArray(parsedCrew) ? parsedCrew : []);
+      } catch (_) {
+        setCrewMembers([]);
+      }
     } else {
-      setCrewMembers([
-        { id: 'c1', name: 'Chris Smith', role: 'FOH Sound Tech', contact: 'chris.sound@nexus.core' },
-        { id: 'c2', name: 'John Marston', role: 'Driver / Transport', contact: '+1 (555) 321-7890' }
-      ]);
+      setCrewMembers([]);
     }
 
     setCurrentLoadedBandId(bandId);
-  }, [activeBand?.id]);
+  }, [activeBand?.id, (activeBand as any)?.lineup, activeBand?.logo_url, activeBand?.cover_url]);
 
   useEffect(() => {
     if (!isInitialHydrated || !activeBand || currentLoadedBandId !== activeBand.id) return;
@@ -2343,10 +2348,9 @@ export default function App() {
     ];
     const found = combined.find((m: any) => m.id === simulatedMemberId);
     if (found) return found;
-    // Default to first member of current lineup if loaded
+    // Default to first member of current lineup if loaded, otherwise null (no fake placeholder member)
     if (list.length > 0) return { ...list[0], clearanceLevel: list[0].clearanceLevel || 5 };
-    // Ultimate fallback
-    return { id: 'l1', name: 'Band Member 1', role: 'Vocals', clearanceLevel: 5 };
+    return null;
   }, [bandLineup, crewMembers, simulatedMemberId]);
 
   // Keep activeClearanceLevel in sync with activeSimulatedMember's level, and persist changes
@@ -4415,59 +4419,71 @@ list.push({
 
   if (window.location.search.includes('guest_confirm=1')) {
     return (
-      <GuestPassConfirmView 
-        onGoToApp={() => {
-          const url = new URL(window.location.href);
-          url.searchParams.delete('guest_confirm');
-          url.searchParams.delete('email');
-          url.searchParams.delete('guestName');
-          url.searchParams.delete('band');
-          url.searchParams.delete('date');
-          url.searchParams.delete('venue');
-          url.searchParams.delete('pass_type');
-          window.history.pushState(null, '', url.pathname + url.search);
-          setActiveTab('home-v2');
-        }}
-      />
+      <Suspense fallback={null}>
+        <GuestPassConfirmView 
+          onGoToApp={() => {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('guest_confirm');
+            url.searchParams.delete('email');
+            url.searchParams.delete('guestName');
+            url.searchParams.delete('band');
+            url.searchParams.delete('date');
+            url.searchParams.delete('venue');
+            url.searchParams.delete('pass_type');
+            window.history.pushState(null, '', url.pathname + url.search);
+            setActiveTab('home-v2');
+          }}
+        />
+      </Suspense>
     );
   }
 
   if (window.location.search.includes('signup=vip')) {
     return (
-      <PublicVIPKioskView 
-        activeBandName={activeBand?.name || "Artist"} 
-        shows={shows}
-        loyaltyMembers={loyaltyMembers}
-        onBackToApp={() => {
-          const url = new URL(window.location.href);
-          url.searchParams.delete('signup');
-          window.history.pushState(null, '', url.pathname + url.search);
-          setActiveTab('home-v2');
-        }}
-        onSignUp={(member) => {
-          setLoyaltyMembers(prev => {
-            const index = prev.findIndex(m => m.id === member.id || m.phone === member.phone);
-            if (index !== -1) {
-              const updated = [...prev];
-              updated[index] = member;
-              return updated;
-            }
-            return [member, ...prev];
-          });
-        }}
-        onUpdateMember={(member) => {
-          setLoyaltyMembers(prev => prev.map(m => m.id === member.id ? member : m));
-        }}
-      />
+      <Suspense fallback={null}>
+        <PublicVIPKioskView 
+          activeBandName={activeBand?.name || "Artist"} 
+          shows={shows}
+          loyaltyMembers={loyaltyMembers}
+          onBackToApp={() => {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('signup');
+            window.history.pushState(null, '', url.pathname + url.search);
+            setActiveTab('home-v2');
+          }}
+          onSignUp={(member) => {
+            setLoyaltyMembers(prev => {
+              const index = prev.findIndex(m => m.id === member.id || m.phone === member.phone);
+              if (index !== -1) {
+                const updated = [...prev];
+                updated[index] = member;
+                return updated;
+              }
+              return [member, ...prev];
+            });
+          }}
+          onUpdateMember={(member) => {
+            setLoyaltyMembers(prev => prev.map(m => m.id === member.id ? member : m));
+          }}
+        />
+      </Suspense>
     );
   }
 
   if (activeTab === 'pay-portal' || window.location.pathname === '/pay') {
-    return <CustomerPayView onBackToApp={() => setActiveTab('home-v2')} />;
+    return (
+      <Suspense fallback={null}>
+        <CustomerPayView onBackToApp={() => setActiveTab('home-v2')} />
+      </Suspense>
+    );
   }
 
   if (activeTab === 'landing' || window.location.pathname === '/landing') {
-    return <LandingView onEnterApp={() => setActiveTab('home-v2')} />;
+    return (
+      <Suspense fallback={null}>
+        <LandingView onEnterApp={() => setActiveTab('home-v2')} />
+      </Suspense>
+    );
   }
 
   return (
@@ -4502,37 +4518,40 @@ list.push({
       </AnimatePresence>
 
       {/* Global NotificationCenterView Overlay */}
-      {userProfile && (
-        <NotificationCenterView
-          userProfile={userProfile}
-          notifications={notifications}
-          setNotifications={setNotifications}
-          onMarkAsRead={handleMarkNotificationAsRead}
-          onNavigateToInventory={() => {
-            setActiveTab('inventory');
-            setIsTransferModalOpen(true);
-          }}
-          onNavigateToPost={(postId) => {
-            setActiveTab('social');
-            setIsNotificationDrawerOpen(false);
-            setTimeout(() => {
-              const postEl = document.getElementById(`post`);
-              if (postEl) {
-                postEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                postEl.classList.add('ring-2', 'ring-purple-500', 'scale-[1.01]', 'duration-500');
-                setTimeout(() => {
-                  postEl.classList.remove('ring-2', 'ring-purple-500', 'scale-[1.01]');
-                }, 3000);
-              }
-            }, 300);
-          }}
-          isOpen={isNotificationDrawerOpen}
-          onClose={() => setIsNotificationDrawerOpen(false)}
-          triggerNotification={triggerNotification}
-          hideTrigger={true}
-        />
+      {userProfile && isNotificationDrawerOpen && (
+        <Suspense fallback={null}>
+          <NotificationCenterView
+            userProfile={userProfile}
+            notifications={notifications}
+            setNotifications={setNotifications}
+            onMarkAsRead={handleMarkNotificationAsRead}
+            onNavigateToInventory={() => {
+              setActiveTab('inventory');
+              setIsTransferModalOpen(true);
+            }}
+            onNavigateToPost={(postId) => {
+              setActiveTab('social');
+              setIsNotificationDrawerOpen(false);
+              setTimeout(() => {
+                const postEl = document.getElementById(`post`);
+                if (postEl) {
+                  postEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  postEl.classList.add('ring-2', 'ring-purple-500', 'scale-[1.01]', 'duration-500');
+                  setTimeout(() => {
+                    postEl.classList.remove('ring-2', 'ring-purple-500', 'scale-[1.01]');
+                  }, 3000);
+                }
+              }, 300);
+            }}
+            isOpen={isNotificationDrawerOpen}
+            onClose={() => setIsNotificationDrawerOpen(false)}
+            triggerNotification={triggerNotification}
+            hideTrigger={true}
+          />
+        </Suspense>
       )}
 
+      <Suspense fallback={null}>
       <div className="flex-1 w-full flex flex-col relative">
         {showSplash ? (
           <div className="fixed inset-0 z-[9999] bg-[#07080a] overflow-y-auto custom-scrollbar">
@@ -4691,9 +4710,9 @@ list.push({
                     avatar_url: cLogo,
                     banner_url: cCover,
                     bio: cBio,
-                    city: customProfile.creative_metadata?.city || 'Denison',
-                    state_province: customProfile.creative_metadata?.state_province || 'TX',
-                    country: 'USA'
+                    city: customProfile.creative_metadata?.city || (isOwnerMiguel ? 'Denison' : customProfile.city || ''),
+                    state_province: customProfile.creative_metadata?.state_province || (isOwnerMiguel ? 'TX' : customProfile.state_province || ''),
+                    country: customProfile.creative_metadata?.country || customProfile.country || 'USA'
                   };
 
                   if (!hasRegisteredWorkspace(customProfile, 'creative')) {
@@ -4763,59 +4782,107 @@ list.push({
             }} 
           />
         ) : ((activeTab as string) === 'social') ? (
-          <UniversalSocialFeed 
-            userProfile={userProfile}
-            setUserProfile={setUserProfile}
-            portalRole={
-              (userProfile?.account_type === 'fan' || userProfile?.account_type === 'fan_only' || userProfile?.active_workspace === 'fan_only') ? 'fan_only' :
-              userProfile?.active_workspace === 'creative' ? 'creative' :
-              userProfile?.active_workspace === 'label' ? 'label' :
-              userProfile?.active_workspace === 'promoter' ? 'promoter' :
-              userProfile?.active_workspace === 'band' ? 'band' :
-              'industry_pro'
-            }
-            bandJoinRequests={bandJoinRequests}
-            setBandJoinRequests={setBandJoinRequests}
-            bands={bands}
-            setBands={setBands}
-            activeBand={activeBand}
-            activeBandId={activeBandId}
-            showSceneRadio={showSceneRadio}
-            setShowSceneRadio={setShowSceneRadio}
-            onLogout={() => {
-              localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
-              triggerNotification?.("Session closed. Goodbye.");
-            }}
-            onBack={() => {
-              const target = userProfile?.active_workspace;
-              if (target === 'creative') setActiveTab('creative');
-              else if (target === 'label') setActiveTab('label');
-              else if (target === 'promoter') setActiveTab('promoter');
-              else setActiveTab('home-v2');
-            }}
-            onNavigateToTab={(tab: string, subNav?: string) => {
-              if (subNav) {
-                setDashboardV2ActiveNav(subNav as any);
+          (userProfile?.account_type === 'fan' || userProfile?.account_type === 'fan_only' || userProfile?.active_workspace === 'fan_only') ? (
+            <FanPortal
+              userProfile={userProfile}
+              setUserProfile={setUserProfile}
+              bandJoinRequests={bandJoinRequests}
+              setBandJoinRequests={setBandJoinRequests}
+              bands={bands}
+              setBands={setBands}
+              activeBand={activeBand}
+              activeBandId={activeBandId}
+              showSceneRadio={showSceneRadio}
+              setShowSceneRadio={setShowSceneRadio}
+              onLogout={() => {
+                localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
+                triggerNotification?.("Session closed. Goodbye.");
+              }}
+              onBack={() => {
+                const target = userProfile?.active_workspace;
+                if (target === 'creative') setActiveTab('creative');
+                else if (target === 'label') setActiveTab('label');
+                else if (target === 'promoter') setActiveTab('promoter');
+                else setActiveTab('home-v2');
+              }}
+              onNavigateToTab={(tab: string, subNav?: string) => {
+                if (subNav) {
+                  setDashboardV2ActiveNav(subNav as any);
+                }
+                setActiveTab(tab as any);
+              }}
+              setActiveTab={setActiveTab}
+              setDashboardV2ActiveNav={setDashboardV2ActiveNav}
+              dashboardV2ActiveNav={dashboardV2ActiveNav}
+              onUpgradeToPro={() => {
+                setShowWorkspaceRegistration(true);
+              }}
+              triggerNotification={triggerNotification}
+              addLog={addLog}
+              onUpdateBandLogo={(newUrl) => {
+                if (activeBand) {
+                  const updatedBand = { ...activeBand, logo_url: newUrl };
+                  setBands((prevBands) =>
+                    prevBands.map((b) => (b.id === activeBand.id ? updatedBand : b))
+                  );
+                }
+              }}
+            />
+          ) : (
+            <IndustryProPortal
+              userProfile={userProfile}
+              setUserProfile={setUserProfile}
+              portalRole={
+                userProfile?.active_workspace === 'creative' ? 'creative' :
+                userProfile?.active_workspace === 'label' ? 'label' :
+                userProfile?.active_workspace === 'promoter' ? 'promoter' :
+                userProfile?.active_workspace === 'band' ? 'band' :
+                'industry_pro'
               }
-              setActiveTab(tab as any);
-            }}
-            setActiveTab={setActiveTab}
-            setDashboardV2ActiveNav={setDashboardV2ActiveNav}
-            dashboardV2ActiveNav={dashboardV2ActiveNav}
-            onUpgradeToPro={() => {
-              setShowWorkspaceRegistration(true);
-            }}
-            triggerNotification={triggerNotification}
-            addLog={addLog}
-            onUpdateBandLogo={(newUrl) => {
-              if (activeBand) {
-                const updatedBand = { ...activeBand, logo_url: newUrl };
-                setBands((prevBands) =>
-                  prevBands.map((b) => (b.id === activeBand.id ? updatedBand : b))
-                );
-              }
-            }}
-          />
+              bandJoinRequests={bandJoinRequests}
+              setBandJoinRequests={setBandJoinRequests}
+              bands={bands}
+              setBands={setBands}
+              activeBand={activeBand}
+              activeBandId={activeBandId}
+              setActiveBandId={setActiveBandId}
+              showSceneRadio={showSceneRadio}
+              setShowSceneRadio={setShowSceneRadio}
+              onLogout={() => {
+                localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
+                triggerNotification?.("Session closed. Goodbye.");
+              }}
+              onBack={() => {
+                const target = userProfile?.active_workspace;
+                if (target === 'creative') setActiveTab('creative');
+                else if (target === 'label') setActiveTab('label');
+                else if (target === 'promoter') setActiveTab('promoter');
+                else setActiveTab('home-v2');
+              }}
+              onNavigateToTab={(tab: string, subNav?: string) => {
+                if (subNav) {
+                  setDashboardV2ActiveNav(subNav as any);
+                }
+                setActiveTab(tab as any);
+              }}
+              setActiveTab={setActiveTab}
+              setDashboardV2ActiveNav={setDashboardV2ActiveNav}
+              dashboardV2ActiveNav={dashboardV2ActiveNav}
+              onUpgradeToPro={() => {
+                setShowWorkspaceRegistration(true);
+              }}
+              triggerNotification={triggerNotification}
+              addLog={addLog}
+              onUpdateBandLogo={(newUrl) => {
+                if (activeBand) {
+                  const updatedBand = { ...activeBand, logo_url: newUrl };
+                  setBands((prevBands) =>
+                    prevBands.map((b) => (b.id === activeBand.id ? updatedBand : b))
+                  );
+                }
+              }}
+            />
+          )
         ) : (userProfile?.account_type === 'creative' || userProfile?.active_workspace === 'creative' || (activeTab as string) === 'creative') ? (
           <div className="flex-grow overflow-y-auto">
               <CreativeDashboardViewV2
@@ -4862,278 +4929,324 @@ list.push({
               }}
             />
         ) : (FLAGS.ENABLE_PROMOTER_PORTAL && (userProfile?.account_type === 'promoter' || userProfile?.active_workspace === 'promoter' || (activeTab as string) === 'promoter')) ? (
-            <div className="flex-grow overflow-y-auto">
-              <PromoterDashboardViewV2
-                onUpgradeToPro={() => setShowWorkspaceRegistration(true)}
-                userProfile={userProfile}
-                setUserProfile={setUserProfile}
-                onLogout={() => {
-                  localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
-                  triggerNotification?.("Promoter console disconnected.");
-                }}
-                onBack={() => {
-                  localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
-                  triggerNotification?.("Session closed. Goodbye.");
-                }}
-                notifications={notifications}
-                onOpenNotifications={() => setIsNotificationDrawerOpen(true)}
-                triggerNotification={triggerNotification}
-                setActiveTab={setActiveTab as any}
-                addLog={addLog}
-                bands={bands}
-                offers={offers}
-                onCreateOffer={handleCreateOffer}
-                onUpdateOffer={handleUpdateOffer}
-                shows={shows}
-                onMarkAsRead={handleMarkNotificationAsRead}
-                activeBand={activeBand}
-                activeBandId={activeBandId}
-                setActiveBandId={setActiveBandId}
-                isOfflineSimActive={isOfflineSimActive}
-                setIsOfflineSimActive={setIsOfflineSimActive}
-                isOnline={isOnline}
-              />
-            </div>
+            <PromoterVenuePortal
+              onUpgradeToPro={() => setShowWorkspaceRegistration(true)}
+              userProfile={userProfile}
+              setUserProfile={setUserProfile}
+              onLogout={() => {
+                localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
+                triggerNotification?.("Promoter console disconnected.");
+              }}
+              onBack={() => {
+                localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
+                triggerNotification?.("Session closed. Goodbye.");
+              }}
+              notifications={notifications}
+              onOpenNotifications={() => setIsNotificationDrawerOpen(true)}
+              triggerNotification={triggerNotification}
+              setActiveTab={setActiveTab as any}
+              addLog={addLog}
+              bands={bands}
+              offers={offers}
+              onCreateOffer={handleCreateOffer}
+              onUpdateOffer={handleUpdateOffer}
+              shows={shows}
+              onMarkAsRead={handleMarkNotificationAsRead}
+              activeBand={activeBand}
+              activeBandId={activeBandId}
+              setActiveBandId={setActiveBandId}
+              isOfflineSimActive={isOfflineSimActive}
+              setIsOfflineSimActive={setIsOfflineSimActive}
+              isOnline={isOnline}
+            />
         ) : (
-          <>
-            {/* TOP STATUS BAR ACCENTS REMOVED */}
-
-
-        {/* BRAND NAVIGATION HEADER */}
-        <NexusTopBar
-          activeTab={activeTab} setActiveTab={setActiveTab as any} setDashboardV2ActiveNav={setDashboardV2ActiveNav} triggerNotification={triggerNotification}
-          pendingSyncCount={pendingSyncCount} processOfflineQueue={processOfflineQueue} isRosterOwner={isRosterOwner} activePlan={activePlan}
-          getTrialCountdownStr={getTrialCountdownStr} activeClearanceLevel={activeClearanceLevel} activeSimulatedMember={activeSimulatedMember}
-          userProfile={userProfile} notifications={notifications} setIsNotificationDrawerOpen={setIsNotificationDrawerOpen}
-          v2RoleMenuOpen={v2RoleMenuOpen} setV2RoleMenuOpen={setV2RoleMenuOpen} activeBand={activeBand} bands={bands}
-          simulatedMemberId={simulatedMemberId} setSimulatedMemberId={setSimulatedMemberId} bandLineup={bandLineup} crewMembers={crewMembers}
-          handleOpenMyProfile={handleOpenMyProfile} setUserProfile={setUserProfile} isOfflineSimActive={isOfflineSimActive}
-          setIsOfflineSimActive={setIsOfflineSimActive} isOnline={isOnline}
-          onUpgradeToPro={() => setShowWorkspaceRegistration(true)}
-          onOpenSettingsDrawer={() => setIsSettingsDrawerOpen(true)}
-        />
-
-        {isTabRestricted(activeTab, activeClearanceLevel) ? (
-          <div className="flex-grow flex flex-col items-center justify-center p-8 text-center min-h-[70vh] bg-[#030303] text-zinc-300">
-            <div className="max-w-md w-full bg-[#09090b] border border-zinc-800 p-8 rounded-2xl shadow-[0_10px_50px_-12px_rgba(0,0,0,0.8)] relative overflow-hidden group">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-rose-500/10 via-red-500/10 to-amber-500/10 rounded-2xl blur opacity-65" />
-              <div className="relative z-10 flex flex-col items-center">
-                <div className="w-16 h-16 rounded-full bg-rose-950/20 border border-rose-500/30 flex items-center justify-center mb-5 text-rose-500">
-                  <Lock className="w-8 h-8" />
-                </div>
-                <h3 className="text-lg font-black text-white uppercase tracking-wider font-display">
-                  Access Restricted
-                </h3>
-                <p className="text-xs text-zinc-500 font-mono mt-2">
-                  SECURE PORTAL INTERCEPTED • LEVEL {activeClearanceLevel}
-                </p>
-                <div className="bg-black/40 border border-zinc-900 rounded-xl p-4 my-6 text-left w-full space-y-2 text-xs">
-                  <p className="text-zinc-400 font-sans leading-relaxed">
-                    The requested portal <span className="font-mono text-rose-400 font-bold uppercase">{activeTab}</span> is restricted for your active simulated user.
-                  </p>
-                  <p className="text-zinc-500 font-sans leading-relaxed text-[11px]">
-                    To view this tab, you require a higher security clearance level than your current <span className="font-mono text-zinc-300 font-semibold">Level {activeClearanceLevel}</span>.
-                  </p>
-                </div>
-                
-                <div className="w-full space-y-3 text-left">
-                  <span className="text-[8px] font-mono uppercase text-zinc-500 block mb-1 tracking-wider font-bold">Temporarily elevate simulated identity</span>
-                  <select
-                    value={simulatedMemberId}
-                    onChange={(e) => {
-                      const targetId = e.target.value;
-                      setSimulatedMemberId(targetId);
-                      const combined = [
-                        ...(Array.isArray(bandLineup) ? bandLineup : []),
-                        ...(Array.isArray(crewMembers) ? crewMembers : [])
-                      ];
-                      const foundName = combined.find((m: any) => m.id === targetId)?.name || 'Member';
-                      triggerNotification?.(`⚡ Simulating ${foundName}`);
-                    }}
-                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-[#00ffcc]/50 rounded-lg px-2.5 py-2 text-xs text-white font-mono focus:outline-none cursor-pointer"
-                  >
-                    {[
-                      ...(Array.isArray(bandLineup) ? bandLineup : []).map((m: any) => ({ ...m, type: 'Lineup', lvl: m.clearanceLevel || 5 })),
-                      ...(Array.isArray(crewMembers) ? crewMembers : []).map((c: any) => ({ ...c, type: 'Crew', lvl: c.clearanceLevel || 1 }))
-                    ].map((member: any, idx: number) => {
-                      const optKey = `${member.type}-${member.id || 'noid'}-${idx}`;
-                      const optVal = member.id || `${member.type}-${idx}`;
-                      return (
-                        <option key={optKey} value={optVal}>
-                          [{member.type}] {member?.name || 'Unnamed'} ({member.role || 'Crew'}) - Lvl {member.lvl}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  
-                  <button
-                    onClick={() => {
-                      setSimulatedMemberId('');
-                      triggerNotification?.("⚡ Returned to normal view");
-                    }}
-                    className="w-full bg-red-950/40 text-red-400 border border-red-900 hover:bg-red-900/60 rounded-lg py-2 text-xs font-mono transition-all"
-                  >
-                    Clear Simulation
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : activeTab === 'home' || activeTab === 'home-v2' ? (
-          !isBandRegistered ? (
-            <div className="flex-grow flex flex-col items-center justify-center p-8 text-center min-h-[70vh] bg-[#030303] text-zinc-300 font-mono">
-              <div className="max-w-md w-full bg-[#09090b] border border-emerald-500/30 p-8 rounded-2xl shadow-[0_10px_50px_-12px_rgba(16,185,129,0.2)] relative overflow-hidden group">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 rounded-2xl blur opacity-65" />
-                <div className="relative z-10 flex flex-col items-center">
-                  <div className="w-16 h-16 rounded-full bg-emerald-950/30 border border-emerald-500/40 flex items-center justify-center mb-5 text-emerald-400 shadow-lg shadow-emerald-950/50">
-                    <Lock className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-lg font-black text-white uppercase tracking-wider font-display">
-                    Band Workspace Locked
-                  </h3>
-                  <p className="text-xs text-emerald-400/80 font-mono mt-1">
-                    REGISTRATION REQUIRED
-                  </p>
-                  <div className="bg-black/50 border border-zinc-800 rounded-xl p-4 my-6 text-left w-full space-y-2 text-xs">
-                    <p className="text-zinc-300 font-sans leading-relaxed">
-                      You have not registered a Band Workspace on your profile yet.
-                    </p>
-                    <p className="text-zinc-500 font-sans leading-relaxed text-[11px]">
-                      Registering your band unlocks tour logistics, merch inventory management, flight & hotel manifests, setlist builders, and financial tracking.
-                    </p>
-                  </div>
-                  
-                  <div className="w-full space-y-3 text-left">
-                    <button
-                      onClick={() => {
-                        if (typeof window !== 'undefined') {
-                          localStorage.setItem('nexus_target_register_workspace', 'band');
-                        }
-                        setShowWorkspaceRegistration(true);
-                      }}
-                      className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-950/50 cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <span>Register Band Workspace Now</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setActiveTab('social');
-                        const updated = { ...userProfile, active_workspace: 'industry_pro', account_type: 'industry_pro' };
-                        setUserProfile(updated);
-                        localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated));
-                        window.dispatchEvent(new CustomEvent('nexus_core_user_profile_updated', { detail: updated }));
-                      }}
-                      className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-xs rounded-xl transition-all border border-zinc-800 cursor-pointer"
-                    >
-                      Return to Industry Pro
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : activeTab === 'home' ? (
-            <HomeDashboardView dashboardRef={dashboardRef} dashboardScrollPos={dashboardScrollPos} setActiveTab={setActiveTab} triggerNotification={triggerNotification} addLog={addLog} musicTrackCount={musicTrackCount} isRosterOwner={isRosterOwner} setDistroDeckSubTab={setDistroDeckSubTab} userProfile={userProfile} activeBand={activeBand} isSyncBadgeExpanded={isSyncBadgeExpanded} setIsOfflineSimActive={setIsOfflineSimActive} isOfflineSimActive={isOfflineSimActive} isOnline={isOnline} setIsSyncBadgeExpanded={setIsSyncBadgeExpanded} status={status} setIsMetricCarouselPaused={setIsMetricCarouselPaused} setCurrentMetricIndex={setCurrentMetricIndex} metrics={metrics} currentMetricIndex={currentMetricIndex} setIsHoveringTourStatus={setIsHoveringTourStatus} registerTourStatusInteraction={registerTourStatusInteraction} handleStatusTouchStart={handleStatusTouchStart} handleStatusTouchMove={handleStatusTouchMove} handleStatusTouchEnd={handleStatusTouchEnd} hasSettleReminder={hasSettleReminder} firstShowToSettle={firstShowToSettle} setAutoExpandShowId={setAutoExpandShowId} shows={shows} setTourStatusIndex={setTourStatusIndex} tourStatusIndex={tourStatusIndex} activeShowDisplay={activeShowDisplay} currentOrNextShow={currentOrNextShow} countdownString={countdownString} inventory={inventory} isCritical={isCritical} totalTableStock={totalTableStock} totalVanStock={totalVanStock} notes={notes} filteredNotes={filteredNotes} isNoteExpanded={isNoteExpanded} setIsNoteExpanded={setIsNoteExpanded} inlineNoteEditingId={inlineNoteEditingId} setInlineNoteEditingId={setInlineNoteEditingId} inlineNoteText={inlineNoteText} setInlineNoteText={setInlineNoteText} inlineNoteCategory={inlineNoteCategory} setInlineNoteCategory={setInlineNoteCategory} inlineNoteTag={inlineNoteTag} setInlineNoteTag={setInlineNoteTag} activeNoteIndex={activeNoteIndex} setActiveNoteIndex={setActiveNoteIndex} isTourNotesCardCollapsed={isTourNotesCardCollapsed} setIsTourNotesCardCollapsed={setIsTourNotesCardCollapsed} handleNoteTouchStart={handleNoteTouchStart} handleNoteTouchMove={handleNoteTouchMove} handleNoteTouchEnd={handleNoteTouchEnd} handleDeleteNote={handleDeleteNote} handleUpdateNote={handleUpdateNote} handleDataSubmit={handleDataSubmit} showSpecificNotes={showSpecificNotes} localWeather={localWeather} weatherLoading={weatherLoading} weatherError={weatherError} currentCoords={currentCoords} customNavDestination={customNavDestination} setCustomNavDestination={setCustomNavDestination} venues={venues} fetchLocalWeather={fetchLocalWeather} setIsWeatherForecastExpanded={setIsWeatherForecastExpanded} isWeatherForecastExpanded={isWeatherForecastExpanded} isEditingBusCall={isEditingBusCall} isTime24Hour={isTime24Hour} setIsTime24Hour={setIsTime24Hour} tempBusCallTime={tempBusCallTime} setTempBusCallTime={setTempBusCallTime} tempLockupTime={tempLockupTime} setTempLockupTime={setTempLockupTime} setIsEditingBusCall={setIsEditingBusCall} setBusCallTime={setBusCallTime} setLockupTime={setLockupTime} renderTime={renderTime} busCallTime={busCallTime} lockupTime={lockupTime} checklistItems={checklistItems} toggleChecklistItem={toggleChecklistItem} flights={flights} tableStockPercent={tableStockPercent} handleRestock={handleRestock} handleNewSaleClick={handleNewSaleClick} handleNewSalePointerDown={handleNewSalePointerDown} handleNewSalePointerUp={handleNewSalePointerUp} setIsGlobalHoverPaused={setIsGlobalHoverPaused} setDashboardCarouselIndex={setDashboardCarouselIndex} dashboardCarouselIndex={dashboardCarouselIndex} getNextShow={getNextShow} getSetlistDetailsForShow={getSetlistDetailsForShow} selectedGuestlistShowId={selectedGuestlistShowId} setSelectedGuestlistShowId={setSelectedGuestlistShowId} sales={sales} setModalType={setModalType} setIsModalOpen={setIsModalOpen} sortedShows={sortedShows} setPromoCardActiveSlot={setPromoCardActiveSlot} promoCardActiveSlot={promoCardActiveSlot} setIsNotificationDrawerOpen={setIsNotificationDrawerOpen} setDashboardV2ActiveNav={setDashboardV2ActiveNav} alliancePosts={alliancePosts} previewReactionMenuOpenFor={previewReactionMenuOpenFor} setPreviewReactionMenuOpenFor={setPreviewReactionMenuOpenFor} handleAlliancePostReaction={handleAlliancePostReaction} setAlliancePosts={setAlliancePosts} previewFollowedActs={previewFollowedActs} setPreviewFollowedActs={setPreviewFollowedActs} filteredInventory={filteredInventory} setPromoHubSelectedItemId={setPromoHubSelectedItemId} setPromoHubSubTab={setPromoHubSubTab} loyaltyMembers={loyaltyMembers} reviewLeft={reviewLeft} userReviews={userReviews} setReviewLeft={setReviewLeft} setReviewText={setReviewText} setReviewScore={setReviewScore} reviewScore={reviewScore} reviewText={reviewText} reviewerName={reviewerName} setReviewerName={setReviewerName} reviewerGroup={reviewerGroup} setReviewerGroup={setReviewerGroup} setUserReviews={setUserReviews}  renderRecentSalesFeed={() => null} />
-          ) : (
-            <HomeV2DashboardView setIsGlobalHoverPaused={setIsGlobalHoverPaused} dashboardV2ActiveNav={dashboardV2ActiveNav} setActiveTab={setActiveTab} setDashboardV2ActiveNav={setDashboardV2ActiveNav} setIsV2StoryCreatorExpanded={setIsV2StoryCreatorExpanded} isV2StoryCreatorExpanded={isV2StoryCreatorExpanded} inventory={inventory} filteredInventory={filteredInventory} triggerNotification={triggerNotification} addLog={addLog} activeBand={activeBand} stagedDistroItems={stagedDistroItems} setStagedDistroItems={setStagedDistroItems} activeTab={activeTab} userProfile={userProfile} setUserProfile={setUserProfile} bands={bands} setBands={setBands} bandJoinRequests={bandJoinRequests} setBandJoinRequests={setBandJoinRequests} isSubNavRestricted={isSubNavRestricted} activeClearanceLevel={activeClearanceLevel} simulatedMemberId={simulatedMemberId} setSimulatedMemberId={setSimulatedMemberId} bandLineup={bandLineup} crewMembers={crewMembers} activeDriver={activeDriver} activeEventsSection={activeEventsSection} activeShowDisplay={activeShowDisplay} busCallTime={busCallTime} checkedPreDriveItems={checkedPreDriveItems} checklistBank={checklistBank} checklistItems={checklistItems} commitFlightMutation={commitFlightMutation} countdownString={countdownString} currentCoords={currentCoords} currentOrNextShow={currentOrNextShow} customMpg={customMpg} customNavDestination={customNavDestination} driveHoursElapsed={driveHoursElapsed} fetchLocalWeather={fetchLocalWeather} filteredNotes={filteredNotes} isNoteExpanded={isNoteExpanded} setIsNoteExpanded={setIsNoteExpanded} inlineNoteEditingId={inlineNoteEditingId} setInlineNoteEditingId={setInlineNoteEditingId} inlineNoteText={inlineNoteText} setInlineNoteText={setInlineNoteText} inlineNoteCategory={inlineNoteCategory} setInlineNoteCategory={setInlineNoteCategory} inlineNoteTag={inlineNoteTag} setInlineNoteTag={setInlineNoteTag} activeNoteIndex={activeNoteIndex} setActiveNoteIndex={setActiveNoteIndex} isTourNotesCardCollapsed={isTourNotesCardCollapsed} setIsTourNotesCardCollapsed={setIsTourNotesCardCollapsed} handleNoteTouchStart={handleNoteTouchStart} handleNoteTouchMove={handleNoteTouchMove} handleNoteTouchEnd={handleNoteTouchEnd} filteredSales={filteredSales} filteredShows={filteredShows} flights={flights} fuelPrice={fuelPrice} handleDeleteNote={handleDeleteNote} handleUpdateNote={handleUpdateNote} handleUpdateOffer={handleUpdateOffer} isCritical={isCritical} isDriverRotationExpanded={isDriverRotationExpanded} isEditingBusCall={isEditingBusCall} isFuelCalculatorExpanded={isFuelCalculatorExpanded} isInteractiveMapExpanded={isInteractiveMapExpanded} isOfflineSimActive={isOfflineSimActive} isOnline={isOnline} isPreDriveChecklistExpanded={isPreDriveChecklistExpanded} isTime24Hour={isTime24Hour} isWaypointsExpanded={isWaypointsExpanded} localWeather={localWeather} lockupTime={lockupTime} newWaypointName={newWaypointName} newWaypointType={newWaypointType} offers={offers} onRouteVenueAddress={onRouteVenueAddress} renderTime={renderTime} selectedGuestlistShowId={selectedGuestlistShowId} setActiveDriver={setActiveDriver} setActiveEventsSection={setActiveEventsSection} setAutoExpandShowId={setAutoExpandShowId} setBusCallTime={setBusCallTime} setCheckedPreDriveItems={setCheckedPreDriveItems} setChecklistBank={setChecklistBank} setChecklistItems={setChecklistItems} setCustomMpg={setCustomMpg} setCustomNavDestination={setCustomNavDestination} setDriveHoursElapsed={setDriveHoursElapsed} setFlights={setFlights} setFuelPrice={setFuelPrice} setIsDriverRotationExpanded={setIsDriverRotationExpanded} setIsEditingBusCall={setIsEditingBusCall} setIsFuelCalculatorExpanded={setIsFuelCalculatorExpanded} setIsInteractiveMapExpanded={setIsInteractiveMapExpanded} setIsModalOpen={setIsModalOpen} setIsOfflineSimActive={setIsOfflineSimActive} setIsPreDriveChecklistExpanded={setIsPreDriveChecklistExpanded} setIsTime24Hour={setIsTime24Hour} setIsWaypointsExpanded={setIsWaypointsExpanded} setLockupTime={setLockupTime} setModalType={setModalType} setNewWaypointName={setNewWaypointName} setNewWaypointType={setNewWaypointType} setSelectedGuestlistShowId={setSelectedGuestlistShowId} setShows={setShows} setTempBusCallTime={setTempBusCallTime} setTempLockupTime={setTempLockupTime} setVehicleType={setVehicleType} setVenues={setVenues} setWaypoints={setWaypoints} showSpecificNotes={showSpecificNotes} shows={shows} sortedShows={sortedShows} tempBusCallTime={tempBusCallTime} tempLockupTime={tempLockupTime} totalTableStock={totalTableStock} totalVanStock={totalVanStock} userReviews={userReviews} vehicleType={vehicleType} venues={venues} waypoints={waypoints} weatherError={weatherError} weatherLoading={weatherLoading} bandCoverUrl={bandCoverUrl} handleDataSubmit={handleDataSubmit} loyaltyMembers={loyaltyMembers} setInventory={setInventory} setLoyaltyMembers={setLoyaltyMembers} inventoryAudits={inventoryAudits} setInventoryAudits={setInventoryAudits} activeBandId={activeBandId} setTransferPreselectedId={setTransferPreselectedId} setIsTransferModalOpen={setIsTransferModalOpen} setEditingItem={setEditingItem} expenses={expenses} sales={sales} setExpenses={setExpenses} setEditingBand={setEditingBand} setIsBandModalOpen={setIsBandModalOpen} bandInfoBio={bandInfoBio} setBandInfoBio={setBandInfoBio} bandInfoCustomSlug={bandInfoCustomSlug} setBandInfoCustomSlug={setBandInfoCustomSlug} bandInfoBookingEmail={bandInfoBookingEmail} setBandInfoBookingEmail={setBandInfoBookingEmail} bandInfoBookingPhone={bandInfoBookingPhone} setBandInfoBookingPhone={setBandInfoBookingPhone} bandInfoYoutubeVideo={bandInfoYoutubeVideo} setBandInfoYoutubeVideo={setBandInfoYoutubeVideo} bandInfoStreamingUrl={bandInfoStreamingUrl} setBandInfoStreamingUrl={setBandInfoStreamingUrl} bandInfoTechRider={bandInfoTechRider} setBandInfoTechRider={setBandInfoTechRider} bandInfoTourVehicle={bandInfoTourVehicle} setBandInfoTourVehicle={setBandInfoTourVehicle} bandInfoMetalArchivesUrl={bandInfoMetalArchivesUrl} setBandInfoMetalArchivesUrl={setBandInfoMetalArchivesUrl} bandLogoUrl={bandLogoUrl} setLogoUploaderDragActive={setLogoUploaderDragActive} handleBandInfoLogoUpload={handleBandInfoLogoUpload} logoUploaderDragActive={logoUploaderDragActive} bandInfoLogoFileInputRef={bandInfoLogoFileInputRef} setCoverUploaderDragActive={setCoverUploaderDragActive} handleBandInfoCoverUpload={handleBandInfoCoverUpload} coverUploaderDragActive={coverUploaderDragActive} bandInfoCoverFileInputRef={bandInfoCoverFileInputRef} bandInfoName={bandInfoName} setBandInfoName={setBandInfoName} selectedMicroGenres={selectedMicroGenres} setSelectedMicroGenres={setSelectedMicroGenres} bandInfoHomebase={bandInfoHomebase} setBandInfoHomebase={setBandInfoHomebase} bandInfoFoundedYear={bandInfoFoundedYear} setBandInfoFoundedYear={setBandInfoFoundedYear} setBandLineup={setBandLineup} setCrewMembers={setCrewMembers} setReviewLeft={setReviewLeft} setReviewText={setReviewText} reviewScore={reviewScore} setReviewScore={setReviewScore} reviewText={reviewText} reviewerName={reviewerName} setReviewerName={setReviewerName} reviewerGroup={reviewerGroup} setReviewerGroup={setReviewerGroup} setSales={setSales} logs={logs} handleRestock={handleRestock} dbStatus={dbStatus} />
-          )
-        ) : (
-          <MainTabRouter
+          <ArtistBandPortal
             activeTab={activeTab}
-            setActiveTab={setActiveTab as any}
+            setActiveTab={setActiveTab}
+            setDashboardV2ActiveNav={setDashboardV2ActiveNav}
             triggerNotification={triggerNotification}
-            addLog={addLog}
+            pendingSyncCount={pendingSyncCount}
+            processOfflineQueue={processOfflineQueue}
+            isRosterOwner={isRosterOwner}
+            activePlan={activePlan}
+            getTrialCountdownStr={getTrialCountdownStr}
+            activeClearanceLevel={activeClearanceLevel}
+            activeSimulatedMember={activeSimulatedMember}
+            userProfile={userProfile}
+            notifications={notifications}
+            setIsNotificationDrawerOpen={setIsNotificationDrawerOpen}
+            v2RoleMenuOpen={v2RoleMenuOpen}
+            setV2RoleMenuOpen={setV2RoleMenuOpen}
+            activeBand={activeBand}
+            bands={bands}
+            simulatedMemberId={simulatedMemberId}
+            setSimulatedMemberId={setSimulatedMemberId}
+            bandLineup={bandLineup}
+            crewMembers={crewMembers}
+            handleOpenMyProfile={handleOpenMyProfile}
+            setUserProfile={setUserProfile}
+            isOfflineSimActive={isOfflineSimActive}
+            setIsOfflineSimActive={setIsOfflineSimActive}
+            isOnline={isOnline}
+            setShowWorkspaceRegistration={setShowWorkspaceRegistration}
+            setIsSettingsDrawerOpen={setIsSettingsDrawerOpen}
+            isTabRestricted={isTabRestricted}
+            isBandRegistered={isBandRegistered}
             dashboardRef={dashboardRef}
             dashboardScrollPos={dashboardScrollPos}
-            filteredInventory={filteredInventory}
+            addLog={addLog}
+            musicTrackCount={musicTrackCount}
+            setDistroDeckSubTab={setDistroDeckSubTab}
+            isSyncBadgeExpanded={isSyncBadgeExpanded}
+            setIsSyncBadgeExpanded={setIsSyncBadgeExpanded}
+            status={status}
+            setIsMetricCarouselPaused={setIsMetricCarouselPaused}
+            setCurrentMetricIndex={setCurrentMetricIndex}
+            metrics={metrics}
+            currentMetricIndex={currentMetricIndex}
+            setIsHoveringTourStatus={setIsHoveringTourStatus}
+            registerTourStatusInteraction={registerTourStatusInteraction}
+            handleStatusTouchStart={handleStatusTouchStart}
+            handleStatusTouchMove={handleStatusTouchMove}
+            handleStatusTouchEnd={handleStatusTouchEnd}
+            hasSettleReminder={hasSettleReminder}
+            firstShowToSettle={firstShowToSettle}
+            setAutoExpandShowId={setAutoExpandShowId}
+            shows={shows}
+            setTourStatusIndex={setTourStatusIndex}
+            tourStatusIndex={tourStatusIndex}
+            activeShowDisplay={activeShowDisplay}
+            currentOrNextShow={currentOrNextShow}
+            countdownString={countdownString}
             inventory={inventory}
+            isCritical={isCritical}
+            totalTableStock={totalTableStock}
+            totalVanStock={totalVanStock}
+            notes={notes}
+            filteredNotes={filteredNotes}
+            isNoteExpanded={isNoteExpanded}
+            setIsNoteExpanded={setIsNoteExpanded}
+            inlineNoteEditingId={inlineNoteEditingId}
+            setInlineNoteEditingId={setInlineNoteEditingId}
+            inlineNoteText={inlineNoteText}
+            setInlineNoteText={setInlineNoteText}
+            inlineNoteCategory={inlineNoteCategory}
+            setInlineNoteCategory={setInlineNoteCategory}
+            inlineNoteTag={inlineNoteTag}
+            setInlineNoteTag={setInlineNoteTag}
+            activeNoteIndex={activeNoteIndex}
+            setActiveNoteIndex={setActiveNoteIndex}
+            isTourNotesCardCollapsed={isTourNotesCardCollapsed}
+            setIsTourNotesCardCollapsed={setIsTourNotesCardCollapsed}
+            handleNoteTouchStart={handleNoteTouchStart}
+            handleNoteTouchMove={handleNoteTouchMove}
+            handleNoteTouchEnd={handleNoteTouchEnd}
+            handleDeleteNote={handleDeleteNote}
+            handleUpdateNote={handleUpdateNote}
+            handleDataSubmit={handleDataSubmit}
+            showSpecificNotes={showSpecificNotes}
+            localWeather={localWeather}
+            weatherLoading={weatherLoading}
+            weatherError={weatherError}
+            currentCoords={currentCoords}
+            customNavDestination={customNavDestination}
+            setCustomNavDestination={setCustomNavDestination}
+            venues={venues}
+            fetchLocalWeather={fetchLocalWeather}
+            setIsWeatherForecastExpanded={setIsWeatherForecastExpanded}
+            isWeatherForecastExpanded={isWeatherForecastExpanded}
+            isEditingBusCall={isEditingBusCall}
+            isTime24Hour={isTime24Hour}
+            setIsTime24Hour={setIsTime24Hour}
+            tempBusCallTime={tempBusCallTime}
+            setTempBusCallTime={setTempBusCallTime}
+            tempLockupTime={tempLockupTime}
+            setTempLockupTime={setTempLockupTime}
+            setIsEditingBusCall={setIsEditingBusCall}
+            setBusCallTime={setBusCallTime}
+            setLockupTime={setLockupTime}
+            renderTime={renderTime}
+            busCallTime={busCallTime}
+            lockupTime={lockupTime}
+            checklistItems={checklistItems}
+            toggleChecklistItem={toggleChecklistItem}
+            flights={flights}
+            tableStockPercent={tableStockPercent}
+            handleRestock={handleRestock}
+            handleNewSaleClick={handleNewSaleClick}
+            handleNewSalePointerDown={handleNewSalePointerDown}
+            handleNewSalePointerUp={handleNewSalePointerUp}
+            setIsGlobalHoverPaused={setIsGlobalHoverPaused}
+            setDashboardCarouselIndex={setDashboardCarouselIndex}
+            dashboardCarouselIndex={dashboardCarouselIndex}
+            getNextShow={getNextShow}
+            getSetlistDetailsForShow={getSetlistDetailsForShow}
+            selectedGuestlistShowId={selectedGuestlistShowId}
+            setSelectedGuestlistShowId={setSelectedGuestlistShowId}
+            sales={sales}
+            setModalType={setModalType}
+            setIsModalOpen={setIsModalOpen}
+            sortedShows={sortedShows}
+            setPromoCardActiveSlot={setPromoCardActiveSlot}
+            promoCardActiveSlot={promoCardActiveSlot}
+            alliancePosts={alliancePosts}
+            previewReactionMenuOpenFor={previewReactionMenuOpenFor}
+            setPreviewReactionMenuOpenFor={setPreviewReactionMenuOpenFor}
+            handleAlliancePostReaction={handleAlliancePostReaction}
+            setAlliancePosts={setAlliancePosts}
+            previewFollowedActs={previewFollowedActs}
+            setPreviewFollowedActs={setPreviewFollowedActs}
+            filteredInventory={filteredInventory}
+            setPromoHubSelectedItemId={setPromoHubSelectedItemId}
+            setPromoHubSubTab={setPromoHubSubTab}
+            loyaltyMembers={loyaltyMembers}
+            reviewLeft={reviewLeft}
+            userReviews={userReviews}
+            setReviewLeft={setReviewLeft}
+            setReviewText={setReviewText}
+            setReviewScore={setReviewScore}
+            reviewScore={reviewScore}
+            reviewText={reviewText}
+            reviewerName={reviewerName}
+            setReviewerName={setReviewerName}
+            reviewerGroup={reviewerGroup}
+            setReviewerGroup={setReviewerGroup}
+            setUserReviews={setUserReviews}
+            dashboardV2ActiveNav={dashboardV2ActiveNav}
+            setIsV2StoryCreatorExpanded={setIsV2StoryCreatorExpanded}
+            isV2StoryCreatorExpanded={isV2StoryCreatorExpanded}
+            stagedDistroItems={stagedDistroItems}
+            setStagedDistroItems={setStagedDistroItems}
+            setBands={setBands}
+            bandJoinRequests={bandJoinRequests}
+            setBandJoinRequests={setBandJoinRequests}
+            isSubNavRestricted={isSubNavRestricted}
+            activeDriver={activeDriver}
+            activeEventsSection={activeEventsSection}
+            checkedPreDriveItems={checkedPreDriveItems}
+            checklistBank={checklistBank}
+            commitFlightMutation={commitFlightMutation}
+            customMpg={customMpg}
+            driveHoursElapsed={driveHoursElapsed}
+            filteredSales={filteredSales}
+            filteredShows={filteredShows}
+            fuelPrice={fuelPrice}
+            handleUpdateOffer={handleUpdateOffer}
+            isDriverRotationExpanded={isDriverRotationExpanded}
+            isFuelCalculatorExpanded={isFuelCalculatorExpanded}
+            isInteractiveMapExpanded={isInteractiveMapExpanded}
+            isPreDriveChecklistExpanded={isPreDriveChecklistExpanded}
+            isWaypointsExpanded={isWaypointsExpanded}
+            newWaypointName={newWaypointName}
+            newWaypointType={newWaypointType}
+            offers={offers}
+            onRouteVenueAddress={onRouteVenueAddress}
+            setActiveDriver={setActiveDriver}
+            setActiveEventsSection={setActiveEventsSection}
+            setCheckedPreDriveItems={setCheckedPreDriveItems}
+            setChecklistBank={setChecklistBank}
+            setChecklistItems={setChecklistItems}
+            setCustomMpg={setCustomMpg}
+            setDriveHoursElapsed={setDriveHoursElapsed}
+            setFlights={setFlights}
+            setFuelPrice={setFuelPrice}
+            setIsDriverRotationExpanded={setIsDriverRotationExpanded}
+            setIsFuelCalculatorExpanded={setIsFuelCalculatorExpanded}
+            setIsInteractiveMapExpanded={setIsInteractiveMapExpanded}
+            setIsPreDriveChecklistExpanded={setIsPreDriveChecklistExpanded}
+            setIsWaypointsExpanded={setIsWaypointsExpanded}
+            setNewWaypointName={setNewWaypointName}
+            setNewWaypointType={setNewWaypointType}
+            setShows={setShows}
+            setVehicleType={setVehicleType}
+            setVenues={setVenues}
+            setWaypoints={setWaypoints}
+            vehicleType={vehicleType}
+            waypoints={waypoints}
+            bandCoverUrl={bandCoverUrl}
             setInventory={setInventory}
+            setLoyaltyMembers={setLoyaltyMembers}
             inventoryAudits={inventoryAudits}
             setInventoryAudits={setInventoryAudits}
-            setEditingItem={setEditingItem}
-            editingItem={editingItem}
             activeBandId={activeBandId}
             setTransferPreselectedId={setTransferPreselectedId}
             setIsTransferModalOpen={setIsTransferModalOpen}
-            setDistroDeckSubTab={setDistroDeckSubTab}
-            stagedDistroItems={stagedDistroItems}
-            setStagedDistroItems={setStagedDistroItems}
-            activeClearanceLevel={activeClearanceLevel}
-            shows={shows}
-            setShows={setShows}
-            filteredShows={filteredShows}
-            filteredSales={filteredSales}
-            sales={sales}
+            setEditingItem={setEditingItem}
+            expenses={expenses}
+            setExpenses={setExpenses}
+            setEditingBand={setEditingBand}
+            setIsBandModalOpen={setIsBandModalOpen}
+            bandInfoBio={bandInfoBio}
+            setBandInfoBio={setBandInfoBio}
+            bandInfoCustomSlug={bandInfoCustomSlug}
+            setBandInfoCustomSlug={setBandInfoCustomSlug}
+            bandInfoBookingEmail={bandInfoBookingEmail}
+            setBandInfoBookingEmail={setBandInfoBookingEmail}
+            bandInfoBookingPhone={bandInfoBookingPhone}
+            setBandInfoBookingPhone={setBandInfoBookingPhone}
+            bandInfoYoutubeVideo={bandInfoYoutubeVideo}
+            setBandInfoYoutubeVideo={setBandInfoYoutubeVideo}
+            bandInfoStreamingUrl={bandInfoStreamingUrl}
+            setBandInfoStreamingUrl={setBandInfoStreamingUrl}
+            bandInfoTechRider={bandInfoTechRider}
+            setBandInfoTechRider={setBandInfoTechRider}
+            bandInfoTourVehicle={bandInfoTourVehicle}
+            setBandInfoTourVehicle={setBandInfoTourVehicle}
+            bandInfoMetalArchivesUrl={bandInfoMetalArchivesUrl}
+            setBandInfoMetalArchivesUrl={setBandInfoMetalArchivesUrl}
+            bandLogoUrl={bandLogoUrl}
+            setLogoUploaderDragActive={setLogoUploaderDragActive}
+            handleBandInfoLogoUpload={handleBandInfoLogoUpload}
+            logoUploaderDragActive={logoUploaderDragActive}
+            bandInfoLogoFileInputRef={bandInfoLogoFileInputRef}
+            setCoverUploaderDragActive={setCoverUploaderDragActive}
+            handleBandInfoCoverUpload={handleBandInfoCoverUpload}
+            coverUploaderDragActive={coverUploaderDragActive}
+            bandInfoCoverFileInputRef={bandInfoCoverFileInputRef}
+            bandInfoName={bandInfoName}
+            setBandInfoName={setBandInfoName}
+            selectedMicroGenres={selectedMicroGenres}
+            setSelectedMicroGenres={setSelectedMicroGenres}
+            bandInfoHomebase={bandInfoHomebase}
+            setBandInfoHomebase={setBandInfoHomebase}
+            bandInfoFoundedYear={bandInfoFoundedYear}
+            setBandInfoFoundedYear={setBandInfoFoundedYear}
+            setBandLineup={setBandLineup}
+            setCrewMembers={setCrewMembers}
             setSales={setSales}
+            logs={logs}
+            dbStatus={dbStatus}
+            editingItem={editingItem}
             commitInventoryMutation={commitInventoryMutation}
-            handleDataSubmit={handleDataSubmit}
-            activeBand={activeBand}
             setIsCashDrawerOpen={setIsCashDrawerOpen}
             setAutoOpenSettlementShowId={setAutoOpenSettlementShowId}
-            loyaltyMembers={loyaltyMembers}
-            setLoyaltyMembers={setLoyaltyMembers}
-            isOfflineSimActive={isOfflineSimActive}
-            isOnline={isOnline}
             processingGlobalSyncQueue={processingGlobalSyncQueue}
             getSupabase={getSupabase}
             inventoryStore={inventoryStore}
-            setModalType={setModalType as any}
-            setIsModalOpen={setIsModalOpen}
             pendingOpenShowsForm={pendingOpenShowsForm}
             setPendingOpenShowsForm={setPendingOpenShowsForm}
             autoExpandShowId={autoExpandShowId}
-            setAutoExpandShowId={setAutoExpandShowId}
             autoOpenSettlementShowId={autoOpenSettlementShowId}
             setOnRouteVenueAddress={setOnRouteVenueAddress}
-            offers={offers}
             blockedPromoters={blockedPromoters}
             handleAcceptOffer={handleAcceptOffer}
             handleDeclineOffer={handleDeclineOffer}
             handleRenegotiateOffer={handleRenegotiateOffer}
             handleBlockPromoter={handleBlockPromoter}
-            handleUpdateOffer={handleUpdateOffer}
-            filteredNotes={filteredNotes}
-            handleDeleteNote={handleDeleteNote}
-            handleUpdateNote={handleUpdateNote}
-            userProfile={userProfile}
-            setUserProfile={setUserProfile}
-            venues={venues}
-            setVenues={setVenues}
             setSettingsExpandedSection={setSettingsExpandedSection}
-            logs={logs}
-            handleRestock={handleRestock}
-            dbStatus={dbStatus}
             supabaseUrl={supabaseUrl}
             supabaseKey={supabaseKey}
-            bands={bands}
-            setBands={setBands}
             setActiveBandId={setActiveBandId}
-            setIsBandModalOpen={setIsBandModalOpen}
             settingsExpandedSection={settingsExpandedSection}
-            selectedGuestlistShowId={selectedGuestlistShowId}
-            expenses={expenses}
-            setExpenses={setExpenses}
             promoHubSubTab={promoHubSubTab}
             promoHubSelectedItemId={promoHubSelectedItemId}
-            userReviews={userReviews}
-            setUserReviews={setUserReviews}
-            activePlan={activePlan}
             setActivePlan={setActivePlan}
-            flights={flights}
-            setFlights={setFlights}
-            commitFlightMutation={commitFlightMutation}
             pendingFlightIsAdding={pendingFlightIsAdding}
             setPendingFlightIsAdding={setPendingFlightIsAdding}
-            checklistItems={checklistItems}
-            setChecklistItems={setChecklistItems}
-            checklistBank={checklistBank}
-            setChecklistBank={setChecklistBank}
-            onRouteVenueAddress={onRouteVenueAddress}
             distroDeckSubTab={distroDeckSubTab}
           />
         )}
-      </>
-    )}
-  </div>
+      </div>
         {/* Offline Queue Reconciler bottom status bar banner */}
         {(!offlineSyncIsOnline || isOfflineSimActive || offlineQueueLength > 0 || offlineIsSyncing) && (
           <div id="offline-queue-indicator" className={`fixed ${(!isLoggedOut && !showSplash && (!userProfile?.account_type || userProfile?.account_type === 'band') && activeTab !== 'social') ? 'bottom-[72px]' : 'bottom-0'} w-full sm:max-w-[620px] bg-black/90 border-t border-b border-zinc-900 px-4 py-1.5 flex items-center justify-between z-45 font-mono text-[8.5px] uppercase tracking-wider text-[#00ffcc] select-none shadow-[0_-5px_15px_rgba(0,0,0,0.4)]`}>
@@ -5240,6 +5353,7 @@ list.push({
           triggerNotification={triggerNotification}
         />
       )}
+      </Suspense>
     </div>
   );
 }

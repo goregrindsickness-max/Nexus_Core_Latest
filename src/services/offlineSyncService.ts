@@ -35,66 +35,6 @@ export const resolveBandName = (item: any, bandIdFallback?: string): any => {
     'gorgasm': 'Gorgasm'
   };
 
-  if ((!bName || bName.toLowerCase() === 'underground label' || bName.toLowerCase() === 'nexus artist') && rawSlugCandidate && KNOWN_SEEDED_NAMES[rawSlugCandidate]) {
-    bName = KNOWN_SEEDED_NAMES[rawSlugCandidate];
-  }
-
-  if ((!bName || bName.toLowerCase() === 'underground label' || bName.toLowerCase() === 'nexus artist') && lookupId) {
-    const lId = String(lookupId);
-    const lUUID = ensureUUID(lId);
-
-    const findInList = (list: any[]) => {
-      return list.find((b: any) => {
-        if (!b) return false;
-        const bId = b.id ? String(b.id) : '';
-        const bUUID = b.id ? ensureUUID(b.id) : '';
-        const bSlug = (b.custom_slug || b.slug || '').trim().toLowerCase();
-        return bId === lId || bUUID === lUUID || (rawSlugCandidate && bSlug === rawSlugCandidate);
-      });
-    };
-
-    try {
-      const archives = JSON.parse(localStorage.getItem('nexus_community_band_archives') || '[]');
-      const found = findInList(archives);
-      if (found?.name || found?.band_name) {
-        const n = (found.name || found.band_name).trim();
-        if (n && n.toLowerCase() !== 'underground label' && n.toLowerCase() !== 'nexus artist') bName = n;
-      }
-    } catch {}
-    if (!bName || bName.toLowerCase() === 'underground label' || bName.toLowerCase() === 'nexus artist') {
-      try {
-        const allCommunity = JSON.parse(localStorage.getItem('nexus_community_bands_v2') || '[]');
-        const found = findInList(allCommunity);
-        if (found?.name || found?.band_name) {
-          const n = (found.name || found.band_name).trim();
-          if (n && n.toLowerCase() !== 'underground label' && n.toLowerCase() !== 'nexus artist') bName = n;
-        }
-      } catch {}
-    }
-    if (!bName || bName.toLowerCase() === 'underground label' || bName.toLowerCase() === 'nexus artist') {
-      try {
-        const registered = JSON.parse(localStorage.getItem('nexus_registered_bands') || '[]');
-        const found = findInList(registered);
-        if (found?.name || found?.band_name) {
-          const n = (found.name || found.band_name).trim();
-          if (n && n.toLowerCase() !== 'underground label' && n.toLowerCase() !== 'nexus artist') bName = n;
-        }
-      } catch {}
-    }
-    if (!bName || bName.toLowerCase() === 'underground label' || bName.toLowerCase() === 'nexus artist') {
-      try {
-        const activeBandRaw = localStorage.getItem('nexus_active_band');
-        if (activeBandRaw) {
-          const parsed = JSON.parse(activeBandRaw);
-          if (parsed?.name || parsed?.band_name) {
-            const n = (parsed.name || parsed.band_name).trim();
-            if (n && n.toLowerCase() !== 'underground label' && n.toLowerCase() !== 'nexus artist') bName = n;
-          }
-        }
-      } catch {}
-    }
-  }
-
   if ((!bName || bName.toLowerCase() === 'underground label' || bName.toLowerCase() === 'nexus artist') && rawSlugCandidate) {
     bName = KNOWN_SEEDED_NAMES[rawSlugCandidate] || rawSlugCandidate
       .split('-')

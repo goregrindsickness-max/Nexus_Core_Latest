@@ -268,6 +268,8 @@ export function getComposerRoleTheme(roleOrTheme?: string): ComposerThemeConfig 
 }
 
 export interface CreatePostCardProps {
+  isFullScreenModal?: boolean;
+  onCloseModal?: () => void;
   roleTheme?: ComposerRoleTheme | ComposerThemeConfig | string;
   portalRole?: string;
   activeBand?: any;
@@ -401,6 +403,8 @@ export interface CreatePostCardProps {
 }
 
 export const CreatePostCard: React.FC<CreatePostCardProps> = ({
+  isFullScreenModal = false,
+  onCloseModal,
   roleTheme,
   portalRole,
   activeBand,
@@ -585,6 +589,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
   const [localScheduledTime, setLocalScheduledTime] = useState('');
   const [postScope, setPostScope] = useState<'public' | 'followers' | 'private'>('public');
   const [showAdvancedEventDetails, setShowAdvancedEventDetails] = useState(false);
+  const panelsAnchorRef = useRef<HTMLDivElement | null>(null);
 
   // Classifieds & Gear Swap Notice internal states & fallback
   const [internalClassifiedType, setInternalClassifiedType] = useState<'gear' | 'classifieds'>('gear');
@@ -1094,6 +1099,16 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     setActivePanel(activePanel === panelName ? null : panelName);
   };
 
+  const triggerQuickPanel = (panelName: string) => {
+    const isOpening = activePanel !== panelName;
+    togglePanel(panelName);
+    if (isOpening && isFullScreenModal) {
+      setTimeout(() => {
+        panelsAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 60);
+    }
+  };
+
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (activeScheduledTime) {
@@ -1256,10 +1271,127 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     Boolean(localClassifiedTitle) ||
     postScope !== 'public';
 
+  const isSubmitDisabled =
+    !newPostText.trim() &&
+    !newPostImageUrl &&
+    selectedMediaFiles.length === 0 &&
+    !youtubeUrl &&
+    !attachedSong &&
+    !tapeAudioUrl &&
+    !pollQuestion &&
+    !merchDropName &&
+    !eventTitle &&
+    !eventData &&
+    !localClassifiedTitle &&
+    !attachedFestivalEditionId;
+
+  const schedulerDrawerContent = (showScheduler || activeScheduledTime) && (
+    <div className={`${isFullScreenModal ? '' : 'mt-2.5'} p-3 rounded-xl ${theme.innerPanelBg} border ${theme.panelBorder} space-y-3 text-left`}>
+      <div className={`flex items-center justify-between pb-2 border-b ${theme.inputBorder}`}>
+        <div className={`flex items-center gap-2 ${theme.badgeText} font-mono text-[11px] font-bold uppercase tracking-wider`}>
+          <Clock className={`w-3.5 h-3.5 ${theme.accentText}`} />
+          <span>TRANSMISSION SCHEDULER</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowScheduler(false)}
+          className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 cursor-pointer"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Quick Preset Buttons */}
+      <div className="space-y-1.5">
+        <label className="text-[10px] font-mono uppercase text-zinc-400 font-semibold block">
+          QUICK PRESETS:
+        </label>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+          <button
+            type="button"
+            onClick={() => applyPresetHours(1)}
+            className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} hover:${theme.accentBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
+          >
+            +1 HOUR
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPresetHours(3)}
+            className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} hover:${theme.accentBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
+          >
+            +3 HOURS
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPresetTomorrowMorning()}
+            className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} hover:${theme.accentBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
+          >
+            TOMORROW 9AM
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPresetFridayEvening()}
+            className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} hover:${theme.accentBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
+          >
+            FRIDAY 6PM
+          </button>
+        </div>
+      </div>
+
+      {/* Custom Datetime Input */}
+      <div className="space-y-1.5">
+        <label className="text-[10px] font-mono uppercase text-zinc-400 font-semibold block">
+          TARGET DISPATCH DATE & TIME:
+        </label>
+        <input
+          type="datetime-local"
+          value={activeScheduledTime}
+          onChange={(e) => updateScheduledTime(e.target.value)}
+          className={`w-full ${theme.panelBg} border ${theme.inputBorder} rounded-lg px-3 py-2 text-xs ${theme.badgeText} font-mono ${theme.inputFocus} transition-colors cursor-pointer`}
+        />
+      </div>
+
+      {/* Active Scheduled Confirmation Badge */}
+      {activeScheduledTime && (
+        <div className={`p-2 rounded-lg ${theme.badgeBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} flex items-center justify-between gap-2`}>
+          <div className="flex items-center gap-1.5 truncate">
+            <CheckCircle2 className={`w-3.5 h-3.5 ${theme.accentText} shrink-0`} />
+            <span className="truncate">
+              Queued for {new Date(activeScheduledTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => updateScheduledTime('')}
+            className="text-rose-400 hover:text-rose-300 font-bold uppercase underline shrink-0 cursor-pointer"
+          >
+            CLEAR
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          type="button"
+          disabled={!activeScheduledTime || (!newPostText.trim() && !newPostImageUrl && !tapeAudioUrl && !pollQuestion && !merchDropName && !eventTitle && !eventData)}
+          onClick={(e) => handleFormSubmit(e)}
+          className={`w-full py-2.5 px-3 rounded-lg ${theme.gradientBtn} disabled:from-zinc-900 disabled:to-zinc-900 disabled:border disabled:border-zinc-800 disabled:text-zinc-600 text-white font-mono font-bold text-[10px] sm:text-[11px] uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed`}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          <span>CONFIRM & QUEUE TRANSMISSION</span>
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div 
-      className={`w-full ${theme.cardBg} border rounded-2xl p-3.5 sm:p-5 transition-all mb-2 text-left relative overflow-hidden group ${theme.cardBorderGlow}`}
-      style={theme.key === 'fan_only' ? { backgroundColor: '#00133b' } : undefined}
+      className={
+        isFullScreenModal
+          ? 'w-full flex-1 min-h-0 flex flex-col bg-zinc-950 text-left relative'
+          : `w-full ${theme.cardBg} border rounded-2xl p-3.5 sm:p-5 transition-all mb-2 text-left relative overflow-hidden group ${theme.cardBorderGlow}`
+      }
+      style={!isFullScreenModal && theme.key === 'fan_only' ? { backgroundColor: '#00133b' } : undefined}
     >
       {/* Hidden file input for Tape Audio */}
       {handleTapeAudioUpload && (
@@ -1272,14 +1404,62 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
         />
       )}
 
-      {/* Dynamic role background ambient glow */}
-      <div 
-        className="absolute top-0 right-0 w-64 h-64 rounded-full blur-3xl pointer-events-none transition-all duration-500 opacity-25" 
-        style={{ backgroundColor: theme.glowHex }}
-      />
+      {/* Dynamic role background ambient glow (inline card only) */}
+      {!isFullScreenModal && (
+        <div 
+          className="absolute top-0 right-0 w-64 h-64 rounded-full blur-3xl pointer-events-none transition-all duration-500 opacity-25" 
+          style={{ backgroundColor: theme.glowHex }}
+        />
+      )}
 
-      {/* Header & Identity Section */}
-      <div className="flex flex-col gap-3 pb-3 border-b border-zinc-800/80 mb-3 relative z-10">
+      <form
+        onSubmit={handleFormSubmit}
+        className={isFullScreenModal ? 'flex-1 min-h-0 flex flex-col' : 'space-y-3'}
+      >
+        {isFullScreenModal && (
+          <div
+            className="shrink-0 w-full bg-zinc-950 border-b border-zinc-800/80 px-4 pb-3"
+            style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+          >
+            <div className="max-w-2xl mx-auto grid grid-cols-3 items-center gap-2">
+              <div className="flex items-center justify-start">
+                <button
+                  type="button"
+                  onClick={() => onCloseModal && onCloseModal()}
+                  aria-label="Cancel and close post composer"
+                  className="inline-flex items-center gap-1 px-2 py-1.5 -ml-2 rounded-lg text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>CANCEL</span>
+                </button>
+              </div>
+
+              <span className="text-xs font-mono font-bold uppercase tracking-widest text-white text-center truncate">
+                CREATE POST
+              </span>
+
+              <div className="flex items-center justify-end">
+                <button
+                  type="submit"
+                  disabled={isSubmitDisabled}
+                  className={`inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-full font-mono font-black text-[11px] uppercase tracking-wider transition-all ${
+                    isSubmitDisabled
+                      ? 'bg-zinc-900/90 border border-zinc-800 text-zinc-500 cursor-not-allowed opacity-70 shadow-none'
+                      : 'bg-gradient-to-r from-purple-600 via-fuchsia-600 to-teal-500 hover:from-purple-500 hover:via-fuchsia-500 hover:to-teal-400 text-white border border-teal-300/60 shadow-[0_0_18px_rgba(168,85,247,0.55),0_0_12px_rgba(20,184,166,0.45)] cursor-pointer active:scale-95'
+                  }`}
+                >
+                  <Send className="w-3 h-3 shrink-0" />
+                  <span>{activeScheduledTime ? 'QUEUE' : 'POST'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className={isFullScreenModal ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain' : ''}>
+          <div className={isFullScreenModal ? 'max-w-2xl mx-auto w-full px-4 py-3.5 space-y-3' : 'space-y-3'}>
+            {/* Header & Identity Section */}
+            <div className={`flex flex-col gap-3 pb-3 border-b border-zinc-800/80 ${isFullScreenModal ? '' : 'mb-3'} relative z-10`}>
         {/* Top Section: Larger Avatar + POSTING AS Label & Full Width Dropdown */}
         <div className="flex items-center gap-3">
           <div 
@@ -1433,7 +1613,6 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
         </div>
       </div>
 
-      <form onSubmit={handleFormSubmit} className="space-y-3">
         {/* Main Textarea Input with Monospace Transmission Character Counter */}
         <div className="relative w-full">
           <textarea
@@ -1570,6 +1749,14 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
               )}
             </div>
           )}
+        </div>
+
+        {/* Concise Music-Ecosystem Guidelines Callout (Directly below textarea, above 2-column attachment grid) */}
+        <div className="flex items-center gap-1.5 text-[9.5px] font-mono text-amber-300/85 bg-amber-950/25 border border-amber-500/25 rounded-lg px-2.5 py-1.5 leading-snug">
+          <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+          <span>
+            Music & scene updates welcome. Off-topic, political, or abusive posts are moderated.
+          </span>
         </div>
 
         {/* Flyer & Tour Announcement Smart Companion Prompt (Completely Optional) */}
@@ -1753,6 +1940,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
         </div>
 
         {/* Dynamic Panels */}
+        <div ref={panelsAnchorRef} className="h-0 w-full" aria-hidden="true" />
 
         {/* Media Input Panel (Native Images, Audio Stems & Bandcamp Link Resolver) */}
         {activePanel === 'media' && (
@@ -3021,137 +3209,41 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           </div>
         )}
 
-        {/* Integrated Post & Schedule Button Container */}
-        <div className="pt-2">
-          <div className="flex items-center gap-2 w-full">
-            <button
-              type="submit"
-              disabled={!newPostText.trim() && !newPostImageUrl && !tapeAudioUrl && !pollQuestion && !merchDropName && !eventTitle && !eventData && !localClassifiedTitle && !attachedFestivalEditionId}
-              className={`flex-1 py-3 sm:py-3.5 px-4 rounded-xl disabled:bg-zinc-800/80 disabled:border-zinc-800 disabled:text-zinc-500 disabled:shadow-none font-mono font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed active:scale-[0.99] ${theme.buttonBg}`}
-            >
-              <Send className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">
-                {activeScheduledTime
-                  ? `QUEUE FOR ${new Date(activeScheduledTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
-                  : 'POST TO GLOBAL NETWORK'}
-              </span>
-            </button>
+        {/* Integrated Post & Schedule Button Container (inline mode only; full-screen uses sticky footer below) */}
+        {!isFullScreenModal && (
+          <div className="pt-2">
+            <div className="flex items-center gap-2 w-full">
+              <button
+                type="submit"
+                disabled={isSubmitDisabled}
+                className={`flex-1 py-3 sm:py-3.5 px-4 rounded-xl disabled:bg-zinc-800/80 disabled:border-zinc-800 disabled:text-zinc-500 disabled:shadow-none font-mono font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed active:scale-[0.99] ${theme.buttonBg}`}
+              >
+                <Send className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">
+                  {activeScheduledTime
+                    ? `QUEUE FOR ${new Date(activeScheduledTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                    : 'POST TO GLOBAL NETWORK'}
+                </span>
+              </button>
 
-            {/* Integrated Clock Schedule Trigger Button on Far Right */}
-            <button
-              type="button"
-              onClick={() => setShowScheduler(!showScheduler)}
-              className={`py-3 sm:py-3.5 px-3.5 rounded-xl border font-mono font-bold text-xs transition-all flex items-center justify-center cursor-pointer shrink-0 ${
-                showScheduler || activeScheduledTime
-                  ? 'bg-amber-950/80 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
-                  : `${theme.inactiveBtnStyle} hover:text-amber-400 hover:border-amber-500/50`
-              }`}
-              title={activeScheduledTime ? `Scheduled for ${new Date(activeScheduledTime).toLocaleString()}` : "Schedule post dispatch time"}
-            >
-              <Clock className={`w-4 h-4 ${activeScheduledTime ? 'text-amber-400 animate-pulse' : ''}`} />
-            </button>
-          </div>
-
-          {/* Expandable Scheduler Drawer/Panel */}
-          {(showScheduler || activeScheduledTime) && (
-            <div className={`mt-2.5 p-3 rounded-xl ${theme.innerPanelBg} border ${theme.panelBorder} space-y-3 text-left`}>
-              <div className={`flex items-center justify-between pb-2 border-b ${theme.inputBorder}`}>
-                <div className={`flex items-center gap-2 ${theme.badgeText} font-mono text-[11px] font-bold uppercase tracking-wider`}>
-                  <Clock className={`w-3.5 h-3.5 ${theme.accentText}`} />
-                  <span>TRANSMISSION SCHEDULER</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowScheduler(false)}
-                  className="text-zinc-500 hover:text-zinc-300 transition-colors p-1"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-
-              {/* Quick Preset Buttons */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono uppercase text-zinc-400 font-semibold block">
-                  QUICK PRESETS:
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => applyPresetHours(1)}
-                    className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} hover:${theme.accentBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
-                  >
-                    +1 HOUR
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyPresetHours(3)}
-                    className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} hover:${theme.accentBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
-                  >
-                    +3 HOURS
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyPresetTomorrowMorning()}
-                    className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} hover:${theme.accentBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
-                  >
-                    TOMORROW 9AM
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyPresetFridayEvening()}
-                    className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} hover:${theme.accentBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
-                  >
-                    FRIDAY 6PM
-                  </button>
-                </div>
-              </div>
-
-              {/* Custom Datetime Input */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono uppercase text-zinc-400 font-semibold block">
-                  TARGET DISPATCH DATE & TIME:
-                </label>
-                <input
-                  type="datetime-local"
-                  value={activeScheduledTime}
-                  onChange={(e) => updateScheduledTime(e.target.value)}
-                  className={`w-full ${theme.panelBg} border ${theme.inputBorder} rounded-lg px-3 py-2 text-xs ${theme.badgeText} font-mono ${theme.inputFocus} transition-colors cursor-pointer`}
-                />
-              </div>
-
-              {/* Active Scheduled Confirmation Badge */}
-              {activeScheduledTime && (
-                <div className={`p-2 rounded-lg ${theme.badgeBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} flex items-center justify-between gap-2`}>
-                  <div className="flex items-center gap-1.5 truncate">
-                    <CheckCircle2 className={`w-3.5 h-3.5 ${theme.accentText} shrink-0`} />
-                    <span className="truncate">
-                      Queued for {new Date(activeScheduledTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => updateScheduledTime('')}
-                    className="text-rose-400 hover:text-rose-300 font-bold uppercase underline shrink-0 cursor-pointer"
-                  >
-                    CLEAR
-                  </button>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  disabled={!activeScheduledTime || (!newPostText.trim() && !newPostImageUrl && !tapeAudioUrl && !pollQuestion && !merchDropName && !eventTitle && !eventData)}
-                  onClick={(e) => handleFormSubmit(e)}
-                  className={`w-full py-2.5 px-3 rounded-lg ${theme.gradientBtn} disabled:from-zinc-900 disabled:to-zinc-900 disabled:border disabled:border-zinc-800 disabled:text-zinc-600 text-white font-mono font-bold text-[10px] sm:text-[11px] uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed`}
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>CONFIRM & QUEUE TRANSMISSION</span>
-                </button>
-              </div>
+              {/* Integrated Clock Schedule Trigger Button on Far Right */}
+              <button
+                type="button"
+                onClick={() => setShowScheduler(!showScheduler)}
+                className={`py-3 sm:py-3.5 px-3.5 rounded-xl border font-mono font-bold text-xs transition-all flex items-center justify-center cursor-pointer shrink-0 ${
+                  showScheduler || activeScheduledTime
+                    ? 'bg-amber-950/80 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
+                    : `${theme.inactiveBtnStyle} hover:text-amber-400 hover:border-amber-500/50`
+                }`}
+                title={activeScheduledTime ? `Scheduled for ${new Date(activeScheduledTime).toLocaleString()}` : "Schedule post dispatch time"}
+              >
+                <Clock className={`w-4 h-4 ${activeScheduledTime ? 'text-amber-400 animate-pulse' : ''}`} />
+              </button>
             </div>
-          )}
-        </div>
+
+            {schedulerDrawerContent}
+          </div>
+        )}
 
         {/* Live Preview of Attached Festival Billing Card in Composer */}
         {attachedFestivalEditionId && (
@@ -3174,13 +3266,110 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           </div>
         )}
 
-        {/* Disclaimer Footer Note */}
-        <div className="mt-2.5 flex items-center justify-center gap-1.5 text-[8.5px] sm:text-[9.5px] font-mono text-amber-300/80 bg-amber-950/20 border border-amber-500/20 rounded-lg p-2 text-center leading-snug">
-          <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-          <span>
-            Music-focused ecosystem. Behind-the-scenes & personal updates welcome. Purely off-topic, political, or abusive posts are moderated.
-          </span>
+          </div>
         </div>
+
+        {/* Sticky Bottom Action Bar (Full-Screen Modal Mode) */}
+        {isFullScreenModal && (
+          <div
+            className="sticky bottom-0 shrink-0 w-full bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/80 z-20 px-4 pt-2.5"
+            style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+          >
+            <div className="max-w-2xl mx-auto w-full flex flex-col gap-2.5">
+              {(showScheduler || activeScheduledTime) && (
+                <div className="max-h-[40dvh] overflow-y-auto">
+                  {schedulerDrawerContent}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 w-full">
+                {/* Quick Media Icons */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => triggerQuickPanel('media')}
+                    title="Add Photo or Media"
+                    aria-label="Add photo or media"
+                    className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
+                      activePanel === 'media' || newPostImageUrl || selectedMediaFiles.length > 0
+                        ? theme.activeBtnStyle
+                        : theme.inactiveBtnStyle
+                    }`}
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => triggerQuickPanel('video')}
+                    title="Add YouTube Video"
+                    aria-label="Add YouTube video"
+                    className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
+                      activePanel === 'video' || youtubeUrl
+                        ? theme.activeBtnStyle
+                        : theme.inactiveBtnStyle
+                    }`}
+                  >
+                    <Video className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (setShowSongModal) setShowSongModal(true);
+                      else triggerQuickPanel('song');
+                    }}
+                    title="Attach Music"
+                    aria-label="Attach music"
+                    className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
+                      attachedSong || activePanel === 'song'
+                        ? theme.activeBtnStyle
+                        : theme.inactiveBtnStyle
+                    }`}
+                  >
+                    <Music className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => triggerQuickPanel('event')}
+                    title="Attach Event / Tickets"
+                    aria-label="Attach event or tickets"
+                    className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
+                      eventTitle || eventData || activePanel === 'event'
+                        ? 'bg-amber-950/70 border-amber-500 text-amber-300'
+                        : theme.inactiveBtnStyle
+                    }`}
+                  >
+                    <Ticket className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowScheduler(!showScheduler)}
+                    title={activeScheduledTime ? `Scheduled for ${new Date(activeScheduledTime).toLocaleString()}` : "Schedule post dispatch time"}
+                    aria-label="Schedule post"
+                    className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
+                      showScheduler || activeScheduledTime
+                        ? 'bg-amber-950/80 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
+                        : `${theme.inactiveBtnStyle} hover:text-amber-400 hover:border-amber-500/50`
+                    }`}
+                  >
+                    <Clock className={`w-4 h-4 ${activeScheduledTime ? 'text-amber-400 animate-pulse' : ''}`} />
+                  </button>
+                </div>
+
+                {/* Primary SHARE Button */}
+                <button
+                  type="submit"
+                  disabled={isSubmitDisabled}
+                  className={`flex-1 min-w-0 py-2.5 px-4 rounded-xl disabled:bg-zinc-800/80 disabled:border-zinc-800 disabled:text-zinc-500 disabled:shadow-none font-mono font-bold text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed active:scale-[0.99] ${theme.buttonBg}`}
+                >
+                  <Send className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">
+                    {activeScheduledTime ? 'QUEUE SHARE' : 'SHARE'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </form>
 
       <CreateEntityModal

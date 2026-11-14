@@ -336,33 +336,18 @@ export function isProfileFollowedGlobally(
   const keys = getTargetFollowKeys(target);
   if (keys.length === 0) return false;
 
-  // 1. Read user-scoped localStorage registry first (highest user intent priority)
-  try {
-    if (typeof window !== 'undefined') {
-      const localFollows = getScopedFollowsMap(currentUserId);
-      // Check for explicit false first across any key
-      for (const k of keys) {
-        if (localFollows[k] === false) return false;
-      }
-      // Then check for explicit true
-      for (const k of keys) {
-        if (localFollows[k] === true) return true;
-      }
-    }
-  } catch (_) {}
+  const isOnline = typeof navigator === 'undefined' || navigator.onLine !== false;
 
-  // 2. Check additional follows list (e.g., Supabase follows array for the current user)
-  if (Array.isArray(additionalFollowsList) && additionalFollowsList.length > 0) {
+  // 1. When online and an authoritative Supabase follows list is provided, Supabase is the single source of truth
+  if (isOnline && Array.isArray(additionalFollowsList)) {
     const activeUserIds = getActiveFollowUserIds(currentUserId);
     for (const f of additionalFollowsList) {
       if (!f) continue;
 
-      // Skip entries explicitly marked unfollowed (e.g. if a profile object list was passed)
       if (typeof f === 'object' && (f.followed === false || f.isFollowed === false || f.isFollowedByMe === false)) {
         continue;
       }
 
-      // Enforce current-user ownership when the row carries a follower identifier
       const rowFollower = f.follower_id || f.fan_profile_id;
       if (rowFollower && activeUserIds.length > 0) {
         const cleanFollower = String(rowFollower).trim().toLowerCase();
@@ -384,7 +369,21 @@ export function isProfileFollowedGlobally(
         return true;
       }
     }
+    return false;
   }
+
+  // 2. Offline or when no authoritative follows list was provided: read user-scoped localStorage cache
+  try {
+    if (typeof window !== 'undefined') {
+      const localFollows = getScopedFollowsMap(currentUserId);
+      for (const k of keys) {
+        if (localFollows[k] === false) return false;
+      }
+      for (const k of keys) {
+        if (localFollows[k] === true) return true;
+      }
+    }
+  } catch (_) {}
 
   // 3. Fallback boolean on object ONLY when no authoritative follows list was provided
   if (additionalFollowsList === undefined && typeof target === 'object') {

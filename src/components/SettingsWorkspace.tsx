@@ -215,9 +215,7 @@ export default function SettingsWorkspace(props: any) {
       logo_url: logoUrl,
       is_verified: isVerifiedState,
       verification_platform: verificationPlatformInput || (isVerifiedState ? 'Spotify Official Artist' : null),
-      lineup: (Array.isArray(props.bandLineup) ? props.bandLineup : [])
-        .map((m: any) => `${m.name || 'Unnamed'} (${m.role || 'Vocals'} - Lvl ${m.clearanceLevel || 5})`)
-        .join(', ')
+      lineup: Array.isArray(props.bandLineup) ? props.bandLineup : []
     };
 
     if (props.setBands) {
@@ -225,7 +223,7 @@ export default function SettingsWorkspace(props: any) {
     }
 
     try {
-      await upsertBandToDatabase(updated, { triggerNotification: props.triggerNotification });
+      await upsertBandToDatabase(updated, { triggerNotification: props.triggerNotification, allowEmptyLineup: true });
     } catch (err) {
       console.warn("Error syncing band info to Supabase:", err);
     }

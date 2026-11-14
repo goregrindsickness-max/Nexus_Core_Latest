@@ -34,6 +34,7 @@ import {
   DiscoveryZone,
   PeopleYouMayKnow,
 } from './timeline';
+import { FeedPostCard } from '../feed/FeedPostCard';
 import { InlineReactionsModal } from './modals/InlineReactionsModal';
 import { ForumHighlightCard } from './ForumHighlightCard';
 import {
@@ -460,7 +461,7 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
 
               return (
                 <React.Fragment key={post.id ? `feed-post-${post.id}` : `feed-post-${index}`}>
-                  <PostCard
+                  <FeedPostCard
                     post={post}
                     currentUserId={currentUserId}
                     currentUserName={currentUserName}

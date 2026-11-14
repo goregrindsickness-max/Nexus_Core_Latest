@@ -221,57 +221,7 @@ export const GENRE_CLUSTERS = [
   }
 ];
 
-export async function ensureAutoFollowMiguel(supabase: any, newUserId: string) {
-  if (!supabase || !newUserId) return;
-  try {
-    // Query profiles strictly for Miguel / goregrindsickness personal account
-    const { data: proProfiles } = await supabase
-      .from('profiles')
-      .select('id, email, full_name, console_handle, account_type')
-      .or('email.ilike.%goregrindsickness%,full_name.ilike.%miguel medina%,console_handle.ilike.%bdmceo%');
-
-    let targetId: string | null = null;
-    if (proProfiles && proProfiles.length > 0) {
-      const match =
-        proProfiles.find(
-          (p: any) =>
-            p.email?.toLowerCase().includes('goregrindsickness') ||
-            p.console_handle?.toLowerCase().includes('bdmceo') ||
-            p.full_name?.toLowerCase().includes('miguel')
-        ) || proProfiles[0];
-      if (match?.id) {
-        targetId = match.id;
-      }
-    }
-
-    if (!targetId || targetId === newUserId) return;
-
-    const followId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'f0000000-0000-4000-8000-' + Math.floor(Math.random() * 1e12).toString(16).padStart(12, '0');
-    const payload = {
-      id: followId,
-      follower_id: newUserId,
-      followed_id: targetId,
-      target_type: 'user'
-    };
-
-    await supabase.from('follows').upsert([payload], { onConflict: 'follower_id,followed_id' });
-
-    try {
-      const raw = localStorage.getItem('nexus_local_follows_v2');
-      const store = raw ? JSON.parse(raw) : {};
-      const cleanFollower = String(newUserId).toLowerCase().trim();
-      const cleanTarget = String(targetId).toLowerCase().trim();
-      if (!store[cleanFollower] || typeof store[cleanFollower] !== 'object') {
-        store[cleanFollower] = {};
-      }
-      store[cleanFollower][cleanTarget] = true;
-      localStorage.setItem('nexus_local_follows_v2', JSON.stringify(store));
-    } catch (e) {
-      // ignore
-    }
-
-    console.log(`[Auto-Follow Active] User ${newUserId} successfully auto-followed industry pro profile ${targetId}`);
-  } catch (err) {
-    console.warn('ensureAutoFollowMiguel exception:', err);
-  }
+export async function ensureAutoFollowMiguel(_supabase: any, _newUserId: string) {
+  // Strict opt-in relationships: newly registered accounts start with 0 auto-followed profiles or bands.
+  return;
 }

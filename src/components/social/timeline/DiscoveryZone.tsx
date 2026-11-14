@@ -34,6 +34,7 @@ import { getSupabase } from '../../../supabase';
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME, getTargetFollowKeys } from '../../../utils/followSyncService';
 import { communityBandManager, purgeDeletedAndZombieBands, isDeletedOrZombieBand } from '../../../lib/communityBands';
 import { resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
+import { createMonogramPlaceholderSvg } from '../../../utils/imageFallbacks';
 
 export interface DiscoveryProfile {
   id: string;
@@ -407,12 +408,20 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
     }
 
     try {
-      // 1. Primary: Fetch real bands directly from 'bands' table in Supabase
+      const DISCOVERY_PAGE_SIZE = 20;
+      const BAND_CARD_COLUMNS =
+        'id, name, band_name, category, avatar_url, logo_url, cover_url, banner_url, city, state, state_province, country, micro_genres, custom_slug, verification_status, is_verified, status, is_split_up, founded_year, followers_count, creator_id, user_id, owner_id, bio';
+      const CREATIVE_CARD_COLUMNS =
+        'id, business_name, creative_handle, creative_name, name, avatar_url, banner_url, city, state, state_province, country, genres, primary_category, primary_skill, bio, user_id, creator_id';
+      const PROFILE_CARD_COLUMNS =
+        'id, full_name, display_name, name, console_handle, email, role, account_type, isBandProfile, bandName, creative_name, creative_avatar, creative_metadata, label_company_name, label_avatar, label_metadata, promoter_name, promoter_logo, promoter_metadata, avatar_url, banner_url, city, state, state_province, country, bio';
+
+      // 1. Primary: Fetch real bands directly from 'bands' table in Supabase with explicit columns, .order(), and .range()
       const { data: bData, error: bError } = await client
         .from('bands')
-        .select('*')
+        .select(BAND_CARD_COLUMNS)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .range(0, DISCOVERY_PAGE_SIZE - 1);
 
       if (bData && !bError && Array.isArray(bData)) {
         bData.forEach((b: any) => {
@@ -477,13 +486,13 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
         });
       }
 
-      // 2. Fetch from dedicated 'creatives' table in Supabase
+      // 2. Fetch from dedicated 'creatives' table in Supabase with explicit columns, .order(), and .range()
       try {
         const { data: cData, error: cError } = await client
           .from('creatives')
-          .select('*')
+          .select(CREATIVE_CARD_COLUMNS)
           .order('created_at', { ascending: false })
-          .limit(50);
+          .range(0, DISCOVERY_PAGE_SIZE - 1);
           
         if (cData && !cError && Array.isArray(cData)) {
           cData.forEach((c: any) => {
@@ -533,12 +542,12 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
         // Table might be empty or optional
       }
 
-      // 3. Fetch real users & workspace accounts from 'profiles' table
+      // 3. Fetch real users & workspace accounts from 'profiles' table with explicit columns, .order(), and .range()
       const { data: pData, error: pError } = await client
         .from('profiles')
-        .select('*')
+        .select(PROFILE_CARD_COLUMNS)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .range(0, DISCOVERY_PAGE_SIZE - 1);
 
       if (pData && !pError && Array.isArray(pData)) {
         // Extract real individual human members from profiles for real social proof
@@ -692,7 +701,11 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
 
       // 4. Fetch from dedicated 'labels' table
       try {
-        const { data: lData } = await client.from('labels').select('*').limit(50);
+        const { data: lData } = await client
+          .from('labels')
+          .select('id, user_id, creator_id, label_company_name, label_name, name, label_avatar, avatar_url, logo_url, city, headquarters, country, description, created_at')
+          .order('created_at', { ascending: false })
+          .range(0, 19);
         if (lData && Array.isArray(lData)) {
           lData.forEach((l: any) => {
             const lName = l.label_company_name || l.label_name || l.name;
@@ -723,7 +736,11 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
 
       // 5. Fetch from dedicated 'promoters' or 'venues' table
       try {
-        const { data: prData } = await client.from('promoters').select('*').limit(50);
+        const { data: prData } = await client
+          .from('promoters')
+          .select('id, user_id, creator_id, brand_name, agency_name, promoter_name, name, promoter_logo, logo_url, avatar_url, region, city, country, description, created_at')
+          .order('created_at', { ascending: false })
+          .range(0, 19);
         if (prData && Array.isArray(prData)) {
           prData.forEach((pr: any) => {
             const prName = pr.brand_name || pr.agency_name || pr.promoter_name || pr.name;
@@ -1240,7 +1257,8 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
     const RoleIcon = theme.icon;
     const isBand = profile.isBandProfile || profile.category === 'bands';
 
-    const heroImage = resolveHeroImage(profile) || profile.image || profile.avatar || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80';
+    const fallbackSvg = createMonogramPlaceholderSvg(profile.name, isBand ? 'band' : profile.category === 'venues' ? 'venue' : 'user');
+    const heroImage = resolveHeroImage(profile) || profile.image || profile.avatar || fallbackSvg;
     const cardAvatar = resolveCardAvatar(profile) || heroImage;
     const subtitle = formatCategorySubtitle(profile);
     const realProof = getRealFollowerProof(profile, realSceneUsers, currentUserId);
@@ -1294,8 +1312,7 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
             className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-500 ease-out"
             referrerPolicy="no-referrer"
             onError={(e) => {
-              // Fallback to heavy metal dark textured placeholder
-              e.currentTarget.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80';
+              e.currentTarget.src = fallbackSvg;
             }}
           />
 

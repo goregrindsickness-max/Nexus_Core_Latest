@@ -14,6 +14,9 @@
 
 // 1. Client & Auth Service
 export {
+  supabase,
+  DEFAULT_SUPABASE_URL,
+  DEFAULT_SUPABASE_ANON_KEY,
   getActivePortalType,
   getSupabaseUrlForPortal,
   getSupabaseAnonKeyForPortal,
@@ -26,10 +29,18 @@ export {
   getRawSupabase,
   ensureValidSupabaseAuthSession,
   getSupabase,
-} from './services/clientService';
+} from './lib/supabaseClient';
 
 // 2. Storage & Media Service
 export {
+  isClientOnline,
+  sanitizeForLocalStorage,
+  safeSetLocalStorageItem,
+  safeGetLocalStorageItem,
+  compressImage,
+  uploadAudioVault,
+  uploadArtworkToVault,
+  uploadFeedMedia,
   compressAndTranscodeImageToWebP,
   isValidStorageOrImageUrl,
   base64ToBlob,
@@ -37,9 +48,10 @@ export {
   uploadCommunityBandMedia,
   uploadArchiveFlyer,
   uploadClipVideoFile,
+  uploadStoryMediaToStorage,
   testPhotoPitStorageConnection,
   ensureImagesUploadedToStorage,
-} from './services/storageService';
+} from './lib/storageManager';
 
 // 3. Offline Sync & Connectivity Service
 export {

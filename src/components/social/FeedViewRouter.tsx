@@ -1,47 +1,60 @@
-import React, { useState, useMemo } from 'react';
-import { StorefrontView } from './StorefrontView';
-import { InboxTerminal } from '../messaging/InboxTerminal';
-import { CreatePostCard } from './CreatePostCard';
+import React, { useState, Suspense } from 'react';
 import { TimelineFeed } from './TimelineFeed';
-import { PhotoPitView } from './PhotoPitView';
-import { ForumView } from './ForumView';
-import { StoriesCarouselSection } from './StoriesCarouselSection';
-import { ClipsView } from './ClipsView';
+import {
+  PostComposerTrigger,
+  CompactComposerTriggerBar,
+  ENABLE_COMPACT_COMPOSER_STRIP_AB_TEST,
+  type CompactComposerTriggerBarProps,
+  StoriesBar,
+  WelcomeStarterCard,
+} from '../feed';
+
+const StorefrontView = React.lazy(() =>
+  import('./StorefrontView').then((m) => ({ default: m.StorefrontView }))
+);
+const InboxTerminal = React.lazy(() =>
+  import('../messaging/InboxTerminal').then((m) => ({ default: m.InboxTerminal }))
+);
+const CreatePostCard = React.lazy(() =>
+  import('./CreatePostCard').then((m) => ({ default: m.CreatePostCard }))
+);
+const PhotoPitView = React.lazy(() =>
+  import('./PhotoPitView').then((m) => ({ default: m.PhotoPitView }))
+);
+const ForumView = React.lazy(() =>
+  import('./ForumView').then((m) => ({ default: m.ForumView }))
+);
+const ClipsView = React.lazy(() =>
+  import('./ClipsView').then((m) => ({ default: m.ClipsView }))
+);
+const CreatePostModal = React.lazy(() =>
+  import('../feed/CreatePostModal').then((m) => ({ default: m.CreatePostModal }))
+);
+
+const LazyTabFallback = () => (
+  <div className="py-12 flex items-center justify-center">
+    <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 import { formatPostTimestamp } from '../../utils/socialFeedUtils';
-import { getComposerRoleTheme } from './CreatePostCard';
 import { mergePostWithReactions } from './utils/reactionStore';
 import { isMiguelNameOrProfile } from './utils/profileUtils';
 import { resolveCreativeLogo, resolvePromoterLogo, resolveBandLogo } from '../../utils/bandProfileUtils';
 import { generateValidUUID } from '../../services/postInteractionsService';
 import { isProfileFollowedGlobally } from '../../utils/followSyncService';
 
+export {
+  PostComposerTrigger,
+  CompactComposerTriggerBar,
+  ENABLE_COMPACT_COMPOSER_STRIP_AB_TEST,
+  type CompactComposerTriggerBarProps,
+};
+
 export const FeedViewRouter: React.FC<any> = (props) => {
-  const [feedStreamScope, setFeedStreamScope] = React.useState<'all' | 'workspace'>('all');
-
-  const normRole = (props.portalRole || props.userProfile?.active_workspace || 'industry_pro').toLowerCase();
-  const isWorkspace = ['band', 'label', 'promoter', 'creative', 'industry_pro'].includes(normRole);
-
-  const theme = React.useMemo(() => {
-    return (props.roleTheme && typeof props.roleTheme === 'object' && 'roleTitle' in props.roleTheme)
-      ? props.roleTheme
-      : getComposerRoleTheme(normRole);
-  }, [props.roleTheme, normRole]);
-
-  const workspaceStreamLabel = React.useMemo(() => {
-    if (normRole === 'band' || normRole.includes('artist')) {
-      return `${props.activeBand?.name || 'Band'} Stream`;
-    }
-    if (normRole === 'label') {
-      return `${props.userProfile?.label_company_name || 'Label'} Desk`;
-    }
-    if (normRole === 'promoter') {
-      return `${props.userProfile?.promoter_metadata?.brand_name || props.userProfile?.promoter_name || 'Promoter'} Wire`;
-    }
-    if (normRole === 'creative') {
-      return `${props.userProfile?.creative_metadata?.business_name || props.userProfile?.creative_name || 'Creative'} Reel`;
-    }
-    return 'Operator Wire';
-  }, [normRole, props.activeBand, props.userProfile]);
+  const [internalComposerModalOpen, setInternalComposerModalOpen] = useState(false);
+  const isComposerModalOpen =
+    props.isComposerModalOpen !== undefined ? Boolean(props.isComposerModalOpen) : internalComposerModalOpen;
+  const setIsComposerModalOpen = props.setIsComposerModalOpen || setInternalComposerModalOpen;
 
   const {
     activeBand,
@@ -164,127 +177,160 @@ export const FeedViewRouter: React.FC<any> = (props) => {
 
   const [selectedForumThreadId, setSelectedForumThreadId] = useState<string | null>(null);
 
+  const handleComposerSubmit = async (e: React.FormEvent) => {
+    const offTopicRegex = /(politics|election|vote|candidate|government|president|congress|democrat|republican)/i;
+    const pendingFest =
+      typeof window !== 'undefined' ? localStorage.getItem('nexus_pending_festival_edition_id') : null;
+    const shouldClose =
+      (Boolean(String(newPostText || '').trim()) || Boolean(pendingFest)) &&
+      !offTopicRegex.test(String(newPostText || ''));
+    await handleCreatePost(e);
+    if (ENABLE_COMPACT_COMPOSER_STRIP_AB_TEST && shouldClose) {
+      setIsComposerModalOpen(false);
+    }
+  };
+
+  const composerProps = {
+    roleTheme: props.roleTheme || props.portalRole,
+    portalRole: props.portalRole,
+    activeBand: props.activeBand,
+    bands: props.bands,
+    allProfiles,
+    discoverProfiles,
+    profileFullLegalName: props.profileFullLegalName,
+    profileHandle: props.profileHandle,
+    profileAvatarUrl: props.profileAvatarUrl,
+    userProfile,
+    setUserProfile,
+    postIdentity,
+    setPostIdentity,
+    newPostText,
+    setNewPostText,
+    newPostImageUrl: mediaUrl,
+    setNewPostImageUrl: setMediaUrl,
+    selectedMediaFiles,
+    setSelectedMediaFiles,
+    handleMediaUpload,
+    newPostCategory: newPostTag,
+    setNewPostCategory: setNewPostTag,
+    handleCreatePost: handleComposerSubmit,
+    availableIdentities: userProfile?.bands || [],
+    youtubeUrl,
+    setYoutubeUrl,
+    taggedVenue,
+    setTaggedVenue,
+    setShowPollModal,
+    pollQuestion,
+    setPollQuestion,
+    pollVariant,
+    setPollVariant,
+    pollOptions,
+    setPollOptions,
+    pollIsTimed,
+    setPollIsTimed,
+    pollTimerDays,
+    setPollTimerDays,
+    pollTimerHours,
+    setPollTimerHours,
+    setShowMerchDropModal,
+    merchDropName,
+    setMerchDropName,
+    merchDropPrice,
+    setMerchDropPrice,
+    setShowSongModal,
+    attachedSong,
+    setAttachedSong,
+    taggedBands,
+    setTaggedBands,
+    tapeTitle,
+    setTapeTitle,
+    tapeBand,
+    setTapeBand,
+    tapeDate,
+    setTapeDate,
+    tapeDuration,
+    setTapeDuration,
+    tapeAudioUrl,
+    setTapeAudioUrl,
+    tapeAudioFileName,
+    isUploadingTapeAudio,
+    handleTapeAudioUpload,
+    tapeFileInputRef,
+    triggerNotification,
+    setShowEventModal: props.setShowEventModal,
+    eventTitle: props.eventTitle,
+    setEventTitle: props.setEventTitle,
+    eventType: props.eventType,
+    setEventType: props.setEventType,
+    eventDate: props.eventDate,
+    setEventDate: props.setEventDate,
+    eventTime: props.eventTime,
+    setEventTime: props.setEventTime,
+    eventLocationName: props.eventLocationName,
+    setEventLocationName: props.setEventLocationName,
+    eventAddress: props.eventAddress,
+    setEventAddress: props.setEventAddress,
+    eventIsSecret: props.eventIsSecret,
+    setEventIsSecret: props.setEventIsSecret,
+    eventLineup: props.eventLineup,
+    setEventLineup: props.setEventLineup,
+    eventFlyerUrl: props.eventFlyerUrl,
+    setEventFlyerUrl: props.setEventFlyerUrl,
+    eventDescription: props.eventDescription,
+    setEventDescription: props.setEventDescription,
+    eventCost: props.eventCost,
+    setEventCost: props.setEventCost,
+    eventTicketUrl: props.eventTicketUrl,
+    setEventTicketUrl: props.setEventTicketUrl,
+    eventData: props.eventData,
+    setEventData: props.setEventData,
+    classifiedType: props.classifiedType,
+    setClassifiedType: props.setClassifiedType,
+    classifiedTitle: props.classifiedTitle,
+    setClassifiedTitle: props.setClassifiedTitle,
+    classifiedPrice: props.classifiedPrice,
+    setClassifiedPrice: props.setClassifiedPrice,
+    classifiedCondition: props.classifiedCondition,
+    setClassifiedCondition: props.setClassifiedCondition,
+    classifiedBrand: props.classifiedBrand,
+    setClassifiedBrand: props.setClassifiedBrand,
+    classifiedYear: props.classifiedYear,
+    setClassifiedYear: props.setClassifiedYear,
+    classifiedLocation: props.classifiedLocation,
+    setClassifiedLocation: props.setClassifiedLocation,
+    classifiedDescription: props.classifiedDescription,
+    setClassifiedDescription: props.setClassifiedDescription,
+  };
+
   return (
     <>
           {activeTab === 'feed' && (
             <>
-              {/* Scene Creator Box */}
-              <div className="max-w-2xl mx-auto px-4 pt-3 pb-0 sm:px-4">
-                <CreatePostCard
-                  roleTheme={props.roleTheme || props.portalRole}
-                  portalRole={props.portalRole}
-                  activeBand={props.activeBand}
-                  bands={props.bands}
-                  allProfiles={allProfiles}
-                  discoverProfiles={discoverProfiles}
-                  profileFullLegalName={props.profileFullLegalName}
-                  profileHandle={props.profileHandle}
-                  profileAvatarUrl={props.profileAvatarUrl}
-                  userProfile={userProfile}
-                  setUserProfile={setUserProfile}
-                  postIdentity={postIdentity}
-                  setPostIdentity={setPostIdentity}
-                  newPostText={newPostText}
-                  setNewPostText={setNewPostText}
-                  newPostImageUrl={mediaUrl}
-                  setNewPostImageUrl={setMediaUrl}
-                  selectedMediaFiles={selectedMediaFiles}
-                  setSelectedMediaFiles={setSelectedMediaFiles}
-                  handleMediaUpload={handleMediaUpload}
-                  newPostCategory={newPostTag}
-                  setNewPostCategory={setNewPostTag}
-                  handleCreatePost={handleCreatePost}
-                  availableIdentities={userProfile?.bands || []}
-                  youtubeUrl={youtubeUrl}
-                  setYoutubeUrl={setYoutubeUrl}
-                  taggedVenue={taggedVenue}
-                  setTaggedVenue={setTaggedVenue}
-                  setShowPollModal={setShowPollModal}
-                  pollQuestion={pollQuestion}
-                  setPollQuestion={setPollQuestion}
-                  pollVariant={pollVariant}
-                  setPollVariant={setPollVariant}
-                  pollOptions={pollOptions}
-                  setPollOptions={setPollOptions}
-                  pollIsTimed={pollIsTimed}
-                  setPollIsTimed={setPollIsTimed}
-                  pollTimerDays={pollTimerDays}
-                  setPollTimerDays={setPollTimerDays}
-                  pollTimerHours={pollTimerHours}
-                  setPollTimerHours={setPollTimerHours}
-                  setShowMerchDropModal={setShowMerchDropModal}
-                  merchDropName={merchDropName}
-                  setMerchDropName={setMerchDropName}
-                  merchDropPrice={merchDropPrice}
-                  setMerchDropPrice={setMerchDropPrice}
-                  setShowSongModal={setShowSongModal}
-                  attachedSong={attachedSong}
-                  setAttachedSong={setAttachedSong}
-                  taggedBands={taggedBands}
-                  setTaggedBands={setTaggedBands}
-                  tapeTitle={tapeTitle}
-                  setTapeTitle={setTapeTitle}
-                  tapeBand={tapeBand}
-                  setTapeBand={setTapeBand}
-                  tapeDate={tapeDate}
-                  setTapeDate={setTapeDate}
-                  tapeDuration={tapeDuration}
-                  setTapeDuration={setTapeDuration}
-                  tapeAudioUrl={tapeAudioUrl}
-                  setTapeAudioUrl={setTapeAudioUrl}
-                  tapeAudioFileName={tapeAudioFileName}
-                  isUploadingTapeAudio={isUploadingTapeAudio}
-                  handleTapeAudioUpload={handleTapeAudioUpload}
-                  tapeFileInputRef={tapeFileInputRef}
-                  triggerNotification={triggerNotification}
-                  setShowEventModal={props.setShowEventModal}
-                  eventTitle={props.eventTitle}
-                  setEventTitle={props.setEventTitle}
-                  eventType={props.eventType}
-                  setEventType={props.setEventType}
-                  eventDate={props.eventDate}
-                  setEventDate={props.setEventDate}
-                  eventTime={props.eventTime}
-                  setEventTime={props.setEventTime}
-                  eventLocationName={props.eventLocationName}
-                  setEventLocationName={props.setEventLocationName}
-                  eventAddress={props.eventAddress}
-                  setEventAddress={props.setEventAddress}
-                  eventIsSecret={props.eventIsSecret}
-                  setEventIsSecret={props.setEventIsSecret}
-                  eventLineup={props.eventLineup}
-                  setEventLineup={props.setEventLineup}
-                  eventFlyerUrl={props.eventFlyerUrl}
-                  setEventFlyerUrl={props.setEventFlyerUrl}
-                  eventDescription={props.eventDescription}
-                  setEventDescription={props.setEventDescription}
-                  eventCost={props.eventCost}
-                  setEventCost={props.setEventCost}
-                  eventTicketUrl={props.eventTicketUrl}
-                  setEventTicketUrl={props.setEventTicketUrl}
-                  eventData={props.eventData}
-                  setEventData={props.setEventData}
-                  classifiedType={props.classifiedType}
-                  setClassifiedType={props.setClassifiedType}
-                  classifiedTitle={props.classifiedTitle}
-                  setClassifiedTitle={props.setClassifiedTitle}
-                  classifiedPrice={props.classifiedPrice}
-                  setClassifiedPrice={props.setClassifiedPrice}
-                  classifiedCondition={props.classifiedCondition}
-                  setClassifiedCondition={props.setClassifiedCondition}
-                  classifiedBrand={props.classifiedBrand}
-                  setClassifiedBrand={props.setClassifiedBrand}
-                  classifiedYear={props.classifiedYear}
-                  setClassifiedYear={props.setClassifiedYear}
-                  classifiedLocation={props.classifiedLocation}
-                  setClassifiedLocation={props.setClassifiedLocation}
-                  classifiedDescription={props.classifiedDescription}
-                  setClassifiedDescription={props.setClassifiedDescription}
-                />
-              </div>
+              {/* Scene Creator Box (A/B Test: Trigger bar rendered above Upcoming Shows; modal renders full-screen edge-to-edge CreatePostModal) */}
+              {ENABLE_COMPACT_COMPOSER_STRIP_AB_TEST ? (
+                isComposerModalOpen ? (
+                  <Suspense fallback={null}>
+                    <CreatePostModal
+                      isOpen={isComposerModalOpen}
+                      onClose={() => setIsComposerModalOpen(false)}
+                      composerProps={composerProps}
+                    />
+                  </Suspense>
+                ) : null
+              ) : (
+                <div className="max-w-2xl mx-auto px-4 pt-3 pb-0 sm:px-4">
+                  <Suspense fallback={<LazyTabFallback />}>
+                    <CreatePostCard
+                      isFullScreenModal={false}
+                      onCloseModal={() => setIsComposerModalOpen(false)}
+                      {...(composerProps as any)}
+                    />
+                  </Suspense>
+                </div>
+              )}
 
-      {/* Stories Carousel */}
-      <StoriesCarouselSection
+      {/* Stories Bar */}
+      <StoriesBar
         stories={stories}
         onAddStory={() => setShowUploadStoryModal(true)}
         onSelectStory={(story) => setActiveStory(story)}
@@ -305,56 +351,6 @@ export const FeedViewRouter: React.FC<any> = (props) => {
             String(post.content || '').startsWith('Archived ')
           ) {
             return false;
-          }
-
-          // If scoped to workspace, only keep posts authored by or associated with this workspace entity
-          if (feedStreamScope === 'workspace' && isWorkspace) {
-            const authorName = (post.author?.name || post.authorName || '').toLowerCase();
-            const authorRole = (post.authorRole || post.author?.role || '').toLowerCase();
-            const workspaceType = (post.workspace_type || post.workspaceType || post.author?.workspace_type || '').toLowerCase();
-            const personaId = post.persona_id || post.author?.personaId || '';
-
-            if (normRole === 'band' || normRole.includes('artist')) {
-              const activeBandName = (props.activeBand?.name || '').toLowerCase();
-              const activeBandId = String(props.activeBand?.id || '');
-              const matchesBand =
-                (activeBandName && (authorName === activeBandName || post.tapeData?.band?.toLowerCase() === activeBandName || post.songData?.artist?.toLowerCase() === activeBandName)) ||
-                (activeBandId && personaId.includes(activeBandId)) ||
-                workspaceType === 'band' ||
-                authorRole.includes('band') ||
-                authorRole.includes('artist');
-              if (!matchesBand) return false;
-            } else if (normRole === 'label') {
-              const labelName = (userProfile?.label_company_name || '').toLowerCase();
-              const matchesLabel =
-                (labelName && authorName === labelName) ||
-                personaId.includes('label') ||
-                workspaceType === 'label' ||
-                authorRole.includes('label');
-              if (!matchesLabel) return false;
-            } else if (normRole === 'promoter') {
-              const promoterName = (userProfile?.promoter_metadata?.brand_name || userProfile?.promoter_name || '').toLowerCase();
-              const matchesPromoter =
-                (promoterName && authorName === promoterName) ||
-                personaId.includes('promoter') ||
-                workspaceType === 'promoter' ||
-                authorRole.includes('promoter');
-              if (!matchesPromoter) return false;
-            } else if (normRole === 'creative') {
-              const creativeName = (userProfile?.creative_metadata?.business_name || userProfile?.creative_name || '').toLowerCase();
-              const matchesCreative =
-                (creativeName && authorName === creativeName) ||
-                personaId.includes('creative') ||
-                workspaceType === 'creative' ||
-                authorRole.includes('creative');
-              if (!matchesCreative) return false;
-            } else if (normRole === 'industry_pro') {
-              const matchesPro =
-                workspaceType === 'industry_pro' ||
-                authorRole.includes('pro') ||
-                personaId.includes('pro');
-              if (!matchesPro) return false;
-            }
           }
 
           if (filterHideTicketPresales) {
@@ -670,39 +666,37 @@ export const FeedViewRouter: React.FC<any> = (props) => {
 
         return (
           <div className="max-w-2xl mx-auto pt-2 pb-28 sm:pb-24 px-4">
-            {/* Stream Scope Toggle Bar */}
-            {isWorkspace && (
-              <div className="flex items-center justify-between mb-3 px-1">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFeedStreamScope('all')}
-                    className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                      feedStreamScope === 'all'
-                        ? 'bg-zinc-800 text-white border-zinc-600 shadow-sm'
-                        : 'bg-[#0d0e12] text-zinc-400 border-zinc-800/80 hover:text-zinc-200'
-                    }`}
-                  >
-                    🌐 Scene Network
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFeedStreamScope('workspace')}
-                    className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
-                      feedStreamScope === 'workspace'
-                        ? `${theme.badgeBg} ${theme.badgeText} ${theme.accentBorder} shadow-sm`
-                        : 'bg-[#0d0e12] text-zinc-400 border-zinc-800/80 hover:text-zinc-200'
-                    }`}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: theme.glowHex }} />
-                    {workspaceStreamLabel}
-                  </button>
-                </div>
-                <span className="text-[9px] font-mono text-zinc-500 hidden sm:inline">
-                  {feedStreamScope === 'workspace' ? 'Workspace scoped' : 'All signals'}
-                </span>
-              </div>
-            )}
+            <WelcomeStarterCard
+              userProfile={userProfile}
+              feed={feed}
+              discoverProfiles={discoverProfiles}
+              profileAvatarUrl={profileAvatarUrl}
+              profileCoverUrl={props.profileCoverUrl}
+              profileBlurb={props.profileBlurb}
+              onFollowBandsAction={() => {
+                if (typeof document !== 'undefined') {
+                  const searchInput = document.querySelector<HTMLInputElement>(
+                    'input[placeholder*="Bands, Venues"]'
+                  );
+                  if (searchInput) {
+                    searchInput.focus();
+                    searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return;
+                  }
+                }
+                if (props.setLeftDrawerOpen && props.setDrawerCurrentView) {
+                  props.setDrawerCurrentView('following');
+                  props.setLeftDrawerOpen(true);
+                }
+              }}
+              onCustomizeProfileAction={() => {
+                if (props.setLeftDrawerOpen && props.setDrawerCurrentView) {
+                  props.setDrawerCurrentView('profile');
+                  props.setLeftDrawerOpen(true);
+                }
+              }}
+              onDropPostAction={() => setIsComposerModalOpen(true)}
+            />
 
             {/* Category Filter Bar positioned right above the feed stream */}
             <div className="max-w-2xl mx-auto px-4 pt-3 pb-1 sm:px-4 text-left">
@@ -951,126 +945,118 @@ export const FeedViewRouter: React.FC<any> = (props) => {
       )}
 
       {/* SHOP VIEW */}
-      <StorefrontView
-        activeTab={activeTab}
-        shopBrandFilter={shopBrandFilter}
-        setShopBrandFilter={setShopBrandFilter}
-        portalRole={portalRole}
-        shopSearchQuery={shopSearchQuery}
-        setShopSearchQuery={setShopSearchQuery}
-        shopCategory={shopCategory}
-        setShopCategory={setShopCategory}
-        shopItems={shopItems}
-        setShopItems={setShopItems}
-        selectedMerch={selectedMerch}
-        setSelectedMerch={setSelectedMerch}
-        selectedMerchSize={selectedMerchSize}
-        setSelectedMerchSize={setSelectedMerchSize}
-        selectedMerchQty={selectedMerchQty}
-        setSelectedMerchQty={setSelectedMerchQty}
-        isCheckoutModalOpen={isCheckoutModalOpen}
-        setIsCheckoutModalOpen={setIsCheckoutModalOpen}
-        checkoutSuccess={checkoutSuccess}
-        setCheckoutSuccess={setCheckoutSuccess}
-        userProfile={userProfile}
-        triggerNotification={triggerNotification}
-        getSupabase={getSupabase}
-        openCheckout={props.openCheckout}
-        addToCart={props.addToCart}
-        cartItems={props.cartItems}
-        setCartItems={props.setCartItems}
-        isCartOpen={props.isCartOpen}
-        setIsCartOpen={props.setIsCartOpen}
-        chats={props.chats}
-        setChats={props.setChats}
-        allProfiles={allProfiles}
-        setFeed={setFeed}
-        setLabelPosts={setLabelPosts}
-        onAddFeedPost={(p: any) => {
-          setFeed((prev: any[]) => [p, ...prev]);
-          setLabelPosts((prev: any[]) => [p, ...prev]);
-        }}
-      />
+      {activeTab === 'shop' && (
+        <Suspense fallback={<LazyTabFallback />}>
+          <StorefrontView
+            activeTab={activeTab}
+            shopBrandFilter={shopBrandFilter}
+            setShopBrandFilter={setShopBrandFilter}
+            portalRole={portalRole}
+            shopSearchQuery={shopSearchQuery}
+            setShopSearchQuery={setShopSearchQuery}
+            shopCategory={shopCategory}
+            setShopCategory={setShopCategory}
+            shopItems={shopItems}
+            setShopItems={setShopItems}
+            selectedMerch={selectedMerch}
+            setSelectedMerch={setSelectedMerch}
+            selectedMerchSize={selectedMerchSize}
+            setSelectedMerchSize={setSelectedMerchSize}
+            selectedMerchQty={selectedMerchQty}
+            setSelectedMerchQty={setSelectedMerchQty}
+            isCheckoutModalOpen={isCheckoutModalOpen}
+            setIsCheckoutModalOpen={setIsCheckoutModalOpen}
+            checkoutSuccess={checkoutSuccess}
+            setCheckoutSuccess={setCheckoutSuccess}
+            userProfile={userProfile}
+            triggerNotification={triggerNotification}
+            getSupabase={getSupabase}
+            openCheckout={props.openCheckout}
+            addToCart={props.addToCart}
+            cartItems={props.cartItems}
+            setCartItems={props.setCartItems}
+            isCartOpen={props.isCartOpen}
+            setIsCartOpen={props.setIsCartOpen}
+            chats={props.chats}
+            setChats={props.setChats}
+            allProfiles={allProfiles}
+            setFeed={setFeed}
+            setLabelPosts={setLabelPosts}
+            onAddFeedPost={(p: any) => {
+              setFeed((prev: any[]) => [p, ...prev]);
+              setLabelPosts((prev: any[]) => [p, ...prev]);
+            }}
+          />
+        </Suspense>
+      )}
 
       {/* FORUM VIEW */}
       {activeTab === 'forum' && (
-        <ForumView
-          userProfile={userProfile}
-          profileHandle={props.profileHandle}
-          triggerNotification={triggerNotification}
-          profileAvatarUrl={profileAvatarUrl}
-          discoverProfiles={discoverProfiles}
-          allProfiles={allProfiles}
-          initialThreadId={selectedForumThreadId}
-          onClearInitialThread={() => setSelectedForumThreadId(null)}
-        />
+        <Suspense fallback={<LazyTabFallback />}>
+          <ForumView
+            userProfile={userProfile}
+            profileHandle={props.profileHandle}
+            triggerNotification={triggerNotification}
+            profileAvatarUrl={profileAvatarUrl}
+            discoverProfiles={discoverProfiles}
+            allProfiles={allProfiles}
+            initialThreadId={selectedForumThreadId}
+            onClearInitialThread={() => setSelectedForumThreadId(null)}
+          />
+        </Suspense>
       )}
-
 
       {/* MESSENGER INBOX VIEW */}
       {activeTab === 'messages' && (
         <div className="w-full flex-1 min-h-0 animate-in fade-in duration-300 flex flex-col overflow-hidden">
-          <InboxTerminal
-            onBack={() => setActiveTab('feed')}
-            userProfile={userProfile}
-            allProfiles={allProfiles}
-            discoverProfiles={discoverProfiles}
-            onSelectProfile={setSelectedUserProfile}
-          />
+          <Suspense fallback={<LazyTabFallback />}>
+            <InboxTerminal
+              onBack={() => setActiveTab('feed')}
+              userProfile={userProfile}
+              allProfiles={allProfiles}
+              discoverProfiles={discoverProfiles}
+              onSelectProfile={setSelectedUserProfile}
+            />
+          </Suspense>
         </div>
       )}
 
       {/* MEDIA GALLERY / PHOTO PIT VIEW */}
       {(activeTab === 'gallery' || activeTab === 'photopit') && (
-        <PhotoPitView
-          userProfile={userProfile}
-          setUserProfile={setUserProfile}
-          feed={feed}
-          setFeed={setFeed}
-          triggerNotification={triggerNotification}
-          profileFullLegalName={profileFullLegalName}
-          profileAvatarUrl={profileAvatarUrl}
-          portalRole={portalRole}
-          syncPostToSupabase={syncPostToSupabase}
-          uploadBase64ToStorage={uploadBase64ToStorage}
-          compressImageInSocialFeed={compressImageInSocialFeed}
-          triggerPictureViewer={triggerPictureViewer}
-          setActiveTab={setActiveTab}
-        />
+        <Suspense fallback={<LazyTabFallback />}>
+          <PhotoPitView
+            userProfile={userProfile}
+            setUserProfile={setUserProfile}
+            feed={feed}
+            setFeed={setFeed}
+            triggerNotification={triggerNotification}
+            profileFullLegalName={profileFullLegalName}
+            profileAvatarUrl={profileAvatarUrl}
+            portalRole={portalRole}
+            syncPostToSupabase={syncPostToSupabase}
+            uploadBase64ToStorage={uploadBase64ToStorage}
+            compressImageInSocialFeed={compressImageInSocialFeed}
+            triggerPictureViewer={triggerPictureViewer}
+            setActiveTab={setActiveTab}
+          />
+        </Suspense>
       )}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
       {/* REELS / CLIPS VIEW */}
       {(activeTab === 'reels' || activeTab === 'clips') && (
-        <ClipsView
-          userProfile={userProfile}
-          clips={clips}
-          setClips={setClips}
-          triggerNotification={triggerNotification}
-          setActiveTab={setActiveTab}
-          portalRole={portalRole}
-          deleteClip={deleteClip}
-          getSupabase={getSupabase}
-          onSelectProfile={(userPayload) => setSelectedUserProfile(getProfileForUser(userPayload))}
-        />
+        <Suspense fallback={<LazyTabFallback />}>
+          <ClipsView
+            userProfile={userProfile}
+            clips={clips}
+            setClips={setClips}
+            triggerNotification={triggerNotification}
+            setActiveTab={setActiveTab}
+            portalRole={portalRole}
+            deleteClip={deleteClip}
+            getSupabase={getSupabase}
+            onSelectProfile={(userPayload) => setSelectedUserProfile(getProfileForUser(userPayload))}
+          />
+        </Suspense>
       )}
       </>
   );

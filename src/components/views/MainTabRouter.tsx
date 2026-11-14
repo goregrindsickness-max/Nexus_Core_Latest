@@ -1,33 +1,33 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { useBandState } from '../../hooks/useBandState';
 import { useInventoryState } from '../../hooks/useInventoryState';
 import { useOffersManagement } from '../../hooks/useOffersManagement';
-import InventoryView from '../portals/Band/InventoryView';
-import SalesDashboardView from '../sales/SalesDashboardView';
-import AddItemView from '../portals/Band/AddItemView';
-import ShowsView from '../portals/Band/ShowsView';
-import TourNotesView from '../portals/Band/TourNotesView';
-import SettingsView from '../SettingsView';
-import SetlistsView from '../portals/Band/SetlistsView';
-import GuestlistsView from '../portals/Band/GuestlistsView';
 import PremiumGate from '../PremiumGate';
-import ReportsView from '../portals/Band/ReportsView';
-import PromoHubView from '../portals/Band/PromoHubView';
-import PlansView from '../PlansView';
-import TermsOfServiceView from '../TermsOfServiceView';
-import CreativesHubView from '../portals/Band/CreativesHubView';
-import CreativeDashboardViewV2 from '../portals/Creative/CreativeDashboardViewV2';
-import MerchandisePrintersView from '../portals/Band/MerchandisePrintersView';
-import OnRouteEssentialsView from '../portals/Band/OnRouteEssentialsView';
 import { UniversalSocialFeed } from '../social/UniversalSocialFeed';
 import { saveInventoryItem, deleteInventoryItem } from '../../services/inventoryService';
 
-import ChecklistView from './ChecklistView';
-import HelpDeskView from './HelpDeskView';
-import FlightsView from './FlightsView';
-import BlackBookView from './BlackBookView';
-import DistroDeckView from './DistroDeckView';
-import StudioView from './StudioView';
+const InventoryView = React.lazy(() => import('../portals/Band/InventoryView'));
+const SalesDashboardView = React.lazy(() => import('../sales/SalesDashboardView'));
+const AddItemView = React.lazy(() => import('../portals/Band/AddItemView'));
+const ShowsView = React.lazy(() => import('../portals/Band/ShowsView'));
+const TourNotesView = React.lazy(() => import('../portals/Band/TourNotesView'));
+const SettingsView = React.lazy(() => import('../SettingsView'));
+const SetlistsView = React.lazy(() => import('../portals/Band/SetlistsView'));
+const GuestlistsView = React.lazy(() => import('../portals/Band/GuestlistsView'));
+const ReportsView = React.lazy(() => import('../portals/Band/ReportsView'));
+const PromoHubView = React.lazy(() => import('../portals/Band/PromoHubView'));
+const PlansView = React.lazy(() => import('../PlansView'));
+const TermsOfServiceView = React.lazy(() => import('../TermsOfServiceView'));
+const CreativesHubView = React.lazy(() => import('../portals/Band/CreativesHubView'));
+const CreativeDashboardViewV2 = React.lazy(() => import('../portals/Creative/CreativeDashboardViewV2'));
+const MerchandisePrintersView = React.lazy(() => import('../portals/Band/MerchandisePrintersView'));
+const OnRouteEssentialsView = React.lazy(() => import('../portals/Band/OnRouteEssentialsView'));
+const ChecklistView = React.lazy(() => import('./ChecklistView'));
+const HelpDeskView = React.lazy(() => import('./HelpDeskView'));
+const FlightsView = React.lazy(() => import('./FlightsView'));
+const BlackBookView = React.lazy(() => import('./BlackBookView'));
+const DistroDeckView = React.lazy(() => import('./DistroDeckView'));
+const StudioView = React.lazy(() => import('./StudioView'));
 
 import {
   Show,
@@ -278,8 +278,9 @@ export const MainTabRouter: React.FC<MainTabRouterProps> = (props) => {
     distroDeckSubTab,
   } = props;
 
-  switch (activeTab) {
-    case 'home':
+  const renderActiveTab = () => {
+    switch (activeTab) {
+      case 'home':
       return (
         <div
           className="flex-grow overflow-y-auto pb-4 scrollbar-thin"
@@ -767,6 +768,7 @@ export const MainTabRouter: React.FC<MainTabRouterProps> = (props) => {
             triggerNotification={triggerNotification}
             addLog={addLog}
             activeBandId={activeBandId}
+            setActiveBandId={props.setActiveBandId}
             onNavigateToTab={props.onNavigateToTab || ((tab: string, subNav?: string) => {
               if (subNav && props.setDashboardV2ActiveNav) {
                 props.setDashboardV2ActiveNav(subNav as any);
@@ -788,9 +790,12 @@ export const MainTabRouter: React.FC<MainTabRouterProps> = (props) => {
         </div>
       );
 
-    default:
-      return null;
-  }
+      default:
+        return null;
+    }
+  };
+
+  return <Suspense fallback={null}>{renderActiveTab()}</Suspense>;
 };
 
 export default MainTabRouter;

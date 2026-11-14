@@ -1,7 +1,7 @@
 import { normalizeRegisteredWorkspaces } from '../types';
 import { executeWithSchemaResilience, registerSchemaSanitizers } from './schemaResilienceService';
 import { isMiguelNameOrProfile } from '../components/social/utils/profileUtils';
-import { isCommunityBandRecord } from '../lib/seedBandsData';
+import { isCommunityBandRecord } from '../lib/communityBands';
 import { isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER } from '../utils/bandProfileUtils';
 import { cacheProfileImage, cacheProfileMetadata, hydrateProfileWithCache } from './profileImageCacheService';
 

@@ -1,6 +1,6 @@
 import { getSupabase } from './clientService';
-import { INITIAL_COMMUNITY_BANDS } from '../lib/seedBandsData';
 import { isDeletedOrZombieBand, pickBestBandImage, isValidBandImageUrl } from '../lib/communityBands';
+import { createMonogramPlaceholderSvg } from '../utils/imageFallbacks';
 
 export interface BandProfileOption {
   id: string;
@@ -19,14 +19,40 @@ export interface BandProfileOption {
   displayText: string;
 }
 
-// In-memory cache
+export const BAND_SEARCH_SELECT_COLUMNS =
+  'id, name, band_name, category, avatar_url, logo_url, cover_url, banner_url, city, state, state_province, country, micro_genres, custom_slug, verification_status, is_verified, followers_count, bio';
+
+const PROFILE_BAND_SELECT_COLUMNS =
+  'id, full_name, band_name, account_type, avatar_url, band_logo, city, state, country, bio';
+
+// Purge legacy bulk band catalog key from localStorage
+if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+  try {
+    localStorage.removeItem('nexus_bands_list');
+  } catch (_) {}
+}
+
 let cachedBands: BandProfileOption[] = [];
 let lastFetchTime = 0;
-const CACHE_TTL_MS = 10000; // 10 seconds
+const CACHE_TTL_MS = 10000;
 
-export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<BandProfileOption[]> {
+export async function getAllRealBandProfiles(
+  extraBands: any[] = [],
+  options: { query?: string; page?: number; pageSize?: number } = {}
+): Promise<BandProfileOption[]> {
+  const { query = '', page = 0, pageSize = 20 } = options;
+  const cleanQuery = query.trim().replace(/[%_]/g, '');
+  const from = Math.max(0, page * pageSize);
+  const to = from + pageSize - 1;
   const now = Date.now();
-  if (cachedBands.length > 0 && now - lastFetchTime < CACHE_TTL_MS && extraBands.length === 0) {
+
+  if (
+    !cleanQuery &&
+    page === 0 &&
+    cachedBands.length > 0 &&
+    now - lastFetchTime < CACHE_TTL_MS &&
+    extraBands.length === 0
+  ) {
     return cachedBands;
   }
 
@@ -46,18 +72,35 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
 
     const genre = Array.isArray(b.micro_genres)
       ? b.micro_genres.slice(0, 2).join(' / ')
-      : b.micro_genres || b.genre || (Array.isArray(b.subgenres) ? b.subgenres.slice(0, 2).join(' / ') : b.sub_genres) || 'Metal / Hardcore';
+      : b.micro_genres ||
+        b.genre ||
+        (Array.isArray(b.subgenres) ? b.subgenres.slice(0, 2).join(' / ') : b.sub_genres) ||
+        'Metal / Hardcore';
 
     const city = b.city || b.homebase_city || '';
     const state = b.state_province || b.state || '';
     const locParts = [city, state, b.country].filter(Boolean);
-    const location = locParts.length > 0 ? locParts.join(', ') : (b.location || '');
+    const location = locParts.length > 0 ? locParts.join(', ') : b.location || '';
 
-    const discCover = b.discography?.[0]?.cover_url || b.discography?.[0]?.cover_image || b.discography?.[0]?.image_url;
+    const discCover =
+      b.discography?.[0]?.cover_url ||
+      b.discography?.[0]?.cover_image ||
+      b.discography?.[0]?.image_url;
 
-    let avatar = pickBestBandImage(b.logo_url, b.avatar_url, b.avatar, b.logo, b.profile_image, b.image, discCover);
+    let avatar = pickBestBandImage(
+      b.logo_url,
+      b.avatar_url,
+      b.avatar,
+      b.logo,
+      b.profile_image,
+      b.image,
+      discCover
+    );
     if (!avatar && (b.cover_url || b.banner_url)) {
       avatar = pickBestBandImage(b.cover_url, b.banner_url) || '';
+    }
+    if (!avatar) {
+      avatar = createMonogramPlaceholderSvg(name, 'band');
     }
 
     const banner = pickBestBandImage(b.banner_url, b.cover_url) || b.banner_url || b.cover_url || '';
@@ -78,10 +121,9 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
       isVerified,
       followersCount,
       source,
-      displayText: `${name}${location ? ` • ${location}` : ''}${genre ? ` (${genre})` : ''}`
+      displayText: `${name}${location ? ` • ${location}` : ''}${genre ? ` (${genre})` : ''}`,
     };
 
-    // If already exists, prefer database source with real verified logo
     if (bandMap.has(lowerName)) {
       const existing = bandMap.get(lowerName)!;
       if (source === 'database') {
@@ -89,7 +131,7 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
           ...existing,
           ...opt,
           avatar: pickBestBandImage(avatar, existing.avatar) || avatar || existing.avatar,
-          source: 'database'
+          source: 'database',
         });
       } else if ((!existing.avatar || !isValidBandImageUrl(existing.avatar)) && avatar) {
         bandMap.set(lowerName, { ...existing, avatar });
@@ -99,16 +141,23 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
     }
   };
 
-  // 1. Live Supabase database 'bands' table (Highest priority authoritative band entities)
+  // 1. Live Supabase database 'bands' table with explicit column selection, .order(), .range()
   try {
     const client = getSupabase();
     if (client) {
-      const { data: dbBands, error: bErr } = await client
+      let qb = client
         .from('bands')
-        .select('*')
+        .select(BAND_SEARCH_SELECT_COLUMNS)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .range(from, to);
 
+      if (cleanQuery.length > 0) {
+        qb = qb.or(
+          `band_name.ilike.%${cleanQuery}%,name.ilike.%${cleanQuery}%,city.ilike.%${cleanQuery}%,state_province.ilike.%${cleanQuery}%`
+        );
+      }
+
+      const { data: dbBands, error: bErr } = await qb;
       if (dbBands && !bErr && Array.isArray(dbBands)) {
         dbBands.forEach((b) => addBandToMap(b, 'database'));
       }
@@ -117,46 +166,36 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
     console.warn('[bandProfileSearchService] Supabase bands query notice:', err);
   }
 
-  // 2. Load from INITIAL_COMMUNITY_BANDS
-  if (Array.isArray(INITIAL_COMMUNITY_BANDS)) {
-    INITIAL_COMMUNITY_BANDS.forEach((b) => addBandToMap(b, 'community'));
-  }
-
-  // 3. Load from localStorage nexus_bands_list
-  try {
-    const local = localStorage.getItem('nexus_bands_list');
-    if (local) {
-      const parsed = JSON.parse(local);
-      if (Array.isArray(parsed)) {
-        parsed.forEach((b) => addBandToMap(b, 'database'));
-      }
-    }
-  } catch (_) {}
-
-  // 4. Load extraBands passed from props/context
+  // 2. Load extraBands passed from props/context
   if (Array.isArray(extraBands)) {
     extraBands.forEach((b) => addBandToMap(b, 'profile'));
   }
 
-  // 5. Query dedicated band accounts from profiles table (ONLY if workspace/account_type is strictly band)
+  // 3. Query dedicated band accounts from profiles table with explicit columns + .range()
   try {
     const client = getSupabase();
     if (client) {
-      const { data: pBands, error: pErr } = await client
+      let pQb = client
         .from('profiles')
-        .select('*')
+        .select(PROFILE_BAND_SELECT_COLUMNS)
         .eq('account_type', 'band')
-        .limit(50);
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
+      if (cleanQuery.length > 0) {
+        pQb = pQb.or(`band_name.ilike.%${cleanQuery}%,full_name.ilike.%${cleanQuery}%,city.ilike.%${cleanQuery}%`);
+      }
+
+      const { data: pBands, error: pErr } = await pQb;
       if (pBands && !pErr && Array.isArray(pBands)) {
-        pBands.forEach((p) => {
+        pBands.forEach((p: any) => {
           const bName = p.band_name || p.bandName;
           if (bName && !bandMap.has(bName.toLowerCase())) {
             addBandToMap(
               {
                 ...p,
                 band_name: bName,
-                avatar_url: p.band_logo || p.avatar_url || p.avatar || p.logo_url
+                avatar_url: p.band_logo || p.avatar_url || p.avatar || p.logo_url,
               },
               'profile'
             );
@@ -171,32 +210,40 @@ export async function getAllRealBandProfiles(extraBands: any[] = []): Promise<Ba
   const results = Array.from(bandMap.values()).sort((a, b) =>
     (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true })
   );
-  cachedBands = results;
-  lastFetchTime = now;
+
+  if (!cleanQuery && page === 0) {
+    cachedBands = results;
+    lastFetchTime = now;
+  }
 
   return results;
 }
 
 export async function searchBandProfiles(
   query: string,
-  extraBands: any[] = []
+  extraBands: any[] = [],
+  page = 0,
+  pageSize = 20
 ): Promise<BandProfileOption[]> {
-  const allBands = await getAllRealBandProfiles(extraBands);
+  const cleanQ = (query || '').trim();
+  const matchingBands = await getAllRealBandProfiles(extraBands, {
+    query: cleanQ,
+    page,
+    pageSize,
+  });
 
-  if (!query || query.trim().length === 0) {
-    // Return top 8 prominent bands
-    return allBands.slice(0, 8);
+  if (!cleanQ) {
+    return matchingBands.slice(0, 8);
   }
 
-  const cleanQ = query.toLowerCase().trim();
-
-  return allBands
+  const lowerQ = cleanQ.toLowerCase();
+  return matchingBands
     .filter((b) => {
-      const nameMatch = b.name.toLowerCase().includes(cleanQ);
-      const slugMatch = b.slug && b.slug.toLowerCase().includes(cleanQ);
-      const genreMatch = b.genre && b.genre.toLowerCase().includes(cleanQ);
-      const locMatch = b.location && b.location.toLowerCase().includes(cleanQ);
+      const nameMatch = b.name.toLowerCase().includes(lowerQ);
+      const slugMatch = b.slug && b.slug.toLowerCase().includes(lowerQ);
+      const genreMatch = b.genre && b.genre.toLowerCase().includes(lowerQ);
+      const locMatch = b.location && b.location.toLowerCase().includes(lowerQ);
       return nameMatch || slugMatch || genreMatch || locMatch;
     })
-    .slice(0, 10);
+    .slice(0, pageSize);
 }

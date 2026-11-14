@@ -1,14 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getSupabase } from '../../../supabase';
-import { mockStories } from '../../../data/socialFeedMockData';
 import {
   StoryItem,
   normalizeStory,
+  isGenuineActiveStory,
   fetchAuthoritativeStories,
   syncLocalStoriesToCloud,
 } from '../utils/storiesPersistenceService';
-
-const DEFAULT_MOCK_STORIES = mockStories.map((s: any, idx: number) => normalizeStory(s, idx));
 
 export function useSocialStoriesState() {
   const [stories, setStories] = useState<StoryItem[]>(() => {
@@ -17,19 +15,22 @@ export function useSocialStoriesState() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((s: any, idx: number) => normalizeStory(s, idx));
+          return parsed
+            .filter(isGenuineActiveStory)
+            .map((s: any, idx: number) => normalizeStory(s, idx));
         }
       }
     } catch (e) {
       console.warn("Failed to load stories from localStorage:", e);
     }
-    return DEFAULT_MOCK_STORIES;
+    return [];
   });
 
-  // Keep localStorage updated with latest stories
+  // Keep localStorage updated with latest genuine active stories
   useEffect(() => {
     try {
-      localStorage.setItem('nexus_pit_stories_v2', JSON.stringify(stories));
+      const activeOnly = stories.filter(isGenuineActiveStory);
+      localStorage.setItem('nexus_pit_stories_v2', JSON.stringify(activeOnly));
     } catch (e) {
       console.warn("Failed to save stories to localStorage:", e);
     }
@@ -41,36 +42,35 @@ export function useSocialStoriesState() {
       // 1. First sync any phone-saved local stories up to the cloud
       await syncLocalStoriesToCloud();
 
-      // 2. Fetch all authoritative cloud stories (cached for 10 min unless force=true)
+      // 2. Fetch all genuine, non-expired (24h) authoritative cloud stories
       const cloudStories = await fetchAuthoritativeStories(force);
 
-      if (cloudStories && cloudStories.length > 0) {
-        setStories((prev) => {
-          const cloudIds = new Set(cloudStories.map((s) => s.id));
-          const localOnly = prev.filter(
-            (s) =>
-              !cloudIds.has(s.id) &&
-              (s.id.startsWith('story_') || s.id.startsWith('s_'))
-          );
-          const combined = [...localOnly, ...cloudStories];
-          return combined.map((s, idx) => normalizeStory(s, idx));
-        });
-      }
+      setStories((prev) => {
+        const cloudIds = new Set(cloudStories.map((s) => s.id));
+        const localOnly = prev.filter(
+          (s) =>
+            !cloudIds.has(s.id) &&
+            isGenuineActiveStory(s) &&
+            s.id.startsWith('story_')
+        );
+        const combined = [...localOnly, ...cloudStories].filter(isGenuineActiveStory);
+        return combined.map((s, idx) => normalizeStory(s, idx));
+      });
     } catch (err) {
       console.warn('[useSocialStoriesState] Failed to refresh cloud stories:', err);
     }
   }, []);
 
   useEffect(() => {
-    refreshStories();
+    refreshStories(true);
 
     // Listen for local story publishing events
     const handleStoryPublished = (event: any) => {
       const newStory = event.detail;
-      if (newStory) {
+      if (newStory && isGenuineActiveStory(newStory)) {
         setStories((prev) => [normalizeStory(newStory), ...prev.filter((s) => s.id !== newStory.id)]);
       }
-      refreshStories();
+      refreshStories(true);
     };
 
     window.addEventListener('nexus_story_published', handleStoryPublished);

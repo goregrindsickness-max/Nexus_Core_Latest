@@ -1,5 +1,12 @@
 import { SocialThemeShell } from "./SocialThemeShell";
 import { FeedViewRouter } from "./FeedViewRouter";
+import {
+  ProfileCommandBar,
+  PostComposerTrigger,
+  ENABLE_COMPACT_COMPOSER_STRIP_AB_TEST,
+  UpcomingShowsCarousel,
+} from "../feed";
+import { resolveActivePersona } from "./utils/personaResolution";
 import { useTapePlayer } from "./hooks/useTapePlayer";
 import { useSocialFollowsAndProfiles } from "./hooks/useSocialFollowsAndProfiles";
 import { useSocialMarketplaceState } from "./hooks/useSocialMarketplaceState";
@@ -51,28 +58,10 @@ import { resolveActiveUserId, syncPostToSupabase, generateUUID } from './utils/p
 import { mergePostWithReactions } from './utils/reactionStore';
 import { useSocialProfileState } from './hooks/useSocialProfileState';
 import { FeedTopHeader } from './navigation/FeedTopHeader';
-import { FeedSideDrawers } from './navigation/FeedSideDrawers';
-import { SocialModalsOverlay } from './modals/SocialModalsOverlay';
-import { CartDrawer } from './drawers/CartDrawer';
-import { AlbumDetailsModal } from './modals/AlbumDetailsModal';
-import { AttachSongModal } from './modals/AttachSongModal';
-import { PhotoLightboxModal } from './modals/PhotoLightboxModal';
-import { ClipsOverlaysModal } from './modals/ClipsOverlaysModal';
-import { TicketEscrowModal } from './modals/TicketEscrowModal';
-import { FanPitWallDrawer } from './drawers/FanPitWallDrawer';
-import { StripeCartCheckoutModal } from './modals/StripeCartCheckoutModal';
-import { LeftProfileDrawer } from './drawers/LeftProfileDrawer';
-import { RightNotificationsDrawer } from './drawers/RightNotificationsDrawer';
-import { UploadClipModal } from './modals/UploadClipModal';
-import { UploadStoryModal } from './modals/UploadStoryModal';
-import { StoryViewerModal } from './modals/StoryViewerModal';
-import { EventCompanionModal } from './modals/EventCompanionModal';
 import { formatTimeAgo, isPastShowDate } from '../../utils/socialFeedUtils';
 import { isValidStorageOrImageUrl } from '../../services/storageService';
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { InteractiveCropperModal } from '../InteractiveCropperModal';
-import { ProfileMarketplaceTab } from '../profile/ProfileMarketplaceTab';
 import { MapPin, Calendar, Clock, ArrowRight, ArrowLeft, Share2, Flame, Zap, Check,
   CheckCircle, X, Tag, ShoppingCart, Ticket, Briefcase, Volume2, VolumeX, Shield, MessageSquare, MessageCircle, Repeat, TrendingUp, Image, Home, Bell, Settings, Search, User, CreditCard, Crown, Library, Users, PlayCircle, Youtube, Wifi, WifiOff, Database, AlertTriangle, Lock, Unlock, Trash2, Plus, Minus, RefreshCw, ArrowUp, ArrowDown, Edit2, FileUp, Folder, Heart, Send, Award, UserPlus, UserCheck,
    Music, Activity, Disc, Play, Pause, Square, SkipBack, SkipForward, Link as LinkIcon, Network, Pin as PinIcon, Image as ImageIcon, Upload, Compass, MoreVertical, LayoutGrid, ArrowUpRight, Menu, LogOut, ChevronRight, ChevronDown, ChevronUp, Filter, ShoppingBag, PauseCircle, FastForward, Rewind, Maximize2, Star, Globe, Fingerprint, Box, Hash, Mic, Settings2, SlidersHorizontal, Info, Phone, FileText, BellOff, Users as UsersGroup, Archive, Download, EyeOff, ShieldAlert, UserMinus, Sparkles, PlaySquare, Radio, Video, Camera, Smile, ThumbsUp, CornerUpLeft , Palette, DollarSign, MinusCircle, Slash, Eye, Shirt} from 'lucide-react';
@@ -86,36 +75,25 @@ import { communityBandManager, pickBestBandImage, isGorgasmBand, GORGASM_OFFICIA
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME, getScopedFollowsMap, isEntityTargetObject } from '../../utils/followSyncService';
 import { hasRegisteredWorkspace } from '../../types';
 import { tourPackageManager } from '../../lib/tourPackageManager';
-import Barcode from 'react-barcode';
 import { MASTER_GENRES } from '../../constants/genres';
-import { InboxPreferences } from '../messaging/InboxPreferences';
 import MarqueeText from '../MarqueeText';
 import { getProfileGlowInfo } from '../../utils/profileGlow';
 import { triggerPictureViewer } from '../../utils/avatarPopupEvents';
-import { TimelineTab } from '../profile/TimelineTab';
-import { SocialSubNav } from './SocialSubNav';
 import { formatTimeTo12Hour } from '../../lib/timeUtils';
-import { SocialMapOverlay } from './SocialMapOverlay';
-import { SubViewControlPanels } from './SubViewControlPanels';
-import PromoterArchivesModal from './modals/PromoterArchivesModal';
-import CreateCommunityShowModal from './modals/CreateCommunityShowModal';
-import { InlineShareModal } from './modals/InlineShareModal';
-import { InlineReactionsModal } from './modals/InlineReactionsModal';
-import { PollCreationModal } from './modals/PollCreationModal';
-import { SongShareModal } from './modals/SongShareModal';
-import { AddItemModal } from './modals/AddItemModal';
-import { PollCreationModal as PollCreateModal } from './modals/PollCreationModal';
-import { MerchDropModal } from './modals/MerchDropModal';
-import { ReportProfileModal } from './modals/ReportProfileModal';
-import { SubmitEpkModal, ViewEpksModal, EpkModals } from './modals/EpkModals';
-import { AdminPinModal } from './modals/AdminPinModal';
-import { AdminConsoleModal } from './modals/AdminConsoleModal';
 import { formatLocationDisplay } from '../../constants/location';
-import { PublicProfileModal } from './modals/PublicProfileModal';
-import { DirectMessageDrawer } from './modals/DirectMessageDrawer';
-import { ProfileHubCard } from './ProfileHubCard';
-import { FollowersModal } from './follows';
 import { PROFILE_REGISTRY, isMiguelNameOrProfile } from './utils/profileUtils';
+
+const FeedSideDrawers = React.lazy(() =>
+  import('./navigation/FeedSideDrawers').then((m) => ({ default: m.FeedSideDrawers }))
+);
+const SocialModalsOverlay = React.lazy(() =>
+  import('./modals/SocialModalsOverlay').then((m) => ({ default: m.SocialModalsOverlay }))
+);
+const StoryViewerModal = React.lazy(() =>
+  import('./modals/StoryViewerModal').then((m) => ({ default: m.StoryViewerModal }))
+);
+const PromoterArchivesModal = React.lazy(() => import('./modals/PromoterArchivesModal'));
+const CreateCommunityShowModal = React.lazy(() => import('./modals/CreateCommunityShowModal'));
 import { DEFAULT_LABEL_POSTS, DEFAULT_INBOUND_INQUIRIES } from '../../data/mockSocialData';
 import { handleMarkAllAsRead } from '../../lib/chat';
 import { useNexusMessaging } from '../messaging/useNexusMessaging';
@@ -125,7 +103,6 @@ import {
   type FeedItem,
   mockLiveTonight,
   bandSetlists,
-  mockStories,
   mockInAppSongs,
   mockFeed,
   ROSTER_CATALOGS,
@@ -155,6 +132,7 @@ export function UniversalSocialFeed({
   setUserProfile,
   activeBand,
   activeBandId,
+  setActiveBandId,
   onLogout, 
   onUpgradeToPro, 
   triggerNotification, 
@@ -2531,6 +2509,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
   // Shop merchandise state & categories
   const [selectedShopItem, setSelectedShopItem] = useState<any | null>(null);
   const [activeStory, setActiveStory] = useState<any | null>(null);
+  const [isComposerModalOpen, setIsComposerModalOpen] = useState<boolean>(false);
   const [shopPage, setShopPage] = useState<number>(1);
 
   useEffect(() => {
@@ -5101,24 +5080,38 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
       try {
         const queryTerm = `%${q}%`;
 
-        // 1. Query profiles table across valid schema columns
+        // 1. Query profiles table using explicit card column selection, .order(), and .range()
         const { data: profData } = await supabaseClient
           .from('profiles')
-          .select('*')
+          .select(
+            'id, full_name, username, console_handle, email, account_type, role, band_name, business_name, agency_name, label_name, avatar_url, band_logo, creative_avatar, promoter_logo, label_avatar, genre, city, state, location, bio'
+          )
           .or(`full_name.ilike.${queryTerm},console_handle.ilike.${queryTerm},email.ilike.${queryTerm}`)
-          .limit(20);
+          .order('created_at', { ascending: false })
+          .range(0, 19);
 
-        // 2. Query registered bands table across valid schema columns
+        // 2. Query registered bands table using explicit card column selection, .order(), and .range()
         const { data: bandsData } = await supabaseClient
           .from('bands')
-          .select('*')
+          .select(
+            'id, name, band_name, category, avatar_url, logo_url, city, state, state_province, country, micro_genres, custom_slug, bio'
+          )
           .or(`band_name.ilike.${queryTerm},city.ilike.${queryTerm},state_province.ilike.${queryTerm},country.ilike.${queryTerm}`)
-          .limit(20);
+          .order('created_at', { ascending: false })
+          .range(0, 19);
+
+        // 3. Query venues table using explicit card column selection, .order(), and .range()
+        const { data: venuesData } = await supabaseClient
+          .from('venues')
+          .select('id, name, category, avatar_url, city, state')
+          .or(`name.ilike.${queryTerm},city.ilike.${queryTerm},state.ilike.${queryTerm}`)
+          .order('name', { ascending: true })
+          .range(0, 19);
 
         const mappedProfiles = (profData || []).map(p => ({
           ...p,
           name: p.full_name || p.username || p.band_name || p.business_name || p.agency_name || p.label_name || 'Unknown',
-          avatar: p.avatar_url || p.band_logo || p.creative_avatar || p.promoter_logo || p.label_avatar,
+          avatar: p.avatar_url || p.band_logo || p.creative_avatar || p.promoter_logo || p.label_avatar || null,
           category: (p.account_type === 'industry_pro' || p.account_type === 'industry pro') ? 'people' :
                     (p.role?.includes('band') || p.role?.includes('artist') || p.band_name) ? 'bands' : 
                     (p.role?.includes('label') || p.label_name) ? 'labels' : 
@@ -5126,7 +5119,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
                     (p.role?.includes('creative') || p.business_name) ? 'creatives' : 'people'
         }));
 
-        const mappedBands = (bandsData || []).map(b => {
+        const mappedBands = (bandsData || []).map((b: any) => {
           const loc = formatBandLocation(b);
           const cleanMicros = sanitizeMicroGenres(b.micro_genres || b.sub_genres || b.genre_tags || b.genres || b.genre);
           const bTitle = b.band_name || b.name || 'Registered Band';
@@ -5147,9 +5140,9 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
             band_name: bTitle,
             full_name: bTitle,
             username: (bTitle || '').toLowerCase().replace(/\s+/g, '_'),
-            avatar: bestBandAvatar || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150',
-            avatar_url: bestBandAvatar || b.logo_url || b.avatar_url,
-            logo_url: bestBandAvatar || b.logo_url || b.avatar_url,
+            avatar: bestBandAvatar || null,
+            avatar_url: bestBandAvatar || b.logo_url || b.avatar_url || null,
+            logo_url: bestBandAvatar || b.logo_url || b.avatar_url || null,
             role: 'band',
             portalRole: 'Band / Artist',
             type: 'band',
@@ -5166,11 +5159,24 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
           };
         });
 
-        const combined = [...mappedProfiles, ...mappedBands];
+        const mappedVenues = (venuesData || []).map((v: any) => ({
+          ...v,
+          id: v.id || `venue_${v.name}`,
+          name: v.name || 'Venue',
+          avatar: v.avatar_url || null,
+          avatar_url: v.avatar_url || null,
+          role: 'venue',
+          portalRole: 'Promoter / Venue',
+          type: 'venue',
+          category: 'venues',
+          location: [v.city, v.state].filter(Boolean).join(', '),
+          homebase: [v.city, v.state].filter(Boolean).join(', '),
+        }));
+
+        const combined = [...mappedProfiles, ...mappedBands, ...mappedVenues];
         const seen = new Set();
         const deduped = combined.filter(item => {
           const nameLower = (item.name || '').toLowerCase();
-          // If searching for Miguel, exclude "Vortex Graphics" creative/band profile.
           const isSearchingForMiguel = q.toLowerCase().includes('miguel') || q.toLowerCase().includes('goregrinder') || q.toLowerCase().includes('goregrindsickness');
           const isVortexProfile = nameLower.includes('vortex graphics') || nameLower.includes('vortex graphic');
           if (isSearchingForMiguel && isVortexProfile) {
@@ -5573,6 +5579,9 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         userProfile={userProfile}
         setUserProfile={setUserProfile}
         activeBand={resolvedActiveBand || activeBand}
+        bands={effectiveBands}
+        activeBandId={activeBandId}
+        setActiveBandId={setActiveBandId}
         getRoleBorderAndGlowClass={getRoleBorderAndGlowClass}
         unreadNotifsCount={unreadNotifsCount}
         setRightDrawerOpen={setRightDrawerOpen}
@@ -5597,8 +5606,8 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         setActiveFeedCategoryFilter={setActiveFeedCategoryFilter}
       />
 
-        {/* Profile Hub Card */}
-        <ProfileHubCard
+        {/* Profile Hub Card (Profile Command Bar) */}
+        <ProfileCommandBar
           activeTab={activeTab}
           setLeftDrawerOpen={setLeftDrawerOpen}
           setDrawerCurrentView={setDrawerCurrentView}
@@ -5618,9 +5627,36 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
           userProfile={userProfile}
         />
 
+        {/* Post Composer Trigger Bar (Placed cleanly beneath Profile Command Bar & above Upcoming Shows) */}
+        {ENABLE_COMPACT_COMPOSER_STRIP_AB_TEST && activeTab === 'feed' && (() => {
+          const triggerPersona = resolveActivePersona({
+            postIdentity,
+            portalRole,
+            userProfile,
+            activeBand: resolvedActiveBand || activeBand,
+            bands,
+            profileFullLegalName,
+            profileHandle,
+            profileAvatarUrl,
+          });
+          const triggerPostingLabel =
+            triggerPersona.type === 'industry_pro' || triggerPersona.type === 'fan'
+              ? (String(profileHandle || userProfile?.console_handle || '').replace(/^@/, '').trim() || triggerPersona.name)
+              : triggerPersona.name;
+
+          return (
+            <PostComposerTrigger
+              avatarUrl={triggerPersona.avatarUrl}
+              personaName={triggerPersona.name}
+              postingLabel={triggerPostingLabel}
+              onOpenComposer={() => setIsComposerModalOpen(true)}
+            />
+          );
+        })()}
+
         {/* Sub-view control panels & Live Tonight Header inside unified sticky header */}
         {activeTab !== 'forum' && activeTab !== 'messages' && activeTab !== 'reels' && activeTab !== 'shop' && activeTab !== 'gallery' && (activeTab as string) !== 'photopit' && (
-          <SubViewControlPanels
+          <UpcomingShowsCarousel
             isLiveTonightOpen={isLiveTonightOpen}
             setIsLiveTonightOpen={setIsLiveTonightOpen}
             liveEvents={liveEvents}
@@ -5704,6 +5740,12 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         </div>
       ) : (
 <FeedViewRouter
+  isComposerModalOpen={isComposerModalOpen}
+  setIsComposerModalOpen={setIsComposerModalOpen}
+  setLeftDrawerOpen={setLeftDrawerOpen}
+  setDrawerCurrentView={setDrawerCurrentView}
+  profileCoverUrl={profileCoverUrl}
+  profileBlurb={profileBlurb}
   activeTab={activeTab}
   setActiveTab={setActiveTab}
   userProfile={userProfile}
@@ -5879,6 +5921,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
       )}
 
       {/* Side Drawers & Floating Handles */}
+      <Suspense fallback={null}>
       <FeedSideDrawers
         leftDrawerOpen={leftDrawerOpen}
         setLeftDrawerOpen={setLeftDrawerOpen}
@@ -6389,39 +6432,67 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         setFeed={setFeed}
         syncPostToSupabase={syncPostToSupabase}
       />
+      </Suspense>
       {/* Floating Particle Reaction Overlay */}
       <FloatingReactionOverlay particles={particles} />
 
-      <CreateCommunityShowModal
-        isOpen={isCommunityShowModalOpen}
-        onClose={() => { setIsCommunityShowModalOpen(false); setEditingCommunityShow(null); }}
-        onSubmit={handleCommunityShowSubmit}
-        editingShow={editingCommunityShow}
-        triggerNotification={triggerNotification}
-      />
+      {isCommunityShowModalOpen && (
+        <Suspense fallback={null}>
+          <CreateCommunityShowModal
+            isOpen={isCommunityShowModalOpen}
+            onClose={() => { setIsCommunityShowModalOpen(false); setEditingCommunityShow(null); }}
+            onSubmit={handleCommunityShowSubmit}
+            editingShow={editingCommunityShow}
+            triggerNotification={triggerNotification}
+          />
+        </Suspense>
+      )}
 
       {/* Facebook-style Story Viewer Modal */}
-      <StoryViewerModal
-        activeStory={activeStory}
-        stories={stories}
-        progress={storyProgress}
-        isPaused={isStoryPaused}
-        setIsPaused={setIsStoryPaused}
-        onClose={() => setActiveStory(null)}
-        onNext={handleNextStory}
-        onPrev={handlePrevStory}
-        triggerNotification={triggerNotification}
-        userProfile={userProfile}
-      />
+      {activeStory && (
+        <Suspense fallback={null}>
+          <StoryViewerModal
+            activeStory={activeStory}
+            stories={stories}
+            progress={storyProgress}
+            isPaused={isStoryPaused}
+            setIsPaused={setIsStoryPaused}
+            onClose={() => setActiveStory(null)}
+            onNext={handleNextStory}
+            onPrev={handlePrevStory}
+            triggerNotification={triggerNotification}
+            userProfile={userProfile}
+          />
+        </Suspense>
+      )}
       {/* Historic Show Archives Modal */}
-      <PromoterArchivesModal
-        isOpen={showPromoterArchivesModal}
-        onClose={() => setShowPromoterArchivesModal(false)}
-        promoterProfile={userProfile}
-        userProfile={userProfile}
-        shows={liveEvents}
-        triggerNotification={triggerNotification}
-      />
+      {showPromoterArchivesModal && (
+        <Suspense fallback={null}>
+          <PromoterArchivesModal
+            isOpen={showPromoterArchivesModal}
+            onClose={() => setShowPromoterArchivesModal(false)}
+            promoterProfile={userProfile}
+            userProfile={userProfile}
+            shows={liveEvents}
+            triggerNotification={triggerNotification}
+          />
+        </Suspense>
+      )}
+      {/* Conditional Floating Shopping Cart Button (Only shown when cart has items) */}
+      {cartItems.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setIsCartOpen(true)}
+          aria-label="Open shopping cart"
+          title="View Cart & Checkout"
+          className="fixed bottom-5 right-5 z-40 w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-[#0d0b14]/95 backdrop-blur-md border border-purple-500/65 hover:border-teal-400 text-white shadow-[0_0_24px_rgba(157,78,223,0.45),0_0_14px_rgba(20,184,166,0.3)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer"
+        >
+          <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6 text-teal-300" />
+          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 border border-zinc-950 flex items-center justify-center text-[10px] font-mono font-black text-white shadow-lg">
+            {cartItems.reduce((acc, item) => acc + (item.quantity || 1), 0)}
+          </span>
+        </button>
+      )}
       </SocialThemeShell>
     </SocialRoleProvider>
   );

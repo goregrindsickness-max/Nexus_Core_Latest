@@ -1,6 +1,5 @@
 import { getSupabase } from '../../../supabase';
 import { uploadStoryMediaToStorage } from '../../../services/storageService';
-import { mockStories } from '../../../data/socialFeedMockData';
 import { authFetch, getSupabaseAccessToken } from '../../../utils/apiConfig';
 
 export interface StoryItem {
@@ -64,13 +63,72 @@ let cachedStories: StoryItem[] | null = null;
 let lastStoriesFetch = 0;
 let inFlightStoriesPromise: Promise<StoryItem[]> | null = null;
 
+const STORY_TTL_MS = 24 * 60 * 60 * 1000;
+const LEGACY_MOCK_STORY_IDS = new Set(['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9']);
+
+/**
+ * Verify that a story is a genuine, non-expired (24h) user/band story rather than
+ * a hardcoded mock, expired record, or test probe/placeholder.
+ */
+export function isGenuineActiveStory(raw: any): boolean {
+  if (!raw || typeof raw !== 'object') return false;
+
+  const idStr = String(raw.id || '').trim().toLowerCase();
+  if (
+    idStr &&
+    (LEGACY_MOCK_STORY_IDS.has(idStr) ||
+      idStr.startsWith('mock_') ||
+      idStr.startsWith('dummy_') ||
+      idStr.startsWith('test_') ||
+      idStr.startsWith('test-'))
+  ) {
+    return false;
+  }
+
+  const authorRaw = String(raw.name || raw.user || raw.username || raw.author || '').trim().toLowerCase();
+  if (
+    !authorRaw ||
+    authorRaw === 'band story' ||
+    authorRaw === 'testband' ||
+    authorRaw === 'test band' ||
+    authorRaw === 'test scene band' ||
+    authorRaw === 'test_scene_band' ||
+    authorRaw.includes('test_probe') ||
+    authorRaw.includes('testband') ||
+    authorRaw.includes('test scene band') ||
+    authorRaw.startsWith('dummy') ||
+    authorRaw.startsWith('placeholder')
+  ) {
+    return false;
+  }
+
+  const hasMedia = Boolean(raw.media_url || raw.mediaUrl || raw.image || raw.video || raw.video_url);
+  if (!hasMedia) return false;
+
+  const now = Date.now();
+  if (raw.expires_at) {
+    const expiresMs = Date.parse(String(raw.expires_at));
+    if (!Number.isNaN(expiresMs) && expiresMs <= now) {
+      return false;
+    }
+  }
+
+  const createdRaw = raw.created_at || raw.timestamp;
+  if (!createdRaw) return false;
+  const createdMs = Date.parse(String(createdRaw));
+  if (Number.isNaN(createdMs) || now - createdMs > STORY_TTL_MS) {
+    return false;
+  }
+
+  return true;
+}
+
 /**
  * Standardize and clean any raw story object from DB, Storage, or LocalStorage
  */
 export function normalizeStory(raw: any, idx = 0): StoryItem {
-  const mockMatch = mockStories[idx % mockStories.length];
   const id = raw.id || `story_${Date.now()}_${idx}`;
-  const authorName = raw.name || raw.user || raw.username || raw.author || mockMatch?.name || 'Band Story';
+  const authorName = raw.name || raw.user || raw.username || raw.author || 'Scene Member';
 
   const rawImage = raw.media_url || raw.mediaUrl || raw.image || raw.video || raw.video_url;
   const isVideo =
@@ -81,13 +139,13 @@ export function normalizeStory(raw: any, idx = 0): StoryItem {
 
   const rawAvatar = raw.avatar || raw.user_avatar || raw.avatar_url;
   const avatar =
-    rawAvatar && (rawAvatar.startsWith('http') || rawAvatar.startsWith('data:'))
+    rawAvatar && (rawAvatar.startsWith('http') || rawAvatar.startsWith('/') || rawAvatar.startsWith('data:'))
       ? rawAvatar
-      : mockMatch?.avatar || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=150';
+      : undefined;
 
   const video = isVideo ? (raw.video || raw.video_url || rawImage) : null;
-  const image = isVideo ? null : (raw.image || raw.media_url || raw.mediaUrl || (rawImage && !isVideo ? rawImage : mockMatch?.image));
-  const mediaUrl = video || image || raw.media_url || raw.mediaUrl || mockMatch?.image;
+  const image = isVideo ? null : (raw.image || raw.media_url || raw.mediaUrl || (rawImage && !isVideo ? rawImage : null));
+  const mediaUrl = video || image || raw.media_url || raw.mediaUrl || '';
 
   return {
     ...raw,
@@ -137,24 +195,49 @@ export function normalizeStory(raw: any, idx = 0): StoryItem {
 export async function fetchAuthoritativeStories(force = false): Promise<StoryItem[]> {
   const now = Date.now();
   if (!force && cachedStories && now - lastStoriesFetch < STALE_TIME_MS) {
-    return cachedStories;
+    return cachedStories.filter(isGenuineActiveStory);
   }
-  if (inFlightStoriesPromise) {
+  if (inFlightStoriesPromise && !force) {
     return inFlightStoriesPromise;
   }
 
   inFlightStoriesPromise = (async () => {
     const storiesMap = new Map<string, StoryItem>();
+    const cutoffIso = new Date(Date.now() - STORY_TTL_MS).toISOString();
 
-    // 1. Try Express backend endpoint
+    // 1. Query genuine non-expired (24h) stories from Supabase Postgres table (nexus_stories)
+    const client = getSupabase();
+    if (client) {
+      try {
+        const { data, error } = await client
+          .from('nexus_stories')
+          .select('*')
+          .gte('created_at', cutoffIso)
+          .order('created_at', { ascending: false });
+        if (!error && Array.isArray(data)) {
+          data.forEach((s: any, idx: number) => {
+            if (!isGenuineActiveStory(s)) return;
+            const norm = normalizeStory(s, idx);
+            if (norm.id) storiesMap.set(norm.id, norm);
+          });
+        }
+      } catch (err) {
+        console.warn('[StoriesService] nexus_stories table fetch error:', err);
+      }
+    }
+
+    // 2. Supplement with genuine non-expired (<24h) stories from Express API if any
     try {
       const res = await authFetch('/api/stories');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
           data.forEach((s: any, idx: number) => {
+            if (!isGenuineActiveStory(s)) return;
             const norm = normalizeStory(s, idx);
-            if (norm.id) storiesMap.set(norm.id, norm);
+            if (norm.id && !storiesMap.has(norm.id)) {
+              storiesMap.set(norm.id, norm);
+            }
           });
         }
       }
@@ -162,13 +245,14 @@ export async function fetchAuthoritativeStories(force = false): Promise<StoryIte
       console.warn('[StoriesService] Express /api/stories fetch error:', err);
     }
 
-    // 2. Try Supabase CDN storage manifest directly (cached by browser without ?t= timestamp cache-busting)
+    // 3. Supplement with genuine non-expired (<24h) stories from Supabase CDN storage manifest if any
     try {
       const res = await fetch(MANIFEST_URL);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
           data.forEach((s: any, idx: number) => {
+            if (!isGenuineActiveStory(s)) return;
             const norm = normalizeStory(s, idx);
             if (norm.id && !storiesMap.has(norm.id)) {
               storiesMap.set(norm.id, norm);
@@ -180,28 +264,11 @@ export async function fetchAuthoritativeStories(force = false): Promise<StoryIte
       console.warn('[StoriesService] Manifest CDN fetch error:', err);
     }
 
-    // 3. Try Supabase Postgres table (nexus_stories)
-    const client = getSupabase();
-    if (client) {
-      try {
-        const { data, error } = await client
-          .from('nexus_stories')
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (!error && Array.isArray(data)) {
-          data.forEach((s: any, idx: number) => {
-            const norm = normalizeStory(s, idx);
-            if (norm.id && !storiesMap.has(norm.id)) {
-              storiesMap.set(norm.id, norm);
-            }
-          });
-        }
-      } catch (err) {
-        console.warn('[StoriesService] nexus_stories table fetch error:', err);
-      }
-    }
-
-    const result = Array.from(storiesMap.values());
+    const result = Array.from(storiesMap.values()).sort((a, b) => {
+      const ta = Date.parse(String(a.created_at || a.timestamp || 0)) || 0;
+      const tb = Date.parse(String(b.created_at || b.timestamp || 0)) || 0;
+      return tb - ta;
+    });
     cachedStories = result;
     lastStoriesFetch = Date.now();
     inFlightStoriesPromise = null;
@@ -410,13 +477,17 @@ export async function publishStoryAuthoritative(
     }
   }
 
-  // 4. Update LocalStorage cache
+  // 4. Update LocalStorage cache (only keep genuine active stories)
   try {
     const raw = localStorage.getItem('nexus_pit_stories_v2');
     const existing: StoryItem[] = raw ? JSON.parse(raw) : [];
-    const merged = [finalStory, ...existing.filter((s) => s.id !== finalStory.id)];
+    const merged = [finalStory, ...existing.filter((s) => s.id !== finalStory.id && isGenuineActiveStory(s))];
     localStorage.setItem('nexus_pit_stories_v2', JSON.stringify(merged));
   } catch (_) {}
+
+  // Reset in-memory cache so subsequent reads include the newly published story
+  cachedStories = null;
+  lastStoriesFetch = 0;
 
   return finalStory;
 }
