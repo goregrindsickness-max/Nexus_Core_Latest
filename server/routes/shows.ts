@@ -1961,3 +1961,350 @@ Please return structured details in valid JSON format (inside a \`\`\`json codeb
       .json({ error: error.message || 'Failed to ground venue with Google Maps' });
   }
 });
+
+// ============================================================
+// LIVE VENUE PIT WALL (PERSISTENT MULTI-USER SHOW CHAT)
+// ============================================================
+export interface PitWallReplyRef {
+  id: string;
+  username: string;
+  text: string;
+}
+
+export interface PitWallMessage {
+  id: string;
+  eventId: string;
+  user_id: string;
+  username: string;
+  handle?: string;
+  avatar_url?: string;
+  role?: string;
+  category?: 'chat' | 'set_times' | 'merch' | 'meetup' | 'pit';
+  text: string;
+  replyTo?: PitWallReplyRef | null;
+  reactions?: Record<string, string[]>;
+  timestamp: string;
+  created_at: string;
+}
+
+export interface PitWallPinnedNotice {
+  text: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+interface PitWallStoreData {
+  messagesByEvent: Record<string, PitWallMessage[]>;
+  pinnedByEvent: Record<string, PitWallPinnedNotice | null>;
+}
+
+const PIT_WALL_STORE_PATH = path.join(uploadsDir, 'venue_pit_walls.json');
+
+const LEGACY_MOCK_AUTHORS = new Set([
+  'pit host',
+  'jax_riff',
+  'valkyrie_v',
+  'metalhead99',
+  'sarahv',
+  'tour crew',
+]);
+
+function isLegacyMockPitMessage(msg: any): boolean {
+  if (!msg) return true;
+  const id = String(msg.id || '');
+  if (id.startsWith('seed-') || id === 'msg_1' || id === 'msg_2') return true;
+  const uid = String(msg.user_id || '');
+  if (uid.startsWith('seed-')) return true;
+  const uname = String(msg.username || msg.author || msg.user || '').toLowerCase().trim();
+  if (LEGACY_MOCK_AUTHORS.has(uname)) return true;
+  return false;
+}
+
+function readPitWallStore(): PitWallStoreData {
+  try {
+    if (fs.existsSync(PIT_WALL_STORE_PATH)) {
+      const raw = fs.readFileSync(PIT_WALL_STORE_PATH, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return {
+        messagesByEvent: parsed?.messagesByEvent && typeof parsed.messagesByEvent === 'object' ? parsed.messagesByEvent : {},
+        pinnedByEvent: parsed?.pinnedByEvent && typeof parsed.pinnedByEvent === 'object' ? parsed.pinnedByEvent : {},
+      };
+    }
+  } catch (err) {
+    console.warn('[PitWall] Failed to read pit wall store:', err);
+  }
+  return { messagesByEvent: {}, pinnedByEvent: {} };
+}
+
+function writePitWallStore(store: PitWallStoreData): void {
+  try {
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    fs.writeFileSync(PIT_WALL_STORE_PATH, JSON.stringify(store, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[PitWall] Failed to write pit wall store:', err);
+  }
+}
+
+function normalizeEventKey(rawEventId: string): string {
+  return decodeURIComponent(String(rawEventId || 'default_event')).trim() || 'default_event';
+}
+
+showsRouter.get('/api/shows/:eventId/pitwall', async (req, res) => {
+  try {
+    const eventKey = normalizeEventKey(req.params.eventId);
+    const store = readPitWallStore();
+    const localMessages = (store.messagesByEvent[eventKey] || []).filter(m => !isLegacyMockPitMessage(m));
+    const pinnedNotice = store.pinnedByEvent[eventKey] || null;
+
+    // Also merge any persisted rows from Supabase nexus_venue_chat if available
+    const sb = getSupabaseService();
+    const mergedMap = new Map<string, PitWallMessage>();
+    for (const msg of localMessages) {
+      mergedMap.set(msg.id, msg);
+    }
+
+    if (sb) {
+      try {
+        const { data, error } = await sb
+          .from('nexus_venue_chat')
+          .select('*, profiles(username, full_name, avatar_url, role)')
+          .eq('event_id', eventKey)
+          .order('created_at', { ascending: true })
+          .limit(200);
+
+        if (!error && Array.isArray(data)) {
+          for (const row of data) {
+            const rowId = String(row.id || `sb_${row.created_at}`);
+            const text = String(row.message || '').trim();
+            if (!text) continue;
+            const username =
+              row.sender_name ||
+              row.profiles?.username ||
+              row.profiles?.full_name ||
+              'Attendee';
+            if (LEGACY_MOCK_AUTHORS.has(String(username).toLowerCase().trim())) continue;
+
+            // Avoid duplicating a message that was already saved locally around the same timestamp & text
+            const alreadyExists = Array.from(mergedMap.values()).some(
+              existing =>
+                existing.id === rowId ||
+                (existing.text === text &&
+                  existing.username.toLowerCase() === String(username).toLowerCase() &&
+                  Math.abs(new Date(existing.created_at).getTime() - new Date(row.created_at).getTime()) < 10000)
+            );
+            if (!alreadyExists) {
+              mergedMap.set(rowId, {
+                id: rowId,
+                eventId: eventKey,
+                user_id: String(row.profile_id || 'attendee'),
+                username: String(username),
+                avatar_url: row.profiles?.avatar_url || '',
+                role: row.profiles?.role || 'Fan',
+                category: 'chat',
+                text,
+                replyTo: null,
+                reactions: {},
+                created_at: row.created_at || new Date().toISOString(),
+                timestamp: row.created_at
+                  ? new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : 'Just now',
+              });
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    const messages = Array.from(mergedMap.values()).sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+
+    // Save cleaned list back if needed
+    if (messages.length !== (store.messagesByEvent[eventKey] || []).length) {
+      store.messagesByEvent[eventKey] = messages;
+      writePitWallStore(store);
+    }
+
+    res.json({
+      success: true,
+      eventId: eventKey,
+      messages,
+      pinnedNotice,
+    });
+  } catch (error: any) {
+    console.error('[PitWall GET Error]:', error);
+    res.status(500).json({ error: error.message || 'Failed to load Venue Pit Wall' });
+  }
+});
+
+showsRouter.post('/api/shows/:eventId/pitwall', apiMutationLimiter, async (req, res) => {
+  try {
+    const eventKey = normalizeEventKey(req.params.eventId);
+    const {
+      id,
+      user_id,
+      username,
+      handle,
+      avatar_url,
+      role,
+      category,
+      text,
+      replyTo,
+    } = req.body || {};
+
+    const cleanText = String(text || '').trim();
+    if (!cleanText) {
+      return res.status(400).json({ error: 'Message text is required' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const timeFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const msgId = String(id || `pit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+
+    const validCategories = new Set(['chat', 'set_times', 'merch', 'meetup', 'pit']);
+    const normalizedCat = validCategories.has(category) ? category : 'chat';
+
+    const newMessage: PitWallMessage = {
+      id: msgId,
+      eventId: eventKey,
+      user_id: String(user_id || 'guest_fan'),
+      username: String(username || 'Scene Attendee').trim(),
+      handle: handle ? String(handle).trim() : undefined,
+      avatar_url: avatar_url ? String(avatar_url).trim() : '',
+      role: role ? String(role).trim() : 'Fan',
+      category: normalizedCat,
+      text: cleanText.slice(0, 1000),
+      replyTo:
+        replyTo && replyTo.id && replyTo.text
+          ? {
+              id: String(replyTo.id),
+              username: String(replyTo.username || 'Attendee'),
+              text: String(replyTo.text).slice(0, 200),
+            }
+          : null,
+      reactions: {},
+      timestamp: timeFormatted,
+      created_at: nowIso,
+    };
+
+    const store = readPitWallStore();
+    const existing = (store.messagesByEvent[eventKey] || []).filter(m => !isLegacyMockPitMessage(m));
+    const deduped = existing.filter(m => m.id !== newMessage.id);
+    deduped.push(newMessage);
+    store.messagesByEvent[eventKey] = deduped.slice(-250);
+    writePitWallStore(store);
+
+    // Best-effort sync to Supabase nexus_venue_chat
+    const sb = getSupabaseService();
+    if (sb) {
+      try {
+        await sb.from('nexus_venue_chat').insert({
+          event_id: eventKey,
+          profile_id: user_id && /^[0-9a-f-]{36}$/i.test(String(user_id)) ? user_id : null,
+          sender_name: newMessage.username,
+          message: newMessage.text,
+          created_at: nowIso,
+        });
+      } catch (_) {}
+    }
+
+    res.json({
+      success: true,
+      message: newMessage,
+      messages: store.messagesByEvent[eventKey],
+    });
+  } catch (error: any) {
+    console.error('[PitWall POST Error]:', error);
+    res.status(500).json({ error: error.message || 'Failed to post Pit Wall message' });
+  }
+});
+
+showsRouter.post('/api/shows/:eventId/pitwall/:messageId/react', apiMutationLimiter, async (req, res) => {
+  try {
+    const eventKey = normalizeEventKey(req.params.eventId);
+    const messageId = String(req.params.messageId || '').trim();
+    const { emoji, userId } = req.body || {};
+    const cleanEmoji = String(emoji || '🤘').trim();
+    const actorId = String(userId || 'guest_fan').trim();
+
+    const store = readPitWallStore();
+    const list = store.messagesByEvent[eventKey] || [];
+    const target = list.find(m => m.id === messageId);
+    if (!target) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    if (!target.reactions || typeof target.reactions !== 'object') {
+      target.reactions = {};
+    }
+    const currentUsers = Array.isArray(target.reactions[cleanEmoji]) ? target.reactions[cleanEmoji] : [];
+    if (currentUsers.includes(actorId)) {
+      target.reactions[cleanEmoji] = currentUsers.filter(u => u !== actorId);
+      if (target.reactions[cleanEmoji].length === 0) {
+        delete target.reactions[cleanEmoji];
+      }
+    } else {
+      target.reactions[cleanEmoji] = [...currentUsers, actorId];
+    }
+
+    writePitWallStore(store);
+    res.json({
+      success: true,
+      message: target,
+    });
+  } catch (error: any) {
+    console.error('[PitWall React Error]:', error);
+    res.status(500).json({ error: error.message || 'Failed to react to Pit Wall message' });
+  }
+});
+
+showsRouter.post('/api/shows/:eventId/pitwall/pin', apiMutationLimiter, async (req, res) => {
+  try {
+    const eventKey = normalizeEventKey(req.params.eventId);
+    const { text, updatedBy } = req.body || {};
+    const cleanText = String(text || '').trim();
+
+    const store = readPitWallStore();
+    if (!cleanText) {
+      store.pinnedByEvent[eventKey] = null;
+    } else {
+      store.pinnedByEvent[eventKey] = {
+        text: cleanText.slice(0, 300),
+        updatedBy: String(updatedBy || 'Show Host').trim(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    writePitWallStore(store);
+
+    res.json({
+      success: true,
+      pinnedNotice: store.pinnedByEvent[eventKey],
+    });
+  } catch (error: any) {
+    console.error('[PitWall Pin Error]:', error);
+    res.status(500).json({ error: error.message || 'Failed to update pinned Pit Wall notice' });
+  }
+});
+
+showsRouter.delete('/api/shows/:eventId/pitwall/:messageId', apiMutationLimiter, async (req, res) => {
+  try {
+    const eventKey = normalizeEventKey(req.params.eventId);
+    const messageId = String(req.params.messageId || '').trim();
+
+    const store = readPitWallStore();
+    const existing = store.messagesByEvent[eventKey] || [];
+    store.messagesByEvent[eventKey] = existing.filter(m => m.id !== messageId);
+    writePitWallStore(store);
+
+    res.json({
+      success: true,
+      messageId,
+    });
+  } catch (error: any) {
+    console.error('[PitWall DELETE Error]:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete Pit Wall message' });
+  }
+});
+

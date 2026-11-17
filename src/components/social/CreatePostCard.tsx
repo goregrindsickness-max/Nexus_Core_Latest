@@ -1310,28 +1310,28 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           <button
             type="button"
             onClick={() => applyPresetHours(1)}
-            className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} hover:${theme.accentBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
+            className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} ${theme.accentHoverBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
           >
             +1 HOUR
           </button>
           <button
             type="button"
             onClick={() => applyPresetHours(3)}
-            className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} hover:${theme.accentBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
+            className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} ${theme.accentHoverBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
           >
             +3 HOURS
           </button>
           <button
             type="button"
             onClick={() => applyPresetTomorrowMorning()}
-            className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} hover:${theme.accentBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
+            className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} ${theme.accentHoverBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
           >
             TOMORROW 9AM
           </button>
           <button
             type="button"
             onClick={() => applyPresetFridayEvening()}
-            className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} hover:${theme.accentBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
+            className={`px-2 py-1.5 rounded-lg ${theme.badgeBg} ${theme.accentHoverBg} border ${theme.accentBorder} text-[10px] font-mono ${theme.badgeText} transition-colors text-center font-bold cursor-pointer`}
           >
             FRIDAY 6PM
           </button>

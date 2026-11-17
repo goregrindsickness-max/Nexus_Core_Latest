@@ -6,7 +6,10 @@ import {
 } from 'lucide-react';
 import { showsStore, venuesStore } from '../../../utils/indexedDB';
 import { getSupabase, sanitizeShowForDb, generateUUID, ensureUUID, uploadBase64ToStorage } from '../../../supabase';
-import { compressImageInSocialFeed } from '../../../utils/socialFeedUtils';
+import { compressImageInSocialFeed, getShowTicketTiers } from '../../../utils/socialFeedUtils';
+import { parseShowExtraNotes } from '../../../utils/showDisplayUtils';
+import { CustomTicketTiersBuilder } from '../../shows/CustomTicketTiersBuilder';
+import type { TicketTier } from '../../../types';
 
 export interface PostCommunityShowModalProps {
   isOpen?: boolean;
@@ -45,6 +48,7 @@ export function PostCommunityShowModal({
   const [setTime, setSetTime] = useState(initialData?.set_time || '20:00');
   const [price, setPrice] = useState(initialData?.price || initialData?.day_of_show_price || '');
   const [presalePrice, setPresalePrice] = useState(initialData?.presale_price || '');
+  const [ticketTiers, setTicketTiers] = useState<TicketTier[]>(() => getShowTicketTiers(initialData));
   const [ageRestriction, setAgeRestriction] = useState(initialData?.age_restriction || 'All Ages');
   const [safetyCode, setSafetyCode] = useState(initialData?.safety_code || '');
   const [venueName, setVenueName] = useState(initialData?.venue_name || initialData?.venue || '');
@@ -226,6 +230,42 @@ export function PostCommunityShowModal({
     const showId = initialData?.id || ('sh_comm_' + Math.random().toString(36).substring(2, 9));
     const showName = tourName.trim() ? `${headlinerVal} (${tourName.trim()})` : `${headlinerVal} Live`;
 
+    const validTiers = ticketTiers
+      .filter((t) => String(t.name || '').trim().length > 0 && Number.isFinite(Number(t.price)) && Number(t.price) >= 0)
+      .map((t, idx) => ({
+        ...t,
+        id: t.id || `tier_${idx}_${Date.now()}`,
+        name: String(t.name).trim(),
+        price: Number(t.price),
+        capacity: Number.isFinite(Number(t.capacity)) && Number(t.capacity) > 0 ? Number(t.capacity) : 0,
+        sold: Number.isFinite(Number(t.sold)) && Number(t.sold) >= 0 ? Number(t.sold) : 0,
+        description: t.description?.trim() || undefined,
+        includesMerch: Boolean(t.includesMerch),
+      }));
+
+    const existingExtra = parseShowExtraNotes(initialData);
+    const mergedExtra: Record<string, any> = {
+      ...existingExtra,
+      tour_name: tourName.trim() || undefined,
+    };
+    if (validTiers.length > 0) {
+      mergedExtra.ticket_tiers = validTiers;
+    } else {
+      delete mergedExtra.ticket_tiers;
+      delete mergedExtra.ticketTiers;
+    }
+    const serializedNotes = JSON.stringify(mergedExtra);
+
+    const resolvedPrice =
+      price.trim() ||
+      (validTiers.length > 0
+        ? (validTiers.length > 1
+            ? `From $${Math.min(...validTiers.map((t) => t.price))}`
+            : `$${validTiers[0].price}`)
+        : ticketUrl.trim()
+        ? 'External Tickets'
+        : 'Cover at Door');
+
     const showPayload = {
       id: showId,
       name: showName,
@@ -247,9 +287,10 @@ export function PostCommunityShowModal({
       state: state.trim() || undefined,
       state_province: state.trim() || undefined,
       country: country.trim() || 'United States',
-      price: price.trim() || 'Cover at Door',
-      day_of_show_price: price.trim() || 'Cover at Door',
+      price: resolvedPrice,
+      day_of_show_price: price.trim() || resolvedPrice,
       presale_price: presalePrice.trim() || undefined,
+      ticket_tiers: validTiers,
       age_restriction: ageRestriction,
       safety_code: safetyCode.trim() || undefined,
       ticket_url: ticketUrl.trim() || undefined,
@@ -257,6 +298,7 @@ export function PostCommunityShowModal({
       flyer_url: flyerUrl || undefined,
       support_bands: supportBands.join(', '),
       support_lineup: supportBands.map(bandName => ({ band_name: bandName, set_duration: '35 mins' })),
+      additional_notes: serializedNotes,
       is_community_submitted: true,
       created_at: initialData?.created_at || new Date().toISOString()
     };
@@ -283,9 +325,13 @@ export function PostCommunityShowModal({
           venue_name: venueName.trim() || 'Live Venue',
           city: city.trim(),
           state_province: state.trim() || null,
-          price: price.trim() || 'Cover at Door',
+          price: resolvedPrice,
+          day_of_show_price: price.trim() || null,
+          presale_price: presalePrice.trim() || null,
           flyer_url: flyerUrl || null,
           ticket_url: ticketUrl.trim() || null,
+          external_ticket_url: ticketUrl.trim() || null,
+          additional_notes: serializedNotes,
           support_bands: supportBands.join(', '),
           is_community_submitted: true,
           created_at: showPayload.created_at
@@ -704,6 +750,14 @@ export function PostCommunityShowModal({
                 </div>
               </div>
 
+              {/* Optional Custom Admission Tiers */}
+              <CustomTicketTiersBuilder
+                tiers={ticketTiers}
+                onChange={setTicketTiers}
+                hasExternalUrl={Boolean(ticketUrl.trim())}
+                accentColor="emerald"
+              />
+
               {/* Age Restriction & Safety Code */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-zinc-800/80">
                 <div>
@@ -832,7 +886,7 @@ export function PostCommunityShowModal({
               </div>
 
               {/* Ticket URL */}
-              <div className="pt-2 border-t border-zinc-800/80">
+              <div className="pt-2 border-t border-zinc-800/80 space-y-1.5">
                 <label className="block font-mono text-[11px] text-zinc-300 uppercase tracking-wider mb-1">
                   External Ticketing Link (Optional)
                 </label>
@@ -843,6 +897,9 @@ export function PostCommunityShowModal({
                   placeholder="https://dice.fm/event/... or https://ticketmaster.com/..."
                   className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-400"
                 />
+                <p className="text-[10px] font-mono text-zinc-400 leading-snug">
+                  Adding a third-party link sends buyers off-platform. Nexus Core cannot verify external purchases or generate a scannable entry QR code for third-party orders.
+                </p>
               </div>
 
               {/* Actions */}

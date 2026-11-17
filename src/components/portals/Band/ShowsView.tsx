@@ -287,6 +287,30 @@ export default function ShowsView({
   const [pitWallMessages, setPitWallMessages] = useState<Record<string, {id: string, user: string, text: string, time: string}[]>>({});
   const [newPitWallMessage, setNewPitWallMessage] = useState('');
 
+  useEffect(() => {
+    if (!showPitWallId) return;
+    let cancelled = false;
+    fetch(`/api/shows/${encodeURIComponent(showPitWallId)}/pitwall`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!cancelled && data && Array.isArray(data.messages)) {
+          setPitWallMessages(prev => ({
+            ...prev,
+            [showPitWallId]: data.messages.map((m: any) => ({
+              id: m.id,
+              user: m.username || m.user || 'Attendee',
+              text: m.text || '',
+              time: m.timestamp || m.time || 'Just now',
+            })),
+          }));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [showPitWallId]);
+
   const toggleShowCardExpanded = (id: string) => {
     setExpandedShowCards(prev => {
       const current = prev[id] !== undefined ? prev[id] : (id === selectedShowId);
@@ -4034,7 +4058,7 @@ export default function ShowsView({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed top-0 right-0 h-[100dvh] w-full sm:w-[400px] bg-[#0c0f12] border-l border-rose-900/40 z-[200] flex flex-col shadow-2xl"
+              className="fixed top-0 right-0 h-[100dvh] w-full sm:w-[400px] bg-[#0c0f12] border-l border-rose-900/40 z-[10080] flex flex-col shadow-2xl"
             >
               {/* Header */}
               <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/80">
@@ -4058,32 +4082,34 @@ export default function ShowsView({
               {/* System Notice */}
               <div className="px-4 py-3 bg-rose-950/20 border-b border-rose-900/30 text-center">
                 <p className="text-[9px] font-mono uppercase text-rose-400 font-bold tracking-wider">
-                  ⚠️ Live Session Active<br/>
-                  <span className="text-zinc-500 font-normal">Destructs 6hrs post-show</span>
+                  📍 Live Venue & Tour Pit Wall<br/>
+                  <span className="text-zinc-400 font-normal">Synced in real-time with attendees & tour crew</span>
                 </p>
               </div>
 
               {/* Messages Area */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar flex flex-col-reverse">
-                {[...messages].reverse().map((msg, mIdx) => (
-                  <div key={msg.id ? `msg-${msg.id}-${mIdx}` : `msg-${mIdx}`} className={`flex flex-col ${msg.user === 'You' ? 'items-end' : 'items-start'}`}>
-                    <div className="flex items-baseline gap-2 mb-1">
-                      <span className="text-[10px] font-bold text-zinc-300">{msg.user}</span>
-                      <span className="text-[8px] font-mono text-zinc-600">{msg.time}</span>
+                {[...messages].reverse().map((msg, mIdx) => {
+                  const isMe = msg.user === 'You' || msg.user === (bandName || 'Artist');
+                  return (
+                    <div key={msg.id ? `msg-${msg.id}-${mIdx}` : `msg-${mIdx}`} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                      <div className="flex items-baseline gap-2 mb-1">
+                        <span className="text-[10px] font-bold text-zinc-300">{msg.user}</span>
+                        <span className="text-[8px] font-mono text-zinc-600">{msg.time}</span>
+                      </div>
+                      <div className={`px-3 py-2 rounded-xl max-w-[85%] text-sm ${isMe ? 'bg-rose-600 text-white rounded-br-sm' : 'bg-zinc-900 text-zinc-200 border border-zinc-800 rounded-bl-sm'}`}>
+                        {msg.text}
+                      </div>
                     </div>
-                    <div className={`px-3 py-2 rounded-xl max-w-[85%] text-sm ${msg.user === 'You' ? 'bg-rose-600 text-white rounded-br-sm' : 'bg-zinc-900 text-zinc-200 border border-zinc-800 rounded-bl-sm'}`}>
-                      {msg.text}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 
                 <div className="flex flex-col items-start opacity-70">
                   <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-[10px] font-bold text-rose-400">SYSTEM</span>
-                    <span className="text-[8px] font-mono text-zinc-600">--:--</span>
+                    <span className="text-[10px] font-bold text-rose-400">VENUE CHANNEL</span>
                   </div>
                   <div className="px-3 py-2 rounded-xl bg-transparent border border-rose-900/30 text-zinc-400 text-xs italic font-mono">
-                    Pit Wall initialized for {show.city}. Keep it brutal.
+                    Live Pit Wall active for {show.city}. Drop updates, set times, or merch notes below.
                   </div>
                 </div>
               </div>
@@ -4093,18 +4119,33 @@ export default function ShowsView({
                 <form 
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (!newPitWallMessage.trim()) return;
+                    const text = newPitWallMessage.trim();
+                    if (!text) return;
+                    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const msgId = `pit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+                    const senderName = bandName || 'Artist';
                     setPitWallMessages(prev => {
                       const existing = prev[showPitWallId] || [];
                       return {
                         ...prev,
                         [showPitWallId]: [
                           ...existing, 
-                          { id: Date.now().toString(), user: 'You', text: newPitWallMessage, time: 'Just now' }
+                          { id: msgId, user: senderName, text, time: nowTime }
                         ]
                       };
                     });
                     setNewPitWallMessage('');
+                    fetch(`/api/shows/${encodeURIComponent(showPitWallId)}/pitwall`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        id: msgId,
+                        eventId: showPitWallId,
+                        username: senderName,
+                        role: 'Band',
+                        text,
+                      }),
+                    }).catch(() => {});
                   }}
                   className="flex items-center gap-2"
                 >
@@ -4112,13 +4153,13 @@ export default function ShowsView({
                     type="text"
                     value={newPitWallMessage}
                     onChange={(e) => setNewPitWallMessage(e.target.value)}
-                    placeholder="Scream into the void..."
+                    placeholder="Message the Venue Pit Wall..."
                     className="flex-1 bg-zinc-900 border border-zinc-800 focus:border-rose-500/50 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none transition-colors"
                   />
                   <button
                     type="submit"
                     disabled={!newPitWallMessage.trim()}
-                    className="p-2.5 bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-lg transition-colors"
+                    className="p-2.5 bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-lg transition-colors cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
                   </button>

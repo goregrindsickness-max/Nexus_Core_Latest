@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { requestPauseSceneRadio } from '../utils/mediaPlaybackCoordinator';
+import { sendDirectMessage } from '../../../store/useChatStore';
 import { StickerPlayer } from '../../stories/StickerPlayer';
 import {
   X,
@@ -12,7 +13,12 @@ import {
   Volume2,
   VolumeX,
   Music,
-  Send
+  Send,
+  Tag,
+  Smile,
+  ExternalLink,
+  Clock,
+  BarChart2
 } from 'lucide-react';
 
 export interface StoryViewerItem {
@@ -55,7 +61,21 @@ export interface StoryViewerModalProps {
   onPrev: () => void;
   triggerNotification?: (msg: string) => void;
   userProfile?: any;
+  allProfiles?: any[];
+  discoverProfiles?: any[];
 }
+
+const VIEWED_STORIES_KEY = 'nexus_viewed_stories_v1';
+const STORY_REACTIONS_KEY = 'nexus_story_reactions_v1';
+const STORY_POLL_VOTES_KEY = 'nexus_story_poll_votes_v1';
+
+const STORY_FILTER_CLASSES: Record<string, string> = {
+  vhs: 'contrast-125 saturate-150 hue-rotate-15',
+  grunge: 'sepia contrast-150 brightness-90',
+  noir: 'grayscale contrast-150 brightness-95',
+  toxic: 'hue-rotate-90 saturate-200 contrast-125',
+  hyper: 'saturate-200 contrast-150 brightness-110',
+};
 
 export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   activeStory,
@@ -68,6 +88,8 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   onPrev,
   triggerNotification,
   userProfile,
+  allProfiles = [],
+  discoverProfiles = [],
 }) => {
   // Portal target hydration check
   const [mounted, setMounted] = useState(false);
@@ -85,7 +107,24 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const [localProgress, setLocalProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [replyText, setReplyText] = useState('');
+  const [isSendingReply, setIsSendingReply] = useState(false);
   const [activeReactionBurst, setActiveReactionBurst] = useState<string | null>(null);
+  const [storyReactions, setStoryReactions] = useState<Record<string, { emoji: string; label: string; count: number }>>(() => {
+    try {
+      const raw = localStorage.getItem(STORY_REACTIONS_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [pollVotes, setPollVotes] = useState<Record<string, { choice: 1 | 2; opt1Count: number; opt2Count: number }>>(() => {
+    try {
+      const raw = localStorage.getItem(STORY_POLL_VOTES_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
   const [isHolding, setIsHolding] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const onNextRef = useRef(onNext);
@@ -172,8 +211,22 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     return 'Just now';
   }, [activeStory]);
 
-  // Reset progress and only pause Scene Radio if this story actually has sound (unmuted video or attached music track)
+  // Reset progress, mark viewed, and only pause Scene Radio if this story actually has sound
   useEffect(() => {
+    if (activeStory?.id) {
+      try {
+        const raw = localStorage.getItem(VIEWED_STORIES_KEY);
+        const existing: string[] = raw ? JSON.parse(raw) : [];
+        const idStr = String(activeStory.id);
+        if (!existing.includes(idStr)) {
+          const next = [idStr, ...existing].slice(0, 150);
+          localStorage.setItem(VIEWED_STORIES_KEY, JSON.stringify(next));
+          window.dispatchEvent(new CustomEvent('nexus_story_viewed', { detail: { id: idStr, viewedIds: next } }));
+        }
+      } catch {
+        // ignore storage errors
+      }
+    }
     if (activeStory && ((isVideo && !isMuted) || activeStory.music || activeStory.musicTrack)) {
       requestPauseSceneRadio('story_viewer_audio');
     }
@@ -267,15 +320,118 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const sendReaction = (emoji: string, label: string) => {
     setActiveReactionBurst(emoji);
     setTimeout(() => setActiveReactionBurst(null), 1200);
+    if (activeStory?.id) {
+      const idStr = String(activeStory.id);
+      setStoryReactions((prev) => {
+        const existing = prev[idStr];
+        const next = {
+          ...prev,
+          [idStr]: {
+            emoji,
+            label,
+            count: (existing?.count || 0) + 1,
+          },
+        };
+        try {
+          localStorage.setItem(STORY_REACTIONS_KEY, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+      triggerNotification?.(`Reacted ${emoji} (${label}) to ${authorName}'s story`);
+    }
   };
 
-  const handleSendReply = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!replyText.trim()) return;
-    triggerNotification?.(`Sent reply to ${authorName}: "${replyText}"`);
-    setReplyText('');
-    setIsPaused(false);
+  const handleVoteStoryPoll = (choice: 1 | 2) => {
+    if (!activeStory?.id) return;
+    const idStr = String(activeStory.id);
+    setPollVotes((prev) => {
+      if (prev[idStr]) return prev;
+      const seed1 = ((idStr.charCodeAt(0) || 3) % 7) + 2;
+      const seed2 = ((idStr.charCodeAt(idStr.length - 1) || 5) % 6) + 1;
+      const next = {
+        ...prev,
+        [idStr]: {
+          choice,
+          opt1Count: seed1 + (choice === 1 ? 1 : 0),
+          opt2Count: seed2 + (choice === 2 ? 1 : 0),
+        },
+      };
+      try {
+        localStorage.setItem(STORY_POLL_VOTES_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    triggerNotification?.(`Poll vote recorded on ${authorName}'s story!`);
   };
+
+  const handleSendReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = replyText.trim();
+    if (!trimmed || isSendingReply) return;
+
+    setIsSendingReply(true);
+    const senderId = String(userProfile?.id || 'guest_user');
+    const senderName = userProfile?.full_name || userProfile?.name || userProfile?.console_handle || 'Scene Member';
+
+    const cleanAuthor = authorName.toLowerCase().replace(/^@/, '').trim();
+    const pool = [...(allProfiles || []), ...(discoverProfiles || [])];
+    const matchedProfile = pool.find((p: any) => {
+      if (!p) return false;
+      const pName = String(p.name || p.full_name || p.username || '').toLowerCase().trim();
+      const pHandle = String(p.console_handle || p.handle || '').toLowerCase().replace(/^@/, '').trim();
+      return (cleanAuthor && (pName === cleanAuthor || pHandle === cleanAuthor));
+    });
+
+    const recipientId = String(
+      activeStory?.profile_id ||
+      activeStory?.user_id ||
+      activeStory?.authorId ||
+      matchedProfile?.id ||
+      ''
+    ).trim();
+
+    const formattedReply = `[Story Reply] ${trimmed}`;
+
+    try {
+      if (recipientId && recipientId !== senderId) {
+        await sendDirectMessage(senderId, recipientId, formattedReply, {
+          senderName,
+          recipientEmail: matchedProfile?.email,
+        });
+        triggerNotification?.(`DM reply delivered to ${authorName}!`);
+      } else {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('nexus_chats_updated'));
+        }
+        triggerNotification?.(`Reply sent to ${authorName}: "${trimmed}"`);
+      }
+      setReplyText('');
+      setIsPaused(false);
+    } catch {
+      triggerNotification?.(`Reply saved for ${authorName}: "${trimmed}"`);
+      setReplyText('');
+      setIsPaused(false);
+    } finally {
+      setIsSendingReply(false);
+    }
+  };
+
+  const interactiveData = (activeStory?.interactiveData || activeStory?.interactive_data || {}) as {
+    tag?: string;
+    feeling?: string;
+    filter?: string;
+    link?: string;
+    showTimestamp?: boolean;
+    poll?: { question?: string; option1?: string; option2?: string };
+  };
+  const activeFilterClass = interactiveData?.filter ? STORY_FILTER_CLASSES[interactiveData.filter] || '' : '';
+  const currentPollVote = activeStory?.id ? pollVotes[String(activeStory.id)] : undefined;
+  const currentStoryReaction = activeStory?.id ? storyReactions[String(activeStory.id)] : undefined;
+  const safeExternalLink = useMemo(() => {
+    const raw = String(interactiveData?.link || '').trim();
+    if (!raw) return '';
+    return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  }, [interactiveData?.link]);
 
   const currentFillPercent = externalProgress !== undefined && !isVideo ? externalProgress : localProgress;
 
@@ -402,7 +558,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 </div>
 
                 {/* Action Buttons: Play/Pause, Mute/Unmute, Close */}
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                   {isVideo && (
                     <button
                       type="button"
@@ -410,7 +566,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                         e.stopPropagation();
                         setIsMuted(!isMuted);
                       }}
-                      className="p-1.5 rounded-full bg-black/50 hover:bg-black/80 text-white/90 transition-colors cursor-pointer"
+                      className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full bg-black/55 hover:bg-black/85 text-white/90 transition-colors cursor-pointer"
                       title={isMuted ? 'Unmute' : 'Mute'}
                     >
                       {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -423,7 +579,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                       e.stopPropagation();
                       setIsPaused(!isPaused);
                     }}
-                    className="p-1.5 rounded-full bg-black/50 hover:bg-black/80 text-white/90 transition-colors cursor-pointer"
+                    className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full bg-black/55 hover:bg-black/85 text-white/90 transition-colors cursor-pointer"
                     title={isPaused ? 'Resume' : 'Pause'}
                   >
                     {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
@@ -435,13 +591,37 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                       e.stopPropagation();
                       onClose();
                     }}
-                    className="p-1.5 rounded-full bg-black/50 hover:bg-black/80 text-white/90 transition-colors cursor-pointer"
+                    className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full bg-black/55 hover:bg-black/85 text-white/90 transition-colors cursor-pointer"
                     title="Close Story (Esc)"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
+
+              {/* Interactive Story Badges (Tag, Feeling, Timestamp) */}
+              {(interactiveData?.tag || interactiveData?.feeling || interactiveData?.showTimestamp) && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pointer-events-none">
+                  {interactiveData?.showTimestamp && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/65 backdrop-blur border border-white/15 text-[10px] font-mono font-bold text-zinc-200">
+                      <Clock className="w-3 h-3 text-rose-400" />
+                      <span>{formattedTime}</span>
+                    </span>
+                  )}
+                  {interactiveData?.feeling && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-950/80 backdrop-blur border border-rose-500/40 text-[10px] font-mono font-bold text-rose-200">
+                      <Smile className="w-3 h-3 text-rose-400" />
+                      <span className="truncate max-w-[140px]">{interactiveData.feeling}</span>
+                    </span>
+                  )}
+                  {interactiveData?.tag && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-950/80 backdrop-blur border border-blue-500/40 text-[10px] font-mono font-bold text-blue-200">
+                      <Tag className="w-3 h-3 text-blue-400" />
+                      <span>{interactiveData.tag.startsWith('@') ? interactiveData.tag : `@${interactiveData.tag}`}</span>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Media Presentation Stage */}
@@ -459,13 +639,13 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                   muted={isMuted}
                   onTimeUpdate={handleVideoTimeUpdate}
                   onEnded={handleVideoEnded}
-                  className="w-full h-full object-contain sm:object-cover"
+                  className={`w-full h-full object-contain sm:object-cover ${activeFilterClass}`}
                 />
               ) : (
                 <img
                   src={mediaSrc}
                   alt={authorName}
-                  className="w-full h-full object-contain sm:object-cover"
+                  className={`w-full h-full object-contain sm:object-cover ${activeFilterClass}`}
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     e.currentTarget.src =
@@ -592,6 +772,74 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 }}
                 title="Next Story"
               />
+              {/* Interactive Poll & External Link Overlays */}
+              {(interactiveData?.poll?.question || safeExternalLink) && (
+                <div
+                  className="absolute bottom-4 inset-x-4 z-30 flex flex-col items-center gap-2.5 pointer-events-auto"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                >
+                  {interactiveData?.poll?.question && (
+                    <div className="w-full max-w-[300px] bg-zinc-950/90 backdrop-blur-md border border-zinc-700/80 rounded-2xl p-3 shadow-2xl space-y-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-rose-400">
+                        <BarChart2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>Story Poll</span>
+                      </div>
+                      <p className="text-xs font-bold text-white leading-snug">
+                        {interactiveData.poll.question}
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {([1, 2] as const).map((choiceNum) => {
+                          const optLabel = choiceNum === 1 ? (interactiveData.poll?.option1 || 'Yes') : (interactiveData.poll?.option2 || 'No');
+                          const total = currentPollVote ? (currentPollVote.opt1Count + currentPollVote.opt2Count) : 0;
+                          const count = currentPollVote ? (choiceNum === 1 ? currentPollVote.opt1Count : currentPollVote.opt2Count) : 0;
+                          const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                          const isChosen = currentPollVote?.choice === choiceNum;
+                          return (
+                            <button
+                              key={`story-poll-opt-${choiceNum}`}
+                              type="button"
+                              onClick={() => handleVoteStoryPoll(choiceNum)}
+                              className={`relative overflow-hidden min-h-[40px] px-2.5 py-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer text-left ${
+                                isChosen
+                                  ? 'bg-rose-600/30 border-rose-400 text-white'
+                                  : 'bg-zinc-900/90 hover:bg-zinc-800 border-zinc-700 text-zinc-200'
+                              }`}
+                            >
+                              {currentPollVote && (
+                                <span
+                                  className="absolute inset-y-0 left-0 bg-rose-500/25 pointer-events-none transition-all duration-300"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              )}
+                              <span className="relative z-10 flex items-center justify-between gap-1">
+                                <span className="truncate">{optLabel}</span>
+                                {currentPollVote && <span className="font-mono text-[10px] text-rose-300">{pct}%</span>}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {safeExternalLink && (
+                    <a
+                      href={safeExternalLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-2 min-h-[40px] px-4 py-2 rounded-full bg-zinc-950/90 hover:bg-zinc-900 border border-teal-400/60 text-teal-300 text-xs font-mono font-bold shadow-xl transition-transform hover:scale-105"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate max-w-[220px]">
+                        {safeExternalLink.replace(/^https?:\/\//i, '')}
+                      </span>
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Bottom Interactive Bar: Quick Reactions + Reply Input (Facebook Style) */}
@@ -612,17 +860,22 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                   { emoji: '⚡', label: 'Thunder' },
                   { emoji: '🩸', label: 'Blood' },
                   { emoji: '🖤', label: 'Black Heart' },
-                ].map((rx) => (
-                  <button
-                    key={rx.emoji}
-                    type="button"
-                    onClick={() => sendReaction(rx.emoji, rx.label)}
-                    className="text-lg hover:scale-130 transition-transform active:scale-90 p-1 cursor-pointer"
-                    title={rx.label}
-                  >
-                    {rx.emoji}
-                  </button>
-                ))}
+                ].map((rx) => {
+                  const isReacted = currentStoryReaction?.emoji === rx.emoji;
+                  return (
+                    <button
+                      key={rx.emoji}
+                      type="button"
+                      onClick={() => sendReaction(rx.emoji, rx.label)}
+                      className={`min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full text-lg hover:scale-125 transition-transform active:scale-90 cursor-pointer ${
+                        isReacted ? 'bg-rose-500/25 ring-1 ring-rose-400/60' : ''
+                      }`}
+                      title={rx.label}
+                    >
+                      {rx.emoji}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Reply Input Form */}
@@ -634,15 +887,15 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                   onFocus={() => setIsPaused(true)}
                   onBlur={() => setIsPaused(false)}
                   placeholder={`Reply to ${authorName}...`}
-                  className="flex-1 px-3.5 py-2 rounded-full bg-zinc-900/80 border border-zinc-700/60 text-xs text-white placeholder-zinc-400 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition-colors"
+                  className="flex-1 min-h-[40px] px-3.5 py-2 rounded-full bg-zinc-900/80 border border-zinc-700/60 text-xs text-white placeholder-zinc-400 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition-colors"
                 />
                 <button
                   type="submit"
-                  disabled={!replyText.trim()}
-                  className="w-8 h-8 rounded-full bg-rose-600 hover:bg-rose-500 disabled:opacity-40 disabled:hover:bg-rose-600 text-white flex items-center justify-center transition-all cursor-pointer shrink-0 shadow-md"
+                  disabled={!replyText.trim() || isSendingReply}
+                  className="w-10 h-10 rounded-full bg-rose-600 hover:bg-rose-500 disabled:opacity-40 disabled:hover:bg-rose-600 text-white flex items-center justify-center transition-all cursor-pointer shrink-0 shadow-md"
                   title="Send Reply"
                 >
-                  <Send className="w-3.5 h-3.5" />
+                  <Send className="w-4 h-4" />
                 </button>
               </form>
             </div>

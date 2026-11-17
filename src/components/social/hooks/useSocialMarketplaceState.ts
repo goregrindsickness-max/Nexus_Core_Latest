@@ -1,4 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import {
+  readStoredCart,
+  writeStoredCart,
+  getItemAvailableStock,
+  type CartFulfillmentMap,
+} from '../../../services/shopCommerceService';
 
 export interface UseSocialMarketplaceStateParams {
   setShowAddItemModal: (open: boolean) => void;
@@ -44,7 +50,7 @@ export function useSocialMarketplaceState({
     triggerNotification?.('Item listed on marketplace!');
   };
 
-  // Cart & Stripe Checkout
+  // Cart & Stripe Checkout (Persistent)
   const [cartItems, setCartItems] = useState<{
     id: string;
     productId: string;
@@ -54,29 +60,73 @@ export function useSocialMarketplaceState({
     bandName: string;
     quantity: number;
     size?: string;
-  }[]>([]);
+    category?: string;
+    subcategory?: string;
+    stock?: number;
+    maxStock?: number | null;
+    tracks?: any[];
+  }[]>(() => readStoredCart());
+  const [fulfillmentMap, setFulfillmentMap] = useState<CartFulfillmentMap>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showStripeCartCheckout, setShowStripeCartCheckout] = useState(false);
 
-  const addToCart = (product: any, size?: string) => {
+  useEffect(() => {
+    writeStoredCart(cartItems);
+  }, [cartItems]);
+
+  const addToCart = (product: any, size?: string, qty: number = 1) => {
+    const requestedQty = Math.max(1, Number(qty) || 1);
+    const normalizedSize = size || undefined;
+    const stockCheck = getItemAvailableStock(product, normalizedSize);
+
+    if (stockCheck.isSoldOut || stockCheck.isVariantSoldOut) {
+      triggerNotification?.(
+        normalizedSize
+          ? `Sorry, "${product.name}" (${normalizedSize}) is currently sold out.`
+          : `Sorry, "${product.name}" is currently sold out.`
+      );
+      return;
+    }
+
+    const maxAvailable = stockCheck.isUnlimited ? null : (stockCheck.variantStock ?? stockCheck.totalStock);
+
     setCartItems(prev => {
-      const existing = prev.find(item => item.productId === product.id && item.size === size);
+      const existing = prev.find(
+        item => item.productId === product.id && (item.size || '') === (normalizedSize || '')
+      );
       if (existing) {
-        return prev.map(item => item.id === existing.id ? { ...item, quantity: item.quantity + 1 } : item);
+        const nextQty = existing.quantity + requestedQty;
+        const clampedQty = maxAvailable !== null ? Math.min(maxAvailable, nextQty) : nextQty;
+        if (maxAvailable !== null && nextQty > maxAvailable) {
+          triggerNotification?.(`Only ${maxAvailable} available in stock for ${product.name}.`);
+        }
+        return prev.map(item =>
+          item.id === existing.id ? { ...item, quantity: clampedQty, maxStock: maxAvailable } : item
+        );
       }
-      return [...prev, {
-        id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        productId: product.id,
-        name: product.name,
-        price: product.price,
-        image: product.thumbnail || product.image,
-        bandName: product.seller || product.brand || 'Nexus Merchant',
-        quantity: 1,
-        size
-      }];
+
+      const initialQty = maxAvailable !== null ? Math.min(maxAvailable, requestedQty) : requestedQty;
+      return [
+        ...prev,
+        {
+          id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          productId: product.id,
+          name: product.name,
+          price: Number(product.price) || 0,
+          image: product.thumbnail || product.image || product.fallbackThumbnail,
+          bandName: product.bandName || product.artist || product.band || product.seller || product.brand || 'Nexus Merchant',
+          quantity: initialQty,
+          size: normalizedSize,
+          category: product.category,
+          subcategory: product.subcategory,
+          stock: product.stock,
+          maxStock: maxAvailable,
+          tracks: product.tracks,
+        },
+      ];
     });
     setIsCartOpen(true);
-    triggerNotification?.(`Added ${product.name} to cart.`);
+    triggerNotification?.(`Added ${product.name}${normalizedSize ? ` (${normalizedSize})` : ''} to cart.`);
   };
 
   // Direct Merch Checkout
@@ -140,6 +190,8 @@ export function useSocialMarketplaceState({
 
     cartItems,
     setCartItems,
+    fulfillmentMap,
+    setFulfillmentMap,
     isCartOpen,
     setIsCartOpen,
     showStripeCartCheckout,

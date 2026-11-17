@@ -36,12 +36,20 @@ import {
   Layers,
   Award,
   Edit3,
-  Trash2
+  Trash2,
+  MessageSquare,
+  AlertTriangle
 } from 'lucide-react';
 import { getSupabase } from '../../../supabase';
 import { showsStore } from '../../../utils/indexedDB';
 import { resolveLocationCoordinates } from '../../../lib/geoResolution';
-import { isPastShowDate, formatShowDate } from '../../../utils/socialFeedUtils';
+import {
+  isPastShowDate,
+  formatShowDate,
+  getExternalTicketUrl,
+  getExternalTicketProviderName,
+  getShowTicketTiers
+} from '../../../utils/socialFeedUtils';
 import { isShowEmbargoedOrDraft } from '../../../utils/showDisplayUtils';
 import { tourPackageManager } from '../../../lib/tourPackageManager';
 import { authFetch } from '../../../utils/apiConfig';
@@ -289,6 +297,8 @@ export const normalizeShowToEventDirectoryItem = (show: any, idx: number = 0, us
     ? (String(doorsVal).toLowerCase().includes('door') ? doorsVal : `Doors ${doorsVal}`)
     : (show.set_time ? `Set ${show.set_time}` : (show.time || 'Doors 7:30 PM'));
 
+  const normalizedTiers = getShowTicketTiers({ ...show, additional_notes: extraNotes });
+
   let priceDisplay = show.price;
   if (!priceDisplay) {
     if (show.day_of_show_price && show.presale_price) {
@@ -299,12 +309,15 @@ export const normalizeShowToEventDirectoryItem = (show: any, idx: number = 0, us
       priceDisplay = `$${show.ticket_price}`;
     } else if (show.day_of_show_price) {
       priceDisplay = String(show.day_of_show_price).startsWith('$') ? show.day_of_show_price : `$${show.day_of_show_price}`;
+    } else if (normalizedTiers.length > 0) {
+      const minTier = Math.min(...normalizedTiers.map((t) => t.price));
+      priceDisplay = normalizedTiers.length > 1 ? `From $${minTier}` : `$${minTier}`;
+    } else if (show.external_ticket_url || show.ticket_url) {
+      priceDisplay = 'External Tickets';
     } else if (show.guarantee_amount && show.guarantee_amount > 0) {
       priceDisplay = `$${Math.min(45, Math.max(15, Math.round(show.guarantee_amount / 100)))}`;
-    } else if (show.external_ticket_url) {
-      priceDisplay = 'External Tickets';
     } else {
-      priceDisplay = '$25';
+      priceDisplay = 'Door Admission';
     }
   }
 
@@ -384,9 +397,13 @@ export const normalizeShowToEventDirectoryItem = (show: any, idx: number = 0, us
     festival_name: show.festival_name || resolvedTourName || show.tour_name,
     time: timeDisplay,
     price: priceDisplay,
+    presale_price: show.presale_price,
+    day_of_show_price: show.day_of_show_price,
+    ticket_tiers: normalizedTiers,
     genre,
     support: supportList,
     ticketUrl,
+    external_ticket_url: show.external_ticket_url || extraNotes.external_ticket_url || ticketUrl,
     flyerUrl,
     verified: true,
     isFromShowsTable: true,
@@ -559,14 +576,19 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
   };
 
   // Open Full Event Companion Page handler
-  const handleOpenFullEventPage = (event: any) => {
+  const handleOpenFullEventPage = (event: any, initialTab: 'info' | 'setlist' | 'chat' = 'info') => {
     if (!event) return;
+    const enrichedEvent = { ...event, initialTab, openPitWall: initialTab === 'chat' };
     if (onOpenEventPage) {
-      onOpenEventPage(event);
+      onOpenEventPage(enrichedEvent);
     }
     // Also dispatch custom window event for universal deep-linking across the app
-    window.dispatchEvent(new CustomEvent('open-event-companion', { detail: event }));
-    triggerNotification?.(`Opening event page: ${event.title || event.headliner || 'Show'}`);
+    window.dispatchEvent(new CustomEvent('open-event-companion', { detail: enrichedEvent }));
+    triggerNotification?.(
+      initialTab === 'chat'
+        ? `Opening live Venue Pit Wall: ${event.title || event.headliner || 'Show'}`
+        : `Opening event page: ${event.title || event.headliner || 'Show'}`
+    );
   };
 
   // Handler to permanently delete a show from Community Archives
@@ -2360,7 +2382,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
                         <div className="pt-2 space-y-2">
                           <button
                             type="button"
-                            onClick={() => handleOpenFullEventPage(activeEvent)}
+                            onClick={() => handleOpenFullEventPage(activeEvent, 'info')}
                             className="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:via-orange-400 hover:to-amber-400 text-black font-mono uppercase font-black text-xs py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.35)] flex items-center justify-center gap-2 cursor-pointer border border-amber-300/80 active:scale-[0.98]"
                           >
                             <Sparkles className="w-4 h-4 text-black animate-pulse" /> Open Full Event Page
@@ -2368,24 +2390,46 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
 
                           <button
                             type="button"
-                            onClick={() => {
-                              triggerNotification?.(`🎟️ Reserved pass for ${activeEvent.title}!`);
-                            }}
-                            className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-mono uppercase font-black text-xs py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] flex items-center justify-center gap-2 cursor-pointer"
+                            onClick={() => handleOpenFullEventPage(activeEvent, 'chat')}
+                            className="w-full bg-rose-600/90 hover:bg-rose-500 text-white font-mono uppercase font-black text-xs py-2.5 rounded-xl transition-all shadow-[0_0_15px_rgba(244,63,94,0.3)] flex items-center justify-center gap-2 cursor-pointer border border-rose-400/50 active:scale-[0.98]"
                           >
-                            <Ticket className="w-4 h-4" /> Claim Presale Pass
+                            <MessageSquare className="w-4 h-4" /> Enter Venue Pit Wall (Live Chat)
                           </button>
 
-                          {activeEvent.ticketUrl && (
-                            <a
-                              href={activeEvent.ticketUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white font-mono uppercase font-bold text-[10px] py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-zinc-800"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5" /> Official Box Office Website
-                            </a>
-                          )}
+                          {(() => {
+                            const externalUrl = getExternalTicketUrl(activeEvent);
+                            const externalProvider = getExternalTicketProviderName(externalUrl);
+                            if (externalUrl) {
+                              return (
+                                <div className="space-y-2 pt-1">
+                                  <div className="p-2.5 rounded-xl bg-amber-950/30 border border-amber-500/40 flex items-start gap-2 text-[10px] font-mono text-amber-200/90 leading-snug">
+                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                    <span>
+                                      Tickets sold off-platform via <strong className="text-white">{externalProvider}</strong>. Nexus Core does not track external purchases or issue scannable QR entry codes for them.
+                                    </span>
+                                  </div>
+                                  <a
+                                    href={externalUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-full bg-amber-500 hover:bg-amber-400 text-black font-mono uppercase font-black text-xs py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] flex items-center justify-center gap-2"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    <span>Buy Tickets on {externalProvider}</span>
+                                  </a>
+                                </div>
+                              );
+                            }
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenFullEventPage(activeEvent, 'info')}
+                                className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-mono uppercase font-black text-xs py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <Ticket className="w-4 h-4" /> View Box Office & Passes
+                              </button>
+                            );
+                          })()}
                         </div>
                       </div>
                     ) : (

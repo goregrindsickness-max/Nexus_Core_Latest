@@ -57,43 +57,22 @@ export default function ShowExpandedView({
   const [newPitWallMessage, setNewPitWallMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load venue pit wall messages
+  // Load venue pit wall messages from backend
   useEffect(() => {
     if (!show?.id) return;
-    const storageKey = `nexus_venue_pitwall_${show.id}`;
-    const cached = localStorage.getItem(storageKey);
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setPitWallMessages(parsed);
-          return;
+    let cancelled = false;
+    fetch(`/api/shows/${encodeURIComponent(show.id)}/pitwall`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!cancelled && data && Array.isArray(data.messages)) {
+          setPitWallMessages(data.messages);
         }
-      } catch (e) {
-        console.warn("Could not parse pit messages", e);
-      }
-    }
-
-    const seed = [
-      {
-        id: `seed-1-${show.id}`,
-        user: 'Pit Host',
-        username: 'Pit Host',
-        text: `Welcome to the live Pit Wall for ${show.name}! Sound off in the chat 🤘`,
-        time: 'Showtime',
-        timestamp: 'Showtime'
-      },
-      {
-        id: `seed-2-${show.id}`,
-        user: 'Tour Crew',
-        username: 'Tour Crew',
-        text: `Doors open at ${show.doors_time || 'scheduled time'}. Load-in complete!`,
-        time: '30m ago',
-        timestamp: '30m ago'
-      }
-    ];
-    setPitWallMessages(seed);
-  }, [show?.id, show?.name, show?.doors_time]);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [show?.id]);
 
   useEffect(() => {
     if (isPitWallOpen) {
@@ -104,17 +83,21 @@ export default function ShowExpandedView({
     }
   }, [isPitWallOpen, pitWallMessages.length]);
 
-  const handleSendPitMessage = (customText?: string) => {
+  const handleSendPitMessage = async (customText?: string) => {
     const text = (customText !== undefined ? customText : newPitWallMessage).trim();
     if (!text || !show) return;
 
     const newMsg = {
-      id: `msg_${Date.now()}`,
+      id: `pit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      eventId: show.id,
+      user_id: show.band_id || bandName || 'artist',
       user: 'You',
       username: bandName || 'Artist',
+      role: 'Band',
       text: text,
       time: 'Just now',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      created_at: new Date().toISOString()
     };
 
     setPitWallMessages(prev => {
@@ -126,6 +109,14 @@ export default function ShowExpandedView({
     });
 
     setNewPitWallMessage('');
+
+    try {
+      await fetch(`/api/shows/${encodeURIComponent(show.id)}/pitwall`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMsg),
+      });
+    } catch (_) {}
   };
 
   const [itineraries, setItineraries] = useState<any[]>([]);
@@ -792,7 +783,7 @@ export default function ShowExpandedView({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed top-0 right-0 h-[100dvh] w-full sm:w-[420px] bg-[#0c0f12] border-l border-rose-900/50 z-[200] flex flex-col shadow-2xl"
+            className="fixed top-0 right-0 h-[100dvh] w-full sm:w-[420px] bg-[#0c0f12] border-l border-rose-900/50 z-[10080] flex flex-col shadow-2xl"
           >
             {/* Header */}
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/90">

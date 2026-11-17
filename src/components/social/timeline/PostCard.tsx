@@ -22,6 +22,7 @@ import {
   AlertCircle,
   Loader2,
   Pencil,
+  Bookmark,
 } from 'lucide-react';
 import { uploadBase64ToStorage } from '../../../supabase';
 import { isValidStorageOrImageUrl } from '../../../services/storageService';
@@ -139,7 +140,7 @@ interface PostCardProps {
   setCartNotice: (notice: string | null) => void;
   onToggleComments: () => void;
   onCommentDraftChange: (text: string) => void;
-  onCommentSubmit: (e: React.FormEvent) => void;
+  onCommentSubmit: (e: React.FormEvent, mediaUrl?: string) => void;
   onSetReplyingTo: (info: { commentId: string; username: string } | null) => void;
   onTriggerEmojiReact: (type: string) => void;
   onOpenReactionMenu: () => void;
@@ -148,6 +149,8 @@ interface PostCardProps {
   onOpenReactionsModal?: () => void;
   onEditComment?: (commentId: string, newText: string) => void;
   onDeleteComment?: (commentId: string) => void;
+  isBookmarked?: boolean;
+  onToggleBookmark?: (postId: string) => void;
 }
 
 const KNOWN_USER_FULL_NAMES: Record<string, string> = {
@@ -256,8 +259,38 @@ export const PostCard: React.FC<PostCardProps> = ({
   onOpenReactionsModal,
   onEditComment,
   onDeleteComment,
+  isBookmarked: propIsBookmarked,
+  onToggleBookmark,
 }) => {
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [localBookmarked, setLocalBookmarked] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem('nexus_bookmarked_feed_posts_v1');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) && parsed.includes(post.id);
+    } catch {
+      return false;
+    }
+  });
+  const isPostBookmarked = propIsBookmarked !== undefined ? propIsBookmarked : localBookmarked;
+
+  const handleBookmarkClick = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (onToggleBookmark) {
+      onToggleBookmark(post.id);
+      return;
+    }
+    try {
+      const raw = localStorage.getItem('nexus_bookmarked_feed_posts_v1');
+      const existing: string[] = raw ? JSON.parse(raw) : [];
+      const exists = Array.isArray(existing) && existing.includes(post.id);
+      const next = exists ? existing.filter((id) => id !== post.id) : [post.id, ...(Array.isArray(existing) ? existing : [])];
+      localStorage.setItem('nexus_bookmarked_feed_posts_v1', JSON.stringify(next));
+      setLocalBookmarked(!exists);
+      window.dispatchEvent(new CustomEvent('nexus_feed_bookmarks_updated', { detail: next }));
+      onTriggerNotification?.(!exists ? '🔖 Post saved to your Saved stream!' : 'Removed from Saved stream.');
+    } catch {}
+  };
   const isLongPressRef = useRef<boolean>(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -1220,14 +1253,28 @@ export const PostCard: React.FC<PostCardProps> = ({
           </div>
         </div>
 
-        {/* 3-Dot Options Dropdown Menu */}
-        <div className="relative shrink-0 mt-0.5">
+        {/* Bookmark & 3-Dot Options Dropdown Menu */}
+        <div className="relative shrink-0 mt-0.5 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleBookmarkClick}
+            className={`min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl border transition-all cursor-pointer ${
+              isPostBookmarked
+                ? 'bg-amber-950/60 border-amber-500/60 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                : 'bg-zinc-900/90 border-zinc-800/80 text-zinc-400 hover:text-amber-300 hover:border-zinc-700'
+            }`}
+            title={isPostBookmarked ? 'Remove from Saved' : 'Save Post'}
+            aria-label={isPostBookmarked ? 'Remove from Saved' : 'Save Post'}
+          >
+            <Bookmark className={`w-4 h-4 ${isPostBookmarked ? 'fill-amber-300' : ''}`} />
+          </button>
+
           <button
             onClick={(e) => {
               e.stopPropagation();
               onTogglePostMenu();
             }}
-            className={`p-2 rounded-xl border transition-all cursor-pointer ${
+            className={`min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl border transition-all cursor-pointer ${
               isPostMenuOpen
                 ? 'bg-zinc-800 border-zinc-600 text-white shadow-lg'
                 : 'bg-zinc-900/90 border-zinc-800/80 text-zinc-400 hover:text-white hover:border-zinc-700'
@@ -1296,6 +1343,18 @@ export const PostCard: React.FC<PostCardProps> = ({
                     <span>Delete Post</span>
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleBookmarkClick();
+                    onClosePostMenu();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono text-amber-300 hover:bg-amber-500/10 hover:text-amber-200 transition-colors text-left"
+                >
+                  <Bookmark className={`w-3.5 h-3.5 ${isPostBookmarked ? 'fill-amber-300 text-amber-300' : 'text-amber-400'}`} />
+                  <span>{isPostBookmarked ? 'Unsave Post' : 'Save Post'}</span>
+                </button>
 
                 <button
                   type="button"
@@ -1810,7 +1869,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           onTouchStart={startLongPress}
           onTouchEnd={cancelLongPress}
           onClick={() => handleReactionButtonClick(activePaletteItem?.id || defaultReactionId)}
-          className={`w-full py-2 px-3 rounded-xl border text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer group select-none ${
+          className={`w-full min-h-[40px] py-2 px-3 rounded-xl border text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer group select-none ${
             hasUserReacted
               ? 'bg-rose-950/60 border-rose-600 text-rose-300 shadow-[0_0_10px_rgba(244,63,94,0.2)]'
               : 'bg-zinc-900/90 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
@@ -1843,7 +1902,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         {/* Button 2: Comment */}
         <button
           onClick={onToggleComments}
-          className="py-2 px-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          className="min-h-[40px] py-2 px-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
         >
           <MessageSquare className="w-3.5 h-3.5" />
           <span>Comment</span>
@@ -1852,7 +1911,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         {/* Button 3: Share */}
         <button
           onClick={onOpenShareModal}
-          className="py-2 px-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer relative"
+          className="min-h-[40px] py-2 px-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer relative"
         >
           <Share2 className="w-3.5 h-3.5" />
           <span>{shareToastActive ? 'Copied!' : 'Share'}</span>

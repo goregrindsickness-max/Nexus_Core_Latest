@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   MapPin,
@@ -25,11 +25,61 @@ import {
   Check,
   Send,
   MessageSquare,
-  Trash2
+  Trash2,
+  Reply,
+  Pin,
+  Megaphone,
+  Tag,
+  AlertTriangle
 } from 'lucide-react';
 import { bandSetlists } from '../../../data/socialFeedMockData';
-import { formatTimeTo12h, hasGigTickets } from '../../../utils/socialFeedUtils';
+import {
+  formatTimeTo12h,
+  hasGigTickets,
+  getExternalTicketUrl,
+  getExternalTicketProviderName,
+  getShowTicketTiers,
+  parseSingleAdmissionPrice,
+  findInAppPassForEvent
+} from '../../../utils/socialFeedUtils';
 
+type PitCategory = 'chat' | 'set_times' | 'merch' | 'meetup' | 'pit';
+
+const PIT_CATEGORIES: Array<{
+  id: 'all' | PitCategory;
+  label: string;
+  shortLabel: string;
+  badgeClass: string;
+}> = [
+  { id: 'all', label: 'All Activity', shortLabel: 'All', badgeClass: 'bg-zinc-800 text-zinc-300 border-zinc-700' },
+  { id: 'chat', label: '💬 General', shortLabel: '💬 Chat', badgeClass: 'bg-zinc-800/90 text-zinc-300 border-zinc-700' },
+  { id: 'set_times', label: '⏱️ Set Times', shortLabel: '⏱️ Set Times', badgeClass: 'bg-amber-950/80 text-amber-300 border-amber-500/40' },
+  { id: 'merch', label: '👕 Merch Report', shortLabel: '👕 Merch', badgeClass: 'bg-purple-950/80 text-purple-300 border-purple-500/40' },
+  { id: 'meetup', label: '🚗 Meetup / Rides', shortLabel: '🚗 Meetup', badgeClass: 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40' },
+  { id: 'pit', label: '🔥 Front Row / Pit', shortLabel: '🔥 In Pit', badgeClass: 'bg-rose-950/80 text-rose-300 border-rose-500/40' },
+];
+
+const PIT_REACTION_EMOJIS = ['🤘', '🔥', '💀', '🍻'];
+
+const LEGACY_MOCK_NAMES = new Set([
+  'pit host',
+  'jax_riff',
+  'valkyrie_v',
+  'metalhead99',
+  'sarahv',
+  'tour crew',
+]);
+
+function isMockSeedMessage(msg: any): boolean {
+  if (!msg) return true;
+  const id = String(msg.id || '');
+  if (id.startsWith('seed-') || id === 'msg_1' || id === 'msg_2') return true;
+  const uid = String(msg.user_id || '');
+  if (uid.startsWith('seed-')) return true;
+  const uname = String(msg.username || msg.author || msg.user || '').toLowerCase().trim();
+  if (LEGACY_MOCK_NAMES.has(uname)) return true;
+  return false;
+}
 
 interface EventCompanionModalProps {
   isEventModeActive: boolean;
@@ -91,6 +141,41 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Enhanced Venue Pit Wall states
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState<'all' | PitCategory>('all');
+  const [composerCategory, setComposerCategory] = useState<PitCategory>('chat');
+  const [replyingTo, setReplyingTo] = useState<{ id: string; username: string; text: string } | null>(null);
+  const [pinnedNotice, setPinnedNotice] = useState<{ text: string; updatedBy: string; updatedAt: string } | null>(null);
+  const [isEditingPin, setIsEditingPin] = useState(false);
+  const [pinDraftText, setPinDraftText] = useState('');
+  const [isLoadingPitWall, setIsLoadingPitWall] = useState(false);
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const eventKey = useMemo(() => {
+    if (!activeEventData) return 'default_event';
+    return String(
+      activeEventData.id ||
+        `${activeEventData.headliner || activeEventData.title || 'show'}_${activeEventData.date || ''}`
+    ).trim();
+  }, [activeEventData]);
+
+  // Resolve current actor ID for reactions & ownership
+  const currentActorId = useMemo(() => {
+    if (userProfile?.id) return String(userProfile.id);
+    try {
+      let stored = localStorage.getItem('nexus_guest_user_id');
+      if (!stored) {
+        stored = `guest_${Math.random().toString(36).substring(2, 8)}`;
+        localStorage.setItem('nexus_guest_user_id', stored);
+      }
+      return stored;
+    } catch (_) {
+      return 'guest_fan';
+    }
+  }, [userProfile?.id]);
+
   // Check ownership of the show
   const isShowOwner = React.useMemo(() => {
     if (!activeEventData) return false;
@@ -129,8 +214,10 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
     if (!activeEventData) return;
 
     setShowDeleteConfirm(false);
-    // Reset expanded setlists to collapsed by default for each opened show
     setExpandedSetlists({});
+    setReplyingTo(null);
+    setActiveCategoryFilter('all');
+    setIsEditingPin(false);
 
     const eventId = activeEventData.id || activeEventData.headliner || 'default';
     const userKey = userProfile?.id || 'guest';
@@ -157,7 +244,6 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
     const prevStatus = rsvpStatus;
     let newStatus: 'going' | 'maybe' | 'cant_make' | null = status;
 
-    // If clicking the same status, toggle off
     if (prevStatus === status) {
       newStatus = null;
       localStorage.removeItem(`nexus_event_rsvp_${eventId}_${userKey}`);
@@ -167,7 +253,6 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
 
     setRsvpStatus(newStatus);
 
-    // Adjust live counts
     setRsvpCounts(prev => {
       const updated = { ...prev };
       if (prevStatus === 'going') updated.going = Math.max(0, updated.going - 1);
@@ -181,7 +266,6 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
       return updated;
     });
 
-    // Persist to Supabase if table exists
     const supabaseClient = getSupabase ? getSupabase() : null;
     if (supabaseClient && userProfile?.id) {
       supabaseClient.from('nexus_event_rsvps').upsert({
@@ -200,64 +284,99 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
     }));
   };
 
-  // Reference to auto-scroll pit wall messages
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Initialize or load venue pit wall messages for the active event
+  // Load real Pit Wall messages from server + subscribe to Realtime channel
   useEffect(() => {
-    if (!activeEventData) return;
-    const eventId = activeEventData.id || activeEventData.headliner || 'default_event';
-    const storageKey = `nexus_venue_pitwall_${eventId}`;
+    if (!activeEventData || !isEventModeActive) return;
+    const storageKey = `nexus_venue_pitwall_${eventKey}`;
 
-    const cached = localStorage.getItem(storageKey);
-    if (cached) {
-      try {
+    // 1. Load any real non-mock cached messages first for instant UI
+    try {
+      const cached = localStorage.getItem(storageKey);
+      if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setVenueMessages(parsed);
-          return;
+        if (Array.isArray(parsed)) {
+          const realOnly = parsed.filter(m => !isMockSeedMessage(m));
+          setVenueMessages(realOnly);
+          if (realOnly.length !== parsed.length) {
+            localStorage.setItem(storageKey, JSON.stringify(realOnly));
+          }
         }
-      } catch (e) {
-        console.warn("Could not parse cached pit messages", e);
+      } else {
+        setVenueMessages([]);
       }
+    } catch (_) {
+      setVenueMessages([]);
     }
 
-    // Default high-energy seed messages for this specific venue & show
-    const venueName = activeEventData.venue || 'The Venue';
-    const headliner = activeEventData.headliner || 'Tonight\'s Show';
-    const seedMessages = [
-      {
-        id: `seed-1-${eventId}`,
-        user_id: 'seed-system',
-        username: 'Pit Host',
-        avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
-        text: `Welcome to the live Pit Wall for ${headliner} at ${venueName}! Keep it brutal 🤘`,
-        timestamp: 'Showtime',
-        is_official: true
-      },
-      {
-        id: `seed-2-${eventId}`,
-        user_id: 'seed-user-1',
-        username: 'Jax_Riff',
-        avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100',
-        text: 'Soundcheck sounded monstrous outside! Doors moving quick.',
-        timestamp: '15m ago'
-      },
-      {
-        id: `seed-3-${eventId}`,
-        user_id: 'seed-user-2',
-        username: 'Valkyrie_V',
-        avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100',
-        text: 'Merch table has the tour-exclusive vinyls. Grab em before they vanish 🔥',
-        timestamp: '8m ago'
-      }
-    ];
+    // 2. Fetch authoritative messages & pinned notice from backend
+    let cancelled = false;
+    setIsLoadingPitWall(true);
+    fetch(`/api/shows/${encodeURIComponent(eventKey)}/pitwall`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (cancelled || !data) return;
+        if (Array.isArray(data.messages)) {
+          const clean = data.messages.filter((m: any) => !isMockSeedMessage(m));
+          setVenueMessages(clean);
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(clean));
+          } catch (_) {}
+        }
+        if (data.pinnedNotice !== undefined) {
+          setPinnedNotice(data.pinnedNotice || null);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIsLoadingPitWall(false);
+      });
 
-    setVenueMessages(seedMessages);
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(seedMessages));
-    } catch (_) {}
-  }, [activeEventData?.id, activeEventData?.headliner, activeEventData?.venue]);
+    // 3. Subscribe to Supabase Realtime broadcast channel for instant multi-user sync
+    const supabaseClient = getSupabase ? getSupabase() : null;
+    let channel: any = null;
+    if (supabaseClient) {
+      channel = supabaseClient.channel(`venue_chat_${eventKey}`, {
+        config: { broadcast: { self: false } }
+      });
+
+      channel
+        .on('broadcast', { event: 'venue_msg' }, (payload: any) => {
+          const incoming = payload?.payload;
+          if (!incoming || isMockSeedMessage(incoming)) return;
+          setVenueMessages(prev => {
+            if (prev.some(m => m.id === incoming.id)) return prev;
+            const updated = [...prev, incoming];
+            try {
+              localStorage.setItem(storageKey, JSON.stringify(updated));
+            } catch (_) {}
+            return updated;
+          });
+        })
+        .on('broadcast', { event: 'venue_react' }, (payload: any) => {
+          const updatedMsg = payload?.payload;
+          if (!updatedMsg?.id) return;
+          setVenueMessages(prev =>
+            prev.map(m => (m.id === updatedMsg.id ? { ...m, reactions: updatedMsg.reactions } : m))
+          );
+        })
+        .on('broadcast', { event: 'venue_pin' }, (payload: any) => {
+          setPinnedNotice(payload?.payload || null);
+        })
+        .on('broadcast', { event: 'venue_delete' }, (payload: any) => {
+          const deletedId = payload?.payload?.messageId;
+          if (!deletedId) return;
+          setVenueMessages(prev => prev.filter(m => m.id !== deletedId));
+        })
+        .subscribe();
+    }
+
+    return () => {
+      cancelled = true;
+      if (supabaseClient && channel) {
+        supabaseClient.removeChannel(channel);
+      }
+    };
+  }, [eventKey, isEventModeActive]);
 
   // Auto-scroll when switching to chat or when new messages arrive
   useEffect(() => {
@@ -269,75 +388,255 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
     }
   }, [eventModeTab, venueMessages.length]);
 
-  const handleSendVenueMessage = (textToSend?: string) => {
+  const handleSendVenueMessage = async (textToSend?: string, overrideCategory?: PitCategory) => {
     const rawText = textToSend !== undefined ? textToSend : venueMessageInput;
     const text = (rawText || '').trim();
     if (!text || !activeEventData) return;
 
-    // Resolve sender identity with fallback so guest/unregistered users are NEVER blocked
-    let guestId = 'guest_fan';
-    try {
-      let stored = localStorage.getItem('nexus_guest_user_id');
-      if (!stored) {
-        stored = `guest_${Math.random().toString(36).substring(2, 8)}`;
-        localStorage.setItem('nexus_guest_user_id', stored);
-      }
-      guestId = stored;
-    } catch (_) {}
-
-    const senderId = userProfile?.id || guestId;
-    const senderName = userProfile?.username || userProfile?.name || userProfile?.full_name || 'Fan In The Pit';
-    const senderAvatar = userProfile?.avatar_url || userProfile?.avatar || userProfile?.profileAvatarUrl || '';
+    const senderId = currentActorId;
+    const senderName =
+      userProfile?.bandName ||
+      userProfile?.username ||
+      userProfile?.name ||
+      userProfile?.full_name ||
+      'Scene Attendee';
+    const senderHandle = userProfile?.handle || userProfile?.username || '';
+    const senderAvatar =
+      userProfile?.avatar_url || userProfile?.avatar || userProfile?.profileAvatarUrl || '';
+    const senderRole = userProfile?.role || userProfile?.type || (isShowOwner ? 'Show Host' : 'Fan');
+    const chosenCat = overrideCategory || composerCategory || 'chat';
 
     const payload = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: `pit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      eventId: eventKey,
       user_id: senderId,
       username: senderName,
+      handle: senderHandle,
       avatar_url: senderAvatar,
-      text: text,
+      role: senderRole,
+      category: chosenCat,
+      text,
+      replyTo: replyingTo
+        ? {
+            id: replyingTo.id,
+            username: replyingTo.username,
+            text: replyingTo.text,
+          }
+        : null,
+      reactions: {},
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       created_at: new Date().toISOString()
     };
 
     // 1. Optimistic local state update IMMEDIATELY
+    const storageKey = `nexus_venue_pitwall_${eventKey}`;
     setVenueMessages(prev => {
-      const updated = [...prev, payload];
-      const eventId = activeEventData.id || activeEventData.headliner || 'default_event';
+      const cleanPrev = prev.filter(m => !isMockSeedMessage(m) && m.id !== payload.id);
+      const updated = [...cleanPrev, payload];
       try {
-        localStorage.setItem(`nexus_venue_pitwall_${eventId}`, JSON.stringify(updated));
+        localStorage.setItem(storageKey, JSON.stringify(updated));
       } catch (_) {}
       return updated;
     });
 
     setVenueMessageInput('');
+    setReplyingTo(null);
 
-    // 2. Broadcast via Supabase and insert into table if available
+    // 2. Persist to authoritative backend endpoint
+    try {
+      const res = await fetch(`/api/shows/${encodeURIComponent(eventKey)}/pitwall`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.message) {
+          setVenueMessages(prev =>
+            prev.map(m => (m.id === payload.id ? data.message : m))
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('Pit Wall server save note:', err);
+    }
+
+    // 3. Broadcast via Supabase Realtime to other connected attendees
     try {
       const supabaseClient = getSupabase ? getSupabase() : null;
       if (supabaseClient) {
-        supabaseClient.channel(`venue_chat_${activeEventData.id || activeEventData.headliner}`).send({
+        supabaseClient.channel(`venue_chat_${eventKey}`).send({
           type: 'broadcast',
           event: 'venue_msg',
-          payload: payload
-        });
-
-        supabaseClient.from('nexus_venue_chat').insert({
-          event_id: activeEventData.id || null,
-          profile_id: userProfile?.id || null,
-          sender_name: senderName,
-          message: text,
-          created_at: new Date().toISOString()
-        }).then(({ error }: any) => {
-          if (error) console.warn("Supabase venue chat sync note:", error.message);
+          payload
         });
       }
-    } catch (err) {
-      console.warn("Realtime broadcast note:", err);
+    } catch (_) {}
+  };
+
+  const handleToggleReaction = async (messageId: string, emoji: string) => {
+    if (!messageId) return;
+    const actorId = currentActorId;
+
+    // Optimistic update
+    let optimisticUpdatedMsg: any = null;
+    setVenueMessages(prev =>
+      prev.map(msg => {
+        if (msg.id !== messageId) return msg;
+        const reactions = { ...(msg.reactions || {}) };
+        const currentList: string[] = Array.isArray(reactions[emoji]) ? reactions[emoji] : [];
+        if (currentList.includes(actorId)) {
+          const next = currentList.filter(u => u !== actorId);
+          if (next.length === 0) delete reactions[emoji];
+          else reactions[emoji] = next;
+        } else {
+          reactions[emoji] = [...currentList, actorId];
+        }
+        optimisticUpdatedMsg = { ...msg, reactions };
+        return optimisticUpdatedMsg;
+      })
+    );
+
+    try {
+      const res = await fetch(
+        `/api/shows/${encodeURIComponent(eventKey)}/pitwall/${encodeURIComponent(messageId)}/react`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emoji, userId: actorId }),
+        }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.message) {
+          optimisticUpdatedMsg = data.message;
+          setVenueMessages(prev =>
+            prev.map(m => (m.id === messageId ? data.message : m))
+          );
+        }
+      }
+    } catch (_) {}
+
+    if (optimisticUpdatedMsg) {
+      try {
+        const supabaseClient = getSupabase ? getSupabase() : null;
+        if (supabaseClient) {
+          supabaseClient.channel(`venue_chat_${eventKey}`).send({
+            type: 'broadcast',
+            event: 'venue_react',
+            payload: optimisticUpdatedMsg,
+          });
+        }
+      } catch (_) {}
     }
   };
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!messageId) return;
+    const storageKey = `nexus_venue_pitwall_${eventKey}`;
+    setVenueMessages(prev => {
+      const updated = prev.filter(m => m.id !== messageId);
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+
+    try {
+      await fetch(
+        `/api/shows/${encodeURIComponent(eventKey)}/pitwall/${encodeURIComponent(messageId)}`,
+        { method: 'DELETE' }
+      );
+    } catch (_) {}
+
+    try {
+      const supabaseClient = getSupabase ? getSupabase() : null;
+      if (supabaseClient) {
+        supabaseClient.channel(`venue_chat_${eventKey}`).send({
+          type: 'broadcast',
+          event: 'venue_delete',
+          payload: { messageId },
+        });
+      }
+    } catch (_) {}
+  };
+
+  const handleSavePinnedNotice = async (textToPin: string) => {
+    const senderName =
+      userProfile?.bandName ||
+      userProfile?.username ||
+      userProfile?.name ||
+      'Show Host';
+    const clean = textToPin.trim();
+    const nextNotice = clean
+      ? { text: clean, updatedBy: senderName, updatedAt: new Date().toISOString() }
+      : null;
+
+    setPinnedNotice(nextNotice);
+    setIsEditingPin(false);
+
+    try {
+      await fetch(`/api/shows/${encodeURIComponent(eventKey)}/pitwall/pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: clean, updatedBy: senderName }),
+      });
+    } catch (_) {}
+
+    try {
+      const supabaseClient = getSupabase ? getSupabase() : null;
+      if (supabaseClient) {
+        supabaseClient.channel(`venue_chat_${eventKey}`).send({
+          type: 'broadcast',
+          event: 'venue_pin',
+          payload: nextNotice,
+        });
+      }
+    } catch (_) {}
+  };
+
+  // Filtered messages for active category
+  const visibleMessages = useMemo(() => {
+    const cleanList = (venueMessages || []).filter(m => !isMockSeedMessage(m));
+    if (activeCategoryFilter === 'all') return cleanList;
+    return cleanList.filter(m => (m.category || 'chat') === activeCategoryFilter);
+  }, [venueMessages, activeCategoryFilter]);
+
+  const uniqueParticipantCount = useMemo(() => {
+    const ids = new Set<string>();
+    (venueMessages || []).forEach(m => {
+      if (!isMockSeedMessage(m) && (m.user_id || m.username)) {
+        ids.add(String(m.user_id || m.username));
+      }
+    });
+    if (currentActorId) ids.add(currentActorId);
+    return ids.size;
+  }, [venueMessages, currentActorId]);
+
+  const [collectionsVersion, setCollectionsVersion] = useState(0);
+
+  useEffect(() => {
+    const refreshCollections = () => setCollectionsVersion((v) => v + 1);
+    window.addEventListener('nexus-collections-updated', refreshCollections);
+    window.addEventListener('storage', refreshCollections);
+    return () => {
+      window.removeEventListener('nexus-collections-updated', refreshCollections);
+      window.removeEventListener('storage', refreshCollections);
+    };
+  }, []);
+
+  const externalTicketUrl = getExternalTicketUrl(activeEventData);
+  const externalProviderName = getExternalTicketProviderName(externalTicketUrl);
+  const customTicketTiers = getShowTicketTiers(activeEventData);
+  const admissionInfo = parseSingleAdmissionPrice(activeEventData);
+  const isNativePaidBoxOffice = !externalTicketUrl && (customTicketTiers.length > 0 || admissionInfo.hasNumericPrice);
+  const purchasedPass = useMemo(
+    () => (externalTicketUrl ? null : findInAppPassForEvent(activeEventData)),
+    [activeEventData, externalTicketUrl, collectionsVersion]
+  );
+
   // Determine if tickets are setup for this event
-  const isTicketSetup = hasGigTickets(activeEventData);
+  const isTicketSetup = Boolean(externalTicketUrl || isNativePaidBoxOffice || hasGigTickets(activeEventData));
 
   // Compute Full Tour Lineup
   const headlinerName = (activeEventData?.headliner || 'Headliner').trim();
@@ -388,7 +687,7 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 h-[100dvh] bg-black/95 backdrop-blur-xl z-[150] flex flex-col pb-[env(safe-area-inset-bottom)] zoom-in-95 duration-300"
+          className="fixed inset-0 h-[100dvh] bg-black/95 backdrop-blur-xl z-[10080] flex flex-col pb-[env(safe-area-inset-bottom)] zoom-in-95 duration-300"
         >
           {/* Header */}
           <div className="px-4 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] border-b border-zinc-900 bg-black/80 flex items-center justify-between sticky top-0 z-10 backdrop-blur-md">
@@ -399,7 +698,7 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-white font-black uppercase tracking-wider leading-tight text-sm sm:text-base truncate">
-                    {activeEventData.headliner}
+                    {activeEventData.headliner || activeEventData.title}
                   </h2>
                   {activeEventData.date && (
                     <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-rose-950/80 border border-rose-500/40 text-rose-300">
@@ -494,7 +793,7 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
           )}
 
           {/* Navigation Tabs */}
-          <div className="flex border-b border-zinc-900 bg-zinc-950/60">
+          <div className="flex border-b border-zinc-900 bg-zinc-950/60 shrink-0">
             <button
               onClick={() => setEventModeTab('info')}
               className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 cursor-pointer flex items-center justify-center gap-1.5 ${
@@ -525,138 +824,453 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
                   : 'text-zinc-500 border-transparent hover:text-zinc-300'
               }`}
             >
-              <Music className="w-3.5 h-3.5" />
+              <MessageSquare className="w-3.5 h-3.5" />
               <span>Venue Pit Wall</span>
+              {venueMessages.filter(m => !isMockSeedMessage(m)).length > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[9px] font-mono bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                  {venueMessages.filter(m => !isMockSeedMessage(m)).length}
+                </span>
+              )}
             </button>
           </div>
 
           {/* Tab Content */}
           {eventModeTab === 'chat' ? (
-            <div className="flex-1 min-h-0 flex flex-col w-full max-w-2xl mx-auto overflow-hidden bg-black/40">
-              {/* Venue Pit Wall Live Status Banner */}
-              <div className="px-4 py-2.5 bg-zinc-950/90 border-b border-zinc-800 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="relative flex items-center justify-center shrink-0">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping absolute" />
-                    <span className="w-2 h-2 rounded-full bg-rose-500 relative" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-black uppercase tracking-wider text-rose-400 truncate flex items-center gap-1.5">
-                      <span>Venue Pit Wall</span>
-                      <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-rose-950 border border-rose-800/60 text-rose-300 font-bold">
-                        LIVE
-                      </span>
+            <div className="flex-1 min-h-0 flex flex-col w-full max-w-3xl mx-auto overflow-hidden bg-[#07080b] border-x border-zinc-900/80">
+              {/* Top Venue Pit Wall Header & Pinned Show Bulletin */}
+              <div className="px-4 py-2.5 bg-zinc-950/95 border-b border-zinc-800/80 flex flex-col gap-2 shrink-0">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="relative flex items-center justify-center shrink-0">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping absolute" />
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 relative" />
                     </div>
-                    <p className="text-[10px] text-zinc-400 font-mono truncate">
-                      {activeEventData?.venue || 'The Venue'}{activeEventData?.city ? ` • ${activeEventData.city}` : ''}
-                    </p>
+                    <div className="min-w-0">
+                      <div className="text-xs font-black uppercase tracking-wider text-white truncate flex items-center gap-1.5">
+                        <span>Live Venue Pit Wall</span>
+                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 font-bold">
+                          REALTIME
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-zinc-400 font-mono truncate">
+                        {activeEventData?.venue || 'Venue'}{activeEventData?.city ? ` • ${activeEventData.city}` : ''}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPinDraftText(
+                          pinnedNotice?.text ||
+                            `Doors: ${formatTimeTo12h(activeEventData?.doors_time || activeEventData?.time || '7:00 PM')} • Lineup: ${fullLineup.slice(0, 3).join(' / ')}`
+                        );
+                        setIsEditingPin(prev => !prev);
+                      }}
+                      className="text-[10px] font-mono text-amber-300 hover:text-amber-200 bg-amber-950/50 hover:bg-amber-900/50 border border-amber-500/40 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Pin Set Times or Live Show Update"
+                    >
+                      <Pin className="w-3 h-3 text-amber-400" />
+                      <span>{pinnedNotice ? 'Update Pin' : 'Pin Set Times'}</span>
+                    </button>
+                    <div className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                      <Users className="w-3 h-3 text-rose-400" />
+                      <span>{uniqueParticipantCount} active</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-[10px] font-mono text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <Users className="w-3 h-3 text-rose-400" />
-                    <span>{venueMessages.length + 14} in pit</span>
+                {/* Pinned Show Bulletin Editor */}
+                {isEditingPin && (
+                  <div className="p-2.5 rounded-xl bg-amber-950/30 border border-amber-500/40 space-y-2 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-amber-300 font-bold uppercase">
+                      <span className="flex items-center gap-1.5">
+                        <Megaphone className="w-3.5 h-3.5 text-amber-400" />
+                        Pin Live Show Status / Set Times Banner
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingPin(false)}
+                        className="text-zinc-400 hover:text-white cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={pinDraftText}
+                        onChange={e => setPinDraftText(e.target.value)}
+                        placeholder="e.g. Doors 7PM • Opener 8PM • Headliner 9:30PM • Merch open by stage right"
+                        className="flex-1 bg-black/80 border border-amber-500/40 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSavePinnedNotice(pinDraftText)}
+                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-mono font-black text-[10px] uppercase cursor-pointer shrink-0"
+                      >
+                        Save Pin
+                      </button>
+                      {pinnedNotice && (
+                        <button
+                          type="button"
+                          onClick={() => handleSavePinnedNotice('')}
+                          className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950 text-zinc-400 hover:text-rose-300 border border-zinc-800 text-[10px] font-mono cursor-pointer shrink-0"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </div>
+                )}
 
-              {/* Quick Reactions / Topics */}
-              <div className="px-3 py-2 bg-zinc-950/60 border-b border-zinc-900 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-                {[
-                  '🤘 Pit is crazy!',
-                  '🔥 Merch booth open?',
-                  '⚡ What is set time?',
-                  '🍻 Who is in front row?',
-                  '🔊 Sound is massive'
-                ].map((tag, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setVenueMessageInput(tag);
-                    }}
-                    className="text-[10px] font-mono bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white px-2.5 py-1 rounded-full whitespace-nowrap transition-colors cursor-pointer shrink-0"
-                  >
-                    {tag}
-                  </button>
-                ))}
+                {/* Active Pinned Bulletin Display */}
+                {pinnedNotice?.text ? (
+                  <div className="px-3 py-2 rounded-xl bg-gradient-to-r from-amber-950/60 via-zinc-900/90 to-zinc-950 border border-amber-500/40 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Pin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs text-amber-100 font-medium break-words leading-snug">
+                          {pinnedNotice.text}
+                        </p>
+                        <span className="text-[9px] font-mono text-amber-400/80">
+                          Pinned by {pinnedNotice.updatedBy}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="px-3 py-1.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80 flex items-center justify-between text-[10px] font-mono text-zinc-400">
+                    <span className="truncate">
+                      ⏱️ Doors: <strong className="text-zinc-200">{formatTimeTo12h(activeEventData?.doors_time || activeEventData?.time || '7:00 PM')}</strong> • Lineup: <strong className="text-zinc-200">{fullLineup.slice(0, 3).join(', ')}</strong>
+                    </span>
+                  </div>
+                )}
+
+                {/* Category Filter Bar */}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
+                  {PIT_CATEGORIES.map(cat => {
+                    const isActive = activeCategoryFilter === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setActiveCategoryFilter(cat.id)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold whitespace-nowrap transition-all border cursor-pointer shrink-0 ${
+                          isActive
+                            ? 'bg-rose-600 text-white border-rose-500 shadow-sm'
+                            : 'bg-zinc-900/90 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border-zinc-800'
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Messages Feed Area */}
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                <div className="text-center text-[10px] text-zinc-500 uppercase tracking-widest font-mono py-1">
-                  — Real-time Attendee & Fan Chat —
-                </div>
-
-                {venueMessages.map((msg, i) => {
-                  const isMe = msg.user_id === userProfile?.id || (userProfile?.username && msg.username === userProfile?.username);
-                  return (
-                    <div
-                      key={msg.id ? `venue-msg-${msg.id}-${i}` : `venue-msg-${i}`}
-                      className={`flex items-start gap-2.5 ${isMe ? 'flex-row-reverse' : ''}`}
-                    >
-                      <div
-                        className={`w-8 h-8 rounded-full ${
-                          isMe ? 'bg-rose-600' : 'bg-zinc-800 border border-zinc-700'
-                        } flex items-center justify-center text-xs text-white font-bold shrink-0 overflow-hidden shadow`}
-                      >
-                        {msg.avatar_url ? (
-                          <img src={msg.avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        ) : (
-                          msg.username?.[0]?.toUpperCase() || '🤘'
-                        )}
-                      </div>
-                      <div
-                        className={`max-w-[80%] sm:max-w-[70%] rounded-2xl px-3.5 py-2 text-xs shadow-sm ${
-                          isMe
-                            ? 'bg-rose-600 text-white rounded-tr-sm'
-                            : 'bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-tl-sm'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2 mb-0.5">
-                          <span className={`text-[10px] font-bold truncate ${isMe ? 'text-rose-200' : 'text-zinc-400'}`}>
-                            {msg.username || 'Metal Fan'}
-                          </span>
-                          {msg.timestamp && (
-                            <span className={`text-[9px] font-mono ${isMe ? 'text-rose-200/70' : 'text-zinc-500'}`}>
-                              {msg.timestamp}
-                            </span>
-                          )}
-                        </div>
-                        <p className="leading-relaxed break-words text-[13px]">{msg.text}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {venueMessages.length === 0 && (
-                  <div className="text-center text-xs text-zinc-400 py-12 flex flex-col items-center gap-2">
-                    <MessageSquare className="w-8 h-8 text-zinc-600 animate-pulse" />
-                    <p className="font-bold text-zinc-300">The Pit Wall is quiet.</p>
-                    <p className="text-[11px] text-zinc-500 max-w-xs">
-                      Drop the first message below to alert the venue, attendees, and fans!
-                    </p>
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3.5 custom-scrollbar">
+                {isLoadingPitWall && visibleMessages.length === 0 ? (
+                  <div className="text-center py-12 text-xs font-mono text-zinc-500 animate-pulse">
+                    Syncing live Venue Pit Wall...
                   </div>
+                ) : visibleMessages.length === 0 ? (
+                  <div className="text-center py-10 px-4 flex flex-col items-center gap-3 max-w-md mx-auto">
+                    <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-inner">
+                      <MessageSquare className="w-6 h-6" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="font-bold text-sm text-white">
+                        {activeCategoryFilter === 'all'
+                          ? `Start the Pit Wall for ${activeEventData.headliner || activeEventData.title}`
+                          : `No ${PIT_CATEGORIES.find(c => c.id === activeCategoryFilter)?.shortLabel} posts yet`}
+                      </p>
+                      <p className="text-xs text-zinc-400 leading-relaxed">
+                        This is a live, real-time channel for attendees, bands, and fans at <strong className="text-zinc-200">{activeEventData.venue || 'the venue'}</strong>. Drop a message below or tap a topic to kick off the conversation:
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                      {[
+                        { text: 'Anyone know the exact set times for tonight?', cat: 'set_times' as PitCategory },
+                        { text: 'How is the merch line looking right now?', cat: 'merch' as PitCategory },
+                        { text: 'Who is heading to the venue early for front row?', cat: 'meetup' as PitCategory },
+                        { text: 'Soundcheck is sounding massive in here! 🤘', cat: 'pit' as PitCategory },
+                      ].map((prompt, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setComposerCategory(prompt.cat);
+                            setVenueMessageInput(prompt.text);
+                            inputRef.current?.focus();
+                          }}
+                          className="text-[11px] font-mono bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-rose-500/50 text-zinc-300 hover:text-white px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                        >
+                          "{prompt.text}"
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  visibleMessages.map((msg, i) => {
+                    const isMe =
+                      msg.user_id === currentActorId ||
+                      (userProfile?.id && msg.user_id === userProfile.id) ||
+                      (userProfile?.username && msg.username === userProfile.username);
+                    const catMeta =
+                      PIT_CATEGORIES.find(c => c.id === (msg.category || 'chat')) || PIT_CATEGORIES[1];
+                    const reactionsMap: Record<string, string[]> =
+                      msg.reactions && typeof msg.reactions === 'object' ? msg.reactions : {};
+
+                    return (
+                      <div
+                        key={msg.id ? `venue-msg-${msg.id}-${i}` : `venue-msg-${i}`}
+                        className={`group flex items-start gap-3 ${isMe ? 'flex-row-reverse' : ''}`}
+                      >
+                        {/* Clickable Attendee Avatar */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (msg.username) {
+                              window.dispatchEvent(
+                                new CustomEvent('openPublicProfile', {
+                                  detail: {
+                                    id: msg.user_id,
+                                    name: msg.username,
+                                    username: msg.handle || msg.username,
+                                    avatar: msg.avatar_url,
+                                    role: msg.role || 'Fan',
+                                  },
+                                })
+                              );
+                            }
+                          }}
+                          className={`w-9 h-9 rounded-full ${
+                            isMe ? 'bg-rose-600 ring-2 ring-rose-500/40' : 'bg-zinc-800 border border-zinc-700 hover:border-rose-500/60'
+                          } flex items-center justify-center text-xs text-white font-bold shrink-0 overflow-hidden shadow transition-all cursor-pointer`}
+                          title={`View ${msg.username || 'Attendee'}'s profile`}
+                        >
+                          {msg.avatar_url ? (
+                            <img src={msg.avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            (msg.username || 'F')[0]?.toUpperCase()
+                          )}
+                        </button>
+
+                        <div className={`flex flex-col max-w-[82%] sm:max-w-[74%] ${isMe ? 'items-end' : 'items-start'}`}>
+                          {/* Message Bubble */}
+                          <div
+                            className={`w-full rounded-2xl px-3.5 py-2.5 text-xs shadow-md ${
+                              isMe
+                                ? 'bg-gradient-to-br from-rose-600 to-rose-700 text-white rounded-tr-sm border border-rose-500/50'
+                                : 'bg-zinc-900/95 border border-zinc-800 text-zinc-100 rounded-tl-sm'
+                            }`}
+                          >
+                            {/* Author + Role + Category + Time Header */}
+                            <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (msg.username) {
+                                      window.dispatchEvent(
+                                        new CustomEvent('openPublicProfile', {
+                                          detail: {
+                                            id: msg.user_id,
+                                            name: msg.username,
+                                            username: msg.handle || msg.username,
+                                            avatar: msg.avatar_url,
+                                            role: msg.role || 'Fan',
+                                          },
+                                        })
+                                      );
+                                    }
+                                  }}
+                                  className={`text-[11px] font-bold truncate hover:underline cursor-pointer ${
+                                    isMe ? 'text-white' : 'text-rose-300'
+                                  }`}
+                                >
+                                  {msg.username || 'Scene Attendee'}
+                                </button>
+                                {msg.role && msg.role !== 'Fan' && (
+                                  <span className="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-black/30 text-amber-300 border border-amber-400/30">
+                                    {msg.role}
+                                  </span>
+                                )}
+                                {msg.category && msg.category !== 'chat' && (
+                                  <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${catMeta.badgeClass}`}>
+                                    {catMeta.shortLabel}
+                                  </span>
+                                )}
+                              </div>
+                              {msg.timestamp && (
+                                <span className={`text-[9px] font-mono shrink-0 ${isMe ? 'text-rose-200/80' : 'text-zinc-500'}`}>
+                                  {msg.timestamp}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Quoted Reply Context if replying to another message */}
+                            {msg.replyTo && msg.replyTo.text && (
+                              <div
+                                className={`mb-1.5 px-2.5 py-1.5 rounded-lg border-l-2 text-[11px] ${
+                                  isMe
+                                    ? 'bg-black/25 border-rose-200 text-rose-100'
+                                    : 'bg-black/40 border-rose-500 text-zinc-300'
+                                }`}
+                              >
+                                <span className="font-mono font-bold text-[10px] block opacity-90">
+                                  ↩ @{msg.replyTo.username}
+                                </span>
+                                <span className="line-clamp-2 opacity-85">{msg.replyTo.text}</span>
+                              </div>
+                            )}
+
+                            {/* Message Body */}
+                            <p className="leading-relaxed break-words text-[13px] whitespace-pre-wrap">
+                              {msg.text}
+                            </p>
+                          </div>
+
+                          {/* Action & Reactions Bar Under Message */}
+                          <div className={`flex items-center gap-1.5 mt-1 flex-wrap ${isMe ? 'justify-end' : 'justify-start'}`}>
+                            {/* Quick Reaction Pills */}
+                            {PIT_REACTION_EMOJIS.map(emoji => {
+                              const users = Array.isArray(reactionsMap[emoji]) ? reactionsMap[emoji] : [];
+                              const count = users.length;
+                              const hasReacted = users.includes(currentActorId);
+                              if (count === 0 && !hasReacted) {
+                                return (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => handleToggleReaction(msg.id, emoji)}
+                                    className="opacity-70 sm:opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-all cursor-pointer"
+                                    title={`React with ${emoji}`}
+                                  >
+                                    {emoji}
+                                  </button>
+                                );
+                              }
+                              return (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => handleToggleReaction(msg.id, emoji)}
+                                  className={`text-[10px] font-mono px-2 py-0.5 rounded-full border flex items-center gap-1 transition-all cursor-pointer ${
+                                    hasReacted
+                                      ? 'bg-rose-950/90 border-rose-500/60 text-rose-200 font-bold'
+                                      : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700'
+                                  }`}
+                                >
+                                  <span>{emoji}</span>
+                                  <span>{count}</span>
+                                </button>
+                              );
+                            })}
+
+                            {/* Reply Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReplyingTo({
+                                  id: msg.id,
+                                  username: msg.username || 'Attendee',
+                                  text: msg.text,
+                                });
+                                inputRef.current?.focus();
+                              }}
+                              className="text-[10px] font-mono text-zinc-400 hover:text-zinc-200 px-2 py-0.5 rounded-md hover:bg-zinc-900 flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <Reply className="w-3 h-3" />
+                              <span>Reply</span>
+                            </button>
+
+                            {/* Delete Button (own message or show owner) */}
+                            {(isMe || isShowOwner) && msg.id && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteMessage(msg.id)}
+                                className="text-[10px] font-mono text-zinc-500 hover:text-rose-400 px-1.5 py-0.5 rounded-md hover:bg-zinc-900 transition-colors cursor-pointer"
+                                title="Delete message"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Pinned Bottom Chat Input */}
-              <div className="p-3 sm:p-4 bg-zinc-950/95 border-t border-zinc-800 sticky bottom-0 z-10 shrink-0 backdrop-blur-md">
+              {/* Composer Area (Always visible above bottom bar) */}
+              <div className="p-3 sm:p-4 bg-zinc-950 border-t border-zinc-800/90 sticky bottom-0 z-20 shrink-0 space-y-2 shadow-[0_-10px_30px_rgba(0,0,0,0.8)]">
+                {/* Active Reply Banner */}
+                {replyingTo && (
+                  <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-rose-500/40 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Reply className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span className="text-zinc-400 font-mono text-[11px] truncate">
+                        Replying to <strong className="text-rose-300">@{replyingTo.username}</strong>: "{replyingTo.text}"
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReplyingTo(null)}
+                      className="text-zinc-400 hover:text-white p-0.5 cursor-pointer shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Post Tag Selector + Quick Prompts */}
+                <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase mr-1 flex items-center gap-1">
+                      <Tag className="w-3 h-3" /> Tag:
+                    </span>
+                    {PIT_CATEGORIES.filter(c => c.id !== 'all').map(cat => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setComposerCategory(cat.id as PitCategory)}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-mono transition-all border cursor-pointer ${
+                          composerCategory === cat.id
+                            ? cat.badgeClass + ' font-bold ring-1 ring-white/20'
+                            : 'bg-zinc-900/70 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+                        }`}
+                      >
+                        {cat.shortLabel}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Message Input Form */}
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
                     handleSendVenueMessage();
                   }}
-                  className="flex items-center gap-2 max-w-xl mx-auto w-full"
+                  className="flex items-center gap-2 w-full"
                 >
                   <div className="relative flex-1">
                     <input
+                      ref={inputRef}
                       id="venue-pit-wall-input"
                       type="text"
-                      placeholder="Message the venue pit wall..."
-                      className="w-full bg-zinc-900 border border-zinc-700/80 hover:border-zinc-600 focus:border-rose-500 rounded-full py-3 pl-4 pr-10 text-sm text-white placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-rose-500 transition-all shadow-inner"
+                      placeholder={
+                        replyingTo
+                          ? `Reply to @${replyingTo.username}...`
+                          : `Message the ${activeEventData.headliner || 'Venue'} Pit Wall...`
+                      }
+                      className="w-full bg-zinc-900 border border-zinc-700 hover:border-zinc-600 focus:border-rose-500 rounded-xl py-3 px-4 text-sm text-white placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-rose-500 transition-all shadow-inner"
                       value={venueMessageInput}
                       onChange={(e) => setVenueMessageInput(e.target.value)}
                       autoComplete="off"
@@ -666,10 +1280,11 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
                     id="venue-pit-wall-send-btn"
                     type="submit"
                     disabled={!venueMessageInput.trim()}
-                    className="w-10 h-10 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white rounded-full flex items-center justify-center shrink-0 transition-all shadow-lg shadow-rose-950/60 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed cursor-pointer"
-                    title="Send to Pit Wall"
+                    className="px-4 h-11 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white rounded-xl flex items-center justify-center gap-1.5 shrink-0 transition-all shadow-lg shadow-rose-950/60 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed cursor-pointer font-mono font-bold text-xs uppercase"
+                    title="Post to Pit Wall"
                   >
                     <Send className="w-4 h-4" />
+                    <span className="hidden sm:inline">Post</span>
                   </button>
                 </form>
               </div>
@@ -802,7 +1417,53 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
                 })()}
 
                 {/* 3. OFFICIAL BOX OFFICE / TICKET PURCHASE UNDER VENUE INFORMATION */}
-                {isTicketSetup ? (
+                {externalTicketUrl ? (
+                  <div className="bg-gradient-to-br from-amber-950/35 via-[#12100c] to-zinc-950 border border-amber-500/40 rounded-2xl p-4 shadow-xl shadow-black/40 space-y-3 relative overflow-hidden">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 shadow">
+                          <ExternalLink className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                            <span>External Box Office</span>
+                            <span className="text-[9px] font-mono font-bold text-amber-300 bg-amber-950/80 border border-amber-500/40 px-1.5 py-0.2 rounded">
+                              {externalProviderName}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-zinc-400 font-mono">
+                            Off-platform vendor • No in-app confirmation or QR code
+                          </div>
+                        </div>
+                      </div>
+
+                      {activeEventData.price && (
+                        <div className="sm:text-right">
+                          <span className="inline-block text-xs font-black text-amber-300 font-mono px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-500/35 shadow break-words max-w-full">
+                            {activeEventData.price}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-black/50 border border-amber-500/30 flex items-start gap-2 text-[10.5px] font-mono text-amber-100/90 leading-relaxed">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <span>
+                        Tickets are sold directly via <strong className="text-white">{externalProviderName}</strong> outside Nexus Core. Buying through an external link does not sync order confirmation here and does not generate a scannable entry QR code in Nexus Core — keep your {externalProviderName} receipt/pass for admission.
+                      </span>
+                    </div>
+
+                    <a
+                      href={externalTicketUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                    >
+                      <span>Buy Tickets on {externalProviderName}</span>
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
+                ) : isNativePaidBoxOffice ? (
                   <div className="bg-gradient-to-br from-blue-950/50 via-[#0c121e] to-zinc-950 border border-blue-500/40 rounded-2xl p-4 shadow-xl shadow-blue-950/30 space-y-3 relative overflow-hidden">
                     <div className="absolute -right-8 -bottom-8 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
                     
@@ -818,7 +1479,7 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
                               Active
                             </span>
                           </div>
-                          <div className="text-[10px] text-zinc-400 font-mono">Instant QR Delivery • Smart Escrow Protected</div>
+                          <div className="text-[10px] text-zinc-400 font-mono">Instant In-App QR Delivery • Smart Escrow Protected</div>
                         </div>
                       </div>
 
@@ -831,14 +1492,48 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
                       )}
                     </div>
 
+                    {customTicketTiers.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {customTicketTiers.map((tier, idx) => (
+                          <span
+                            key={tier.id || `tier-chip-${idx}`}
+                            className="px-2 py-1 rounded-lg bg-zinc-950/90 border border-blue-500/25 text-[10px] font-mono text-zinc-200"
+                          >
+                            {tier.name}: <strong className="text-emerald-400">${tier.price}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => onCheckoutTicket ? onCheckoutTicket(activeEventData) : null}
                       className="w-full py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-blue-900/40 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                     >
                       <Ticket className="w-4 h-4" />
-                      <span>Buy Tickets {activeEventData.price ? `(${activeEventData.price})` : '• Presale Access'}</span>
+                      <span>
+                        {customTicketTiers.length > 1
+                          ? `Choose from ${customTicketTiers.length} Ticket Tiers`
+                          : `Buy Tickets ${activeEventData.price ? `(${activeEventData.price})` : '• In-App Pass'}`}
+                      </span>
                     </button>
+                  </div>
+                ) : isTicketSetup && admissionInfo.isFreeOrDoorOnly ? (
+                  <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 shrink-0">
+                          <Ticket className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black text-white uppercase tracking-wider">Door / Venue Admission</div>
+                          <div className="text-[10px] text-zinc-400 font-mono">Handled at venue door • No online pre-sale required</div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-950/50 border border-emerald-500/30 px-2 py-0.5 rounded">
+                        {admissionInfo.label}
+                      </span>
+                    </div>
                   </div>
                 ) : (
                   <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-2xl p-4 space-y-2.5">
@@ -857,7 +1552,6 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
                       </span>
                     </div>
 
-                    {/* Greyed Out Ticket Button */}
                     <button
                       disabled
                       type="button"
@@ -887,41 +1581,76 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
                   </div>
                 </div>
 
-                {/* 4. PASS & GATE ADMISSION SIMULATOR (ENTRY SCANNER) UNDER SCHEDULE & SAFETY */}
-                <div className="bg-[#0b0d10] border border-zinc-800 rounded-2xl p-4 text-center space-y-3.5 relative overflow-hidden">
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-500 via-purple-500 to-rose-500" />
-
-                  <div className="w-14 h-14 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-500">
-                    <QrCode className="w-7 h-7" />
-                  </div>
-
-                  <div>
-                    <div className="inline-block px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 font-mono text-[9px] font-bold uppercase tracking-widest border border-rose-500/30 mb-1.5">
-                      NEXUS PASS VERIFIED
+                {/* 4. GATE ENTRY & QR PASS STATUS */}
+                {externalTicketUrl ? (
+                  <div className="bg-[#0b0d10] border border-amber-500/30 rounded-2xl p-4 text-center space-y-2.5">
+                    <div className="w-11 h-11 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                      <ExternalLink className="w-5 h-5" />
                     </div>
-                    <h3 className="text-base font-black text-white uppercase tracking-tight">VIP FLOOR & PIT ACCESS</h3>
-                    <p className="text-xs text-zinc-400 mt-0.5">Present barcode at venue gate for gate check</p>
+                    <div className="inline-block px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 font-mono text-[9px] font-bold uppercase tracking-widest border border-amber-500/30">
+                      External Entry Pass Only
+                    </div>
+                    <h3 className="text-sm font-black text-white uppercase tracking-tight">
+                      QR Pass Issued by {externalProviderName}
+                    </h3>
+                    <p className="text-[11px] text-zinc-400 font-mono leading-relaxed">
+                      Because tickets are sold off-platform, Nexus Core cannot verify third-party purchases or display a scannable door QR code here. Marking Going below is social only.
+                    </p>
                   </div>
+                ) : purchasedPass ? (
+                  <div className="bg-[#0b0d10] border border-emerald-500/40 rounded-2xl p-4 text-center space-y-3.5 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500" />
 
-                  {isTicketScanned ? (
-                    <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-xl space-y-0.5">
-                      <div className="text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" /> SCANNED & ADMITTED
+                    <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
+                      <QrCode className="w-7 h-7" />
+                    </div>
+
+                    <div>
+                      <div className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[9px] font-bold uppercase tracking-widest border border-emerald-500/30 mb-1.5">
+                        NEXUS PASS VERIFIED
                       </div>
-                      <div className="text-[10px] text-zinc-400 font-mono">Gate Timestamp: {scanTime}</div>
+                      <h3 className="text-base font-black text-white uppercase tracking-tight">
+                        {purchasedPass.data?.ticketType || 'Standard Admission Pass'}
+                      </h3>
+                      <p className="text-xs text-zinc-400 mt-0.5">
+                        Present your Digital Escrow pass barcode at the venue gate ({purchasedPass.quantity || 1}x pass)
+                      </p>
                     </div>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setIsTicketScanned(true);
-                        setScanTime(new Date().toLocaleTimeString());
-                      }}
-                      className="w-full py-2.5 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <QrCode className="w-4 h-4" /> Simulate Door Scan
-                    </button>
-                  )}
-                </div>
+
+                    {isTicketScanned ? (
+                      <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-xl space-y-0.5">
+                        <div className="text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" /> SCANNED & ADMITTED
+                        </div>
+                        <div className="text-[10px] text-zinc-400 font-mono">Gate Timestamp: {scanTime}</div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setIsTicketScanned(true);
+                          setScanTime(new Date().toLocaleTimeString());
+                        }}
+                        className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <QrCode className="w-4 h-4" /> Simulate Door Scan
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-[#0b0d10] border border-zinc-800 rounded-2xl p-4 text-center space-y-2.5">
+                    <div className="w-11 h-11 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto text-zinc-500">
+                      <QrCode className="w-5 h-5" />
+                    </div>
+                    <div className="inline-block px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-400 font-mono text-[9px] font-bold uppercase tracking-widest border border-zinc-800">
+                      {isNativePaidBoxOffice ? 'No In-App Pass Purchased Yet' : 'Door / Unlinked Entry'}
+                    </div>
+                    <p className="text-[11px] text-zinc-400 font-mono leading-relaxed">
+                      {isNativePaidBoxOffice
+                        ? 'Purchase a ticket through the Official Box Office above to generate a scannable entry QR code. RSVPs below are social only.'
+                        : 'No scannable in-app QR pass is required or configured for this listing. Admission is managed at the venue door.'}
+                    </p>
+                  </div>
+                )}
 
                 {/* 4. INTERACTIVE RSVP LIST & ATTENDANCE TRACKER */}
                 <div className="bg-[#0b0d10] border border-zinc-800/90 rounded-2xl p-4 space-y-3.5 shadow-lg">

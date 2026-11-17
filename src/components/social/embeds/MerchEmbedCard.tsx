@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Flame, Zap, ZoomIn, Handshake, X, ShoppingCart, Timer, ShieldAlert, Sparkles, ShoppingBag, Package, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Flame, Zap, ZoomIn, Handshake, X, ShoppingCart, Timer, ShieldAlert, Sparkles, ShoppingBag, Package, Check, ChevronLeft, ChevronRight, Heart } from 'lucide-react';
 import { FeedPost, formatFullSizeName } from '../TimelineFeed';
+import {
+  getWishlistIds,
+  toggleWishlistItem,
+  getListingStatus,
+  submitListingOffer,
+} from '../../../services/shopCommerceService';
 
 export const MerchCountdownTimer: React.FC<{ expiresAt?: string; durationHours?: number }> = ({ expiresAt, durationHours }) => {
   const targetTime = React.useMemo(() => {
@@ -92,6 +98,26 @@ export const MerchEmbedCard: React.FC<MerchEmbedCardProps> = ({
   const currentIdx = Math.min(activeImageIdx, Math.max(0, allImages.length - 1));
   const currentDisplayImage = allImages[currentIdx] || post.merchData.thumbnail;
 
+  const merchItemId = String((post.merchData as any).id || post.id);
+  const [isWishlisted, setIsWishlisted] = useState<boolean>(() => getWishlistIds().includes(merchItemId));
+  const [listingStatus, setListingStatusState] = useState<'available' | 'pending' | 'sold'>(() => getListingStatus(merchItemId));
+
+  useEffect(() => {
+    const syncShopState = () => {
+      setIsWishlisted(getWishlistIds().includes(merchItemId));
+      setListingStatusState(getListingStatus(merchItemId));
+    };
+    window.addEventListener('nexus_wishlist_updated', syncShopState as EventListener);
+    window.addEventListener('nexus_listing_status_updated', syncShopState as EventListener);
+    return () => {
+      window.removeEventListener('nexus_wishlist_updated', syncShopState as EventListener);
+      window.removeEventListener('nexus_listing_status_updated', syncShopState as EventListener);
+    };
+  }, [merchItemId]);
+
+  const isListingSold = listingStatus === 'sold';
+  const isListingPending = listingStatus === 'pending';
+
   return (
     <div className={`bg-[#0f0d11] rounded-2xl overflow-hidden mb-3.5 transition-all ${
       isTimedDrop
@@ -141,7 +167,15 @@ export const MerchEmbedCard: React.FC<MerchEmbedCardProps> = ({
             )}
           </div>
           <div>
-            {isUnlimited ? (
+            {isListingSold ? (
+              <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-zinc-800 text-zinc-400 border border-zinc-700">
+                SOLD OUT
+              </span>
+            ) : isListingPending ? (
+              <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                OFFER PENDING
+              </span>
+            ) : isUnlimited ? (
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 IN STOCK • OPEN RUN
               </span>
@@ -391,7 +425,16 @@ export const MerchEmbedCard: React.FC<MerchEmbedCardProps> = ({
                     onClick={() => {
                       const amt = parseFloat(offerValues[post.id]);
                       if (!amt || amt <= 0) return;
-                      
+
+                      submitListingOffer({
+                        itemId: merchItemId,
+                        itemName: post.merchData?.name || 'Merch Item',
+                        sellerName: post.authorName || 'Seller',
+                        buyerName: 'Scene Member',
+                        amount: amt,
+                        fulfillmentPreference: 'escrow_shipping',
+                      });
+
                       const listP = post.merchData?.price || 50;
                       if (amt >= listP * 0.9) {
                         setOfferStatusMap(prev => ({
@@ -415,6 +458,8 @@ export const MerchEmbedCard: React.FC<MerchEmbedCardProps> = ({
                         }));
                       }
                       setActiveNegotiationPostId(null);
+                      setCartNotice(`Offer of $${amt.toFixed(2)} submitted to ${post.authorName}!`);
+                      setTimeout(() => setCartNotice(null), 2500);
                     }}
                     className="px-3 py-1.5 bg-orange-500 hover:bg-orange-400 text-black font-mono font-bold text-xs uppercase rounded transition-colors cursor-pointer"
                   >
@@ -434,26 +479,32 @@ export const MerchEmbedCard: React.FC<MerchEmbedCardProps> = ({
           {/* Action Buttons Row */}
           <div className="flex items-center gap-2 pt-2 border-t border-zinc-900">
             <button
+              disabled={isListingSold}
               onClick={(e) => {
                 e.stopPropagation();
+                if (isListingSold) return;
                 const baseP = (post.isVipExclusive || unlockedVipPosts[post.id]) 
                   ? post.merchData!.price * 0.8 
                   : post.merchData!.price;
                 const sz = selectedSizesMap[post.id] || post.merchData?.sizes[0] || 'Standard';
                 onCheckout(post, sz, baseP);
               }}
-              className="flex-1 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black font-mono font-extrabold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all cursor-pointer transform hover:scale-[1.01]"
+              className={`flex-1 min-h-[40px] py-2.5 px-3 font-mono font-extrabold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+                isListingSold
+                  ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black shadow-[0_0_15px_rgba(249,115,22,0.3)] cursor-pointer transform hover:scale-[1.01]'
+              }`}
             >
-              <Zap className="w-3.5 h-3.5 fill-black" /> 1-CLICK STRIPE CHECKOUT
+              <Zap className="w-3.5 h-3.5 fill-current" /> {isListingSold ? 'SOLD OUT' : '1-CLICK STRIPE CHECKOUT'}
             </button>
 
-            {post.merchData.allowNegotiation !== false && (
+            {post.merchData.allowNegotiation !== false && !isListingSold && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveNegotiationPostId(activeNegotiationPostId === post.id ? null : post.id);
                 }}
-                className="py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 text-purple-400 border border-purple-500/30 hover:border-purple-500/60 font-mono font-bold text-xs uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                className="min-h-[40px] py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 text-purple-400 border border-purple-500/30 hover:border-purple-500/60 font-mono font-bold text-xs uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Negotiate Price"
               >
                 <Handshake className="w-4 h-4 text-purple-400" />
@@ -462,8 +513,33 @@ export const MerchEmbedCard: React.FC<MerchEmbedCardProps> = ({
             )}
 
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
+                const { added } = toggleWishlistItem(merchItemId);
+                setIsWishlisted(added);
+                setCartNotice(
+                  added
+                    ? `Saved "${post.merchData?.name}" to your Wishlist!`
+                    : `Removed "${post.merchData?.name}" from Wishlist.`
+                );
+                setTimeout(() => setCartNotice(null), 2000);
+              }}
+              className={`min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl border transition-colors cursor-pointer ${
+                isWishlisted
+                  ? 'bg-rose-950/60 text-rose-400 border-rose-500/60'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-rose-400 border-zinc-800 hover:border-zinc-700'
+              }`}
+              title={isWishlisted ? 'Remove from Wishlist' : 'Save to Wishlist'}
+            >
+              <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-rose-400' : ''}`} />
+            </button>
+
+            <button
+              disabled={isListingSold}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isListingSold) return;
                 if (onAddToCart && post.merchData) {
                   const finalP = (post.isVipExclusive || unlockedVipPosts[post.id]) ? post.merchData.price * 0.8 : post.merchData.price;
                   onAddToCart({
@@ -476,7 +552,7 @@ export const MerchEmbedCard: React.FC<MerchEmbedCardProps> = ({
                   setTimeout(() => setCartNotice(null), 2000);
                 }
               }}
-              className="p-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 rounded-xl transition-colors cursor-pointer"
+              className="min-w-[40px] min-h-[40px] flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 rounded-xl transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               title="Add to standard cart"
             >
               <ShoppingCart className="w-4 h-4" />

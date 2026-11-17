@@ -3,7 +3,10 @@ import {
   X, Calendar, DollarSign, Clock, MapPin, Building, Users, 
   Trash2, Copy, Check, Info, FileText, ChevronDown, Sparkles, Coffee, ShieldAlert, AlertTriangle, Megaphone, Lock
 } from 'lucide-react';
-import { Show, GuestListItem, SupportBand } from '../../../types';
+import { Show, GuestListItem, SupportBand, TicketTier } from '../../../types';
+import { getShowTicketTiers } from '../../../utils/socialFeedUtils';
+import { parseShowExtraNotes } from '../../../utils/showDisplayUtils';
+import { CustomTicketTiersBuilder } from '../../shows/CustomTicketTiersBuilder';
 
 const US_STATES = [
   { code: 'AL', name: 'Alabama' },
@@ -214,6 +217,8 @@ export default function ShowFormModal({
   const [tempAdditionalCount, setTempAdditionalCount] = useState<number>(0);
   
   const [additionalNotes, setAdditionalNotes] = useState<string>('');
+  const [ticketPrice, setTicketPrice] = useState<string>('');
+  const [ticketTiers, setTicketTiers] = useState<TicketTier[]>([]);
   
   const [merchCallTime, setMerchCallTime] = useState<string>('');
   const [soundcheckTime, setSoundcheckTime] = useState<string>('');
@@ -386,9 +391,18 @@ export default function ShowFormModal({
       setTimeSlot(editingShow.time_slot || 'all-day');
       setSupportLineup(editingShow.support_lineup || []);
       
-      setAdditionalNotes(editingShow.additional_notes || '');
+      const extraNotes = parseShowExtraNotes(editingShow);
+      const plainNotes = typeof extraNotes.notes === 'string'
+        ? extraNotes.notes
+        : (typeof editingShow.additional_notes === 'string' && !editingShow.additional_notes.trim().startsWith('{')
+            ? editingShow.additional_notes
+            : '');
+      setAdditionalNotes(plainNotes);
       setIsCommunitySubmitted(!!editingShow.is_community_submitted);
-      setExternalTicketUrl(editingShow.external_ticket_url || '');
+      setExternalTicketUrl(editingShow.external_ticket_url || (editingShow as any).ticket_url || '');
+      const rawPrice = editingShow.price ?? editingShow.presale_price ?? editingShow.day_of_show_price ?? '';
+      setTicketPrice(rawPrice !== undefined && rawPrice !== null ? String(rawPrice) : '');
+      setTicketTiers(getShowTicketTiers(editingShow));
       setIsPublished(editingShow.is_published !== undefined ? !!editingShow.is_published : (editingShow.publication_status === 'public_announced' ? true : false));
     } else {
       // Set default dates & values for a new show
@@ -440,6 +454,9 @@ export default function ShowFormModal({
       setTimeSlot('all-day');
       setSupportLineup([]);
       setAdditionalNotes('');
+      setExternalTicketUrl('');
+      setTicketPrice('');
+      setTicketTiers([]);
     }
   }, [editingShow, isOpen]);
 
@@ -677,6 +694,52 @@ export default function ShowFormModal({
       return;
     }
 
+    const validTiers = ticketTiers
+      .filter((t) => String(t.name || '').trim().length > 0 && Number.isFinite(Number(t.price)) && Number(t.price) >= 0)
+      .map((t, idx) => ({
+        ...t,
+        id: t.id || `tier_${idx}_${Date.now()}`,
+        name: sanitizeInput(String(t.name)),
+        price: Number(t.price),
+        capacity: Number.isFinite(Number(t.capacity)) && Number(t.capacity) > 0 ? Number(t.capacity) : 0,
+        sold: Number.isFinite(Number(t.sold)) && Number(t.sold) >= 0 ? Number(t.sold) : 0,
+        description: t.description ? sanitizeInput(t.description) : undefined,
+        includesMerch: Boolean(t.includesMerch),
+      }));
+
+    const cleanedPlainNotes = sanitizeInput(additionalNotes);
+    const existingExtra = parseShowExtraNotes(editingShow);
+    const mergedExtra: Record<string, any> = { ...existingExtra };
+    if (cleanedPlainNotes) {
+      mergedExtra.notes = cleanedPlainNotes;
+    } else {
+      delete mergedExtra.notes;
+    }
+    if (validTiers.length > 0) {
+      mergedExtra.ticket_tiers = validTiers;
+    } else {
+      delete mergedExtra.ticket_tiers;
+      delete mergedExtra.ticketTiers;
+    }
+    const serializedNotes =
+      Object.keys(mergedExtra).length === 0
+        ? ''
+        : Object.keys(mergedExtra).length === 1 && typeof mergedExtra.notes === 'string'
+        ? mergedExtra.notes
+        : JSON.stringify(mergedExtra);
+
+    const cleanExternalUrl = sanitizeInput(externalTicketUrl);
+    const cleanTicketPrice = sanitizeInput(ticketPrice);
+    const resolvedPrice =
+      cleanTicketPrice ||
+      (validTiers.length > 0
+        ? (validTiers.length > 1
+            ? `From $${Math.min(...validTiers.map((t) => t.price))}`
+            : `$${validTiers[0].price}`)
+        : cleanExternalUrl
+        ? 'External Tickets'
+        : undefined);
+
     const payload = {
       id: editingShow?.id, // include if updating
       event_scope: eventScope,
@@ -721,9 +784,12 @@ export default function ShowFormModal({
       stage_name: sanitizeInput(stageName),
       time_slot: timeSlot || 'all-day',
       support_lineup: supportLineup,
-      additional_notes: sanitizeInput(additionalNotes),
+      additional_notes: serializedNotes,
       is_community_submitted: isCommunitySubmitted,
-      external_ticket_url: sanitizeInput(externalTicketUrl),
+      external_ticket_url: cleanExternalUrl,
+      ticket_url: cleanExternalUrl,
+      price: resolvedPrice,
+      ticket_tiers: validTiers,
       is_published: isPublished,
       publication_status: isPublished ? 'public_announced' : 'embargoed_private',
       status: editingShow?.status || 'Active'
@@ -856,23 +922,51 @@ export default function ShowFormModal({
                 </span>
               </label>
               <p className="text-[9px] text-zinc-400 font-mono pl-6 leading-relaxed">
-                Crowdsourced events populate the upcoming shows feed. Direct in-app ticketing is disabled unless an official 3rd-party ticket link is attached. Registered band, promoter, or label reps on Nexus Core can collaborate or claim this event to avoid duplicates.
+                Crowdsourced events populate the upcoming shows feed. Registered band, promoter, or label reps on Nexus Core can collaborate or claim this event to avoid duplicates.
               </p>
 
-              {isCommunitySubmitted && (
-                <div className="pt-1 pl-6">
-                  <label className="block text-[9px] font-mono text-zinc-400 mb-1 uppercase tracking-wider">
-                    External 3rd-Party Ticket Link (Optional)
-                  </label>
-                  <input 
-                    type="url"
-                    value={externalTicketUrl}
-                    onChange={(e) => setExternalTicketUrl(e.target.value)}
-                    placeholder="https://dice.fm/event/... or https://ticketmaster.com/..."
-                    className="w-full bg-black border border-zinc-800 rounded p-2 text-xs text-[#00ffcc] font-mono focus:outline-none focus:border-[#00ffcc]"
-                  />
+              {/* Public Box Office Pricing, Custom Tiers & External Ticket Link */}
+              <div className="pt-2 border-t border-zinc-800/70 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[9px] font-mono text-zinc-400 mb-1 uppercase tracking-wider">
+                      Standard Admission / Door Price (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketPrice}
+                      onChange={(e) => setTicketPrice(e.target.value)}
+                      placeholder="e.g. $20, Free, $15 adv / $20 dos"
+                      className="w-full bg-black border border-zinc-800 rounded p-2 text-xs text-white font-mono focus:outline-none focus:border-[#00ffcc]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-mono text-zinc-400 mb-1 uppercase tracking-wider">
+                      External 3rd-Party Ticket Link (Optional)
+                    </label>
+                    <input 
+                      type="url"
+                      value={externalTicketUrl}
+                      onChange={(e) => setExternalTicketUrl(e.target.value)}
+                      placeholder="https://dice.fm/event/... or https://ticketmaster.com/..."
+                      className="w-full bg-black border border-zinc-800 rounded p-2 text-xs text-[#00ffcc] font-mono focus:outline-none focus:border-[#00ffcc]"
+                    />
+                  </div>
                 </div>
-              )}
+
+                {externalTicketUrl.trim() && (
+                  <p className="text-[9.5px] font-mono text-amber-300/90 leading-snug bg-amber-950/30 border border-amber-500/30 rounded p-2">
+                    External ticket links send fans to the third-party vendor to buy. Nexus Core will clearly inform fans that external orders are not tracked here and will not generate a scannable in-app QR entry pass.
+                  </p>
+                )}
+
+                <CustomTicketTiersBuilder
+                  tiers={ticketTiers}
+                  onChange={setTicketTiers}
+                  hasExternalUrl={Boolean(externalTicketUrl.trim())}
+                  accentColor="teal"
+                />
+              </div>
             </div>
 
             {/* Duplicate Event Match Warning */}

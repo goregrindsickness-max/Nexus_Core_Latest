@@ -251,7 +251,7 @@ export const MerchCountdownTimer: React.FC<{ expiresAt?: string; durationHours?:
   const pad = (n: number) => String(n).padStart(2, '0');
 
   return (
-    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-955/90 border border-red-500/50 rounded-lg text-red-400 font-mono text-[11px] font-black tracking-wide shrink-0 shadow-[0_0_12px_rgba(239,68,68,0.25)]">
+    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-950/90 border border-red-500/50 rounded-lg text-red-400 font-mono text-[11px] font-black tracking-wide shrink-0 shadow-[0_0_12px_rgba(239,68,68,0.25)]">
       <Timer className="w-3.5 h-3.5 text-red-400 animate-pulse shrink-0" />
       <span className="text-zinc-400 text-[10px] uppercase font-bold hidden sm:inline">EXCLUSIVE DROP ENDS:</span>
       <span className="text-red-300 font-extrabold tracking-widest">{pad(hours)}h {pad(minutes)}m {pad(seconds)}s</span>

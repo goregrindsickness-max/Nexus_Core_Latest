@@ -20,6 +20,12 @@ import { getStoredWallets, processWalletPayment, selectWalletCard, UserWalletsSt
 import { WalletOAuthModal } from './WalletOAuthModal';
 import { supabase } from '../../../lib/supabaseClient';
 import { authFetch } from '../../../utils/apiConfig';
+import {
+  calculateCartShippingBreakdown,
+  decrementPurchasedInventory,
+  commitShopPurchaseToCollections,
+  type CartFulfillmentMap,
+} from '../../../services/shopCommerceService';
 
 const stripePublicKey = (import.meta.env.VITE_STRIPE_PUBLIC_KEY || '').trim();
 const isRealStripeKey = typeof stripePublicKey === 'string' && stripePublicKey.startsWith('pk_') && !stripePublicKey.includes('placeholder');
@@ -30,13 +36,21 @@ export interface StripeCartCheckoutModalProps {
   onClose: () => void;
   onClearCart?: () => void;
   userProfile?: any;
+  fulfillmentMap?: CartFulfillmentMap;
+  setMyCollections?: React.Dispatch<React.SetStateAction<any[]>>;
+  inAppSongsList?: any[];
+  bands?: any[];
 }
 
 export function StripeCartCheckoutModal({
   cartItems = [],
   onClose,
   onClearCart,
-  userProfile
+  userProfile,
+  fulfillmentMap = {},
+  setMyCollections,
+  inAppSongsList = [],
+  bands = [],
 }: StripeCartCheckoutModalProps) {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<'confirm' | 'success'>('confirm');
@@ -70,10 +84,12 @@ export function StripeCartCheckoutModal({
   const [shippingPhone, setShippingPhone] = useState<string>('');
   const [addressErrors, setAddressErrors] = useState<Record<string, string>>({});
 
-  const totalAmount = (cartItems || []).reduce(
-    (acc: number, item: any) => acc + ((item.price || 0) * (item.quantity || 1)),
-    0
+  const { groups, subtotal, shippingTotal, grandTotal } = calculateCartShippingBreakdown(
+    cartItems,
+    fulfillmentMap
   );
+  const requiresShipping = groups.some((g) => g.fulfillment.mode !== 'booth_pickup');
+  const totalAmount = grandTotal;
 
   useEffect(() => {
     if (totalAmount > 0) {
@@ -107,7 +123,7 @@ export function StripeCartCheckoutModal({
   }, [totalAmount]);
 
   const validateCustomAddress = (): boolean => {
-    if (useWalletAddress) return true;
+    if (!requiresShipping || useWalletAddress) return true;
     const errors: Record<string, string> = {};
     if (!shippingName.trim()) errors.name = 'Full name is required';
     if (!shippingStreet.trim()) errors.street = 'Street address is required';
@@ -194,39 +210,34 @@ export function StripeCartCheckoutModal({
       const generatedOrderId = paymentResult.orderId;
       setConfirmedOrderId(generatedOrderId);
 
-      // Add purchases to local storage
-      try {
-        const newPurchases = cartItems.map((item: any, idx: number) => ({
-          id: `col_${Date.now()}_${idx}`,
-          orderId: generatedOrderId,
-          transactionId: paymentResult.transactionId,
-          type: 'merch' as const,
-          data: {
-            id: item.productId || item.id,
-            name: item.name,
-            thumbnail: item.image || item.thumbnail,
-            price: item.price,
-            band: item.bandName,
-            sizes: item.size ? [item.size] : [],
-            shippingAddress: {
+      // Decrement live stock counts & variant inventory
+      await decrementPurchasedInventory(cartItems);
+
+      // Save itemized receipts (with Booth Pickup passes & Digital Release unlocks) to collections
+      const updatedCollections = commitShopPurchaseToCollections({
+        items: cartItems,
+        orderId: generatedOrderId,
+        transactionId: paymentResult.transactionId,
+        paymentMethod: paymentResult.paymentMethod,
+        fulfillmentMap,
+        shippingCost: shippingTotal,
+        inAppSongsList,
+        bands,
+        shippingAddress: requiresShipping
+          ? {
               type: useWalletAddress ? 'Wallet Saved Address' : 'Custom Shipping Address',
               name: useWalletAddress ? (userProfile?.full_name || 'Wallet User') : shippingName,
               street: useWalletAddress ? 'Wallet Default Address on File' : shippingStreet,
               city: useWalletAddress ? 'Wallet City' : shippingCity,
               state: useWalletAddress ? 'CA' : shippingState,
               zip: useWalletAddress ? '90026' : shippingZip,
-              phone: shippingPhone || 'N/A'
+              phone: shippingPhone || 'N/A',
             }
-          },
-          quantity: item.quantity || 1,
-          paymentMethod: paymentResult.paymentMethod,
-          date: new Date()
-        }));
+          : undefined,
+      });
 
-        const existing = JSON.parse(localStorage.getItem('nexus_my_collections_v1') || '[]');
-        localStorage.setItem('nexus_my_collections_v1', JSON.stringify([...newPurchases, ...existing]));
-      } catch (e) {
-        console.warn('Failed to save to collections', e);
+      if (setMyCollections) {
+        setMyCollections(updatedCollections);
       }
 
       if (onClearCart) onClearCart();
@@ -291,12 +302,41 @@ export function StripeCartCheckoutModal({
             </div>
 
             {/* Total breakdown */}
-            <div className="flex justify-between items-center py-2 px-3 bg-zinc-950 rounded-xl border border-zinc-800/80 font-mono">
-              <span className="text-zinc-400 text-xs uppercase font-bold">Total Amount</span>
-              <span className="text-rose-500 text-base font-black">${totalAmount.toFixed(2)}</span>
+            <div className="space-y-1.5 py-2.5 px-3.5 bg-zinc-950 rounded-xl border border-zinc-800/80 font-mono tabular-nums text-xs">
+              <div className="flex justify-between items-center text-zinc-400">
+                <span>Subtotal</span>
+                <span>${subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center text-zinc-400">
+                <span>Shipping</span>
+                <span className={shippingTotal === 0 ? 'text-emerald-400 font-bold' : 'text-zinc-200'}>
+                  {shippingTotal === 0 ? (requiresShipping ? 'FREE ($75+ Unlocked)' : 'FREE (Merch Booth Pickup)') : `$${shippingTotal.toFixed(2)}`}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-1.5 border-t border-zinc-800/80">
+                <span className="text-white uppercase font-bold">Total Amount</span>
+                <span className="text-rose-500 text-base font-black">${totalAmount.toFixed(2)}</span>
+              </div>
             </div>
 
+            {/* Merch Booth Pickup Notice if selected */}
+            {groups.some((g) => g.fulfillment.mode === 'booth_pickup') && (
+              <div className="p-3 bg-emerald-950/25 border border-emerald-500/30 rounded-2xl space-y-1.5">
+                <div className="text-[11px] font-bold text-emerald-300 uppercase tracking-wide flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5" /> Merch Booth Pickup Scheduled
+                </div>
+                {groups
+                  .filter((g) => g.fulfillment.mode === 'booth_pickup')
+                  .map((g) => (
+                    <p key={g.bandKey} className="text-[10px] font-mono text-zinc-300">
+                      {g.bandName}: {g.fulfillment.venue || 'Show Merch Table'} ({g.fulfillment.date || 'Show Night'}) — Pickup pass issued after checkout.
+                    </p>
+                  ))}
+              </div>
+            )}
+
             {/* Shipping & Address Capture Section */}
+            {requiresShipping && (
             <div className="p-3.5 bg-zinc-950/80 rounded-2xl border border-zinc-800/90 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-white">
@@ -304,7 +344,7 @@ export function StripeCartCheckoutModal({
                   <span>Shipping & Address</span>
                 </div>
                 <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-                  Priority Express
+                  Tracked Dispatch
                 </span>
               </div>
 
@@ -433,6 +473,7 @@ export function StripeCartCheckoutModal({
                 </div>
               )}
             </div>
+            )}
 
             {/* Payment Provider Buttons Hierarchy */}
             <div className="space-y-3 pt-1">

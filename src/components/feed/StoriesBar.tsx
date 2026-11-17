@@ -25,22 +25,69 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
   onAddStory,
   onSelectStory,
 }) => {
-  const isCompactMode = stories.length < 3;
+  const [viewedIds, setViewedIds] = React.useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('nexus_viewed_stories_v1');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(parsed) ? parsed.map(String) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  React.useEffect(() => {
+    const syncViewed = () => {
+      try {
+        const raw = localStorage.getItem('nexus_viewed_stories_v1');
+        const parsed = raw ? JSON.parse(raw) : [];
+        setViewedIds(new Set(Array.isArray(parsed) ? parsed.map(String) : []));
+      } catch {}
+    };
+    window.addEventListener('nexus_story_viewed', syncViewed as EventListener);
+    window.addEventListener('storage', syncViewed);
+    return () => {
+      window.removeEventListener('nexus_story_viewed', syncViewed as EventListener);
+      window.removeEventListener('storage', syncViewed);
+    };
+  }, []);
+
+  const orderedStories = React.useMemo(() => {
+    return [...(stories || [])].sort((a, b) => {
+      const aViewed = viewedIds.has(String(a?.id ?? ''));
+      const bViewed = viewedIds.has(String(b?.id ?? ''));
+      if (aViewed === bViewed) return 0;
+      return aViewed ? 1 : -1;
+    });
+  }, [stories, viewedIds]);
+
+  const unseenCount = React.useMemo(
+    () => orderedStories.filter((s) => !viewedIds.has(String(s?.id ?? ''))).length,
+    [orderedStories, viewedIds]
+  );
+
+  const isCompactMode = orderedStories.length < 3;
 
   return (
     <div className="max-w-2xl mx-auto pt-1 pb-1 px-4 sm:px-4">
       <h3 className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-2 flex items-center justify-between">
-        <span>🔥 Stories from the Pit</span>
+        <span className="flex items-center gap-2">
+          <span>🔥 Stories from the Pit</span>
+          {unseenCount > 0 && (
+            <span className="text-[9px] font-mono font-bold text-teal-300 bg-teal-950/60 border border-teal-500/40 px-1.5 py-0.5 rounded">
+              {unseenCount} New
+            </span>
+          )}
+        </span>
         <span className="text-[9px] text-zinc-600 font-mono font-normal">24h Expires</span>
       </h3>
 
       {isCompactMode ? (
-        <div className="h-[68px] px-3 rounded-2xl bg-[#0b0b0e] border border-zinc-800/80 flex items-center gap-3 overflow-x-auto no-scrollbar select-none">
+        <div className="min-h-[68px] py-1.5 px-3 rounded-2xl bg-[#0b0b0e] border border-zinc-800/80 flex items-center gap-3 overflow-x-auto no-scrollbar select-none">
           {/* Compact + Add to Story Button */}
           <button
             type="button"
             onClick={onAddStory}
-            className="inline-flex items-center gap-2.5 pr-3.5 pl-1.5 py-1.5 rounded-full bg-zinc-900/90 border border-dashed border-zinc-700 hover:border-teal-400/60 hover:bg-zinc-900 transition-all shrink-0 cursor-pointer group focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+            className="min-h-[44px] inline-flex items-center gap-2.5 pr-3.5 pl-1.5 py-1.5 rounded-full bg-zinc-900/90 border border-dashed border-zinc-700 hover:border-teal-400/60 hover:bg-zinc-900 transition-all shrink-0 cursor-pointer group focus:outline-none focus:ring-2 focus:ring-purple-500/40"
           >
             <div className="w-8 h-8 rounded-full bg-zinc-950 border border-purple-500/50 group-hover:border-teal-400 flex items-center justify-center text-teal-300 shadow-[0_0_12px_rgba(157,78,223,0.28)] transition-colors">
               <span className="text-sm font-black leading-none">+</span>
@@ -50,11 +97,12 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
             </span>
           </button>
 
-          {/* Compact Circular Avatar Rings with Glowing Purple/Teal Unread Borders */}
-          {stories.length > 0 ? (
+          {/* Compact Circular Avatar Rings with Unseen Glow vs Seen Muted Ring */}
+          {orderedStories.length > 0 ? (
             <div className="flex items-center gap-3">
-              {stories.map((story, sIdx) => {
+              {orderedStories.map((story, sIdx) => {
                 const storyKey = story.id ? `story-compact-${story.id}-${sIdx}` : `story-compact-${sIdx}`;
+                const isSeen = viewedIds.has(String(story?.id ?? ''));
                 const hasAvatar =
                   story?.avatar &&
                   typeof story.avatar === 'string' &&
@@ -67,10 +115,16 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
                     key={storyKey}
                     type="button"
                     onClick={() => onSelectStory(story)}
-                    title={story.name}
-                    className="flex flex-col items-center justify-center shrink-0 cursor-pointer group focus:outline-none"
+                    title={isSeen ? `${story.name} (Viewed)` : `${story.name} (New Story)`}
+                    className="min-w-[44px] min-h-[44px] flex flex-col items-center justify-center shrink-0 cursor-pointer group focus:outline-none"
                   >
-                    <div className="p-[2px] rounded-full bg-gradient-to-tr from-[#9d4edf] via-purple-500 to-[#00ffcc] shadow-[0_0_12px_rgba(157,78,223,0.45),0_0_8px_rgba(0,255,204,0.35)] group-hover:scale-105 transition-transform">
+                    <div
+                      className={`p-[2px] rounded-full transition-transform group-hover:scale-105 ${
+                        isSeen
+                          ? 'bg-zinc-700 opacity-75'
+                          : 'bg-gradient-to-tr from-[#9d4edf] via-purple-500 to-[#00ffcc] shadow-[0_0_12px_rgba(157,78,223,0.45),0_0_8px_rgba(0,255,204,0.35)]'
+                      }`}
+                    >
                       <div className="w-9 h-9 rounded-full bg-zinc-950 p-[1.5px] overflow-hidden flex items-center justify-center">
                         {hasAvatar ? (
                           <img
@@ -86,7 +140,7 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
                         )}
                       </div>
                     </div>
-                    <span className="text-[9.5px] font-bold text-zinc-300 group-hover:text-white max-w-[68px] truncate leading-none mt-1">
+                    <span className={`text-[9.5px] font-bold max-w-[68px] truncate leading-none mt-1 ${isSeen ? 'text-zinc-500 group-hover:text-zinc-300' : 'text-zinc-200 group-hover:text-white'}`}>
                       {story.name}
                     </span>
                   </button>
@@ -116,8 +170,9 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
           </button>
 
           {/* Stories List */}
-          {stories.map((story, sIdx) => {
+          {orderedStories.map((story, sIdx) => {
             const storyKey = story.id ? `story-${story.id}-${sIdx}` : `story-${sIdx}`;
+            const isSeen = viewedIds.has(String(story?.id ?? ''));
             const rawMedia = story.video || story.image || story.mediaUrl;
             const isVideo = Boolean(
               story.video ||
@@ -138,7 +193,9 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
                   }
                 }}
                 className={`w-28 h-40 rounded-xl relative overflow-hidden flex-shrink-0 cursor-pointer group border transition-all duration-200 ${
-                  story.border || 'border-zinc-800'
+                  isSeen
+                    ? 'border-zinc-800 opacity-75 hover:opacity-100'
+                    : (story.border || 'border-purple-500/70 shadow-[0_0_14px_rgba(157,78,223,0.28)]')
                 } hover:shadow-lg hover:shadow-rose-950/30 hover:scale-[1.03] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-rose-500/50`}
               >
                 {isVideo ? (
@@ -163,7 +220,7 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
 
                 <div
                   className={`absolute top-2 left-2 w-8 h-8 rounded-full border-2 ${
-                    story.border || 'border-rose-500'
+                    isSeen ? 'border-zinc-600' : (story.border || 'border-rose-500')
                   } flex items-center justify-center bg-zinc-900 font-black ${
                     story.textColor || 'text-rose-400'
                   } text-xs z-10 overflow-hidden shadow-md pointer-events-none`}
@@ -184,10 +241,13 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
                   )}
                 </div>
 
-                <div className="absolute bottom-0 left-0 right-0 p-2 pointer-events-none">
+                <div className="absolute bottom-0 left-0 right-0 p-2 pointer-events-none flex items-center justify-between gap-1">
                   <div className="text-[10px] font-bold text-white leading-tight truncate drop-shadow">
                     {story.name}
                   </div>
+                  {isSeen && (
+                    <span className="text-[8px] font-mono text-zinc-400 uppercase shrink-0">Seen</span>
+                  )}
                 </div>
               </div>
             );

@@ -1,4 +1,5 @@
-import React, { useState, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { Search, X as ClearIcon, ArrowUpDown } from 'lucide-react';
 import { TimelineFeed } from './TimelineFeed';
 import {
   PostComposerTrigger,
@@ -176,6 +177,48 @@ export const FeedViewRouter: React.FC<any> = (props) => {
   } = props;
 
   const [selectedForumThreadId, setSelectedForumThreadId] = useState<string | null>(null);
+  const [feedSearchQuery, setFeedSearchQuery] = useState<string>('');
+  const [feedSortBy, setFeedSortBy] = useState<'latest' | 'hyped' | 'discussed'>('latest');
+  const [bookmarkedPostIds, setBookmarkedPostIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('nexus_bookmarked_feed_posts_v1');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const syncBookmarks = () => {
+      try {
+        const raw = localStorage.getItem('nexus_bookmarked_feed_posts_v1');
+        const parsed = raw ? JSON.parse(raw) : [];
+        setBookmarkedPostIds(Array.isArray(parsed) ? parsed.map(String) : []);
+      } catch {}
+    };
+    window.addEventListener('nexus_feed_bookmarks_updated', syncBookmarks as EventListener);
+    window.addEventListener('storage', syncBookmarks);
+    return () => {
+      window.removeEventListener('nexus_feed_bookmarks_updated', syncBookmarks as EventListener);
+      window.removeEventListener('storage', syncBookmarks);
+    };
+  }, []);
+
+  const handleToggleFeedBookmark = (postId: string) => {
+    const idStr = String(postId || '').trim();
+    if (!idStr) return;
+    setBookmarkedPostIds((prev) => {
+      const exists = prev.includes(idStr);
+      const next = exists ? prev.filter((id) => id !== idStr) : [idStr, ...prev];
+      try {
+        localStorage.setItem('nexus_bookmarked_feed_posts_v1', JSON.stringify(next));
+        window.dispatchEvent(new CustomEvent('nexus_feed_bookmarks_updated', { detail: next }));
+      } catch {}
+      triggerNotification?.(!exists ? '🔖 Post saved to Saved filter!' : 'Removed post from Saved.');
+      return next;
+    });
+  };
 
   const handleComposerSubmit = async (e: React.FormEvent) => {
     const offTopicRegex = /(politics|election|vote|candidate|government|president|congress|democrat|republican)/i;
@@ -524,8 +567,39 @@ export const FeedViewRouter: React.FC<any> = (props) => {
               if (!isLocallyFollowed && !isDiscoverFollowed && !isAllProfilesFollowed && !isFollowedInUserProfile && !isSelf) {
                 return false;
               }
+            } else if (filter === 'saved') {
+              if (!bookmarkedPostIds.includes(String(post.id))) {
+                return false;
+              }
             }
           }
+
+          if (feedSearchQuery.trim()) {
+            const q = feedSearchQuery.trim().toLowerCase();
+            const haystack = [
+              post.content,
+              post.message,
+              post.author?.name,
+              post.authorName,
+              post.tag,
+              post.location,
+              post.venue,
+              post.taggedVenue,
+              post.songData?.title,
+              post.songData?.band,
+              post.albumData?.albumName,
+              post.albumData?.band,
+              post.merchData?.name,
+              post.eventData?.eventTitle,
+              post.eventData?.venue,
+              post.tourData?.tourName,
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .toLowerCase();
+            if (!haystack.includes(q)) return false;
+          }
+
           return true;
         }).map(post => {
           const isBoostActive = !!post.is_boosted && !!post.boost_expires_at && new Date(post.boost_expires_at).getTime() > Date.now();
@@ -533,11 +607,29 @@ export const FeedViewRouter: React.FC<any> = (props) => {
         }).sort((a, b) => {
           if (a.effective_boost && !b.effective_boost) return -1;
           if (!a.effective_boost && b.effective_boost) return 1;
+          if (feedSortBy === 'hyped') {
+            const getReactionSum = (p: any) => {
+              if (Array.isArray(p.reactions)) {
+                return p.reactions.reduce((acc: number, r: any) => acc + (Number(r?.count) || 0), 0);
+              }
+              if (p.reactions && typeof p.reactions === 'object') {
+                return Object.values(p.reactions).reduce((acc: number, v: any) => acc + (Number(v) || 0), 0);
+              }
+              return Number(p.likes_count || p.likes || 0);
+            };
+            return getReactionSum(b) - getReactionSum(a);
+          }
+          if (feedSortBy === 'discussed') {
+            return (b.comments?.length || 0) - (a.comments?.length || 0);
+          }
           return 0;
         });
 
         const liveUserAvatar = profileAvatarUrl || userProfile?.avatar || userProfile?.avatar_url || userProfile?.profile_avatar;
-        const isFilterActive = Boolean(props.activeFeedCategoryFilter && props.activeFeedCategoryFilter !== 'all');
+        const isFilterActive = Boolean(
+          (props.activeFeedCategoryFilter && props.activeFeedCategoryFilter !== 'all') ||
+          feedSearchQuery.trim().length > 0
+        );
 
         const postsToPass = filteredFeed.length > 0 ? filteredFeed.map((p: any) => {
           const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
@@ -743,26 +835,65 @@ export const FeedViewRouter: React.FC<any> = (props) => {
               onPublishReleaseAction={() => setIsComposerModalOpen(true)}
             />
 
-            {/* Category Filter Bar positioned right above the feed stream */}
-            <div className="max-w-2xl mx-auto px-4 pt-3 pb-1 sm:px-4 text-left">
-              <div className="flex items-center justify-between gap-2 mb-1.5 px-0.5">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-400">
-                  Filter your Feed
-                </span>
-                {props.activeFeedCategoryFilter && props.activeFeedCategoryFilter !== 'all' && (
-                  <button
-                    type="button"
-                    onClick={() => props.setActiveFeedCategoryFilter?.('all')}
-                    className="text-[9.5px] font-mono font-bold text-amber-400 hover:text-amber-300 uppercase tracking-wider cursor-pointer"
-                  >
-                    Reset Filter
-                  </button>
-                )}
+            {/* Category Filter Bar, Search, & Sort positioned right above the feed stream */}
+            <div className="max-w-2xl mx-auto px-4 pt-3 pb-1 sm:px-4 text-left space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={feedSearchQuery}
+                    onChange={(e) => setFeedSearchQuery(e.target.value)}
+                    placeholder="Search posts, bands, venues, gear..."
+                    className="w-full min-h-[40px] pl-8 pr-8 py-1.5 rounded-xl bg-zinc-900/90 border border-zinc-800 focus:border-purple-500/70 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none transition-colors"
+                  />
+                  {feedSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setFeedSearchQuery('')}
+                      aria-label="Clear feed search"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-zinc-400 hover:text-white cursor-pointer"
+                    >
+                      <ClearIcon className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="inline-flex items-center gap-1.5 min-h-[40px] px-2.5 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs font-mono text-zinc-300">
+                    <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    <select
+                      value={feedSortBy}
+                      onChange={(e) => setFeedSortBy(e.target.value as 'latest' | 'hyped' | 'discussed')}
+                      aria-label="Sort feed"
+                      className="bg-transparent text-xs font-mono font-bold text-zinc-200 focus:outline-none cursor-pointer"
+                    >
+                      <option value="latest" className="bg-zinc-950 text-white">Latest</option>
+                      <option value="hyped" className="bg-zinc-950 text-white">Most Hyped</option>
+                      <option value="discussed" className="bg-zinc-950 text-white">Most Discussed</option>
+                    </select>
+                  </div>
+
+                  {isFilterActive && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        props.setActiveFeedCategoryFilter?.('all');
+                        setFeedSearchQuery('');
+                      }}
+                      className="min-h-[40px] px-2.5 rounded-xl bg-amber-950/50 border border-amber-500/40 text-[10px] font-mono font-bold text-amber-300 hover:text-amber-200 uppercase tracking-wider cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
               </div>
+
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 select-none">
                 {[
                   { id: 'all', label: 'All Stream', emoji: '🔥' },
                   { id: 'followed', label: 'Followed', emoji: '⭐' },
+                  { id: 'saved', label: 'Saved', emoji: '🔖', count: bookmarkedPostIds.length },
                   { id: 'bulletin', label: 'Bulletin & Gear', emoji: '📌' },
                   { id: 'tour', label: 'Tour Dates', emoji: '🎟️' },
                   { id: 'merch', label: 'Merch Drops', emoji: '👕' },
@@ -777,7 +908,7 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                       key={`feed-filter-chip-${chip.id}`}
                       type="button"
                       onClick={() => props.setActiveFeedCategoryFilter?.(chip.id)}
-                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-tight whitespace-nowrap transition-all cursor-pointer ${
+                      className={`min-h-[40px] flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-tight whitespace-nowrap transition-all cursor-pointer ${
                         isSelected
                           ? portalRole === 'fan_only'
                             ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/70 shadow-[0_0_12px_rgba(34,211,238,0.35)]'
@@ -795,37 +926,56 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                     >
                       <span className="text-sm">{chip.emoji}</span>
                       <span>{chip.label}</span>
+                      {typeof chip.count === 'number' && chip.count > 0 && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-black/50 text-amber-300 border border-amber-500/40">
+                          {chip.count}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Empty state for active category filter */}
+            {/* Empty state for active category filter or search */}
             {isFilterActive && filteredFeed.length === 0 && (
               <div className="bg-[#0b0b0d] border border-zinc-800/80 rounded-2xl p-8 text-center my-4 space-y-3 shadow-xl animate-in fade-in duration-200">
                 <div className="w-12 h-12 mx-auto rounded-full bg-zinc-900/90 border border-zinc-800 flex items-center justify-center text-xl shadow-inner">
-                  {(props.activeFeedCategoryFilter === 'followed' || props.activeFeedCategoryFilter === 'following') && '⭐'}
-                  {props.activeFeedCategoryFilter === 'tour' && '🎟️'}
-                  {props.activeFeedCategoryFilter === 'merch' && '👕'}
-                  {props.activeFeedCategoryFilter === 'audio' && '🎙️'}
-                  {props.activeFeedCategoryFilter === 'photos' && '📸'}
-                  {props.activeFeedCategoryFilter === 'bulletin' && '📌'}
+                  {feedSearchQuery.trim() ? '🔍' : (
+                    <>
+                      {(props.activeFeedCategoryFilter === 'followed' || props.activeFeedCategoryFilter === 'following') && '⭐'}
+                      {props.activeFeedCategoryFilter === 'saved' && '🔖'}
+                      {props.activeFeedCategoryFilter === 'tour' && '🎟️'}
+                      {props.activeFeedCategoryFilter === 'merch' && '👕'}
+                      {props.activeFeedCategoryFilter === 'audio' && '🎙️'}
+                      {props.activeFeedCategoryFilter === 'photos' && '📸'}
+                      {props.activeFeedCategoryFilter === 'bulletin' && '📌'}
+                    </>
+                  )}
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-white uppercase tracking-wider">
-                    No {(props.activeFeedCategoryFilter === 'followed' || props.activeFeedCategoryFilter === 'following') ? 'Followed Posts' : props.activeFeedCategoryFilter === 'tour' ? 'Tour Dates' : props.activeFeedCategoryFilter === 'merch' ? 'Merch Drops' : props.activeFeedCategoryFilter === 'audio' ? 'Demos & Tapes' : props.activeFeedCategoryFilter === 'bulletin' ? 'Bulletin & Gear Notices' : 'Photo Pit Snaps'} Yet
+                    {feedSearchQuery.trim()
+                      ? `No Results for "${feedSearchQuery.trim()}"`
+                      : `No ${(props.activeFeedCategoryFilter === 'followed' || props.activeFeedCategoryFilter === 'following') ? 'Followed Posts' : props.activeFeedCategoryFilter === 'saved' ? 'Saved Posts' : props.activeFeedCategoryFilter === 'tour' ? 'Tour Dates' : props.activeFeedCategoryFilter === 'merch' ? 'Merch Drops' : props.activeFeedCategoryFilter === 'audio' ? 'Demos & Tapes' : props.activeFeedCategoryFilter === 'bulletin' ? 'Bulletin & Gear Notices' : 'Photo Pit Snaps'} Yet`}
                   </h3>
                   <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto">
-                    {(props.activeFeedCategoryFilter === 'followed' || props.activeFeedCategoryFilter === 'following')
+                    {feedSearchQuery.trim()
+                      ? 'Try another band name, venue, or keyword.'
+                      : props.activeFeedCategoryFilter === 'saved'
+                      ? 'Tap the bookmark icon on any post in the feed to save it here for quick reference.'
+                      : (props.activeFeedCategoryFilter === 'followed' || props.activeFeedCategoryFilter === 'following')
                       ? 'Follow more bands, venues, labels, and scene members to see their posts exclusively here.'
                       : `There are currently no active posts in the stream tagged with this category.`}
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => props.setActiveFeedCategoryFilter?.('all')}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 transition-all cursor-pointer shadow"
+                  onClick={() => {
+                    props.setActiveFeedCategoryFilter?.('all');
+                    setFeedSearchQuery('');
+                  }}
+                  className="inline-flex items-center gap-1.5 min-h-[40px] px-4 py-1.5 rounded-full text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 transition-all cursor-pointer shadow"
                 >
                   🔥 Show All Stream
                 </button>
@@ -839,26 +989,44 @@ export const FeedViewRouter: React.FC<any> = (props) => {
               userProfile={userProfile}
               portalRole={portalRole}
               allProfiles={allProfiles}
+              bookmarkedPostIds={bookmarkedPostIds}
+              onToggleBookmark={handleToggleFeedBookmark}
               onShareToTimeline={(sharedPost) => {
                 const newPost: any = {
                   id: `share_${Date.now()}`,
+                  type: 'post',
                   authorId: userProfile?.id || 'user',
                   authorName: userProfile?.name || 'You',
-                  authorAvatar: userProfile?.avatar || '',
+                  authorAvatar: liveUserAvatar || userProfile?.avatar || '',
                   legal_name: userProfile?.name,
                   timestamp: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  content: `Reposted from @${sharedPost.authorName}: "${sharedPost.message}"`,
                   message: `Reposted from @${sharedPost.authorName}: "${sharedPost.message}"`,
-                  tag: sharedPost.tag || 'COMMUNITY',
+                  tag: sharedPost.tag || 'REPOST',
+                  images: sharedPost.images,
+                  image_url: sharedPost.image_url,
+                  image: sharedPost.image_url || sharedPost.image,
+                  mediaUrl: sharedPost.mediaUrl,
+                  youtubeId: sharedPost.youtubeId,
                   songData: sharedPost.songData,
                   albumData: sharedPost.albumData,
+                  merchData: sharedPost.merchData,
+                  eventData: sharedPost.eventData,
+                  tourData: sharedPost.tourData,
+                  ticketData: sharedPost.ticketData,
+                  bandcampUrl: sharedPost.bandcampUrl,
+                  tapeData: sharedPost.tapeData,
+                  pollData: sharedPost.pollData,
                   likes_count: 0,
                   comments: [],
                 };
                 setLabelPosts(prev => [newPost, ...prev]);
                 setFeed(prev => [newPost, ...prev]);
+                syncPostToSupabase?.(newPost);
               }}
               onToggleLike={(postId) => {
-                handleReaction(postId, 'heart');
+                handleReaction(postId, 'likes');
                 setLabelPosts(prev => prev.map(p => p.id === postId ? { ...p, user_liked: !p.user_liked, likes_count: p.user_liked ? Math.max(0, p.likes_count - 1) : p.likes_count + 1 } : p));
               }}
               onEmojiReact={(postId, type) => {
@@ -871,8 +1039,8 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                   return { ...p, user_reactions: newReacts };
                 }));
               }}
-              onAddComment={(postId, text, parentCommentId) => {
-                handleAddComment(postId, text, parentCommentId);
+              onAddComment={(postId, text, parentCommentId, mediaUrl) => {
+                handleAddComment(postId, text, parentCommentId, mediaUrl);
                 const activeName = userProfile?.full_name || userProfile?.name || 'Miguel Goregrinder Medina';
                 const activeAvatar = userProfile?.avatar_url || userProfile?.avatar || 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80';
                 setLabelPosts(prev => prev.map(p => p.id === postId ? {
@@ -889,6 +1057,8 @@ export const FeedViewRouter: React.FC<any> = (props) => {
                       avatar: activeAvatar,
                       user_avatar: activeAvatar,
                       text,
+                      mediaUrl: mediaUrl || null,
+                      media_url: mediaUrl || null,
                       time: 'Just now'
                     }
                   ]
@@ -1026,6 +1196,10 @@ export const FeedViewRouter: React.FC<any> = (props) => {
             chats={props.chats}
             setChats={props.setChats}
             allProfiles={allProfiles}
+            liveEvents={props.liveEvents}
+            inAppSongsList={props.inAppSongsList}
+            bands={props.bands}
+            feed={props.feed}
             setFeed={setFeed}
             setLabelPosts={setLabelPosts}
             onAddFeedPost={(p: any) => {

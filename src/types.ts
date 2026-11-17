@@ -137,6 +137,7 @@ export interface Show {
   show_name?: string;
   is_managed_client_booking?: boolean;
   external_ticket_url?: string;
+  ticket_tiers?: TicketTier[];
   collaborator_ids?: string[];
 
   // Tour Manager / Client Agency Booking Extension Fields
@@ -733,6 +734,8 @@ export interface TicketTier {
   price: number;
   capacity?: number;
   sold: number;
+  description?: string;
+  includesMerch?: boolean;
 }
 
 export interface StorefrontTicketOption {

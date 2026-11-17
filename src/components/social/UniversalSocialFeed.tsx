@@ -58,7 +58,7 @@ import { resolveActiveUserId, syncPostToSupabase, generateUUID } from './utils/p
 import { mergePostWithReactions } from './utils/reactionStore';
 import { useSocialProfileState } from './hooks/useSocialProfileState';
 import { FeedTopHeader } from './navigation/FeedTopHeader';
-import { formatTimeAgo, isPastShowDate } from '../../utils/socialFeedUtils';
+import { formatTimeAgo, isPastShowDate, getShowTicketTiers } from '../../utils/socialFeedUtils';
 import { isShowEmbargoedOrDraft, parseShowExtraNotes } from '../../utils/showDisplayUtils';
 import { isValidStorageOrImageUrl } from '../../services/storageService';
 import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
@@ -370,6 +370,8 @@ export function UniversalSocialFeed({
       safety_code: payload.safety_code,
       price: payload.price,
       ticket_price: payload.ticket_price,
+      ticket_tiers: getShowTicketTiers(payload),
+      additional_notes: payload.additional_notes,
       is_community_submitted: true,
       band_id: payload.band_id || 'community_hub',
       external_ticket_url: payload.external_ticket_url,
@@ -676,6 +678,8 @@ export function UniversalSocialFeed({
     handleSaveItem,
     cartItems,
     setCartItems,
+    fulfillmentMap,
+    setFulfillmentMap,
     isCartOpen,
     setIsCartOpen,
     showStripeCartCheckout,
@@ -1060,6 +1064,7 @@ export function UniversalSocialFeed({
               flyerUrl: cleanFlyer,
               external_ticket_url: extra?.external_ticket_url || e.external_ticket_url,
               ticket_url: extra?.ticket_url || e.ticket_url || extra?.external_ticket_url || e.external_ticket_url,
+              ticket_tiers: getShowTicketTiers({ ...e, ...(extra || {}) }),
               ticketsAvailable: !!(extra?.external_ticket_url || e.external_ticket_url || extra?.ticket_url || e.ticket_url || priceClean),
               ticketStatus: 'active'
             };
@@ -1238,6 +1243,7 @@ export function UniversalSocialFeed({
                 price: priceDisplay,
                 day_of_show_price: extra?.day_of_show_price || s.day_of_show_price,
                 presale_price: extra?.presale_price || s.presale_price,
+                ticket_tiers: getShowTicketTiers({ ...s, ...(extra || {}), additional_notes: extraNotes }),
                 safety_code: extra?.safety_code || s.safety_code,
                 flyer_url: resolvedFlyer,
                 flyerUrl: resolvedFlyer,
@@ -1337,6 +1343,7 @@ export function UniversalSocialFeed({
                 state_province: localShow.state_province,
                 country: localShow.country,
                 price: localShow.price || (localShow.external_ticket_url ? 'External Tickets' : 'Free / DIY'),
+                ticket_tiers: getShowTicketTiers(localShow),
                 flyer_url: localShow.flyer_url || localShow.flyerUrl || undefined,
                 flyerUrl: localShow.flyerUrl || localShow.flyer_url || undefined,
                 isFollowed,
@@ -4708,6 +4715,13 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
       const gig = e.detail;
       if (gig) {
         setActiveEventData(gig);
+        if (gig.initialTab === 'chat' || gig.openPitWall) {
+          setEventModeTab('chat');
+        } else if (gig.initialTab === 'setlist') {
+          setEventModeTab('setlist');
+        } else {
+          setEventModeTab('info');
+        }
         setIsEventModeActive(true);
         setShowMapModal(false);
       }
@@ -4760,36 +4774,84 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
   useEffect(() => {
     const fetchShopItemsAndTracks = async () => {
       const supabaseClient = getSupabase();
-      if (!supabaseClient) return;
       try {
-        const { data: shopData, error: shopError } = await supabaseClient.from('nexus_shop_items').select('*').order('created_at', { ascending: false });
-        if (!shopError && shopData && shopData.length > 0) {
-          const fromDb = shopData.map(d => ({
-             id: d.id,
-             name: d.name,
-             price: Number(d.price),
-             category: d.category,
-             subcategory: d.category,
-             description: d.description,
-             thumbnail: d.fallback_thumbnail,
-             fallbackThumbnail: d.fallback_thumbnail,
-             condition: d.condition,
-             year: 'N/A',
-             brand: d.brand_name || 'Generic',
-             seller: d.seller,
-             poster: d.seller,
-             location: 'Local',
-             is_real_account: true
-          }));
-          const merged = [...fromDb, ...mockShopItems];
-          setShopItemsList(merged);
-          setShopItems(merged);
-        }
+        const [{ data: shopData, error: shopError }, merchDrops] = await Promise.all([
+          supabaseClient
+            ? supabaseClient.from('nexus_shop_items').select('*').order('created_at', { ascending: false })
+            : Promise.resolve({ data: [], error: null } as any),
+          fetchShopMerchItems().catch(() => [])
+        ]);
 
-        const { data: trackData, error: trackError } = await supabaseClient.from('nexus_tracks').select('*').order('created_at', { ascending: false });
-        if (!trackError && trackData && trackData.length > 0) {
-           setInAppSongsList(prev => {
-             const dbTracks = trackData.map(t => ({
+        const fromNexusShop = (!shopError && Array.isArray(shopData))
+          ? shopData.map((d: any) => ({
+              id: d.id,
+              name: d.name,
+              price: Number(d.price),
+              category: d.category,
+              subcategory: d.category,
+              description: d.description,
+              thumbnail: d.fallback_thumbnail,
+              fallbackThumbnail: d.fallback_thumbnail,
+              condition: d.condition,
+              year: 'N/A',
+              brand: d.brand_name || 'Generic',
+              seller: d.seller,
+              poster: d.seller,
+              location: d.location || 'Local',
+              is_real_account: true
+            }))
+          : [];
+
+        const fromMerchDrops = (Array.isArray(merchDrops) ? merchDrops : []).map((m: any) => {
+          const rawCat = String(m.category || '').toLowerCase();
+          const nameLower = String(m.name || '').toLowerCase();
+          const isPhysical = rawCat.includes('vinyl') || rawCat.includes('cd') || rawCat.includes('cassette') || rawCat.includes('media') || nameLower.includes('vinyl') || nameLower.includes(' lp') || nameLower.includes('cassette') || nameLower.includes('digipak');
+          return {
+            id: String(m.id),
+            name: m.name,
+            price: Number(m.price) || 0,
+            category: isPhysical ? 'media' : 'apparel',
+            subcategory: isPhysical
+              ? (rawCat.includes('cd') || nameLower.includes('cd') ? 'cds' : rawCat.includes('cassette') || nameLower.includes('cassette') ? 'cassettes' : 'vinyl')
+              : (rawCat.includes('hoodie') || nameLower.includes('hoodie') ? 'hoodies' : rawCat.includes('longsleeve') ? 'longsleeve' : 't-shirts'),
+            rawCategory: m.category,
+            condition: m.condition || 'New',
+            description: m.description || '',
+            sizes: Array.isArray(m.sizes) && m.sizes.length > 0 ? m.sizes : ['S', 'M', 'L', 'XL', '2XL'],
+            thumbnail: m.thumbnail,
+            fallbackThumbnail: m.thumbnail,
+            images: Array.isArray(m.images) && m.images.length > 0 ? m.images : (m.thumbnail ? [m.thumbnail] : []),
+            stock: m.stock !== undefined ? Number(m.stock) : 25,
+            isLimited: Boolean(m.is_timed || (m.stock !== undefined && Number(m.stock) <= 25)),
+            is_timed: Boolean(m.is_timed),
+            expires_at: m.expires_at,
+            duration_hours: m.duration_hours,
+            seller_id: m.seller_id,
+            seller: m.seller_name || 'Nexus Merchant',
+            brand: m.seller_name || 'Nexus Merchant',
+            artist: m.seller_name || 'Nexus Merchant',
+            allow_negotiation: m.allow_negotiation !== false,
+            is_real_account: true,
+            created_at: m.created_at
+          };
+        });
+
+        const seenIds = new Set<string>();
+        const merged = [...fromMerchDrops, ...fromNexusShop, ...mockShopItems].filter((item) => {
+          const idKey = String(item?.id || '');
+          if (!idKey || seenIds.has(idKey)) return false;
+          seenIds.add(idKey);
+          return true;
+        });
+
+        setShopItemsList(merged);
+        setShopItems(merged);
+
+        if (supabaseClient) {
+          const { data: trackData, error: trackError } = await supabaseClient.from('nexus_tracks').select('*').order('created_at', { ascending: false });
+          if (!trackError && trackData && trackData.length > 0) {
+            setInAppSongsList(() => {
+              const dbTracks = trackData.map((t: any) => ({
                 id: t.id,
                 title: t.title,
                 band: t.band,
@@ -4797,12 +4859,13 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
                 duration: t.duration,
                 coverArt: t.cover_art,
                 audioUrl: ''
-             }));
-             return [...dbTracks, ...mockInAppSongs];
-           });
+              }));
+              return [...dbTracks, ...mockInAppSongs];
+            });
+          }
         }
-      } catch(e) {
-         console.error('Error fetching shop items / tracks:', e);
+      } catch (e) {
+        console.error('Error fetching shop items / tracks:', e);
       }
     };
     fetchShopItemsAndTracks();
@@ -4883,7 +4946,9 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
       }
     }
 
-    setShopItemsList(prev => [newListingItem as any, ...prev]);
+    const realNewListing = { ...newListingItem, is_real_account: true };
+    setShopItemsList(prev => [realNewListing as any, ...prev]);
+    setShopItems(prev => [realNewListing as any, ...prev]);
 
     // Also turn this classified/gear item into an active feed post on the timeline
     const isGearListing = newListingType === 'gear';
@@ -5160,41 +5225,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
     };
   };
 
-  useEffect(() => {
-    if (!activeEventData || !isEventModeActive) return;
-    const supabaseClient = getSupabase();
-    if (!supabaseClient) return;
-
-    // Load existing messages from DB
-    supabaseClient.from('nexus_venue_chat')
-      .select('*, profiles(username, full_name, avatar_url, role)')
-      .eq('event_id', activeEventData.id)
-      .order('created_at', { ascending: true })
-      .then(({ data, error }) => {
-        if (!error && data) {
-          const loadedMessages = data.map(row => ({
-            user_id: row.profile_id,
-            username: row.profiles?.username || row.profiles?.full_name || 'Anonymous',
-            avatar_url: row.profiles?.avatar_url,
-            text: row.message,
-            timestamp: row.created_at
-          }));
-          setVenueMessages(loadedMessages);
-        }
-      });
-
-    const channel = supabaseClient.channel(`venue_chat_${activeEventData.id}`, {
-      config: { broadcast: { self: true } }
-    });
-
-    channel.on('broadcast', { event: 'venue_msg' }, (payload) => {
-      setVenueMessages(prev => [...prev, payload.payload]);
-    }).subscribe();
-
-    return () => {
-      supabaseClient.removeChannel(channel);
-    };
-  }, [activeEventData, isEventModeActive]);
+  // Venue Pit Wall real-time sync is handled directly inside EventCompanionModal via /api/shows/:eventId/pitwall + Supabase Realtime
   useEffect(() => {
     const fetchSearchResults = async () => {
       const q = globalSearchQuery.trim();
@@ -5440,14 +5471,17 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
           let purchaseData = { ...checkoutItem.data };
           if (checkoutItem.type === 'ticket') {
             const enriched = enrichTicketData(checkoutItem.data);
+            const resolvedTierName = checkoutItem.data?.ticketType || 'General Admission';
             purchaseData = {
               ...enriched,
-              ticketType: selectedTicketTier === 'ga' ? 'General Admission' : selectedTicketTier === 'vip' ? 'VIP Access Pass' : 'VIP Ultimate Fan Bundle (includes Merch Bundle)',
-              tierCode: selectedTicketTier,
+              ...checkoutItem.data,
+              showId: checkoutItem.data?.id || checkoutItem.data?.show_id,
+              ticketType: resolvedTierName,
+              tierCode: 'standard_admission',
               attendees: attendeeDetails.slice(0, quantity).map((att, idx) => ({
                 name: att?.name.trim() || `Attendee ${idx + 1}`,
-                tier: selectedTicketTier,
-                size: selectedTicketTier === 'vip_merch' ? att.size : undefined
+                tier: 'standard_admission',
+                tierName: resolvedTierName
               }))
             };
           } else if (checkoutItem.type === 'merch') {
@@ -5476,6 +5510,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
             const updated = [newPurchase, ...prev];
             try {
               localStorage.setItem('nexus_my_collections_v1', JSON.stringify(updated));
+              window.dispatchEvent(new CustomEvent('nexus-collections-updated'));
             } catch (e) {
               console.warn("Failed to save collections to localStorage", e);
             }
@@ -6066,6 +6101,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
   setChats={setChats}
   setUserProfile={setUserProfile}
   liveEvents={liveEvents}
+  inAppSongsList={inAppSongsList}
   prefPushNotifications={prefPushNotifications}
   setPrefPushNotifications={setPrefPushNotifications}
   setShowMapModal={setShowMapModal}
@@ -6296,6 +6332,10 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         setIsCartOpen={setIsCartOpen}
         cartItems={cartItems}
         setCartItems={setCartItems}
+        fulfillmentMap={fulfillmentMap}
+        setFulfillmentMap={setFulfillmentMap}
+        shopItems={shopItems}
+        bands={effectiveBands}
         setShowStripeCartCheckout={setShowStripeCartCheckout}
         showStripeCartCheckout={showStripeCartCheckout}
         bottomSheetOpen={bottomSheetOpen}
@@ -6622,6 +6662,8 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
             onPrev={handlePrevStory}
             triggerNotification={triggerNotification}
             userProfile={userProfile}
+            allProfiles={allProfiles}
+            discoverProfiles={discoverProfiles}
           />
         </Suspense>
       )}

@@ -229,13 +229,62 @@ export function sanitizeShowForDb(show: any): any {
   if (show.management_notes) dbShow.management_notes = show.management_notes;
   if (show.created_at) dbShow.created_at = show.created_at;
 
-  // Additional notes handling (clean JSON)
+  // Additional notes & custom ticket_tiers serialization (strict schema safe)
+  let parsedExtraNotes: Record<string, any> = {};
   if (show.additional_notes) {
-    if (typeof show.additional_notes === 'object') {
-      dbShow.additional_notes = JSON.stringify(show.additional_notes);
+    if (typeof show.additional_notes === 'object' && !Array.isArray(show.additional_notes)) {
+      parsedExtraNotes = { ...show.additional_notes };
     } else if (typeof show.additional_notes === 'string' && !show.additional_notes.startsWith('data:')) {
-      dbShow.additional_notes = show.additional_notes;
+      const trimmedNotes = show.additional_notes.trim();
+      if (trimmedNotes.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmedNotes);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            parsedExtraNotes = parsed;
+          } else {
+            parsedExtraNotes = { notes: trimmedNotes };
+          }
+        } catch {
+          parsedExtraNotes = { notes: trimmedNotes };
+        }
+      } else if (trimmedNotes) {
+        parsedExtraNotes = { notes: trimmedNotes };
+      }
     }
+  }
+
+  if (Array.isArray(show.ticket_tiers)) {
+    const cleanTiers = show.ticket_tiers
+      .filter((t: any) => t && String(t.name || '').trim() && Number.isFinite(Number(t.price)) && Number(t.price) >= 0)
+      .map((t: any, idx: number) => ({
+        id: String(t.id || `tier_${idx}`),
+        name: String(t.name).trim(),
+        price: Number(t.price),
+        capacity: Number.isFinite(Number(t.capacity)) && Number(t.capacity) > 0 ? Number(t.capacity) : 0,
+        sold: Number.isFinite(Number(t.sold)) && Number(t.sold) >= 0 ? Number(t.sold) : 0,
+        description: typeof t.description === 'string' && t.description.trim() ? t.description.trim() : undefined,
+        includesMerch: Boolean(t.includesMerch),
+      }));
+    if (cleanTiers.length > 0) {
+      parsedExtraNotes.ticket_tiers = cleanTiers;
+    } else {
+      delete parsedExtraNotes.ticket_tiers;
+      delete parsedExtraNotes.ticketTiers;
+    }
+  }
+
+  if (Object.keys(parsedExtraNotes).length > 0) {
+    if (
+      Object.keys(parsedExtraNotes).length === 1 &&
+      typeof parsedExtraNotes.notes === 'string' &&
+      !Array.isArray(show.ticket_tiers)
+    ) {
+      dbShow.additional_notes = parsedExtraNotes.notes;
+    } else {
+      dbShow.additional_notes = JSON.stringify(parsedExtraNotes);
+    }
+  } else if (typeof show.additional_notes === 'string' && !show.additional_notes.startsWith('data:')) {
+    dbShow.additional_notes = show.additional_notes;
   }
 
   // City handling: Postgres 'shows' table enforces a NOT NULL constraint on 'city'

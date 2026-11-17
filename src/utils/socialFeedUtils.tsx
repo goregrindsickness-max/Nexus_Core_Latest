@@ -1,6 +1,8 @@
 import React from 'react';
 import { getSupabase } from '../supabase';
 import { authFetch, getSupabaseAccessToken } from './apiConfig';
+import { parseShowExtraNotes } from './showDisplayUtils';
+import type { TicketTier } from '../types';
 
 export const formatPostTimestamp = (
   timestampOrPost?: any,
@@ -792,20 +794,198 @@ export const formatTimeTo12h = (input?: string): string => {
   return str.replace(/\s*(AM|PM)\s*(AM|PM)/gi, ' $1');
 };
 
+export const getExternalTicketUrl = (gig: any): string | null => {
+  if (!gig || typeof gig !== 'object') return null;
+  const extra = parseShowExtraNotes(gig);
+  const candidates = [
+    gig.external_ticket_url,
+    gig.ticketUrl,
+    gig.ticket_url,
+    gig.ticket_link,
+    extra.external_ticket_url,
+    extra.ticket_url,
+    extra.ticketUrl,
+  ];
+  for (const raw of candidates) {
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed === '#') continue;
+    const lower = trimmed.toLowerCase();
+    if (lower === 'none' || lower === 'n/a' || lower === 'na' || lower === 'tba' || lower === 'tbd') continue;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    if (trimmed.includes('.') && !trimmed.includes(' ')) return `https://${trimmed}`;
+  }
+  return null;
+};
+
+export const getExternalTicketProviderName = (url?: string | null): string => {
+  if (!url) return 'External Box Office';
+  try {
+    const normalized = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`;
+    const host = new URL(normalized).hostname.replace(/^www\./i, '').toLowerCase();
+    if (host.includes('dice.fm')) return 'DICE';
+    if (host.includes('ticketmaster') || host.includes('livenation')) return 'Ticketmaster';
+    if (host.includes('eventbrite')) return 'Eventbrite';
+    if (host.includes('seetickets')) return 'See Tickets';
+    if (host.includes('axs.com')) return 'AXS';
+    if (host.includes('etix.com')) return 'Etix';
+    if (host.includes('ticketweb')) return 'TicketWeb';
+    if (host.includes('eventim')) return 'Eventim';
+    if (host.includes('tixr.com')) return 'Tixr';
+    if (host.includes('bandcamp.com')) return 'Bandcamp';
+    if (host.includes('prekindle')) return 'Prekindle';
+    if (host.includes('holdmyticket')) return 'HoldMyTicket';
+    if (host.includes('showclix')) return 'ShowClix';
+    if (host.includes('stubhub')) return 'StubHub';
+    if (host.includes('vividseats')) return 'Vivid Seats';
+    return host || 'External Box Office';
+  } catch {
+    return 'External Box Office';
+  }
+};
+
+export const getShowTicketTiers = (gig: any): TicketTier[] => {
+  if (!gig || typeof gig !== 'object') return [];
+  const extra = parseShowExtraNotes(gig);
+  const rawTiers =
+    (Array.isArray(gig.ticket_tiers) ? gig.ticket_tiers : null) ||
+    (Array.isArray(gig.ticketTiers) ? gig.ticketTiers : null) ||
+    (Array.isArray(extra.ticket_tiers) ? extra.ticket_tiers : null) ||
+    (Array.isArray(extra.ticketTiers) ? extra.ticketTiers : null) ||
+    [];
+
+  return rawTiers
+    .filter((t: any) => t && typeof t === 'object' && String(t.name || '').trim().length > 0 && Number.isFinite(Number(t.price)) && Number(t.price) >= 0)
+    .map((t: any, idx: number): TicketTier => ({
+      id: String(t.id || `tier_${idx}_${String(t.name).toLowerCase().replace(/[^a-z0-9]+/g, '_')}`),
+      name: String(t.name).trim(),
+      price: Number(t.price),
+      capacity: t.capacity !== undefined && t.capacity !== null && Number.isFinite(Number(t.capacity)) && Number(t.capacity) > 0
+        ? Number(t.capacity)
+        : 0,
+      sold: Number.isFinite(Number(t.sold)) && Number(t.sold) >= 0 ? Number(t.sold) : 0,
+      description: typeof t.description === 'string' && t.description.trim() ? t.description.trim() : undefined,
+      includesMerch: Boolean(t.includesMerch),
+    }));
+};
+
+export const parseSingleAdmissionPrice = (gig: any): {
+  hasNumericPrice: boolean;
+  price: number;
+  label: string;
+  isFreeOrDoorOnly: boolean;
+} => {
+  if (!gig || typeof gig !== 'object') {
+    return { hasNumericPrice: false, price: 0, label: 'See Event Details', isFreeOrDoorOnly: true };
+  }
+
+  const numericTicketPrice = Number(gig.ticket_price ?? gig.ticketPrice);
+  if (Number.isFinite(numericTicketPrice) && numericTicketPrice > 0) {
+    return {
+      hasNumericPrice: true,
+      price: numericTicketPrice,
+      label: `$${numericTicketPrice.toFixed(numericTicketPrice % 1 === 0 ? 0 : 2)}`,
+      isFreeOrDoorOnly: false,
+    };
+  }
+
+  const rawCandidates = [gig.presale_price, gig.day_of_show_price, gig.price]
+    .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
+    .map((v) => String(v).trim());
+
+  const displayLabel = String(gig.price || gig.presale_price || gig.day_of_show_price || 'See Details').trim();
+
+  for (const candidate of rawCandidates) {
+    const lower = candidate.toLowerCase();
+    const numericMatch = candidate.match(/(\d+(?:\.\d{1,2})?)/);
+    if (numericMatch) {
+      const parsed = parseFloat(numericMatch[1]);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return {
+          hasNumericPrice: true,
+          price: parsed,
+          label: displayLabel,
+          isFreeOrDoorOnly: false,
+        };
+      }
+      if (parsed === 0 && (lower.includes('$0') || lower === '0' || lower.includes('0.00'))) {
+        return {
+          hasNumericPrice: false,
+          price: 0,
+          label: 'Free Entry',
+          isFreeOrDoorOnly: true,
+        };
+      }
+    }
+    if (
+      lower.includes('free') ||
+      lower.includes('donation') ||
+      lower.includes('door') ||
+      lower.includes('byob') ||
+      lower.includes('external') ||
+      lower.includes('tba') ||
+      lower.includes('tbd') ||
+      lower.includes('crowdsourced')
+    ) {
+      return {
+        hasNumericPrice: false,
+        price: 0,
+        label: displayLabel,
+        isFreeOrDoorOnly: true,
+      };
+    }
+  }
+
+  return {
+    hasNumericPrice: false,
+    price: 0,
+    label: displayLabel || 'Door Admission',
+    isFreeOrDoorOnly: true,
+  };
+};
+
+export const findInAppPassForEvent = (gig: any): any | null => {
+  if (!gig || typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('nexus_my_collections_v1');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+
+    const gigId = String(gig.id || '').trim().toLowerCase();
+    const gigHeadliner = String(gig.headliner || gig.name || '').trim().toLowerCase();
+    const gigVenue = String(gig.venue || gig.venue_name || '').trim().toLowerCase();
+    const gigDate = String(gig.rawDate || gig.show_date || gig.date || '').trim().toLowerCase();
+
+    return (
+      parsed.find((item: any) => {
+        if (!item || item.type !== 'ticket' || !item.data) return false;
+        const d = item.data;
+        const itemShowId = String(d.showId || d.show_id || d.id || '').trim().toLowerCase();
+        if (gigId && itemShowId && gigId === itemShowId) return true;
+
+        const itemHeadliner = String(d.headliner || d.name || '').trim().toLowerCase();
+        const itemVenue = String(d.venue || d.venue_name || '').trim().toLowerCase();
+        if (!gigHeadliner || !itemHeadliner || gigHeadliner !== itemHeadliner) return false;
+        if (gigVenue && itemVenue && gigVenue !== itemVenue) return false;
+
+        const itemDate = String(d.rawDate || d.show_date || d.date || '').trim().toLowerCase();
+        if (gigDate && itemDate && gigDate !== itemDate) return false;
+        return Boolean(gigVenue && itemVenue);
+      }) || null
+    );
+  } catch {
+    return null;
+  }
+};
+
 export const hasGigTickets = (gig: any): boolean => {
   if (!gig) return false;
   if (gig.ticketsAvailable === false || gig.ticketStatus === 'unlinked') return false;
-  const hasUrl = Boolean(gig.ticketUrl || gig.external_ticket_url || gig.ticket_url || gig.ticket_link);
-  const priceStr = String(gig.price || gig.presale_price || gig.day_of_show_price || '').toLowerCase();
-  const hasPaidPrice = Boolean(
-    priceStr &&
-    !priceStr.includes('free') &&
-    !priceStr.includes('0.00') &&
-    !priceStr.includes('$0') &&
-    !priceStr.includes('tba') &&
-    !priceStr.includes('crowdsourced')
-  );
-  return hasUrl || hasPaidPrice || gig.hasTickets === true;
+  const hasUrl = Boolean(getExternalTicketUrl(gig));
+  const tiers = getShowTicketTiers(gig);
+  const { hasNumericPrice } = parseSingleAdmissionPrice(gig);
+  return hasUrl || tiers.length > 0 || hasNumericPrice || gig.hasTickets === true;
 };
 
 export const isPastShowDate = (dateVal?: string): boolean => {

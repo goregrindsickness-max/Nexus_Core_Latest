@@ -58,7 +58,7 @@ export const EventEmbedCard: React.FC<EventEmbedCardProps> = ({
   return (
     <div className="bg-[#0b0c10] border-2 border-red-900/60 hover:border-red-500/80 rounded-2xl p-4 sm:p-5 shadow-[0_0_25px_rgba(239,68,68,0.2)] hover:shadow-[0_0_35px_rgba(239,68,68,0.35)] transition-all my-3 space-y-4 group/event">
       {/* Top Banner with Category & Secret Flag */}
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-850 pb-3">
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-800 pb-3">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-8 h-8 rounded-xl bg-red-950 border border-red-500/50 flex items-center justify-center text-red-400 shrink-0">
             <Calendar className="w-4 h-4" />
@@ -110,11 +110,11 @@ export const EventEmbedCard: React.FC<EventEmbedCardProps> = ({
         <div className="space-y-2.5 min-w-0 flex-1 w-full">
           {/* Date & Location */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
-            <div className="bg-zinc-950/90 border border-zinc-850 p-2.5 rounded-xl">
+            <div className="bg-zinc-950/90 border border-zinc-800 p-2.5 rounded-xl">
               <span className="text-[10px] text-zinc-500 block uppercase font-bold">DATE & TIME</span>
               <span className="font-bold text-red-400">{actualEventData.date}</span>
             </div>
-            <div className="bg-zinc-950/90 border border-zinc-850 p-2.5 rounded-xl">
+            <div className="bg-zinc-950/90 border border-zinc-800 p-2.5 rounded-xl">
               <span className="text-[10px] text-zinc-500 block uppercase font-bold flex items-center gap-1">
                 <MapPin className="w-3 h-3 text-red-500" /> LOCATION
               </span>
@@ -153,7 +153,7 @@ export const EventEmbedCard: React.FC<EventEmbedCardProps> = ({
       </div>
 
       {/* Footer: RSVP Action & Count */}
-      <div className="flex items-center justify-between pt-2 border-t border-zinc-850">
+      <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
         <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
           <Users className="w-4 h-4 text-red-500" />
           <span>
@@ -163,7 +163,7 @@ export const EventEmbedCard: React.FC<EventEmbedCardProps> = ({
 
         <button
           onClick={() => toggleHandler(actualPostId)}
-          className={`px-4 py-2 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-md ${
+          className={`min-h-[40px] px-4 py-2 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-md ${
             isRsvped
               ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
               : 'bg-red-600 hover:bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:scale-105'

@@ -23,6 +23,8 @@ export interface ForumHighlightThread {
   user_id?: string;
   isUserCreated?: boolean;
   image?: string;
+  images?: string[];
+  imageCaptions?: string[];
   youtubeId?: string;
   timeAgo: string;
   created_at?: string;
@@ -53,6 +55,7 @@ export const LEGACY_MOCK_TITLES = new Set([
   "close to a world below's album art is a masterpiece. who is the artist?",
   'immolation - close to a world below: decades later',
   'maryland deathfest 2026 predictions and wishlist',
+  'maryland deathfest 2027 confirmed lineup — which sets are mandatory?',
   'what gear did cryptopsy use on none so vile for that extreme speed?',
   "cosmic black metal: paysage d'hiver vs. alcest vs. darkspace",
   'the vintage 4-track raw tape sound of early norwegian black metal',
@@ -214,6 +217,27 @@ export function isRealForumThread(thread: ForumHighlightThread | any): boolean {
   return !MOCK_THREAD_IDS.has(String(thread.id));
 }
 
+export function reconcileSeededMockThread<T extends Record<string, any>>(thread: T): T {
+  if (!thread || thread.isUserCreated === true) return thread;
+  const id = String(thread.id || '');
+  if (!LEGACY_MOCK_THREAD_IDS.has(id)) return thread;
+  const seed = initialForumThreads.find((s) => String(s.id) === id) as any;
+  if (!seed) return thread;
+  return {
+    ...thread,
+    title: seed.title,
+    content: seed.content,
+    image: seed.image,
+    images: seed.images,
+    imageCaptions: seed.imageCaptions,
+    youtubeId: seed.youtubeId,
+    comments:
+      Array.isArray(thread.comments) && thread.comments.length > 0
+        ? thread.comments
+        : seed.comments || [],
+  };
+}
+
 // Load forum threads from localStorage or fallback to initial extreme metal mock data
 export function loadCachedForumThreads(): ForumHighlightThread[] {
   if (typeof window === 'undefined') return initialForumThreads as ForumHighlightThread[];
@@ -222,7 +246,9 @@ export function loadCachedForumThreads(): ForumHighlightThread[] {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const cleaned = parsed.filter((t) => t && !isRetiredNonExtremeMock(t));
+        const cleaned = parsed
+          .filter((t) => t && !isRetiredNonExtremeMock(t))
+          .map((t) => reconcileSeededMockThread(t));
         if (cleaned.length > 0) return cleaned;
       }
     }

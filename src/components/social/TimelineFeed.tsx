@@ -93,6 +93,8 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
   allProfiles = [],
   onFollowProfile,
   onNavigateToForum,
+  bookmarkedPostIds,
+  onToggleBookmark,
 }) => {
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
@@ -127,18 +129,40 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
   const [selectedTicketShow, setSelectedTicketShow] = useState<{ post: FeedPost; date: any } | null>(null);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
 
-  // Tape playback state powered by tapeAudioEngine
-  const [playingTapeId, setPlayingTapeId] = useState<string | null>(tapeAudioEngine.getState().playingTapeId);
+  // Tape & Song playback state powered by unified tapeAudioEngine
+  const [playingTapeId, setPlayingTapeId] = useState<string | null>(() => {
+    const st = tapeAudioEngine.getState();
+    return st.isPlaying && st.playingTapeId && !st.playingTapeId.startsWith('song:') ? st.playingTapeId : null;
+  });
   const [tapeProgress, setTapeProgress] = useState<Record<string, number>>({});
+  const [playingSongId, setPlayingSongId] = useState<string | null>(() => {
+    const st = tapeAudioEngine.getState();
+    return st.isPlaying && st.playingTapeId?.startsWith('song:') ? st.playingTapeId.slice(5) : null;
+  });
+  const [songProgress, setSongProgress] = useState<Record<string, number>>({});
+  const [songVolumeMuted, setSongVolumeMuted] = useState<Record<string, boolean>>({});
+  const [songPlaybackSpeed, setSongPlaybackSpeed] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const unsubscribe = tapeAudioEngine.subscribe((state) => {
-      setPlayingTapeId(state.isPlaying ? state.playingTapeId : null);
-      if (state.playingTapeId) {
-        setTapeProgress((prev) => ({
+      const rawId = state.playingTapeId;
+      if (rawId && rawId.startsWith('song:')) {
+        const songPostId = rawId.slice(5);
+        setPlayingTapeId(null);
+        setPlayingSongId(state.isPlaying ? songPostId : null);
+        setSongProgress((prev) => ({
           ...prev,
-          [state.playingTapeId!]: state.progress,
+          [songPostId]: state.progress,
         }));
+      } else {
+        setPlayingSongId(null);
+        setPlayingTapeId(state.isPlaying ? rawId : null);
+        if (rawId) {
+          setTapeProgress((prev) => ({
+            ...prev,
+            [rawId]: state.progress,
+          }));
+        }
       }
     });
     return unsubscribe;
@@ -148,28 +172,6 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>('');
   const [editingImages, setEditingImages] = useState<string[]>([]);
-
-  // Song playback preview state
-  const [playingSongId, setPlayingSongId] = useState<string | null>(null);
-  const [songProgress, setSongProgress] = useState<Record<string, number>>({});
-  const [songVolumeMuted, setSongVolumeMuted] = useState<Record<string, boolean>>({});
-  const [songPlaybackSpeed, setSongPlaybackSpeed] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    if (!playingSongId) return;
-    const speed = songPlaybackSpeed[playingSongId] || 1.0;
-    const interval = setInterval(() => {
-      setSongProgress(prev => {
-        const current = prev[playingSongId] || 0;
-        if (current >= 100) {
-          setPlayingSongId(null);
-          return { ...prev, [playingSongId]: 0 };
-        }
-        return { ...prev, [playingSongId]: current + (0.5 * speed) };
-      });
-    }, 100);
-    return () => clearInterval(interval);
-  }, [playingSongId, songPlaybackSpeed]);
 
   // Poll votes local tracking
   const [pollVotes, setPollVotes] = useState<Record<string, { optionId: string; totalVotes: number; options: PollOption[] }>>({});
@@ -191,20 +193,43 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
   // Active album modal state
   const [activeAlbumModal, setActiveAlbumModal] = useState<AlbumEmbedData | null>(null);
 
-  // DIY Event RSVP local tracking
-  const [rsvpedEvents, setRsvpedEvents] = useState<Record<string, boolean>>({});
+  // DIY Event RSVP persistent tracking
+  const [rsvpedEvents, setRsvpedEvents] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem('nexus_rsvped_events_v1');
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        return parsed.reduce((acc: Record<string, boolean>, id: any) => {
+          acc[String(id)] = true;
+          return acc;
+        }, {});
+      }
+    } catch {}
+    return {};
+  });
   const [rsvpCounts, setRsvpCounts] = useState<Record<string, number>>({});
 
   const handleToggleRsvp = (postId: string) => {
     setRsvpedEvents((prev) => {
       const isCurrentlyRsvped = !!prev[postId];
       const nextRsvped = !isCurrentlyRsvped;
+      const updated = {
+        ...prev,
+        [postId]: nextRsvped,
+      };
+
+      try {
+        const ids = Object.keys(updated).filter((k) => updated[k]);
+        localStorage.setItem('nexus_rsvped_events_v1', JSON.stringify(ids));
+        window.dispatchEvent(new CustomEvent('nexus_rsvp_updated', { detail: ids }));
+      } catch {}
 
       setRsvpCounts((prevCounts) => {
-        const currentCount = prevCounts[postId] || 1;
+        const targetPost = posts.find((p) => p.id === postId);
+        const baseCount = prevCounts[postId] ?? targetPost?.eventData?.rsvpCount ?? 42;
         return {
           ...prevCounts,
-          [postId]: nextRsvped ? currentCount + 1 : Math.max(0, currentCount - 1),
+          [postId]: nextRsvped ? baseCount + 1 : Math.max(0, baseCount - 1),
         };
       });
 
@@ -214,10 +239,7 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
         );
       }
 
-      return {
-        ...prev,
-        [postId]: nextRsvped,
-      };
+      return updated;
     });
   };
 
@@ -513,20 +535,50 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
                     onOpenBoostModal={() => setActiveBoostPostId(post.id)}
                     onPlaySong={onPlaySong}
                     onTogglePlaySong={(song) => {
-                      if (playingSongId !== post.id) {
+                      const trackKey = `song:${post.id}`;
+                      const streamUrl =
+                        song?.audioUrl ||
+                        song?.previewUrl ||
+                        song?.streamUrl ||
+                        (post as any)?.audioUrl ||
+                        (post as any)?.audio_url ||
+                        (post.mediaUrl && isAudioUrl(post.mediaUrl) ? post.mediaUrl : undefined) ||
+                        ((post as any)?.media_url && isAudioUrl((post as any).media_url) ? (post as any).media_url : undefined);
+                      const isCurrentlyPlaying = playingSongId === post.id;
+                      if (!isCurrentlyPlaying) {
                         requestPauseSceneRadio('song_embed_play');
+                        tapeAudioEngine.setMuted(Boolean(songVolumeMuted[post.id]));
+                        tapeAudioEngine.setPlaybackRate(songPlaybackSpeed[post.id] || 1);
                       }
-                      setPlayingSongId(playingSongId === post.id ? null : post.id);
-                      if (onPlaySong && song) onPlaySong(song);
+                      tapeAudioEngine.togglePlay(trackKey, streamUrl);
+                      if (onPlaySong && song && !isCurrentlyPlaying) onPlaySong(song);
                     }}
                     onSeekSong={(pct) => {
+                      const trackKey = `song:${post.id}`;
+                      const streamUrl =
+                        post.songData?.audioUrl ||
+                        post.songData?.previewUrl ||
+                        post.songData?.streamUrl ||
+                        (post as any)?.audioUrl ||
+                        (post as any)?.audio_url;
                       requestPauseSceneRadio('song_embed_seek');
-                      if (playingSongId !== post.id) {
-                        setPlayingSongId(post.id);
+                      if (tapeAudioEngine.getState().playingTapeId !== trackKey) {
+                        tapeAudioEngine.setMuted(Boolean(songVolumeMuted[post.id]));
+                        tapeAudioEngine.setPlaybackRate(songPlaybackSpeed[post.id] || 1);
+                        tapeAudioEngine.play(trackKey, streamUrl);
                       }
+                      tapeAudioEngine.seek(pct);
                       setSongProgress(prev => ({ ...prev, [post.id]: pct }));
                     }}
-                    onToggleMuteSong={() => setSongVolumeMuted(prev => ({ ...prev, [post.id]: !songVolumeMuted[post.id] }))}
+                    onToggleMuteSong={() => {
+                      const nextMuted = !songVolumeMuted[post.id];
+                      setSongVolumeMuted(prev => ({ ...prev, [post.id]: nextMuted }));
+                      if (tapeAudioEngine.getState().playingTapeId === `song:${post.id}`) {
+                        tapeAudioEngine.setMuted(nextMuted);
+                      }
+                    }}
+                    isBookmarked={Array.isArray(bookmarkedPostIds) ? bookmarkedPostIds.includes(post.id) : undefined}
+                    onToggleBookmark={onToggleBookmark}
                     onOpenAlbumModalForSong={openAlbumModalForSong}
                     onOpenAlbumModalForAlbum={openAlbumModalForAlbum}
                     onBuyFormat={handleBuyFormat}

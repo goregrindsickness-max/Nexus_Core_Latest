@@ -348,16 +348,52 @@ BEGIN
       WHERE table_schema = 'public' AND table_name = 'tour_packages' AND column_name = 'publication_status'
     ) THEN
       DROP POLICY IF EXISTS "Hardened public read" ON public.tour_packages;
-      CREATE POLICY "Hardened public read published tour packages" ON public.tour_packages
-        FOR SELECT TO public
-        USING (
-          publication_status = 'published'
-          OR (auth.uid() IS NOT NULL AND (
-            public.is_nexus_admin()
-            OR band_id::text = auth.uid()::text
-            OR public.is_band_owner(band_id::text)
-          ))
-        );
+      DROP POLICY IF EXISTS "Hardened public read published tour packages" ON public.tour_packages;
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'tour_packages' AND column_name = 'band_id'
+      ) THEN
+        EXECUTE $pol$
+          CREATE POLICY "Hardened public read published tour packages" ON public.tour_packages
+            FOR SELECT TO public
+            USING (
+              publication_status = 'published'
+              OR (auth.uid() IS NOT NULL AND (
+                public.is_nexus_admin()
+                OR band_id::text = auth.uid()::text
+                OR public.is_band_owner(band_id::text)
+              ))
+            )
+        $pol$;
+      ELSIF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'tour_packages' AND column_name = 'data'
+      ) THEN
+        EXECUTE $pol$
+          CREATE POLICY "Hardened public read published tour packages" ON public.tour_packages
+            FOR SELECT TO public
+            USING (
+              publication_status = 'published'
+              OR (auth.uid() IS NOT NULL AND (
+                public.is_nexus_admin()
+                OR coalesce(data->>'authorId', '') = auth.uid()::text
+                OR coalesce(data->>'userId', '') = auth.uid()::text
+                OR coalesce(data->>'ownerId', '') = auth.uid()::text
+                OR coalesce(data->>'bandId', '') = auth.uid()::text
+                OR public.is_band_owner(coalesce(data->>'bandId', ''))
+              ))
+            )
+        $pol$;
+      ELSE
+        EXECUTE $pol$
+          CREATE POLICY "Hardened public read published tour packages" ON public.tour_packages
+            FOR SELECT TO public
+            USING (
+              publication_status = 'published'
+              OR (auth.uid() IS NOT NULL AND public.is_nexus_admin())
+            )
+        $pol$;
+      END IF;
     END IF;
   END IF;
 
@@ -548,71 +584,17 @@ END;
 $$;
 
 -- ============================================================================
--- 4. Storage Bucket Policy Hardening (storage.objects)
+-- 4. Storage Bucket Policies (Manage in Supabase Dashboard -> Storage -> Policies)
 -- ============================================================================
+-- Managed Supabase projects restrict DDL (`ALTER TABLE`, `CREATE/DROP POLICY`)
+-- on `storage.objects` to the internal `supabase_storage_admin` role, so running
+-- `storage.objects` policy statements in the SQL Editor raises:
+--   ERROR: 42501: must be owner of table objects
+-- Configure/audit bucket policies in Supabase Dashboard -> Storage -> Policies
+-- (and remove any legacy world-writable `TO public` write policies there, using
+-- `owner_id = auth.uid()::text` for owner update/delete checks).
 
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Public Access" ON storage.objects;
-DROP POLICY IF EXISTS "Public Upload" ON storage.objects;
-DROP POLICY IF EXISTS "Public Update" ON storage.objects;
-DROP POLICY IF EXISTS "Public Delete" ON storage.objects;
-DROP POLICY IF EXISTS "Public Read Access for audio-vault Bucket" ON storage.objects;
-DROP POLICY IF EXISTS "Public Upload Access for audio-vault Bucket" ON storage.objects;
-DROP POLICY IF EXISTS "Public Update Access for audio-vault Bucket" ON storage.objects;
-DROP POLICY IF EXISTS "Public Delete Access for audio-vault Bucket" ON storage.objects;
-DROP POLICY IF EXISTS "Nexus public media read" ON storage.objects;
-DROP POLICY IF EXISTS "Nexus authenticated media upload" ON storage.objects;
-DROP POLICY IF EXISTS "Nexus owner media update" ON storage.objects;
-DROP POLICY IF EXISTS "Nexus owner media delete" ON storage.objects;
-
--- Allow public reads ONLY for designated public media buckets
-CREATE POLICY "Nexus public media read"
-  ON storage.objects FOR SELECT TO public
-  USING (
-    bucket_id IN (
-      'avatars',
-      'bannersv2',
-      'assets',
-      'marketplace',
-      'audio-vault',
-      'photo-pit',
-      'clips',
-      'inventory-items',
-      'feed_media'
-    )
-  );
-
--- Require authenticated Supabase session for uploads to designated media buckets
-CREATE POLICY "Nexus authenticated media upload"
-  ON storage.objects FOR INSERT TO authenticated
-  WITH CHECK (
-    auth.uid() IS NOT NULL
-    AND bucket_id IN (
-      'avatars',
-      'bannersv2',
-      'assets',
-      'marketplace',
-      'audio-vault',
-      'photo-pit',
-      'clips',
-      'inventory-items',
-      'feed_media'
-    )
-  );
-
--- Only file owner or platform admin may overwrite or delete objects
-CREATE POLICY "Nexus owner media update"
-  ON storage.objects FOR UPDATE TO authenticated
-  USING (owner = auth.uid() OR public.is_nexus_admin())
-  WITH CHECK (owner = auth.uid() OR public.is_nexus_admin());
-
-CREATE POLICY "Nexus owner media delete"
-  ON storage.objects FOR DELETE TO authenticated
-  USING (owner = auth.uid() OR public.is_nexus_admin());
-
--- Clean up temporary helper routines used only during migration?
--- Note: Keeping _drop_all_policies_on_table and _apply_table_rls is harmless or we can drop the temporary setup helpers while keeping is_nexus_admin / is_band_owner / is_entity_admin_or_owner!
+-- Clean up temporary helper routines used only during migration
 DROP FUNCTION IF EXISTS public._apply_table_rls(TEXT, TEXT, TEXT, TEXT);
 DROP FUNCTION IF EXISTS public._drop_all_policies_on_table(TEXT);
 

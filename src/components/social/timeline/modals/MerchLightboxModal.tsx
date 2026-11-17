@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
-import { X, ZoomIn, ZoomOut, RotateCcw, ChevronLeft, ChevronRight, Sparkles, Zap, Timer, Flame, ShieldAlert } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, ZoomIn, ZoomOut, RotateCcw, ChevronLeft, ChevronRight, Sparkles, Zap, Heart } from 'lucide-react';
 import { FeedPost } from '../types';
 import { usePinchZoom } from '../../../../hooks/usePinchZoom';
+import { getWishlistIds, toggleWishlistItem, getListingStatus } from '../../../../services/shopCommerceService';
 
 interface MerchLightboxModalProps {
   activeMerchLightbox: {
@@ -38,6 +39,25 @@ export const MerchLightboxModal: React.FC<MerchLightboxModalProps> = ({
   }, [activeMerchLightbox.activeIndex, reset]);
 
   const merchData = activeMerchLightbox.post.merchData;
+  const merchItemId = String((merchData as any)?.id || activeMerchLightbox.post.id);
+  const [isWishlisted, setIsWishlisted] = useState<boolean>(() => getWishlistIds().includes(merchItemId));
+  const [listingStatus, setListingStatusState] = useState<'available' | 'pending' | 'sold'>(() => getListingStatus(merchItemId));
+
+  useEffect(() => {
+    const syncState = () => {
+      setIsWishlisted(getWishlistIds().includes(merchItemId));
+      setListingStatusState(getListingStatus(merchItemId));
+    };
+    syncState();
+    window.addEventListener('nexus_wishlist_updated', syncState as EventListener);
+    window.addEventListener('nexus_listing_status_updated', syncState as EventListener);
+    return () => {
+      window.removeEventListener('nexus_wishlist_updated', syncState as EventListener);
+      window.removeEventListener('nexus_listing_status_updated', syncState as EventListener);
+    };
+  }, [merchItemId]);
+
+  const isListingSold = listingStatus === 'sold';
   const currentStock = merchData?.stock ?? 4;
   const totalLimit = merchData?.totalStock || (merchData?.stock ? Math.max(merchData.stock + 15, 25) : 30);
   const isCriticalStock = currentStock <= 5;
@@ -185,8 +205,8 @@ export const MerchLightboxModal: React.FC<MerchLightboxModalProps> = ({
           ))}
         </div>
 
-        {/* Quick Checkout in Lightbox */}
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        {/* Quick Checkout & Wishlist in Lightbox */}
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
           <div className="text-right">
             <span className="text-xs font-mono font-bold text-zinc-400 block">TOTAL PRICE</span>
             <span className="text-lg font-mono font-black text-orange-400">
@@ -195,7 +215,25 @@ export const MerchLightboxModal: React.FC<MerchLightboxModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={() => {
+              const { added } = toggleWishlistItem(merchItemId);
+              setIsWishlisted(added);
+            }}
+            className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl border transition-colors cursor-pointer ${
+              isWishlisted
+                ? 'bg-rose-950/70 text-rose-400 border-rose-500/60'
+                : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-700'
+            }`}
+            title={isWishlisted ? 'Remove from Wishlist' : 'Save to Wishlist'}
+          >
+            <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-rose-400' : ''}`} />
+          </button>
+
+          <button
+            disabled={isListingSold}
+            onClick={() => {
+              if (isListingSold) return;
               const p = activeMerchLightbox.post;
               const baseP = (p.isVipExclusive || unlockedVipPosts[p.id])
                 ? p.merchData!.price * 0.8
@@ -203,9 +241,13 @@ export const MerchLightboxModal: React.FC<MerchLightboxModalProps> = ({
               const sz = selectedSizesMap[p.id] || p.merchData?.sizes[0] || 'Standard';
               onBuyNow(p, sz, baseP);
             }}
-            className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black font-mono font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 shadow-[0_0_20px_rgba(249,115,22,0.4)] cursor-pointer transition-all transform hover:scale-105"
+            className={`min-h-[44px] px-5 py-2.5 font-mono font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 transition-all ${
+              isListingSold
+                ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                : 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black shadow-[0_0_20px_rgba(249,115,22,0.4)] cursor-pointer transform hover:scale-105'
+            }`}
           >
-            <Zap className="w-4 h-4 fill-black" /> 1-CLICK STRIPE CHECKOUT
+            <Zap className="w-4 h-4 fill-current" /> {isListingSold ? 'SOLD OUT' : '1-CLICK STRIPE CHECKOUT'}
           </button>
         </div>
       </div>

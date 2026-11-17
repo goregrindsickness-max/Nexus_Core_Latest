@@ -22,6 +22,9 @@ export interface SongEmbedData {
   album: string;
   duration?: string;
   coverArt?: string;
+  audioUrl?: string;
+  previewUrl?: string;
+  streamUrl?: string;
 }
 
 export interface AlbumEmbedTrack {
@@ -213,6 +216,8 @@ export interface TimelineFeedProps {
   allProfiles?: any[];
   onFollowProfile?: (profile: any, action?: 'follow' | 'unfollow') => void;
   onNavigateToForum?: (threadId?: string) => void;
+  bookmarkedPostIds?: string[];
+  onToggleBookmark?: (postId: string) => void;
 }
 
 export const REACTION_PALETTE = [

@@ -54,9 +54,10 @@ export const initialForumThreads = [
   },
   {
     id: 't3',
-    title: 'Maryland Deathfest 2026 predictions and wishlist',
+    title: 'Maryland Deathfest 2027 confirmed lineup — which sets are mandatory?',
     content:
-      'Who are you hoping headlines Rams Head and Edison Lot next year? Hoping for some rare European OSDM reunions and early-era grind sets.',
+      'The 22nd edition runs May 27–30, 2027 across 4 stages in Baltimore and the booked bill is already stacked: Enslaved (Vikingligr Veldi set), Candlemass, Autopsy (40 Years of Gut-Churning Death Metal), Insect Warfare (World Extermination 20th Anniversary), Voivod (Old School Deep-Cuts), Covenant (Nexus Polaris), YOB, Demolition Hammer, Anaal Nathrakh, Exhumed, Black Breath, Benighted, Malignancy, Stabbing, plus more bands still to be announced. Which sets are top of your weekend schedule?',
+    image: '/assets/aistudio/MDF_2027_10ce60d6.jpg',
     category: 'Show & Fest',
     genre: 'Death Metal',
     primaryGenre: 'Extreme Metal',
@@ -64,7 +65,22 @@ export const initialForumThreads = [
     timeAgo: '9h ago',
     votes: 94,
     userVote: null,
-    comments: [],
+    comments: [
+      {
+        id: 'c3_mdf1',
+        author: '@GrindVault',
+        text: 'Autopsy 40th anniversary set and Insect Warfare doing World Extermination 20th on the same fest is unreal.',
+        timeAgo: '5h ago',
+        replies: [],
+      },
+      {
+        id: 'c3_mdf2',
+        author: '@SlamVault',
+        text: 'Demolition Hammer, Exhumed, and Malignancy plus free club shows across 4 days — Baltimore is going to be a warzone.',
+        timeAgo: '2h ago',
+        replies: [],
+      },
+    ],
   },
   {
     id: 't4',
@@ -139,7 +155,7 @@ export const initialForumThreads = [
     genre: 'Brutal Death Metal',
     primaryGenre: 'Extreme Metal',
     author: '@CatacombPit',
-    youtubeId: '_qmXMVIaCBc',
+    youtubeId: 'SJJZLhe7b08',
     timeAgo: '1d ago',
     votes: 92,
     userVote: null,
@@ -217,7 +233,15 @@ export const initialForumThreads = [
     id: 't13',
     title: "Carcass 'Symphonies of Sickness' vs. Repulsion 'Horrified': filthiest goregrind essential?",
     content:
-      'Looking for nasty, rotting mid-tempo groove mixed with blisteringly fast D-beat/grind blasts. Drop your go-to goregrind & deathgrind recs.',
+      "Both dropped in 1989 and defined early goregrind — Carcass's filthy pitched-down dual-vocal pathology riffing on Symphonies of Sickness vs. Repulsion's raw Michigan D-beat buzzsaw velocity on Horrified. Which record hits harder start to finish?",
+    images: [
+      '/assets/forum/carcass_symphonies_of_sickness.jpg',
+      '/assets/forum/repulsion_horrified.jpg',
+    ],
+    imageCaptions: [
+      'Carcass — Symphonies of Sickness (1989)',
+      'Repulsion — Horrified (1989)',
+    ],
     category: 'Recommendations',
     genre: 'Goregrind',
     primaryGenre: 'Extreme Metal',

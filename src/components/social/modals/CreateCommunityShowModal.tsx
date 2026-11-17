@@ -4,9 +4,11 @@ import {
   X, Calendar, MapPin, Clock, Ticket, Upload, Plus, Trash2, 
   Check, ZoomIn, Layers, Music, Shield, ExternalLink
 } from 'lucide-react';
-import { compressImageInSocialFeed } from '../../../utils/socialFeedUtils';
+import { compressImageInSocialFeed, getShowTicketTiers } from '../../../utils/socialFeedUtils';
 import { showsStore, venuesStore } from '../../../utils/indexedDB';
 import { generateUUID, ensureUUID, uploadBase64ToStorage, syncCommunityShowToCloud } from '../../../supabase';
+import { CustomTicketTiersBuilder } from '../../shows/CustomTicketTiersBuilder';
+import type { TicketTier } from '../../../types';
 
 export interface CreateCommunityShowModalProps {
   isOpen: boolean;
@@ -57,6 +59,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
   const [flyerUrl, setFlyerUrl] = useState('');
   const [dayOfShowPrice, setDayOfShowPrice] = useState('');
   const [presalePrice, setPresalePrice] = useState('');
+  const [ticketTiers, setTicketTiers] = useState<TicketTier[]>([]);
   const [ageRestriction, setAgeRestriction] = useState('All Ages');
   const [safetyCode, setSafetyCode] = useState('');
   const [isTime24Hour, setIsTime24Hour] = useState<boolean>(() => {
@@ -222,6 +225,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
 
       setExternalTicketUrl(editingShow.external_ticket_url || editingShow.ticket_url || '');
       setFlyerUrl(editingShow.flyer_url || '');
+      setTicketTiers(getShowTicketTiers(editingShow));
       setAgeRestriction(editingShow.age_restriction || editingShow.age || 'All Ages');
       setSafetyCode(editingShow.safety_code || editingShow.safetyCode || '');
       
@@ -247,6 +251,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       setFlyerUrl('');
       setDayOfShowPrice('');
       setPresalePrice('');
+      setTicketTiers([]);
       setAgeRestriction('All Ages');
       setSafetyCode('');
       setSupportBands([]);
@@ -422,6 +427,19 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       set_duration: '35 mins'
     }));
 
+    const validTiers = ticketTiers
+      .filter((t) => String(t.name || '').trim().length > 0 && Number.isFinite(Number(t.price)) && Number(t.price) >= 0)
+      .map((t, idx) => ({
+        ...t,
+        id: t.id || `tier_${idx}_${Date.now()}`,
+        name: String(t.name).trim(),
+        price: Number(t.price),
+        capacity: Number.isFinite(Number(t.capacity)) && Number(t.capacity) > 0 ? Number(t.capacity) : 0,
+        sold: Number.isFinite(Number(t.sold)) && Number(t.sold) >= 0 ? Number(t.sold) : 0,
+        description: t.description?.trim() || undefined,
+        includesMerch: Boolean(t.includesMerch),
+      }));
+
     const cleanDos = dayOfShowPrice.trim();
     const cleanPresale = presalePrice.trim();
     let computedPrice = 'Free';
@@ -431,6 +449,9 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       computedPrice = cleanDos.startsWith('$') || cleanDos.toLowerCase().includes('free') ? cleanDos : `$${cleanDos}`;
     } else if (cleanPresale) {
       computedPrice = `$${cleanPresale.replace(/^\$/, '')} adv`;
+    } else if (validTiers.length > 0) {
+      const lowestTier = Math.min(...validTiers.map((t) => t.price));
+      computedPrice = validTiers.length > 1 ? `From $${lowestTier}` : `$${lowestTier}`;
     } else if (externalTicketUrl.trim()) {
       computedPrice = 'External Tickets';
     }
@@ -466,6 +487,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       safety_code: safetyCode.trim() || undefined,
       price: computedPrice,
       ticket_price: cleanDos ? parseFloat(cleanDos.replace(/[^0-9.]/g, '')) || undefined : undefined,
+      ticket_tiers: validTiers,
       external_ticket_url: externalTicketUrl.trim() || undefined,
       ticket_url: externalTicketUrl.trim() || undefined,
       flyer_url: flyerUrl || undefined,
@@ -477,6 +499,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
         tour_name: trimmedFestival || undefined,
         tour_title: trimmedFestival || undefined,
         flyer_url: (flyerUrl && !flyerUrl.startsWith('data:image/')) ? flyerUrl : undefined,
+        ...(validTiers.length > 0 ? { ticket_tiers: validTiers } : {}),
       }),
       created_at: editingShow?.created_at || new Date().toISOString()
     };
@@ -947,6 +970,14 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
                 </div>
               </div>
 
+              {/* Optional Custom Admission Tiers */}
+              <CustomTicketTiersBuilder
+                tiers={ticketTiers}
+                onChange={setTicketTiers}
+                hasExternalUrl={Boolean(externalTicketUrl.trim())}
+                accentColor="emerald"
+              />
+
               {/* Age Restriction & Safety Code */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-zinc-800/80">
                 <div>
@@ -1075,7 +1106,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
               </div>
 
               {/* External Ticket URL */}
-              <div className="pt-2 border-t border-zinc-800/80">
+              <div className="pt-2 border-t border-zinc-800/80 space-y-1.5">
                 <label className="block font-mono text-[11px] text-zinc-300 uppercase tracking-wider mb-1">
                   External Ticketing Link (Optional)
                 </label>
@@ -1086,6 +1117,9 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
                   placeholder="https://dice.fm/event/... or https://ticketmaster.com/..."
                   className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-400"
                 />
+                <p className="text-[10px] font-mono text-zinc-400 leading-snug">
+                  Adding a third-party link sends buyers off-platform. Nexus Core cannot verify external purchases or generate a scannable entry QR code for third-party orders.
+                </p>
               </div>
 
               {/* Footer Actions */}

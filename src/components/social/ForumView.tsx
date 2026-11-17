@@ -37,6 +37,7 @@ import {
   LEGACY_MOCK_THREAD_IDS,
   LEGACY_MOCK_TITLES,
   isRetiredNonExtremeMock,
+  reconcileSeededMockThread,
 } from '../../services/forumHighlightService';
 import { initialForumThreads } from '../../data/forumMockData';
 import { FirstTimeTooltip } from '../common/FirstTimeTooltip';
@@ -576,9 +577,12 @@ function loadForumCache(): any[] | null {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const cleaned = parsed.filter((t) => t && !isRetiredNonExtremeMock(t));
-        if (cleaned.length !== parsed.length) {
-          localStorage.setItem('nexus_forum_threads_cache', JSON.stringify(cleaned));
+        const cleaned = parsed
+          .filter((t) => t && !isRetiredNonExtremeMock(t))
+          .map((t) => reconcileSeededMockThread(t));
+        const serialized = JSON.stringify(cleaned);
+        if (serialized !== saved) {
+          localStorage.setItem('nexus_forum_threads_cache', serialized);
         }
         return cleaned.length > 0 ? cleaned : null;
       }
@@ -820,7 +824,9 @@ export const ForumView: React.FC<ForumViewProps> = ({
     async function loadThreadsAndComments() {
       const cachedThreads = loadForumCache() || [];
       const ensureSeedsMerged = (list: any[]) => {
-        const activeList = (list || []).filter((t) => t && !isRetiredNonExtremeMock(t));
+        const activeList = (list || [])
+          .filter((t) => t && !isRetiredNonExtremeMock(t))
+          .map((t) => reconcileSeededMockThread(t));
         const realCount = activeList.filter((t) => !isSeededForumThread(t)).length;
         if (realCount >= SEEDED_FORUM_THRESHOLD) {
           return activeList.filter((t) => !isSeededForumThread(t));
@@ -2293,6 +2299,27 @@ export const ForumView: React.FC<ForumViewProps> = ({
                       ></iframe>
                     </div>
                   )}
+                  {Array.isArray(thread.images) && thread.images.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mt-2">
+                      {thread.images.map((imgUrl: string, idx: number) => (
+                        <div key={`${thread.id}-img-${idx}`} className="space-y-1.5">
+                          <div className="aspect-square w-full rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950">
+                            <img
+                              referrerPolicy="no-referrer"
+                              src={imgUrl}
+                              alt={thread.imageCaptions?.[idx] || `${thread.title || 'Thread'} cover ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          {thread.imageCaptions?.[idx] && (
+                            <p className="text-[11px] font-semibold text-zinc-400 text-center">
+                              {thread.imageCaptions[idx]}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {thread.image && (
                     isAudioUrl(thread.image) ? (
                       <div className="w-full mt-2 p-3 bg-zinc-950/90 border border-rose-900/50 rounded-xl space-y-2 shadow-sm">
@@ -2306,8 +2333,13 @@ export const ForumView: React.FC<ForumViewProps> = ({
                         <video controls src={thread.image} className="w-full max-h-[500px]" />
                       </div>
                     ) : (
-                      <div className="w-full rounded-xl overflow-hidden border border-zinc-800 mt-2">
-                        <img src={thread.image} alt="Thread attachment" className="w-full object-cover" />
+                      <div className="w-full rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 mt-2">
+                        <img
+                          referrerPolicy="no-referrer"
+                          src={thread.image}
+                          alt={thread.title || 'Thread attachment'}
+                          className="w-full max-h-[680px] object-contain mx-auto"
+                        />
                       </div>
                     )
                   )}
@@ -2562,6 +2594,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
                 }
 
                 return filteredList.map((thread, tIdx) => {
+                  const hasMultiImages = Array.isArray(thread.images) && thread.images.length > 0;
                   const hasImage = thread.image && !isAudioUrl(thread.image) && !isVideoUrl(thread.image);
                   const hasVideo = thread.image && isVideoUrl(thread.image);
                   const hasAudio = thread.image && isAudioUrl(thread.image);
@@ -2633,7 +2666,35 @@ export const ForumView: React.FC<ForumViewProps> = ({
                       </h3>
 
                       {/* Prominent Media Preview OR Sleek 3-Line Text Excerpt */}
-                      {hasImage ? (
+                      {hasMultiImages ? (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+                            {thread.images.map((imgUrl: string, idx: number) => (
+                              <div key={`${thread.id}-card-img-${idx}`} className="space-y-1.5 min-w-0">
+                                <div className="aspect-square w-full rounded-2xl overflow-hidden border border-zinc-800/80 bg-zinc-950">
+                                  <img
+                                    referrerPolicy="no-referrer"
+                                    src={imgUrl}
+                                    alt={thread.imageCaptions?.[idx] || `${thread.title || 'Album cover'} ${idx + 1}`}
+                                    loading="lazy"
+                                    className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                                  />
+                                </div>
+                                {thread.imageCaptions?.[idx] && (
+                                  <p className="text-[11px] font-semibold text-zinc-300 truncate">
+                                    {thread.imageCaptions[idx]}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          {thread.content && (
+                            <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">
+                              {thread.content}
+                            </p>
+                          )}
+                        </div>
+                      ) : hasImage ? (
                         <div className="space-y-2">
                           <div className="w-full rounded-2xl overflow-hidden border border-zinc-800/80 bg-zinc-950">
                             <img
@@ -2641,7 +2702,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
                               src={thread.image}
                               alt={thread.title || 'Forum attachment'}
                               loading="lazy"
-                              className="w-full max-h-72 object-cover group-hover:scale-[1.01] transition-transform duration-300"
+                              className="w-full max-h-80 object-contain bg-zinc-950 mx-auto group-hover:scale-[1.01] transition-transform duration-300"
                             />
                           </div>
                           {thread.content && (

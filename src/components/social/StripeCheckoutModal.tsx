@@ -19,16 +19,35 @@ import {
   Plus,
   Minus,
   Fingerprint,
-  Settings2
+  Settings2,
+  ExternalLink,
+  AlertTriangle
 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, ExpressCheckoutElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import { enrichTicketData } from '../../utils/socialFeedUtils';
+import {
+  enrichTicketData,
+  getExternalTicketUrl,
+  getExternalTicketProviderName,
+  getShowTicketTiers,
+  parseSingleAdmissionPrice
+} from '../../utils/socialFeedUtils';
 import { getStoredWallets, processWalletPayment, selectWalletCard, UserWalletsState, WalletCard } from '../../services/digitalWalletService';
 import { WalletOAuthModal } from './modals/WalletOAuthModal';
 import { supabase } from '../../lib/supabaseClient';
 import { pushManager } from '../../lib/pushNotifications';
 import { authFetch } from '../../utils/apiConfig';
+import {
+  decrementPurchasedInventory,
+  commitShopPurchaseToCollections,
+  findUpcomingShowsForBand,
+  getItemAvailableStock,
+  FREE_SHIPPING_THRESHOLD_PER_BAND,
+  FLAT_SHIPPING_PER_BAND,
+  normalizeBandKey,
+  isPhysicalMediaItem,
+  type FulfillmentMode,
+} from '../../services/shopCommerceService';
 
 const stripePublicKey = (import.meta.env.VITE_STRIPE_PUBLIC_KEY || '').trim();
 const isRealStripeKey = typeof stripePublicKey === 'string' && stripePublicKey.startsWith('pk_') && !stripePublicKey.includes('placeholder');
@@ -46,6 +65,10 @@ export interface StripeCheckoutModalProps {
   triggerNotification?: (title: string, message?: string, icon?: string) => void;
   setMyCollections?: React.Dispatch<React.SetStateAction<any[]>>;
   setViewingReceipt?: (receipt: any) => void;
+  liveEvents?: any[];
+  shopItems?: any[];
+  inAppSongsList?: any[];
+  bands?: any[];
   onClose: () => void;
 }
 
@@ -61,6 +84,10 @@ export function StripeCheckoutModal({
   triggerNotification,
   setMyCollections,
   setViewingReceipt,
+  liveEvents = [],
+  shopItems = [],
+  inAppSongsList = [],
+  bands = [],
   onClose
 }: StripeCheckoutModalProps) {
   // Determine item type and raw data
@@ -79,29 +106,89 @@ export function StripeCheckoutModal({
   const isMusic = propItemType === 'music' || checkoutItem?.type === 'music';
   const isMerch = !isTicket && !isMusic;
 
-  // Base price computation
+  // Base price computation (non-ticket items)
   const parsePrice = (p: any): number => {
-    if (typeof p === 'number') return p;
+    if (typeof p === 'number') return Number.isFinite(p) ? p : 0;
     if (typeof p === 'string') {
       const cleaned = p.replace(/[^0-9.]/g, '');
       const parsed = parseFloat(cleaned);
-      return isNaN(parsed) ? 25 : parsed;
+      return isNaN(parsed) ? 0 : parsed;
     }
-    return 25;
+    return 0;
   };
 
-  const initialBasePrice = parsePrice(
-    baseInitialPrice || rawItem?.price || rawItem?.ticketPrice || rawItem?.ticket_price || post?.price || 25
+  const externalTicketUrl = isTicket ? getExternalTicketUrl(rawItem) : null;
+  const externalProviderName = getExternalTicketProviderName(externalTicketUrl);
+  const explicitTicketTiers = isTicket ? getShowTicketTiers(rawItem) : [];
+  const parsedAdmission = isTicket
+    ? parseSingleAdmissionPrice({
+        ...rawItem,
+        price: rawItem?.price ?? baseInitialPrice ?? post?.price,
+      })
+    : { hasNumericPrice: false, price: 0, label: '', isFreeOrDoorOnly: false };
+
+  const ticketTierOptions = isTicket
+    ? explicitTicketTiers.length > 0
+      ? explicitTicketTiers.map((t) => ({
+          id: t.id,
+          name: t.name,
+          price: t.price,
+          desc:
+            t.description ||
+            (t.capacity && t.capacity > 0
+              ? `In-App QR Gate Pass • Limited to ${t.capacity}`
+              : 'In-App QR Gate Pass • Standard Admission'),
+          includesMerch: Boolean(t.includesMerch),
+          capacity: t.capacity || 0,
+        }))
+      : parsedAdmission.hasNumericPrice
+      ? [
+          {
+            id: 'standard_admission',
+            name: rawItem?.presale_price ? 'Advance / Pre-Sale Admission' : 'General Admission',
+            price: parsedAdmission.price,
+            desc: 'Instant In-App QR Gate Pass • Standard Admission',
+            includesMerch: false,
+            capacity: 0,
+          },
+        ]
+      : []
+    : [];
+
+  const [selectedTierId, setSelectedTierId] = useState<string>(
+    () => ticketTierOptions[0]?.id || 'standard_admission'
   );
 
-  // Ticket Tiers
-  type TicketTierKey = 'ga' | 'vip_pit' | 'vip_merch' | 'ultra_fan';
-  const [selectedTier, setSelectedTier] = useState<TicketTierKey>('ga');
-  const [quantity, setQuantity] = useState<number>(1);
+  useEffect(() => {
+    if (ticketTierOptions.length > 0 && !ticketTierOptions.some((t) => t.id === selectedTierId)) {
+      setSelectedTierId(ticketTierOptions[0].id);
+    }
+  }, [ticketTierOptions, selectedTierId]);
+
+  const [quantity, setQuantity] = useState<number>(Math.max(1, Number(rawItem?.initialQty) || 1));
   const [selectedMerchSize, setSelectedMerchSize] = useState<string>(initialSize);
 
-  // Available Sizes for apparel
-  const availableSizes = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
+  // Available Sizes for merch/media (respect item's configured sizes/formats if provided)
+  const availableSizes: string[] =
+    Array.isArray(rawItem?.sizes) && rawItem.sizes.length > 0
+      ? rawItem.sizes
+      : ['S', 'M', 'L', 'XL', '2XL', '3XL'];
+
+  // Ticket + Merch Bundle optional add-on (for in-app show tickets)
+  const showBandName = String(
+    rawItem?.headliner || rawItem?.bandName || rawItem?.band || rawItem?.artist || ''
+  ).toLowerCase();
+  const matchingShowBundleMerch = isTicket
+    ? (shopItems || []).filter((m: any) => {
+        if (!m || m.category === 'gear' || m.category === 'classifieds') return false;
+        const mArtist = `${m.artist || ''} ${m.band || ''} ${m.brand || ''} ${m.seller || ''} ${m.name || ''}`.toLowerCase();
+        return showBandName.length > 2 && mArtist.includes(showBandName);
+      }).slice(0, 3)
+    : [];
+  const [bundleMerchId, setBundleMerchId] = useState<string>('');
+  const [bundleMerchSize, setBundleMerchSize] = useState<string>('L');
+  const selectedBundleItem = matchingShowBundleMerch.find((m: any) => m.id === bundleMerchId) || null;
+  const bundleAddonPrice = selectedBundleItem ? Math.round((Number(selectedBundleItem.price) || 25) * 0.85 * 100) / 100 : 0;
 
   // Attendees list state for tickets (names & sizes)
   const defaultUserName = userProfile?.full_name || userProfile?.username || 'Attendee 1';
@@ -120,46 +207,47 @@ export function StripeCheckoutModal({
     });
   }, [quantity]);
 
-  // Pricing calculations per tier
-  const tierPricing = {
-    ga: {
-      name: 'General Admission (GA)',
-      price: initialBasePrice,
-      desc: 'Instant QR Gate Pass • Standing Floor & Pit Access',
-      icon: Ticket,
-      includesMerch: false
-    },
-    vip_pit: {
-      name: 'VIP Floor & Fast Track Pit',
-      price: initialBasePrice + 20,
-      desc: '30-Min Early Door Access • VIP Fast Track Pit Wristband',
-      icon: Flame,
-      includesMerch: false
-    },
-    vip_merch: {
-      name: 'VIP + Merch Bundle (Includes Tour Tee)',
-      price: initialBasePrice + 45,
-      desc: 'VIP Pass + Official Tour T-Shirt + Commemorative Laminate',
-      icon: Sparkles,
-      includesMerch: true
-    },
-    ultra_fan: {
-      name: 'Ultra Fan Meet & Greet VIP Pass',
-      price: initialBasePrice + 90,
-      desc: 'Soundcheck Entry + Photo Op + Signed Poster + Tour Hoodie',
-      icon: Crown,
-      includesMerch: true
-    }
-  };
+  const activeTierConfig = ticketTierOptions.find((t) => t.id === selectedTierId) ||
+    ticketTierOptions[0] || {
+      id: 'standard_admission',
+      name: parsedAdmission.label || 'Door Admission',
+      price: 0,
+      desc: 'Admission details managed at venue door',
+      includesMerch: false,
+      capacity: 0,
+    };
 
-  const activeTierConfig = tierPricing[selectedTier];
-  const unitPrice = isTicket ? activeTierConfig.price : initialBasePrice;
-  const subtotal = unitPrice * quantity;
-  const processingFee = isTicket ? 2.50 : 0;
-  const grandTotal = subtotal + processingFee;
+  const merchFallbackPrice = parsePrice(
+    baseInitialPrice ?? rawItem?.price ?? post?.price ?? 25
+  ) || 25;
+  const unitPrice = isTicket ? activeTierConfig.price : merchFallbackPrice;
+  const isTicketPurchasableInApp = isTicket && !externalTicketUrl && ticketTierOptions.length > 0;
+
+  // Merch Booth Pickup detection for merch items
+  const sellerBandName =
+    rawItem?.bandName || rawItem?.band || rawItem?.artist || rawItem?.seller || rawItem?.brand || post?.authorName || 'Official Artist';
+  const upcomingShowsForSeller = isMerch ? findUpcomingShowsForBand(sellerBandName, liveEvents) : [];
+  const [merchFulfillmentMode, setMerchFulfillmentMode] = useState<FulfillmentMode>(
+    rawItem?.fulfillment?.mode === 'booth_pickup' ? 'booth_pickup' : 'ship'
+  );
+  const [selectedPickupShowId, setSelectedPickupShowId] = useState<string>(
+    rawItem?.fulfillment?.showId || upcomingShowsForSeller[0]?.id || ''
+  );
+
+  const stockInfo = isMerch ? getItemAvailableStock(rawItem, selectedMerchSize) : { isUnlimited: true, totalStock: null, variantStock: null, isSoldOut: false, isVariantSoldOut: false };
+  const maxMerchQty = !isMerch || stockInfo.isUnlimited ? 8 : Math.max(1, Math.min(8, stockInfo.variantStock ?? stockInfo.totalStock ?? 8));
+
+  const subtotal = unitPrice * quantity + bundleAddonPrice;
+  const processingFee = isTicketPurchasableInApp && subtotal > 0 ? 2.5 : 0;
+  const isBoothPickup = isMerch && merchFulfillmentMode === 'booth_pickup' && upcomingShowsForSeller.length > 0;
+  const merchShippingCost =
+    isMerch && !isBoothPickup && subtotal > 0 && subtotal < FREE_SHIPPING_THRESHOLD_PER_BAND
+      ? FLAT_SHIPPING_PER_BAND
+      : 0;
+  const grandTotal = subtotal + processingFee + merchShippingCost;
 
   // Shipping Configuration
-  const requiresShipping = isMerch || (isTicket && activeTierConfig.includesMerch);
+  const requiresShipping = (isMerch && !isBoothPickup) || (isTicket && activeTierConfig.includesMerch);
   const [useWalletAddress, setUseWalletAddress] = useState<boolean>(true);
   const [shippingName, setShippingName] = useState<string>(userProfile?.full_name || userProfile?.username || '');
   const [shippingStreet, setShippingStreet] = useState<string>('');
@@ -238,6 +326,15 @@ export function StripeCheckoutModal({
   };
 
   const handlePayment = async (method: 'GOOGLE_WALLET' | 'APPLE_PAY' | 'PAYPAL' | 'STRIPE') => {
+    if (isTicket && externalTicketUrl) {
+      if (triggerNotification) {
+        triggerNotification('External Ticket Vendor', `Tickets are sold directly via ${externalProviderName}.`, '↗');
+      }
+      return;
+    }
+    if (isTicket && !isTicketPurchasableInApp) {
+      return;
+    }
     if (!validateCustomAddress()) return;
 
     // Check if wallet is linked; if not, trigger real OAuth authorization flow
@@ -288,15 +385,16 @@ export function StripeCheckoutModal({
               } : undefined,
               customerEmail: userProfile?.email,
               orderType: isTicket ? 'ticket' : 'merch',
-              metadata: {
-                customerName: shippingName || userProfile?.full_name || 'Customer',
-                customerEmail: userProfile?.email || '',
-                tier: selectedTier,
-                isTicket: String(isTicket),
-                quantity: String(quantity),
-              }
-            })
-          });
+                metadata: {
+                  customerName: shippingName || userProfile?.full_name || 'Customer',
+                  customerEmail: userProfile?.email || '',
+                  tier: activeTierConfig.id,
+                  tierName: activeTierConfig.name,
+                  isTicket: String(isTicket),
+                  quantity: String(quantity),
+                }
+              })
+            });
 
           if (response.ok) {
             const checkoutData = await response.json();
@@ -307,7 +405,7 @@ export function StripeCheckoutModal({
                 rawItem,
                 post,
                 activeTierConfig,
-                selectedTier,
+                selectedTier: activeTierConfig.id,
                 unitPrice,
                 quantity,
                 grandTotal,
@@ -338,17 +436,21 @@ export function StripeCheckoutModal({
 
       let purchaseData: any = { ...rawItem };
 
+      let newRecord: any;
+
       if (isTicket) {
         const enriched = enrichTicketData(rawItem);
         purchaseData = {
           ...enriched,
           ...rawItem,
+          showId: rawItem?.id || rawItem?.show_id,
           ticketType: activeTierConfig.name,
-          tierCode: selectedTier,
+          tierCode: activeTierConfig.id,
           pricePerUnit: unitPrice,
           attendees: attendeeDetails.map((att, idx) => ({
             name: att.name.trim() || `Attendee ${idx + 1}`,
-            tier: selectedTier,
+            tier: activeTierConfig.id,
+            tierName: activeTierConfig.name,
             size: activeTierConfig.includesMerch ? att.size : undefined,
             ticketCode: `TKT-${orderId.slice(-4)}-${idx + 1}`
           })),
@@ -362,46 +464,121 @@ export function StripeCheckoutModal({
             phone: shippingPhone || 'N/A'
           } : undefined
         };
-      } else {
-        purchaseData = {
-          ...rawItem,
-          name: itemName,
-          price: unitPrice,
-          size: selectedMerchSize,
-          sizes: [selectedMerchSize],
-          thumbnail: rawItem?.thumbnail || rawItem?.image || post?.merchData?.thumbnail,
-          shippingAddress: {
-            type: useWalletAddress ? 'Wallet Saved Address' : 'Custom Shipping Address',
-            name: useWalletAddress ? (userProfile?.full_name || 'Wallet User') : shippingName,
-            street: useWalletAddress ? 'Wallet Default Address on File' : shippingStreet,
-            city: useWalletAddress ? 'Wallet City' : shippingCity,
-            state: useWalletAddress ? 'CA' : shippingState,
-            zip: useWalletAddress ? '90026' : shippingZip,
-            phone: shippingPhone || 'N/A'
-          }
+
+        newRecord = {
+          id: `col_${Date.now()}`,
+          orderId,
+          transactionId: paymentResult.transactionId,
+          type: 'ticket',
+          data: purchaseData,
+          quantity,
+          totalAmount: grandTotal,
+          paymentMethod: paymentResult.paymentMethod,
+          date: new Date()
         };
-      }
 
-      const newRecord = {
-        id: `col_${Date.now()}`,
-        orderId,
-        transactionId: paymentResult.transactionId,
-        type: isTicket ? 'ticket' : 'merch',
-        data: purchaseData,
-        quantity,
-        totalAmount: grandTotal,
-        paymentMethod: paymentResult.paymentMethod,
-        date: new Date()
-      };
+        try {
+          const existing = JSON.parse(localStorage.getItem('nexus_my_collections_v1') || '[]');
+          let updated = [newRecord, ...existing];
 
-      // Save to localStorage collections
-      try {
-        const existing = JSON.parse(localStorage.getItem('nexus_my_collections_v1') || '[]');
-        const updated = [newRecord, ...existing];
-        localStorage.setItem('nexus_my_collections_v1', JSON.stringify(updated));
-        if (setMyCollections) setMyCollections(updated);
-      } catch (e) {
-        console.warn('Failed to sync collection', e);
+          // Also include Show Merch Bundle add-on as a Venue Merch Booth Pickup item!
+          if (selectedBundleItem) {
+            await decrementPurchasedInventory([
+              { id: selectedBundleItem.id, productId: selectedBundleItem.id, name: selectedBundleItem.name, size: bundleMerchSize, quantity: 1, stock: selectedBundleItem.stock },
+            ]);
+            const bundleCollections = commitShopPurchaseToCollections({
+              items: [
+                {
+                  ...selectedBundleItem,
+                  productId: selectedBundleItem.id,
+                  price: bundleAddonPrice,
+                  size: bundleMerchSize,
+                  quantity: 1,
+                  bandName: selectedBundleItem.artist || selectedBundleItem.band || displayAuthor,
+                  fulfillment: {
+                    mode: 'booth_pickup',
+                    showId: rawItem?.id || rawItem?.show_id,
+                    showTitle: displayTitle,
+                    venue: venueName,
+                    date: rawItem?.date || 'Show Night',
+                  },
+                },
+              ],
+              orderId,
+              transactionId: paymentResult.transactionId,
+              paymentMethod: paymentResult.paymentMethod,
+              inAppSongsList,
+              bands,
+            });
+            updated = bundleCollections;
+          }
+
+          localStorage.setItem('nexus_my_collections_v1', JSON.stringify(updated));
+          window.dispatchEvent(new CustomEvent('nexus-collections-updated'));
+          if (setMyCollections) setMyCollections(updated);
+        } catch (e) {
+          console.warn('Failed to sync ticket collection', e);
+        }
+      } else {
+        const chosenPickupShow =
+          upcomingShowsForSeller.find((s) => s.id === selectedPickupShowId) || upcomingShowsForSeller[0];
+        const fulfillmentChoice = isBoothPickup && chosenPickupShow
+          ? {
+              mode: 'booth_pickup' as const,
+              showId: chosenPickupShow.id,
+              showTitle: chosenPickupShow.title,
+              venue: chosenPickupShow.venue,
+              date: chosenPickupShow.date,
+            }
+          : { mode: 'ship' as const };
+
+        await decrementPurchasedInventory([
+          {
+            id: rawItem?.id || post?.id,
+            productId: rawItem?.id || post?.id,
+            name: itemName,
+            size: selectedMerchSize,
+            quantity,
+            stock: rawItem?.stock,
+          },
+        ]);
+
+        const updatedCollections = commitShopPurchaseToCollections({
+          items: [
+            {
+              ...rawItem,
+              productId: rawItem?.id || post?.id,
+              name: itemName,
+              price: unitPrice,
+              size: selectedMerchSize,
+              quantity,
+              thumbnail: rawItem?.thumbnail || rawItem?.image || post?.merchData?.thumbnail,
+              bandName: sellerBandName,
+              fulfillment: fulfillmentChoice,
+            },
+          ],
+          orderId,
+          transactionId: paymentResult.transactionId,
+          paymentMethod: paymentResult.paymentMethod,
+          fulfillmentMap: { [normalizeBandKey(sellerBandName)]: fulfillmentChoice },
+          shippingCost: merchShippingCost,
+          inAppSongsList,
+          bands,
+          shippingAddress: requiresShipping
+            ? {
+                type: useWalletAddress ? 'Wallet Saved Address' : 'Custom Shipping Address',
+                name: useWalletAddress ? (userProfile?.full_name || 'Wallet User') : shippingName,
+                street: useWalletAddress ? 'Wallet Default Address on File' : shippingStreet,
+                city: useWalletAddress ? 'Wallet City' : shippingCity,
+                state: useWalletAddress ? 'CA' : shippingState,
+                zip: useWalletAddress ? '90026' : shippingZip,
+                phone: shippingPhone || 'N/A',
+              }
+            : undefined,
+        });
+
+        newRecord = updatedCollections[0];
+        if (setMyCollections) setMyCollections(updatedCollections);
       }
 
       setConfirmedOrder(newRecord);
@@ -410,7 +587,7 @@ export function StripeCheckoutModal({
       if (triggerNotification) {
         triggerNotification(
           'Payment Authorized',
-          `Order #${orderId} paid via ${paymentResult.paymentMethod}! Pass & receipt saved.`,
+          `Order #${orderId} paid via ${paymentResult.paymentMethod}! Receipt saved to My Collections.`,
           '⚡'
         );
       }
@@ -439,8 +616,8 @@ export function StripeCheckoutModal({
           if (!res.ok) {
             await pushManager.sendPushToServer({
               userId: recipientUid,
-              title: `💰 Ticket Velocity Alert: ${rawItem?.headliner || itemName}`,
-              body: `Sell-out threshold reached! ${simulatedPercentage}% sold out (${quantity} new pass(es) issued)! Gate revenue: $${grandTotal}`,
+              title: `Ticket Velocity Alert: ${rawItem?.headliner || itemName}`,
+              body: `Sell-out threshold reached! ${simulatedPercentage}% sold (${quantity} new pass(es) issued). Gate revenue: $${grandTotal.toFixed(2)}`,
               category: 'ticket_velocity',
               priority: 'P0',
               targetTab: 'sales',
@@ -449,16 +626,18 @@ export function StripeCheckoutModal({
           }
         }).catch(() => {});
       } else {
-        const remainingStock = Math.max(2, Math.floor(Math.random() * 4) + 1);
-        pushManager.sendPushToServer({
-          userId: rawItem?.creator_id || rawItem?.user_id || rawItem?.band_id,
-          title: `📦 Low Merch Stock Warning: ${itemName}`,
-          body: `${selectedMerchSize ? selectedMerchSize + ' size' : 'Item'} inventory reached critical low (${remainingStock} remaining). Restock recommended!`,
-          category: 'inventory_stockout',
-          priority: 'P1',
-          targetTab: 'merch',
-          data: { itemName, stockRemaining: remainingStock, type: 'inventory_stockout' }
-        }).catch(() => {});
+        const afterStock = getItemAvailableStock(rawItem, selectedMerchSize);
+        if (!afterStock.isUnlimited && afterStock.totalStock !== null && afterStock.totalStock <= 5) {
+          pushManager.sendPushToServer({
+            userId: rawItem?.creator_id || rawItem?.user_id || rawItem?.band_id,
+            title: `Low Merch Stock Warning: ${itemName}`,
+            body: `${selectedMerchSize ? selectedMerchSize + ' size ' : ''}inventory reached ${afterStock.totalStock} remaining. Restock recommended.`,
+            category: 'inventory_stockout',
+            priority: 'P1',
+            targetTab: 'merch',
+            data: { itemName, stockRemaining: afterStock.totalStock, type: 'inventory_stockout' }
+          }).catch(() => {});
+        }
       }
     } catch (error: any) {
       if (triggerNotification) {
@@ -491,7 +670,7 @@ export function StripeCheckoutModal({
   const displayImage = rawItem?.flyer || rawItem?.thumbnail || rawItem?.image || rawItem?.coverUrl || post?.merchData?.thumbnail || 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?w=800&q=80';
 
   return (
-    <div className="fixed inset-0 z-[250] bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[10090] bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       <div className="bg-[#0e1014] border border-rose-500/40 rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-[0_0_60px_rgba(244,63,94,0.25)] space-y-4 my-auto relative text-zinc-200">
         {/* Top Header */}
         <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3.5">
@@ -500,13 +679,25 @@ export function StripeCheckoutModal({
               {isTicket ? <Ticket className="w-4 h-4" /> : <ShoppingBag className="w-4 h-4" />}
             </div>
             <div>
-              <div className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
-                <span>{isTicket ? 'Live Event Box Office' : '1-Click Express Checkout'}</span>
-                <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-1.5 py-0.2 rounded">
-                  ESCROW PROTECTED
-                </span>
+              <div className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                <span>{isTicket ? (externalTicketUrl ? 'External Box Office Redirect' : 'Live Event Box Office') : '1-Click Express Checkout'}</span>
+                {externalTicketUrl ? (
+                  <span className="text-[9px] font-mono font-bold text-amber-300 bg-amber-950/80 border border-amber-500/40 px-1.5 py-0.2 rounded">
+                    3RD-PARTY VENDOR
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-1.5 py-0.2 rounded">
+                    ESCROW PROTECTED
+                  </span>
+                )}
               </div>
-              <p className="text-[10px] text-zinc-400 font-mono">Instant Gate Delivery • Verified Authenticity</p>
+              <p className="text-[10px] text-zinc-400 font-mono">
+                {externalTicketUrl
+                  ? `Sold off-platform via ${externalProviderName} • No in-app QR pass`
+                  : isTicket && !isTicketPurchasableInApp
+                  ? 'Admission handled at door / venue box office'
+                  : 'Instant Gate Delivery • Verified Authenticity'}
+              </p>
             </div>
           </div>
 
@@ -518,7 +709,93 @@ export function StripeCheckoutModal({
           </button>
         </div>
 
-        {checkoutStep === 'confirm' ? (
+        {isTicket && externalTicketUrl ? (
+          <div className="space-y-4">
+            {/* Item Card Summary */}
+            <div className="flex gap-3 bg-zinc-950/80 p-3.5 rounded-2xl border border-zinc-800/90 shadow-inner">
+              <img
+                src={displayImage}
+                alt={displayTitle}
+                className="w-16 h-16 sm:w-20 sm:h-20 object-cover bg-zinc-900 rounded-xl border border-zinc-800 shrink-0"
+              />
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h4 className="text-white font-black text-xs sm:text-sm uppercase tracking-wide truncate">
+                    {displayTitle}
+                  </h4>
+                  {rawItem?.date && (
+                    <span className="text-[9px] font-mono font-bold text-rose-400 bg-rose-950/60 border border-rose-500/30 px-1.5 rounded">
+                      {rawItem.date}
+                    </span>
+                  )}
+                </div>
+                <p className="text-zinc-400 font-mono text-[10px] uppercase mt-0.5 truncate">
+                  BY {displayAuthor} {rawItem?.venue ? `• ${rawItem.venue}` : ''}
+                </p>
+                {rawItem?.price && (
+                  <div className="text-amber-300 font-mono font-bold text-xs mt-1">
+                    Listed Price: {rawItem.price}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/40 space-y-2.5">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1.5">
+                  <h5 className="text-xs font-black uppercase tracking-wider text-amber-300">
+                    Tickets Sold Off-Platform ({externalProviderName})
+                  </h5>
+                  <p className="text-[11px] font-mono text-zinc-200 leading-relaxed">
+                    Purchases through this external link take place directly on <strong className="text-white">{externalProviderName}</strong> — not inside Nexus Core.
+                  </p>
+                  <p className="text-[11px] font-mono text-amber-200/90 leading-relaxed">
+                    Nexus Core cannot confirm external orders, track your purchase status, or issue a scannable QR code for venue entry. Keep your confirmation email or app pass from {externalProviderName} for admission at the door.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <a
+                href={externalTicketUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-mono font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>Continue to {externalProviderName}</span>
+                <ExternalLink className="w-4 h-4" />
+              </a>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white font-mono font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer border border-zinc-800"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        ) : isTicket && !isTicketPurchasableInApp ? (
+          <div className="space-y-4">
+            <div className="p-4 rounded-2xl bg-zinc-950/90 border border-zinc-800 space-y-2 text-center">
+              <Ticket className="w-7 h-7 text-zinc-400 mx-auto" />
+              <h5 className="text-xs font-black uppercase tracking-wider text-white">
+                {parsedAdmission.label || 'Door / Free Admission'}
+              </h5>
+              <p className="text-[11px] font-mono text-zinc-400 leading-relaxed">
+                Online pre-sale tiers have not been configured for this show. Check the venue details for door admission or cover policies.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white font-mono font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer border border-zinc-800"
+            >
+              Close
+            </button>
+          </div>
+        ) : checkoutStep === 'confirm' ? (
           <div className="space-y-4 max-h-[78vh] overflow-y-auto pr-1 custom-scrollbar">
             {/* Item Card Summary */}
             <div className="flex gap-3 bg-zinc-950/80 p-3.5 rounded-2xl border border-zinc-800/90 shadow-inner">
@@ -553,26 +830,26 @@ export function StripeCheckoutModal({
               </div>
             </div>
 
-            {/* 1. TICKET TIERS SELECTOR (If Ticket) */}
-            {isTicket && (
+            {/* 1. TICKET TIERS SELECTOR (Only creator-defined tiers or single real admission pass) */}
+            {isTicket && ticketTierOptions.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                    <Ticket className="w-3 h-3 text-rose-500" /> Choose Admission Tier / Package
+                    <Ticket className="w-3 h-3 text-rose-500" /> {ticketTierOptions.length > 1 ? 'Choose Admission Tier' : 'Admission Pass'}
                   </span>
-                  <span className="text-[9px] font-mono text-rose-400 font-bold">4 Options Available</span>
+                  <span className="text-[9px] font-mono text-rose-400 font-bold">
+                    {ticketTierOptions.length === 1 ? '1 Option Available' : `${ticketTierOptions.length} Tiers Configured`}
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {(Object.keys(tierPricing) as TicketTierKey[]).map((key, keyIdx) => {
-                    const tier = tierPricing[key];
-                    const isSelected = selectedTier === key;
-                    const IconComponent = tier.icon;
+                <div className={`grid grid-cols-1 ${ticketTierOptions.length > 1 ? 'sm:grid-cols-2' : ''} gap-2`}>
+                  {ticketTierOptions.map((tier, keyIdx) => {
+                    const isSelected = activeTierConfig.id === tier.id;
                     return (
                       <button
-                        key={`tier-${key}-${keyIdx}`}
+                        key={`tier-${tier.id}-${keyIdx}`}
                         type="button"
-                        onClick={() => setSelectedTier(key)}
+                        onClick={() => setSelectedTierId(tier.id)}
                         className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 relative overflow-hidden ${
                           isSelected
                             ? 'bg-rose-950/30 border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.25)] text-white'
@@ -584,7 +861,7 @@ export function StripeCheckoutModal({
                         )}
                         <div className="flex items-center gap-2">
                           <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? 'bg-rose-500/20 text-rose-400' : 'bg-zinc-900 text-zinc-500'}`}>
-                            <IconComponent className="w-3.5 h-3.5" />
+                            {tier.includesMerch ? <Sparkles className="w-3.5 h-3.5" /> : <Ticket className="w-3.5 h-3.5" />}
                           </div>
                           <div className="text-xs font-black uppercase tracking-wide truncate">
                             {tier.name}
@@ -633,8 +910,8 @@ export function StripeCheckoutModal({
                 </span>
                 <button
                   type="button"
-                  onClick={() => setQuantity(prev => Math.min(8, prev + 1))}
-                  disabled={quantity >= 8}
+                  onClick={() => setQuantity(prev => Math.min(isMerch ? maxMerchQty : 8, prev + 1))}
+                  disabled={quantity >= (isMerch ? maxMerchQty : 8)}
                   className="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 flex items-center justify-center text-white cursor-pointer transition-colors"
                 >
                   <Plus className="w-3 h-3" />
@@ -701,31 +978,166 @@ export function StripeCheckoutModal({
               </div>
             )}
 
-            {/* 4. STANDALONE MERCH SIZING (If Merch) */}
-            {isMerch && (
-              <div className="p-3.5 bg-zinc-950/80 rounded-2xl border border-zinc-800/90 space-y-2">
+            {/* Ticket + Merch Bundle Add-On (Show Checkout) */}
+            {isTicket && matchingShowBundleMerch.length > 0 && (
+              <div className="p-3.5 bg-zinc-950/80 rounded-2xl border border-zinc-800/90 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black uppercase tracking-wide text-white">
-                    Select Apparel Size
+                    Add Show Merch Bundle (15% Off · Venue Booth Pickup)
                   </span>
-                  <span className="text-[9px] font-mono text-zinc-400">Standard Unisex Fit</span>
-                </div>
-                <div className="grid grid-cols-6 gap-1.5">
-                  {availableSizes.map((sz, szIdx) => (
+                  {selectedBundleItem && (
                     <button
-                      key={`sz-${sz}-${szIdx}`}
                       type="button"
-                      onClick={() => setSelectedMerchSize(sz)}
-                      className={`py-2 rounded-xl text-xs font-mono font-black transition-all cursor-pointer ${
-                        selectedMerchSize === sz
-                          ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/40 border border-rose-400'
-                          : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border border-zinc-800'
-                      }`}
+                      onClick={() => setBundleMerchId('')}
+                      className="text-[10px] font-mono text-zinc-400 hover:text-white cursor-pointer"
                     >
-                      {sz}
+                      Remove
                     </button>
-                  ))}
+                  )}
                 </div>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {matchingShowBundleMerch.map((m: any) => {
+                    const isPicked = bundleMerchId === m.id;
+                    const discounted = Math.round((Number(m.price) || 25) * 0.85 * 100) / 100;
+                    return (
+                      <button
+                        key={`bundle-${m.id}`}
+                        type="button"
+                        onClick={() => setBundleMerchId(isPicked ? '' : m.id)}
+                        className={`p-2 rounded-xl border text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer ${
+                          isPicked
+                            ? 'bg-emerald-950/30 border-emerald-500/60 text-white'
+                            : 'bg-zinc-900/50 border-zinc-800 text-zinc-300 hover:border-zinc-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img
+                            src={m.thumbnail || m.image}
+                            alt={m.name}
+                            referrerPolicy="no-referrer"
+                            className="w-9 h-9 rounded-lg object-cover bg-zinc-900 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold truncate">{m.name}</div>
+                            <div className="text-[10px] text-zinc-400 font-mono">
+                              Pick up at venue merch table
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 font-mono tabular-nums">
+                          <div className="text-xs font-bold text-emerald-400">${discounted.toFixed(2)}</div>
+                          <div className="text-[9px] text-zinc-500 line-through">${Number(m.price || 25).toFixed(2)}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedBundleItem && Array.isArray(selectedBundleItem.sizes) && selectedBundleItem.sizes.length > 0 && (
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800/70">
+                    <span className="text-[10px] font-mono text-zinc-400">Bundle Size:</span>
+                    <div className="flex gap-1 flex-wrap">
+                      {selectedBundleItem.sizes.map((sz: string) => (
+                        <button
+                          key={`bndl-sz-${sz}`}
+                          type="button"
+                          onClick={() => setBundleMerchSize(sz)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer ${
+                            bundleMerchSize === sz
+                              ? 'bg-emerald-500 text-black'
+                              : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                          }`}
+                        >
+                          {sz}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 4. STANDALONE MERCH SIZING & PICKUP OPTION */}
+            {isMerch && (
+              <div className="p-3.5 bg-zinc-950/80 rounded-2xl border border-zinc-800/90 space-y-3">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wide text-white">
+                      Select Variant / Size
+                    </span>
+                    <span className="text-[9px] font-mono text-zinc-400">
+                      {!stockInfo.isUnlimited && stockInfo.variantStock !== null
+                        ? `${stockInfo.variantStock} left in stock`
+                        : isPhysicalMediaItem(rawItem)
+                        ? 'Includes Digital Unlock'
+                        : 'Standard Fit'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableSizes.map((sz, szIdx) => {
+                      const varStock = getItemAvailableStock(rawItem, sz);
+                      return (
+                        <button
+                          key={`sz-${sz}-${szIdx}`}
+                          type="button"
+                          disabled={varStock.isVariantSoldOut}
+                          onClick={() => setSelectedMerchSize(sz)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-mono font-black transition-all cursor-pointer disabled:opacity-35 disabled:line-through disabled:cursor-not-allowed ${
+                            selectedMerchSize === sz
+                              ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/40 border border-rose-400'
+                              : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border border-zinc-800'
+                          }`}
+                        >
+                          {sz}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {upcomingShowsForSeller.length > 0 && (
+                  <div className="pt-2.5 border-t border-zinc-800/80 space-y-2">
+                    <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400">
+                      Fulfillment Method
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+                      <button
+                        type="button"
+                        onClick={() => setMerchFulfillmentMode('ship')}
+                        className={`py-1.5 px-2 rounded-lg text-[10px] font-bold transition-colors cursor-pointer ${
+                          merchFulfillmentMode === 'ship'
+                            ? 'bg-zinc-800 text-white'
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        Ship ({subtotal >= FREE_SHIPPING_THRESHOLD_PER_BAND ? 'FREE' : `$${FLAT_SHIPPING_PER_BAND}`})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMerchFulfillmentMode('booth_pickup')}
+                        className={`py-1.5 px-2 rounded-lg text-[10px] font-bold transition-colors cursor-pointer ${
+                          merchFulfillmentMode === 'booth_pickup'
+                            ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/40'
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        Pick Up at Show ($0)
+                      </button>
+                    </div>
+                    {merchFulfillmentMode === 'booth_pickup' && (
+                      <select
+                        value={selectedPickupShowId || upcomingShowsForSeller[0]?.id}
+                        onChange={(e) => setSelectedPickupShowId(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500"
+                      >
+                        {upcomingShowsForSeller.map((sh) => (
+                          <option key={sh.id} value={sh.id}>
+                            {sh.title} · {sh.venue} ({sh.date})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -891,21 +1303,29 @@ export function StripeCheckoutModal({
             )}
 
             {/* 6. ORDER TOTAL BREAKDOWN */}
-            <div className="space-y-1.5 p-3.5 bg-zinc-950/90 rounded-2xl border border-zinc-900 text-xs font-mono">
+            <div className="space-y-1.5 p-3.5 bg-zinc-950/90 rounded-2xl border border-zinc-900 text-xs font-mono tabular-nums">
               <div className="flex justify-between text-zinc-400">
                 <span>Subtotal ({quantity}x {isTicket ? activeTierConfig.name : 'Item'})</span>
-                <span>${subtotal.toFixed(2)}</span>
+                <span>${(unitPrice * quantity).toFixed(2)}</span>
               </div>
+              {selectedBundleItem && (
+                <div className="flex justify-between text-emerald-400 text-[11px]">
+                  <span>Show Merch Add-on ({selectedBundleItem.name} · {bundleMerchSize})</span>
+                  <span>+${bundleAddonPrice.toFixed(2)}</span>
+                </div>
+              )}
               {processingFee > 0 && (
                 <div className="flex justify-between text-zinc-500 text-[11px]">
                   <span>Gate Escrow & Processing Fee</span>
                   <span>${processingFee.toFixed(2)}</span>
                 </div>
               )}
-              {requiresShipping && (
-                <div className="flex justify-between text-zinc-500 text-[11px]">
-                  <span>Priority Shipping</span>
-                  <span className="text-emerald-400 font-bold">FREE INCLUDED</span>
+              {isMerch && (
+                <div className="flex justify-between text-zinc-400 text-[11px]">
+                  <span>{isBoothPickup ? 'Merch Booth Pickup' : 'Tracked Shipping'}</span>
+                  <span className={merchShippingCost === 0 ? 'text-emerald-400 font-bold' : ''}>
+                    {merchShippingCost === 0 ? 'FREE' : `$${merchShippingCost.toFixed(2)}`}
+                  </span>
                 </div>
               )}
               <div className="flex justify-between items-center pt-2 border-t border-zinc-800/80 font-bold">

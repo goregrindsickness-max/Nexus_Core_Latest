@@ -21,6 +21,8 @@ class TapeAudioEngine {
   private listeners: Set<Listener> = new Set();
   private simulatedInterval: any = null;
   private lastProgressEmitTime: number = 0;
+  private isMuted: boolean = false;
+  private playbackRate: number = 1;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -94,7 +96,7 @@ class TapeAudioEngine {
         this.clearSimulatedPlayback();
         return;
       }
-      this.currentTime += 0.2;
+      this.currentTime += 0.2 * this.playbackRate;
       this.progress = Math.min(100, (this.currentTime / this.duration) * 100);
       if (this.progress >= 100) {
         this.stop();
@@ -148,6 +150,8 @@ class TapeAudioEngine {
 
     if (this.currentTapeId === tapeId && this.audio && this.audio.src) {
       // Resume current track
+      this.audio.muted = this.isMuted;
+      this.audio.playbackRate = this.playbackRate;
       this.audio.play().then(() => {
         this.isPlaying = true;
         this.notify();
@@ -167,6 +171,8 @@ class TapeAudioEngine {
       if (this.audio) {
         this.audio.src = audioUrl;
         this.audio.currentTime = 0;
+        this.audio.muted = this.isMuted;
+        this.audio.playbackRate = this.playbackRate;
         this.audio.play().then(() => {
           this.isPlaying = true;
           this.notify();
@@ -208,6 +214,23 @@ class TapeAudioEngine {
       this.currentTime = this.audio.currentTime;
     } else if (this.duration) {
       this.currentTime = (this.progress / 100) * this.duration;
+    }
+    this.notify();
+  }
+
+  public setMuted(muted: boolean) {
+    this.isMuted = Boolean(muted);
+    if (this.audio) {
+      this.audio.muted = this.isMuted;
+    }
+    this.notify();
+  }
+
+  public setPlaybackRate(rate: number) {
+    const safeRate = Number.isFinite(rate) && rate > 0 ? Math.min(2, Math.max(0.5, rate)) : 1;
+    this.playbackRate = safeRate;
+    if (this.audio) {
+      this.audio.playbackRate = safeRate;
     }
     this.notify();
   }

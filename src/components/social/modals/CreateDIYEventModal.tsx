@@ -322,6 +322,9 @@ export const CreateDIYEventModal: React.FC<CreateDIYEventModalProps> = ({
                   onChange={(e) => setEventTicketUrl?.(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-all font-mono text-xs"
                 />
+                <p className="mt-1 text-[9.5px] font-mono text-zinc-400 leading-snug">
+                  External links route buyers off-platform; Nexus Core does not verify third-party purchases or issue scannable QR entry passes for them.
+                </p>
               </div>
 
               {/* Native Flyer / Poster Device Uploader */}

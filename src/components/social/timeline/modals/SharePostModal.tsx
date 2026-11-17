@@ -30,7 +30,7 @@ export const SharePostModal: React.FC<SharePostModalProps> = ({
           <span>SHARE BROADCAST</span>
         </div>
 
-        <div className="bg-zinc-950 border border-zinc-850 rounded-xl p-3 space-y-1">
+        <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-1">
           <p className="text-[11px] font-mono font-bold text-rose-400">@{post.authorName}</p>
           <p className="text-xs font-sans text-zinc-300 line-clamp-2">{post.message}</p>
         </div>
@@ -41,10 +41,11 @@ export const SharePostModal: React.FC<SharePostModalProps> = ({
             onClick={() => {
               if (onShareToTimeline) {
                 onShareToTimeline(post);
+                onNotify?.('Broadcast reposted to your timeline!');
               }
               onClose();
             }}
-            className="w-full flex items-center gap-3 p-3 rounded-xl bg-zinc-900 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-500/60 transition-all cursor-pointer text-left group"
+            className="w-full min-h-[44px] flex items-center gap-3 p-3 rounded-xl bg-zinc-900 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-500/60 transition-all cursor-pointer text-left group"
           >
             <div className="p-2 rounded-lg bg-rose-950 border border-rose-500/40 text-rose-400 shrink-0">
               <Repeat className="w-4 h-4" />
@@ -57,13 +58,19 @@ export const SharePostModal: React.FC<SharePostModalProps> = ({
 
           {/* Option 2: Copy Link */}
           <button
-            onClick={() => {
-              if (typeof navigator !== 'undefined' && navigator.clipboard) {
-                navigator.clipboard.writeText(`${window.location.origin}/post/${post.id}`);
+            onClick={async () => {
+              const postUrl = `${window.location.origin}/post/${post.id}`;
+              try {
+                if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                  await navigator.clipboard.writeText(postUrl);
+                }
+                onNotify?.('Broadcast link copied to clipboard!');
+              } catch {
+                onNotify?.('Could not access clipboard. Copy URL from browser.');
               }
               onClose();
             }}
-            className="w-full flex items-center gap-3 p-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer text-left group"
+            className="w-full min-h-[44px] flex items-center gap-3 p-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer text-left group"
           >
             <div className="p-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 shrink-0">
               <Share2 className="w-4 h-4" />
@@ -76,27 +83,36 @@ export const SharePostModal: React.FC<SharePostModalProps> = ({
 
           {/* Option 3: External Native Device Share */}
           <button
-            onClick={() => {
+            onClick={async () => {
               const postUrl = `${window.location.origin}/post/${post.id}`;
               if (typeof navigator !== 'undefined' && navigator.share) {
-                navigator.share({
-                  title: `Post by ${post.authorName}`,
-                  text: post.message,
-                  url: postUrl,
-                }).catch(() => {});
-              } else {
-                window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.message)}&url=${encodeURIComponent(postUrl)}`, '_blank');
+                try {
+                  await navigator.share({
+                    title: `Post by ${post.authorName}`,
+                    text: post.message,
+                    url: postUrl,
+                  });
+                } catch {
+                  // user cancelled native share sheet
+                }
+              } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                try {
+                  await navigator.clipboard.writeText(postUrl);
+                  onNotify?.('Link copied to clipboard for external sharing!');
+                } catch {
+                  onNotify?.('Copy the broadcast link to share externally.');
+                }
               }
               onClose();
             }}
-            className="w-full flex items-center gap-3 p-3 rounded-xl bg-zinc-900 hover:bg-purple-950/60 border border-zinc-800 hover:border-purple-500/60 transition-all cursor-pointer text-left group"
+            className="w-full min-h-[44px] flex items-center gap-3 p-3 rounded-xl bg-zinc-900 hover:bg-purple-950/60 border border-zinc-800 hover:border-purple-500/60 transition-all cursor-pointer text-left group"
           >
             <div className="p-2 rounded-lg bg-purple-950 border border-purple-500/40 text-purple-400 shrink-0">
               <Send className="w-4 h-4" />
             </div>
             <div>
               <p className="text-xs font-mono font-bold text-white group-hover:text-purple-300">External Device Share</p>
-              <p className="text-[10px] font-mono text-zinc-400">Share via system apps or external networks</p>
+              <p className="text-[10px] font-mono text-zinc-400">Share via system apps or copy shareable URL</p>
             </div>
           </button>
         </div>

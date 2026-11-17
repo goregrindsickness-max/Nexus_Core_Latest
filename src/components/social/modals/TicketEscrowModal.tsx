@@ -71,7 +71,7 @@ export const TicketEscrowModal: React.FC<TicketEscrowModalProps> = ({
       {/* Receipt Modal */}
       <AnimatePresence>
         {viewingReceipt && (
-          <motion.div key="receipt-modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setViewingReceipt(null)}>
+          <motion.div key="receipt-modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[10095] flex items-center justify-center p-4" onClick={() => setViewingReceipt(null)}>
             <motion.div 
               initial={{ scale: 0.95, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -227,7 +227,15 @@ export const TicketEscrowModal: React.FC<TicketEscrowModalProps> = ({
                                     )}
                                   </div>
                                   <div className="text-[9px] text-zinc-500 font-mono uppercase tracking-wider mt-0.5">
-                                    {att.tier === 'ga' ? 'General Admission (GA)' : att.tier === 'vip' ? 'VIP Access Pass' : 'VIP Ultimate Fan Bundle'}
+                                    {att.tierName ||
+                                      viewingReceipt.data.ticketType ||
+                                      (att.tier === 'ga' || att.tier === 'standard_admission'
+                                        ? 'General Admission (GA)'
+                                        : att.tier === 'vip'
+                                        ? 'VIP Access Pass'
+                                        : att.tier === 'vip_merch'
+                                        ? 'VIP Ultimate Fan Bundle'
+                                        : att.tier || 'General Admission')}
                                   </div>
                                 </div>
                               </div>
@@ -446,37 +454,103 @@ export const TicketEscrowModal: React.FC<TicketEscrowModalProps> = ({
                 )}
                 
                 {viewingReceipt.type === 'merch' && (
-                  <div className="space-y-6">
+                  <div className="space-y-5">
                     <div className="flex items-center gap-4">
-                      <div className="w-24 h-24 bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800">
+                      <div className="w-24 h-24 bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800 shrink-0">
                         {viewingReceipt.data.thumbnail ? (
-                          <img src={viewingReceipt.data.thumbnail} alt={viewingReceipt.data.name} className="w-full h-full object-cover" />
+                          <img
+                            src={viewingReceipt.data.thumbnail}
+                            alt={viewingReceipt.data.name}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                          />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center"><ShoppingBag className="w-8 h-8 text-zinc-600" /></div>
                         )}
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-lg font-bold text-white leading-tight">{viewingReceipt.data.name}</div>
-                        <div className="text-sm text-rose-400 mt-1 font-mono">${viewingReceipt.data.price?.toFixed(2) || '0.00'}</div>
+                        {viewingReceipt.data.band && (
+                          <div className="text-xs text-zinc-400 mt-0.5">{viewingReceipt.data.band}</div>
+                        )}
+                        <div className="text-sm text-rose-400 mt-1 font-mono tabular-nums">
+                          ${(viewingReceipt.data.price || 0).toFixed(2)} × {viewingReceipt.quantity}
+                        </div>
+                        {Array.isArray(viewingReceipt.data.sizes) && viewingReceipt.data.sizes.length > 0 && (
+                          <div className="text-[11px] font-mono text-zinc-400 mt-1">
+                            Variant: <span className="text-zinc-200 font-bold">{viewingReceipt.data.sizes.join(', ')}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                    
-                    <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 space-y-3">
-                      <div className="flex justify-between items-center pb-3 border-b border-zinc-800">
+
+                    {/* Scannable Merch Booth Pickup Pass */}
+                    {viewingReceipt.data.fulfillmentType === 'booth_pickup' && viewingReceipt.data.pickupCode && (
+                      <div className="bg-emerald-950/25 border border-emerald-500/35 rounded-xl p-4 space-y-3 text-center">
+                        <div className="text-xs font-black uppercase tracking-wider text-emerald-300 flex items-center justify-center gap-1.5 font-mono">
+                          <MapPin className="w-3.5 h-3.5" /> Merch Booth Pickup Pass
+                        </div>
+                        {viewingReceipt.data.pickupShow && (
+                          <div className="text-xs text-zinc-200 font-mono">
+                            <span className="font-bold">{viewingReceipt.data.pickupShow.title || 'Upcoming Show'}</span>
+                            <div className="text-[11px] text-zinc-400 mt-0.5">
+                              {viewingReceipt.data.pickupShow.venue} · {viewingReceipt.data.pickupShow.date}
+                            </div>
+                          </div>
+                        )}
+                        <div className="bg-white rounded-lg py-2.5 px-3 inline-flex flex-col items-center justify-center mx-auto">
+                          <Barcode
+                            value={String(viewingReceipt.data.pickupCode)}
+                            format="CODE128"
+                            width={1.5}
+                            height={44}
+                            displayValue={true}
+                            fontSize={11}
+                            background="#ffffff"
+                            lineColor="#09090b"
+                            margin={2}
+                          />
+                        </div>
+                        <p className="text-[10px] text-zinc-400 font-mono">
+                          Present this barcode + photo ID at the artist merch table.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Digital Release Unlocked Notice */}
+                    {viewingReceipt.data.digitalUnlocked && (
+                      <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-200 flex items-center justify-between gap-2">
+                        <span className="font-mono">Digital Album Unlocked</span>
+                        <span className="text-[11px] text-emerald-400 font-mono font-bold">In My Collections → Digital Music</span>
+                      </div>
+                    )}
+
+                    <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800 space-y-3 font-mono tabular-nums">
+                      <div className="flex justify-between items-center pb-2.5 border-b border-zinc-800">
                         <span className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Order ID</span>
-                        <span className="text-sm text-white font-mono">{viewingReceipt.id.toUpperCase()}</span>
+                        <span className="text-xs text-white">{String(viewingReceipt.orderId || viewingReceipt.id).toUpperCase()}</span>
                       </div>
-                      <div className="flex justify-between items-center pb-3 border-b border-zinc-800">
+                      <div className="flex justify-between items-center pb-2.5 border-b border-zinc-800">
+                        <span className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Fulfillment</span>
+                        <span className="text-xs text-zinc-200">
+                          {viewingReceipt.data.fulfillmentType === 'booth_pickup'
+                            ? 'Merch Booth Pickup ($0.00)'
+                            : `Tracked Shipping (${viewingReceipt.data.shippingCost ? `$${Number(viewingReceipt.data.shippingCost).toFixed(2)}` : 'FREE'})`}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pb-2.5 border-b border-zinc-800">
                         <span className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Date</span>
-                        <span className="text-sm text-white">{new Date(viewingReceipt.date).toLocaleString()}</span>
+                        <span className="text-xs text-white">{new Date(viewingReceipt.date).toLocaleString()}</span>
                       </div>
-                      <div className="flex justify-between items-center pb-3 border-b border-zinc-800">
+                      <div className="flex justify-between items-center pb-2.5 border-b border-zinc-800">
                         <span className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Quantity</span>
-                        <span className="text-sm text-white">{viewingReceipt.quantity}</span>
+                        <span className="text-xs text-white">{viewingReceipt.quantity}</span>
                       </div>
                       <div className="flex justify-between items-center pt-1">
                         <span className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Total</span>
-                        <span className="text-lg text-rose-400 font-black">${((viewingReceipt.data.price || 0) * viewingReceipt.quantity).toFixed(2)}</span>
+                        <span className="text-lg text-rose-400 font-black">
+                          ${(((viewingReceipt.data.price || 0) * viewingReceipt.quantity) + (Number(viewingReceipt.data.shippingCost) || 0)).toFixed(2)}
+                        </span>
                       </div>
                     </div>
                   </div>

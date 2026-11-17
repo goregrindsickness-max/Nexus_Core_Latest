@@ -180,36 +180,23 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
     cartItems={cartItems}
     setCartItems={setCartItems}
     setShowStripeCartCheckout={setShowStripeCartCheckout}
+    liveEvents={props.liveEvents}
+    fulfillmentMap={props.fulfillmentMap}
+    setFulfillmentMap={props.setFulfillmentMap}
   />
   {/* Stripe Cart Checkout Modal */}
       {showStripeCartCheckout && cartItems.length > 0 && (
         <StripeCartCheckoutModal
           cartItems={cartItems}
+          userProfile={userProfile}
+          fulfillmentMap={props.fulfillmentMap}
+          setMyCollections={setMyCollections}
+          inAppSongsList={inAppSongsList}
+          bands={props.bands}
           onClose={() => setShowStripeCartCheckout(false)}
           onClearCart={() => {
             setCartItems([]);
-            // Simulate adding items to collection
-            const newPurchases = cartItems.map((item, idx) => ({
-              id: `col_${Date.now()}_${idx}`,
-              type: 'merch' as const,
-              data: {
-                id: item.productId,
-                name: item.name,
-                thumbnail: item.image,
-                price: item.price,
-                band: item.bandName,
-                sizes: item.size ? [item.size] : []
-              },
-              quantity: item.quantity,
-              date: new Date()
-            }));
-            setMyCollections(prev => {
-              const updated = [...newPurchases, ...prev];
-              try {
-                localStorage.setItem('nexus_my_collections_v1', JSON.stringify(updated));
-              } catch (e) {}
-              return updated;
-            });
+            props.setFulfillmentMap?.({});
             setTimeout(() => {
               setShowStripeCartCheckout(false);
             }, 3000);
@@ -223,6 +210,10 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
           checkoutItem={checkoutItem}
           itemType={checkoutItem.type}
           rawItem={checkoutItem.data}
+          liveEvents={props.liveEvents}
+          shopItems={props.shopItems}
+          inAppSongsList={inAppSongsList}
+          bands={props.bands}
           post={{
             title: checkoutItem.data?.name || checkoutItem.data?.title || checkoutItem.data?.headliner || 'Item',
             authorName: checkoutItem.data?.bandName || checkoutItem.data?.band || checkoutItem.data?.artist || checkoutItem.data?.venue || 'Creator',
@@ -237,7 +228,7 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
             }
           }}
           size={checkoutItem.data?.size || 'L'}
-          price={checkoutItem.data?.price || checkoutItem.data?.ticketPrice || 25}
+          price={checkoutItem.data?.price ?? checkoutItem.data?.ticketPrice}
           isNegotiated={checkoutItem.data?.isNegotiated}
           userProfile={userProfile}
           triggerNotification={triggerNotification}

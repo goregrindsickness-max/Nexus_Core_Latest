@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, MapPin, Building2, Star, Clock, Plus } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, MapPin, Building2, Star, Clock, Plus, Check } from 'lucide-react';
 import { formatTimeTo12h, isPastShowDate, formatShowDate } from '../../utils/socialFeedUtils';
 import { isShowEmbargoedOrDraft, formatSupportActsPreview } from '../../utils/showDisplayUtils';
 import { tourPackageManager } from '../../lib/tourPackageManager';
@@ -142,6 +142,31 @@ export const UpcomingShowsCarousel: React.FC<UpcomingShowsCarouselProps> = ({
   }, [liveEvents, userProfile]);
 
   const [selectedCity, setSelectedCity] = useState<string>('ALL');
+  const [rsvpedIds, setRsvpedIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('nexus_rsvped_events_v1');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(parsed) ? parsed.map(String) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  React.useEffect(() => {
+    const syncRsvps = () => {
+      try {
+        const raw = localStorage.getItem('nexus_rsvped_events_v1');
+        const parsed = raw ? JSON.parse(raw) : [];
+        setRsvpedIds(new Set(Array.isArray(parsed) ? parsed.map(String) : []));
+      } catch {}
+    };
+    window.addEventListener('nexus_rsvp_updated', syncRsvps as EventListener);
+    window.addEventListener('storage', syncRsvps);
+    return () => {
+      window.removeEventListener('nexus_rsvp_updated', syncRsvps as EventListener);
+      window.removeEventListener('storage', syncRsvps);
+    };
+  }, []);
 
   const availableCities = useMemo(() => {
     const set = new Set<string>();
@@ -307,7 +332,7 @@ export const UpcomingShowsCarousel: React.FC<UpcomingShowsCarouselProps> = ({
                 e.stopPropagation();
                 onOpenShowCreator();
               }}
-              className="shrink-0 inline-flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-[11px] font-mono font-black uppercase tracking-wider text-black bg-[#00ffcc] hover:bg-[#33ffd6] border border-[#00ffcc] shadow-[0_0_14px_rgba(0,255,204,0.32)] transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+              className="shrink-0 min-h-[40px] inline-flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-[11px] font-mono font-black uppercase tracking-wider text-black bg-[#00ffcc] hover:bg-[#33ffd6] border border-[#00ffcc] shadow-[0_0_14px_rgba(0,255,204,0.32)] transition-all cursor-pointer active:scale-95 whitespace-nowrap"
             >
               <Plus className="w-3.5 h-3.5 shrink-0" strokeWidth={2.75} />
               <span>Post Show</span>
@@ -340,6 +365,33 @@ export const UpcomingShowsCarousel: React.FC<UpcomingShowsCarouselProps> = ({
                 )}
               </div>
             ) : (
+              <div className="relative group/carousel">
+                {filteredGigs.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        scrollRef.current?.scrollBy({ left: -290, behavior: 'smooth' });
+                      }}
+                      aria-label="Scroll shows left"
+                      className="hidden sm:flex absolute left-1.5 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-black/85 hover:bg-zinc-900 border border-zinc-700/80 text-white items-center justify-center shadow-xl opacity-0 group-hover/carousel:opacity-100 transition-opacity cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        scrollRef.current?.scrollBy({ left: 290, behavior: 'smooth' });
+                      }}
+                      aria-label="Scroll shows right"
+                      className="hidden sm:flex absolute right-1.5 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-black/85 hover:bg-zinc-900 border border-zinc-700/80 text-white items-center justify-center shadow-xl opacity-0 group-hover/carousel:opacity-100 transition-opacity cursor-pointer"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
               <div
                 ref={scrollRef}
                 onMouseEnter={() => { isHoveredRef.current = true; }}
@@ -417,6 +469,12 @@ export const UpcomingShowsCarousel: React.FC<UpcomingShowsCarouselProps> = ({
                             </span>
                           )}
 
+                          {rsvpedIds.has(String(gig.id)) && (
+                            <span className="inline-flex items-center gap-0.5 text-[8px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0 whitespace-nowrap">
+                              <Check className="w-2.5 h-2.5" /> Going
+                            </span>
+                          )}
+
                           {gig.date && !countdownBadge && (
                             <span className={`text-[8.5px] font-mono font-bold px-1.5 py-0.2 rounded border shrink-0 whitespace-nowrap ${
                               isTonight 
@@ -458,6 +516,7 @@ export const UpcomingShowsCarousel: React.FC<UpcomingShowsCarouselProps> = ({
                     </div>
                   );
                 })}
+              </div>
               </div>
             )}
           </>
