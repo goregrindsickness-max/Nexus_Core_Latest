@@ -12,16 +12,16 @@ export const RELEASE_LIST_COLUMNS =
   'id, band_id, label_id, title, catalog_id, type, release_date, label, genre, cover_image, cover_url, cover_color, tracks, formats, digital, audio_vault_path, status, created_by, created_at, updated_at';
 
 export const BAND_CARD_COLUMNS =
-  'id, creator_id, band_name, custom_slug, logo_url, cover_url, avatar_url, banner_url, bio, founded_year, micro_genres, city, state_province, country, verification_status, is_verified, status, is_split_up, created_at';
+  'id, creator_id, band_name, custom_slug, logo_url, cover_url, avatar_url, banner_url, bio, founded_year, micro_genres, city, state_province, country, verification_platform, is_verified, status, is_split_up, created_at';
 
 export const BAND_DETAIL_COLUMNS =
   `${BAND_CARD_COLUMNS}, lineup, streaming_url, featured_youtube_url, metal_archives_url, instagram, spotify, bandcamp, website, record_label, live_update, featured_video_band_name, featured_video_track_name`;
 
 export const PROFILE_CARD_COLUMNS =
-  'id, created_at, email, full_name, console_handle, role, account_type, active_workspace, allowed_workspaces, registered_workspaces, avatar_url, banner_url, city, state_province, country, genre_tags, bio, band_id, band_name, creative_id, creative_name, promoter_id, label_id, creative_metadata, promoter_metadata, label_metadata, band_metadata, top_song_title, top_song_url';
+  'id, created_at, email, full_name, console_handle, role_badge, account_type, sub_tier, active_workspace, allowed_workspaces, registered_workspaces, avatar_url, banner_url, city, state_province, country, genre_tags, bio, band_id, band_name, creative_id, creative_name, promoter_id, promoter_company, promoter_name, promoter_brand, promoter_agency, promoter_region, promoter_booking_email, promoter_logo, promoter_cover_image, label_id, label_name, creative_metadata, promoter_metadata, update_ticker, rosterTicker, top_song_title, top_song_url';
 
 export const CREATIVE_CARD_COLUMNS =
-  'id, creator_id, user_id, business_name, creative_handle, primary_category, secondary_category, skills, gear, genres, bio, day_rate, pricing_notes, city, state_province, country, portfolio_link, avatar_url, banner_url, created_at';
+  'id, creator_id, user_id, business_name, creative_handle, primary_category, primary_skill, secondary_category, secondary_skill, gear, genres, bio, day_rate, pricing_notes, city, state_province, country, portfolio_link, avatar_url, banner_url, created_at';
 
 export const CREATIVE_DETAIL_COLUMNS =
   `${CREATIVE_CARD_COLUMNS}, top_song_title, top_song_artist, top_song_url, live_update_ticker, broadcast_bulletin, availability_status, instagram, artstation`;
@@ -32,7 +32,7 @@ export const PROMOTER_CARD_COLUMNS =
   'id, user_id, name, entity_name, email, location, active_venues, bio, genres, promoter_logo, promoter_cover_image, top_song_url, featured_youtube_url, top_song_artist, top_song_title, created_at';
 
 export const VENUE_CARD_COLUMNS =
-  'id, name, city, state_province, country, address, capacity, payout_rating, load_in_rating, genre_fit, email, buyers, website, place_type';
+  'id, name, city, state_province, country, capacity, payout_rating, load_in_rating, genre_fit, email, buyers, promoter_id';
 
 export const FORUM_THREAD_COLUMNS =
   'id, title, content, category, genre, primary_genre, author, author_name, user_id, author_avatar, image_url, youtube_id, votes, created_at';

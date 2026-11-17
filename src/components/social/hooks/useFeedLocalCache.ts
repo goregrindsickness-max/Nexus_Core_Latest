@@ -80,11 +80,21 @@ export function useFeedLocalCache({
         const supabaseClient = getSupabase();
         if (supabaseClient) {
           try {
-            const { data, error } = await supabaseClient
+            let { data, error } = await supabaseClient
               .from('nexus_posts')
               .select(`*, profiles:profile_id(${PROFILE_CARD_COLUMNS})`)
               .order('created_at', { ascending: false })
               .limit(100);
+
+            if (error) {
+              const fallbackRes = await supabaseClient
+                .from('nexus_posts')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(100);
+              data = fallbackRes.data;
+              error = fallbackRes.error;
+            }
 
             if (!error && data) {
               const deletedPosts = getDeletedPostIdsLocal();

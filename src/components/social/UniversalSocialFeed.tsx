@@ -3380,7 +3380,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
                 display_name: pName,
                 console_handle: p.console_handle || `@${pName.toLowerCase().replace(/\s+/g, '')}`,
                 avatar_url: norm?.avatar_url || p.avatar_url || '',
-                role: p.role || p.account_type || 'Member',
+                role: (p as any).role || p.role_badge || p.account_type || 'Member',
                 category: 'people',
                 isYou: (userProfile?.id && p.id === userProfile.id) || (userProfile?.email && p.email?.toLowerCase() === userProfile.email.toLowerCase())
               });
@@ -3516,7 +3516,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
                 display_name: pName,
                 console_handle: p.console_handle || `@${pName.toLowerCase().replace(/\s+/g, '')}`,
                 avatar_url: norm?.avatar_url || p.avatar_url || '',
-                role: p.role || p.account_type || 'Member',
+                role: (p as any).role || p.role_badge || p.account_type || 'Member',
                 category: 'people',
                 isYou: (userProfile?.id && p.id === userProfile.id) || (userProfile?.email && p.email?.toLowerCase() === userProfile.email.toLowerCase())
               });

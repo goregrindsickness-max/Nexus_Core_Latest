@@ -47,7 +47,12 @@ import {
   Search
 } from 'lucide-react';
 import { authFetch } from '../../utils/apiConfig';
-import { extractYouTubeVideoId } from '../../utils/youtubeUtils';
+import {
+  extractYouTubeVideoId,
+  fetchYouTubeOEmbedClient,
+  searchYouTubeVideosMultiTier,
+  YouTubeSearchResultItem,
+} from '../../utils/youtubeUtils';
 import { checkDuplicateCommunityEvent, EVENT_CATEGORIES } from '../../utils/communityEventUtils';
 import { getExistingPhotoPitAlbums, persistPhotoPitFolders } from './utils/photoPitAlbums';
 import { resolveBandcampMetadata, isBandcampUrl, normalizeBandcampUrl, BandcampResolvedData } from '../../utils/socialFeedUtils';
@@ -705,17 +710,6 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
   }, [newPostImageUrl]);
 
   // Active YouTube video search & preview state
-  interface YouTubeSearchResultItem {
-    videoId: string;
-    title: string;
-    channelName: string;
-    duration?: string;
-    viewCountText?: string;
-    publishedTime?: string;
-    thumbnailUrl: string;
-    url: string;
-  }
-
   const [videoSearchInput, setVideoSearchInput] = useState<string>('');
   const [videoSearchResults, setVideoSearchResults] = useState<YouTubeSearchResultItem[]>([]);
   const [isSearchingVideos, setIsSearchingVideos] = useState<boolean>(false);
@@ -744,6 +738,28 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
 
   const enrichYouTubeMetaById = async (videoId: string) => {
     try {
+      const clientMeta = await fetchYouTubeOEmbedClient(videoId);
+      if (clientMeta?.title) {
+        setSelectedYoutubeMeta((prev) => {
+          if (prev && prev.videoId === videoId) {
+            return {
+              ...prev,
+              title: clientMeta.title || prev.title,
+              channelName: clientMeta.channelName || prev.channelName,
+              thumbnailUrl: clientMeta.thumbnailUrl || prev.thumbnailUrl,
+            };
+          }
+          return {
+            videoId,
+            title: clientMeta.title,
+            channelName: clientMeta.channelName || 'YouTube Channel',
+            thumbnailUrl: clientMeta.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+          };
+        });
+        return;
+      }
+
       const res = await authFetch(`/api/oembed?videoId=${encodeURIComponent(videoId)}`);
       if (!res.ok) return;
       const data = await res.json();
@@ -819,18 +835,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     setShowVideoResults(true);
 
     try {
-      const res = await authFetch(
-        `/api/youtube/search?q=${encodeURIComponent(trimmed)}&limit=12`,
-        { signal: controller.signal }
-      );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data?.error || `Search failed (HTTP ${res.status})`);
-      }
-
-      const items: YouTubeSearchResultItem[] = Array.isArray(data?.results)
-        ? data.results
-        : [];
+      const items = await searchYouTubeVideosMultiTier(trimmed, 12, controller.signal);
       videoSearchCacheRef.current.set(cacheKey, items);
       setVideoSearchResults(items);
     } catch (err: any) {

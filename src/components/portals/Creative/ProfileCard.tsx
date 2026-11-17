@@ -485,7 +485,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
 
               if (!found && validUUID) {
                 try {
-                  const { data } = await supabase.from('bands').select(BAND_DETAIL_COLUMNS).eq('creator_id', validUUID).neq('verification_status', 'community_archive').order('created_at', { ascending: false }).limit(1).maybeSingle();
+                  const { data } = await supabase.from('bands').select(BAND_DETAIL_COLUMNS).eq('creator_id', validUUID).order('created_at', { ascending: false }).limit(1).maybeSingle();
                   if (data) found = data;
                 } catch (_) {}
               }

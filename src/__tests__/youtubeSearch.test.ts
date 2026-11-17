@@ -3,7 +3,11 @@ import {
   extractYtInitialDataJson,
   parseYouTubeInitialDataVideos,
 } from '../../server/lib/youtubeSearch';
-import { getYouTubeId, extractYouTubeVideoId } from '../utils/youtubeUtils';
+import {
+  getYouTubeId,
+  extractYouTubeVideoId,
+  parsePipedSearchResults,
+} from '../utils/youtubeUtils';
 
 describe('YouTube Search Parser & URL Resolution', () => {
   it('extracts ytInitialData safely even when descriptions contain braces or script tags', () => {
@@ -94,5 +98,34 @@ describe('YouTube Search Parser & URL Resolution', () => {
     expect(getYouTubeId('https://www.youtube.com/shorts/abc12345678')).toBe('abc12345678');
     expect(getYouTubeId('https://m.youtube.com/live/xyz98765432?feature=share')).toBe('xyz98765432');
     expect(extractYouTubeVideoId('sanguisugabogg live set')).toBeNull();
+  });
+
+  it('parses Piped JSON search results cleanly for APK CORS fallback', () => {
+    const pipedPayload = {
+      items: [
+        {
+          url: '/watch?v=Z0NGdLr4img',
+          title: 'Suffocation - Liege of Inveracity (Live)',
+          uploaderName: 'Death Metal Vault',
+          duration: 274,
+          views: 158400,
+          uploadedDate: '1 year ago',
+        },
+      ],
+    };
+
+    const parsed = parsePipedSearchResults(pipedPayload, 5);
+    expect(parsed).toEqual([
+      {
+        videoId: 'Z0NGdLr4img',
+        title: 'Suffocation - Liege of Inveracity (Live)',
+        channelName: 'Death Metal Vault',
+        duration: '4:34',
+        viewCountText: '158,400 views',
+        publishedTime: '1 year ago',
+        thumbnailUrl: 'https://i.ytimg.com/vi/Z0NGdLr4img/hqdefault.jpg',
+        url: 'https://www.youtube.com/watch?v=Z0NGdLr4img',
+      },
+    ]);
   });
 });
