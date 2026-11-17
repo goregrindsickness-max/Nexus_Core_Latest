@@ -1,0 +1,2731 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  X,
+  Plus,
+  Edit2,
+  Trash2,
+  Disc,
+  Music,
+  MapPin,
+  Globe,
+  ExternalLink,
+  ShieldCheck,
+  Users,
+  Sparkles,
+  Save,
+  Check,
+  Search,
+  Upload,
+  Info,
+  Image as ImageIcon,
+  Loader2,
+  Youtube,
+  Play,
+  UserPlus,
+  Clock,
+  Tag,
+  ListMusic,
+  ChevronDown,
+  ChevronUp,
+  ArrowLeft,
+  ShieldAlert,
+  AlertCircle,
+  Database,
+  RefreshCw,
+  Camera
+} from 'lucide-react';
+import {
+  communityBandManager,
+  CommunityBandRecord,
+  LineupMember,
+  DiscographyRelease,
+  DiscographyTrack,
+  saveBandDiscographyToCache,
+  loadBandDiscographyFromCache,
+  clearBandDiscographyFromCache,
+  deduplicateDiscography,
+  deduplicateLineup,
+  markReleaseDeletedInStorage,
+  resolveAuthenticReleaseYear,
+  findMasterReleaseCover,
+  isValidCoverUrl,
+  isValidBandImageUrl,
+  pickBestBandImage,
+  resolveCanonicalBandLogo,
+  resolveCanonicalBandCover,
+  isGorgasmBand,
+  isStaleGorgasmLineup,
+  parseBandLineup,
+  GORGASM_OFFICIAL_LOGO,
+  GORGASM_OFFICIAL_LINEUP
+} from '../../../lib/communityBands';
+import { deleteReleaseFromDatabase } from '../../../services/releasesService';
+import { parseDiscographyFromImageOrText } from '../../../services/metalArchivesScraper';
+import { uploadBase64ToStorage, generateUUID, ensureUUID } from '../../../supabase';
+import { MASTER_GENRES } from '../../../constants/genres';
+import { MetalArchivesImportModal } from './MetalArchivesImportModal';
+
+const getReleaseCoverUrl = (r: any, bandName?: string): string => {
+  if (!r) return '';
+  const candidateKeys = [
+    'cover_url', 'cover_image', 'coverUrl', 'coverImage',
+    'image_url', 'imageUrl', 'artwork_url', 'artworkUrl',
+    'artwork', 'cover', 'image'
+  ];
+  for (const k of candidateKeys) {
+    const val = r[k];
+    if (typeof val === 'string' && val.trim().length > 0 && !val.includes('undefined') && !val.includes('null')) {
+      if (isValidCoverUrl(val)) {
+        return val.trim();
+      }
+    }
+  }
+  if (r.title) {
+    const fallback = findMasterReleaseCover(r.title, bandName || r.artist || r.band_name);
+    if (fallback) return fallback;
+  }
+  return '';
+};
+import { resolvePublicBandData, enrichBandMetadataAsync } from '../../../services/bandEnrichmentService';
+import { getSupabase } from '../../../services/clientService';
+import { BandActivityStatus, resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
+
+interface CommunityBandCuratorModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  initialBand?: CommunityBandRecord | null;
+  userProfile?: any;
+  onSaved?: (band: CommunityBandRecord) => void;
+  triggerNotification?: (msg: string) => void;
+}
+
+export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps> = ({
+  isOpen,
+  onClose,
+  initialBand,
+  userProfile,
+  onSaved,
+  triggerNotification
+}) => {
+  const [activePage, setActivePage] = useState<'list' | 'editor'>('list');
+  const [bandsList, setBandsList] = useState<CommunityBandRecord[]>([]);
+  const [selectedBand, setSelectedBand] = useState<CommunityBandRecord | null>(null);
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedFeedback, setSavedFeedback] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'lineup' | 'discography'>('overview');
+
+  // Supabase Debug Log & Connection Status State
+  const [syncLogs, setSyncLogs] = useState<{ message: string; timestamp: number }[]>([]);
+  const [showUpsertBox, setShowUpsertBox] = useState<boolean>(false);
+  const [showDebugPanel, setShowDebugPanel] = useState<boolean>(true);
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+
+  useEffect(() => {
+    const handleLog = (e: any) => {
+      if (e.detail) {
+        setSyncLogs(prev => [...prev.slice(-40), e.detail]);
+        const msg = (e.detail.message || '').toLowerCase();
+        if (msg.includes('success') || msg.includes('fully synced')) {
+          setConnectionStatus('success');
+        } else if (msg.includes('error') || msg.includes('fail') || msg.includes('rejected')) {
+          setConnectionStatus('error');
+        } else {
+          setConnectionStatus('syncing');
+        }
+      }
+    };
+    window.addEventListener('nexus_band_sync_log', handleLog);
+    return () => window.removeEventListener('nexus_band_sync_log', handleLog);
+  }, []);
+
+  // Basic Info Form State
+  const [name, setName] = useState('');
+  const [genre, setGenre] = useState('Extreme Metal');
+  const [microGenres, setMicroGenres] = useState<string[]>([]);
+  const [foundedYear, setFoundedYear] = useState('');
+  const [bandStatus, setBandStatus] = useState<BandActivityStatus>('active');
+  const [city, setCity] = useState('');
+  const [stateProvince, setStateProvince] = useState('');
+  const [country, setCountry] = useState('USA');
+  const [recordLabel, setRecordLabel] = useState('');
+  const [bio, setBio] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [coverUrl, setCoverUrl] = useState('');
+  const [spotifyUrl, setSpotifyUrl] = useState('');
+  const [bandcampUrl, setBandcampUrl] = useState('');
+  const [metalArchivesUrl, setMetalArchivesUrl] = useState('');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [curatorHandle, setCuratorHandle] = useState('@community_archivist');
+
+  // Lineup Editor State
+  const [lineup, setLineup] = useState<LineupMember[]>([]);
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberRole, setNewMemberRole] = useState('');
+  const [newMemberStatus, setNewMemberStatus] = useState<'active' | 'past' | 'touring'>('active');
+  const [newMemberYears, setNewMemberYears] = useState('');
+  const [editingMemberIdx, setEditingMemberIdx] = useState<number | null>(null);
+
+  // Delete Dialog Confirmation State
+  const [confirmDeleteBand, setConfirmDeleteBand] = useState<CommunityBandRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Discography Editor State
+  const [albums, setAlbums] = useState<DiscographyRelease[]>([]);
+  const [editingAlbumIdx, setEditingAlbumIdx] = useState<number | null>(null);
+  const [showImporterModal, setShowImporterModal] = useState(false);
+
+  // Current working release (for creating or editing)
+  const [releaseTitle, setReleaseTitle] = useState('');
+  const [releaseYear, setReleaseYear] = useState('');
+  const [releaseType, setReleaseType] = useState<'album' | 'ep' | 'single' | 'demo'>('album');
+  const [releaseLabel, setReleaseLabel] = useState('');
+  const [releaseCatalogId, setReleaseCatalogId] = useState('');
+  const [releaseImageUrl, setReleaseImageUrl] = useState('');
+  const [releaseTracks, setReleaseTracks] = useState<DiscographyTrack[]>([]);
+
+  // Working Track inputs
+  const [newTrackTitle, setNewTrackTitle] = useState('');
+  const [newTrackDuration, setNewTrackDuration] = useState('');
+  const [newTrackLyrics, setNewTrackLyrics] = useState('');
+  const [showNewTrackLyricsInput, setShowNewTrackLyricsInput] = useState(false);
+
+  // Upload States
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [isUploadingAlbumImg, setIsUploadingAlbumImg] = useState(false);
+  const [isScanningTracklistImg, setIsScanningTracklistImg] = useState(false);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const [failedLogoKeys, setFailedLogoKeys] = useState<Record<string, boolean>>({});
+  const [syncStatusText, setSyncStatusText] = useState('');
+
+  const handleScanReleaseScreenshot = async (files: FileList | File[]) => {
+    const fileArr = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (fileArr.length === 0) return;
+
+    setIsScanningTracklistImg(true);
+    try {
+      const dataUrls: string[] = [];
+      for (const f of fileArr.slice(0, 4)) {
+        const url = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = reject;
+          reader.readAsDataURL(f);
+        });
+        if (url) dataUrls.push(url);
+      }
+
+      const parsed = await parseDiscographyFromImageOrText({
+        images: dataUrls,
+        bandName: name.trim() || selectedBand?.name || 'Artist',
+        defaultAlbumTitle: releaseTitle.trim() || undefined,
+        defaultYear: releaseYear.trim() || undefined,
+        defaultType: releaseType,
+        defaultLabel: releaseLabel.trim() || undefined,
+      });
+
+      const firstRel = parsed.releases?.[0];
+      if (firstRel) {
+        if (!releaseTitle.trim() && firstRel.title && firstRel.title !== 'Untitled Release') {
+          setReleaseTitle(firstRel.title);
+        }
+        const extractedYr = firstRel.releaseDate || (firstRel as any).release_date || (firstRel as any).year;
+        if (!releaseYear.trim() && extractedYr) {
+          setReleaseYear(String(extractedYr).slice(0, 4));
+        }
+        if (!releaseLabel.trim() && firstRel.label && firstRel.label !== 'Metal Archives Verified') {
+          setReleaseLabel(firstRel.label);
+        }
+        if (!releaseCatalogId.trim() && firstRel.catalogId && !firstRel.catalogId.startsWith('CAT-')) {
+          setReleaseCatalogId(firstRel.catalogId);
+        }
+        const cUrl = firstRel.coverUrl || firstRel.coverImage || (firstRel as any).cover_url;
+        if (!releaseImageUrl.trim() && cUrl) {
+          setReleaseImageUrl(cUrl);
+        }
+        if (firstRel.tracks && firstRel.tracks.length > 0) {
+          const mappedTracks: DiscographyTrack[] = firstRel.tracks.map((t, idx) => ({
+            number: idx + 1,
+            title: t.title || `Track ${idx + 1}`,
+            duration: t.duration || '3:30',
+          }));
+          setReleaseTracks(mappedTracks);
+          triggerNotification?.(`📸 Extracted ${mappedTracks.length} tracks from screenshot!`);
+        } else {
+          triggerNotification?.('📸 Extracted album details from screenshot!');
+        }
+      } else {
+        triggerNotification?.('⚠️ Could not detect a tracklist in that screenshot.');
+      }
+    } catch (err: any) {
+      triggerNotification?.(`❌ Screenshot scan failed: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setIsScanningTracklistImg(false);
+    }
+  };
+
+  const handleSyncAllToSupabase = async () => {
+    if (isSyncingAll) return;
+    try {
+      setIsSyncingAll(true);
+      setSyncStatusText('Connecting to Supabase...');
+      const res = await communityBandManager.syncAllToSupabase((curr, total, name) => {
+        setSyncStatusText(`Syncing (${curr}/${total}): ${name}...`);
+      });
+      loadBands();
+      if (res.success || res.syncedCount > 0) {
+        triggerNotification?.(`⚡ Successfully pushed ${res.syncedCount} band archives and full discographies to Supabase!`);
+      } else {
+        triggerNotification?.(`❌ Database sync notice: ${res.errors.join('; ')}`);
+      }
+    } catch (err: any) {
+      console.error('Sync all error:', err);
+      triggerNotification?.(`❌ Sync error: ${err?.message || 'Unknown failure'}`);
+    } finally {
+      setIsSyncingAll(false);
+      setSyncStatusText('');
+    }
+  };
+
+  const handleDeviceFileUpload = async (
+    file: File,
+    bucket: string,
+    prefix: string,
+    onSuccess: (url: string) => void,
+    setLoadingState: (loading: boolean) => void
+  ) => {
+    try {
+      setLoadingState(true);
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const base64 = evt.target?.result as string;
+        if (!base64) {
+          setLoadingState(false);
+          return;
+        }
+        try {
+          // Dedicated storage asset path separation: never used as database primary key
+          const storageFolderId = (selectedBand?.id && ensureUUID(selectedBand.id))
+            ? ensureUUID(selectedBand.id)
+            : (userProfile?.id ? ensureUUID(userProfile.id) : 'community-uploads');
+          const fileToken = `${prefix}_${Date.now()}`;
+
+          const publicUrl = await uploadBase64ToStorage(
+            base64,
+            bucket,
+            storageFolderId,
+            fileToken
+          );
+          if (publicUrl) {
+            onSuccess(publicUrl);
+          } else {
+            onSuccess(base64);
+          }
+        } catch (err) {
+          console.warn('Storage upload error, fallback to base64:', err);
+          onSuccess(base64);
+        } finally {
+          setLoadingState(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (e) {
+      console.error('File reading failed:', e);
+      setLoadingState(false);
+    }
+  };
+
+  const loadBands = () => {
+    const list = communityBandManager.getAll();
+    setBandsList(list);
+    communityBandManager.fetchFromSupabase({ authoritative: true }).then((remoteList) => {
+      if (remoteList && remoteList.length > 0) {
+        setFailedLogoKeys({});
+        setBandsList(remoteList);
+      }
+    }).catch(() => {});
+  };
+
+  const prevIsOpenRef = useRef(false);
+  const prevBandKeyRef = useRef<string | null>(null);
+  const populateReqIdRef = useRef(0);
+  const isOpenRef = useRef(isOpen);
+  const isSavingRef = useRef(false);
+  const activePageRef = useRef(activePage);
+  const selectedBandRef = useRef<CommunityBandRecord | null>(selectedBand);
+  const lineupDirtyRef = useRef(false);
+
+  isOpenRef.current = isOpen;
+  activePageRef.current = activePage;
+  selectedBandRef.current = selectedBand;
+
+  useEffect(() => {
+    if (isOpen) {
+      // Ensure real-time listener is actively connected to Supabase
+      communityBandManager.setupRealtimeListener();
+
+      const isOpening = !prevIsOpenRef.current;
+      const currentBandKey = initialBand ? `${initialBand.id || ''}:${initialBand.name || ''}` : null;
+      const isDifferentBand = currentBandKey !== prevBandKeyRef.current;
+
+      if (isOpening) {
+        loadBands();
+      }
+
+      if (isOpening || isDifferentBand) {
+        const currentSelected = selectedBandRef.current;
+        const curSelName = (currentSelected?.name || (currentSelected as any)?.band_name || '').toLowerCase().trim();
+        const initBandName = (initialBand?.name || (initialBand as any)?.band_name || '').toLowerCase().trim();
+        const isSameActiveBand = !isOpening && activePageRef.current === 'editor' && Boolean(
+          initialBand && currentSelected && (
+            (initialBand.id && currentSelected.id && ensureUUID(initialBand.id) === ensureUUID(currentSelected.id)) ||
+            (initBandName && curSelName && initBandName === curSelName)
+          )
+        );
+
+        prevBandKeyRef.current = currentBandKey;
+        if (!isSameActiveBand) {
+          if (initialBand) {
+            populateForm(initialBand);
+            setActivePage('editor');
+          } else {
+            resetForm();
+            setActivePage('list');
+          }
+        }
+      }
+    } else {
+      prevBandKeyRef.current = null;
+      populateReqIdRef.current++;
+    }
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, initialBand?.id, initialBand?.name]);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      const freshList = communityBandManager.getAll();
+      if (freshList && freshList.length > 0) {
+        setBandsList(freshList);
+      }
+
+      // Update selectedBand reference without clobbering active unsaved editor inputs
+      const curSelected = selectedBandRef.current;
+      if (curSelected && !isSavingRef.current) {
+        const curId = curSelected.id;
+        const curName = (curSelected.name || (curSelected as any).band_name || '').toLowerCase().trim();
+        const matched = freshList.find(b => b.id === curId || (b.name || (b as any).band_name || '').toLowerCase().trim() === curName);
+        if (matched) {
+          setSelectedBand(matched);
+          selectedBandRef.current = matched;
+          if (activePageRef.current !== 'editor') {
+            const matchedLineup = parseBandLineup(matched.lineup);
+            if (matchedLineup.length > 0) setLineup(matchedLineup);
+            if (matched.discography && Array.isArray(matched.discography) && matched.discography.length > 0) {
+              setAlbums([...matched.discography].sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0')));
+            }
+          }
+        }
+      }
+    };
+
+    const handleDiscoImported = (e: any) => {
+      const { releases } = e.detail || {};
+      if (releases && Array.isArray(releases) && releases.length > 0) {
+        setAlbums((prev) => {
+          const merged = [...prev];
+          for (const r of releases) {
+            const existingIdx = merged.findIndex(
+              (m) => m.id === r.id || (m.title && r.title && m.title.toLowerCase().trim() === r.title.toLowerCase().trim())
+            );
+            const cover = getReleaseCoverUrl(r);
+            const newAlb: DiscographyRelease = {
+              id: r.id || `rel-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+              title: r.title || 'Untitled',
+              year: resolveAuthenticReleaseYear(r) || String(new Date().getFullYear()),
+              type: (['album', 'ep', 'single', 'demo'].includes((r.type || '').toLowerCase()) ? (r.type.toLowerCase() as any) : 'album'),
+              image_url: cover,
+              cover_url: cover,
+              cover_image: cover,
+              coverUrl: cover,
+              coverImage: cover,
+              image: cover,
+              label: r.label || '',
+              release_info: r.label || '',
+              catalog_id: r.catalogId || r.catalog_id || '',
+              tracks: (r.tracks || []).map((t: any, idx: number) => ({
+                number: t.num || t.number || idx + 1,
+                title: t.title || `Track ${idx + 1}`,
+                duration: t.duration || '3:30',
+                lyrics: t.lyrics || undefined
+              }))
+            };
+            if (existingIdx >= 0) {
+              const existingCover = getReleaseCoverUrl(merged[existingIdx]);
+              const finalCover = cover || existingCover;
+              merged[existingIdx] = {
+                ...merged[existingIdx],
+                ...newAlb,
+                image_url: finalCover,
+                cover_url: finalCover,
+                cover_image: finalCover,
+                coverUrl: finalCover,
+                coverImage: finalCover,
+                image: finalCover
+              };
+            } else {
+              merged.push(newAlb);
+            }
+          }
+          return merged.sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0'));
+        });
+      }
+    };
+
+    window.addEventListener('nexus_community_bands_updated', handleUpdate);
+    window.addEventListener('nexus_avatar_updated', handleUpdate);
+    window.addEventListener('nexus_discography_imported', handleDiscoImported as EventListener);
+    return () => {
+      window.removeEventListener('nexus_community_bands_updated', handleUpdate);
+      window.removeEventListener('nexus_avatar_updated', handleUpdate);
+      window.removeEventListener('nexus_discography_imported', handleDiscoImported as EventListener);
+    };
+  }, []);
+
+  const populateForm = (band: CommunityBandRecord) => {
+    const reqId = ++populateReqIdRef.current;
+    lineupDirtyRef.current = false;
+    const publicDetails = resolvePublicBandData(band.name || (band as any).band_name, band);
+    setSelectedBand(band);
+    selectedBandRef.current = band;
+    setIsCreatingNew(false);
+    setName(band.name || (band as any).band_name || '');
+    const bandMicro = band.micro_genres || band.subgenres || publicDetails.micro_genres || [];
+    setMicroGenres(bandMicro);
+    const targetGenreName = band.genre || publicDetails.genre || '';
+    const matchedCluster = MASTER_GENRES.find(c => c.name.toLowerCase() === targetGenreName.toLowerCase() || c.tags.some(t => bandMicro.includes(t.label)))?.name || MASTER_GENRES[0]?.name || 'Extreme Metal';
+    setGenre(matchedCluster);
+    setFoundedYear(band.founded_year || publicDetails.founded_year || '');
+    setBandStatus(resolveBandStatus(band));
+    setCity(band.city || publicDetails.city || '');
+    setStateProvince(band.state_province || band.state || publicDetails.state_province || '');
+    setCountry(band.country || publicDetails.country || 'USA');
+    setRecordLabel(band.record_label || band.label || publicDetails.record_label || publicDetails.label || '');
+
+    const userBio = userProfile?.bio || userProfile?.profileBlurb;
+    const rawBio = band.bio || (band as any).description || publicDetails.bio || '';
+    const isUserBio = Boolean(userBio && (rawBio === userBio || rawBio === (userProfile as any)?.profileBlurb));
+    const validBio = (rawBio && !isUserBio && !rawBio.startsWith('Community-curated archive')) ? rawBio : 'Not written yet.';
+    setBio(validBio);
+    const bandNameOrId = band.id || band.name || (band as any).band_name || '';
+    const resolvedAvatar =
+      resolveCanonicalBandLogo(band) ||
+      (isGorgasmBand(bandNameOrId, (band as any).custom_slug) ? GORGASM_OFFICIAL_LOGO : '');
+    setAvatarUrl(resolvedAvatar);
+    const resolvedCover = resolveCanonicalBandCover(band);
+    setCoverUrl(resolvedCover);
+    setSpotifyUrl(band.spotify_url || publicDetails.spotify_url || '');
+    setBandcampUrl(band.bandcamp_url || '');
+    setMetalArchivesUrl(band.metal_archives_url || publicDetails.metal_archives_url || '');
+    setYoutubeUrl(band.youtube_url || band.featured_youtube_url || publicDetails.youtube_url || '');
+    setCuratorHandle(band.curated_by || (userProfile?.console_handle || userProfile?.handle || '@community_archivist'));
+
+    // Asynchronous background prefill for any remaining empty fields
+    if (!band.founded_year || !band.record_label || !band.city) {
+      enrichBandMetadataAsync(band.name || (band as any).band_name).then(asyncDetails => {
+        if (!isOpenRef.current || populateReqIdRef.current !== reqId || isSavingRef.current) return;
+        if (asyncDetails) {
+          if (asyncDetails.founded_year) setFoundedYear(prev => prev || asyncDetails.founded_year || '');
+          if (asyncDetails.record_label) setRecordLabel(prev => prev || asyncDetails.record_label || '');
+          if (asyncDetails.city) setCity(prev => prev || asyncDetails.city || '');
+          if (asyncDetails.state_province) setStateProvince(prev => prev || asyncDetails.state_province || '');
+          if (asyncDetails.country) setCountry(prev => prev || asyncDetails.country || 'USA');
+          if (asyncDetails.genre) setGenre(prev => prev || asyncDetails.genre || 'Extreme Metal');
+          if (asyncDetails.bio) setBio(prev => (prev === 'Not written yet.' || !prev) ? (asyncDetails.bio || 'Not written yet.') : prev);
+        }
+      }).catch(() => {});
+    }
+
+    // Resilient lineup resolution
+    let loadedLineup: LineupMember[] = parseBandLineup(band.lineup);
+    if (loadedLineup.length === 0) {
+      const bId = band.id || '';
+      const bUUID = bId ? ensureUUID(bId) : '';
+      const bName = (band.name || (band as any).band_name || '').toLowerCase().trim();
+      const stored = (bId ? localStorage.getItem(`nexus_core_band_lineup_${bId}`) : null) ||
+                     (bUUID ? localStorage.getItem(`nexus_core_band_lineup_${bUUID}`) : null) ||
+                     (bName ? localStorage.getItem(`nexus_core_band_lineup_${bName}`) : null);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) loadedLineup = parsed;
+        } catch {}
+      }
+      if (loadedLineup.length === 0) {
+        const enriched = resolvePublicBandData(band.name || (band as any).band_name || '');
+        if (Array.isArray(enriched.lineup) && enriched.lineup.length > 0) {
+          loadedLineup = enriched.lineup;
+        }
+      }
+    }
+    // Sanitize lineup with deduplicateLineup to strip any legacy mock/fake names
+    const cleanLineup = deduplicateLineup(loadedLineup);
+    const bandNameLower = (band.name || (band as any).band_name || '').toLowerCase().trim();
+    const isBirdflesh = bandNameLower.includes('birdflesh');
+    const isGorgasm = isGorgasmBand(band.id || bandNameLower, (band as any).custom_slug);
+    if (isBirdflesh && (cleanLineup.length === 0 || cleanLineup.some(m => m.name === 'Smögen' || m.name === 'Smogen' || m.name === 'Barra'))) {
+      setLineup([
+        { id: 'bf-1', name: 'Adde Mitroulis', role: 'Drums, Vocals', status: 'active', years: '1997–present' },
+        { id: 'bf-2', name: 'Joakim Svensson', role: 'Bass, Vocals', status: 'active', years: '2007–present' },
+        { id: 'bf-3', name: 'Elis Edin Markskog', role: 'Guitars, Vocals', status: 'active', years: '2011–present' }
+      ]);
+    } else if (isGorgasm && isStaleGorgasmLineup(cleanLineup)) {
+      setLineup(GORGASM_OFFICIAL_LINEUP);
+    } else {
+      setLineup(cleanLineup);
+    }
+
+    let initialAlbums = (band.discography && band.discography.length > 0) ? band.discography : [];
+    const cached = loadBandDiscographyFromCache(band.id, band.name);
+    const enriched = resolvePublicBandData(band.name || (band as any).band_name || '');
+    const combined = deduplicateDiscography([...initialAlbums, ...(cached || []), ...(enriched.discography || [])]);
+    if (combined.length > 0) {
+      initialAlbums = combined;
+    }
+
+    const loadedAlbums = initialAlbums.map((alb: any) => {
+      const cover = getReleaseCoverUrl(alb);
+      return {
+        ...alb,
+        image_url: cover,
+        cover_url: cover,
+        cover_image: cover,
+        coverUrl: cover,
+        coverImage: cover,
+        image: cover
+      };
+    });
+
+    setAlbums([...loadedAlbums].sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0')));
+    setEditingAlbumIdx(null);
+    setEditingMemberIdx(null);
+    resetReleaseInputs();
+    setActivePage('editor');
+
+    // Live Supabase Direct Sync: fetch live bands & releases rows to guarantee 100% cloud parity
+    try {
+      const client = getSupabase();
+      const bandName = (band.name || (band as any).band_name || '').trim();
+      const validUUID = band.id ? ensureUUID(band.id) : null;
+      
+      if (client && (validUUID || bandName)) {
+        let bQuery = client.from('bands').select('*');
+        if (validUUID) {
+          bQuery = bQuery.eq('id', validUUID);
+        } else if (bandName) {
+          bQuery = bQuery.ilike('band_name', `%${bandName}%`);
+        }
+
+        const bIdForRel = validUUID || band.id;
+        let rQuery = client.from('releases').select('*');
+        if (validUUID && band.id && validUUID !== band.id) {
+          rQuery = rQuery.or(`band_id.eq.${validUUID},band_id.eq.${band.id}`);
+        } else if (bIdForRel) {
+          rQuery = rQuery.eq('band_id', bIdForRel);
+        }
+
+        Promise.all([
+          Promise.resolve(bQuery.maybeSingle()).catch(() => ({ data: null })),
+          Promise.resolve(rQuery).catch(() => ({ data: [] }))
+        ]).then(([{ data: liveBand }, { data: liveReleases }]: any) => {
+          if (!isOpenRef.current || populateReqIdRef.current !== reqId || isSavingRef.current) return;
+
+          let parsedLiveLineup: LineupMember[] = [];
+          if (liveBand) {
+            if (liveBand.founded_year) setFoundedYear(String(liveBand.founded_year));
+            if (liveBand.record_label) setRecordLabel(liveBand.record_label);
+            if (liveBand.city) setCity(liveBand.city);
+            if (liveBand.state_province) setStateProvince(liveBand.state_province);
+            if (liveBand.country) setCountry(liveBand.country);
+            if (liveBand.bio && liveBand.bio !== 'Not written yet.') setBio(liveBand.bio);
+            if (liveBand.status) setBandStatus(resolveBandStatus(liveBand));
+            if (liveBand.micro_genres && Array.isArray(liveBand.micro_genres) && liveBand.micro_genres.length > 0) {
+              setMicroGenres(liveBand.micro_genres);
+            }
+            const liveLogo = resolveCanonicalBandLogo(liveBand);
+            if (liveLogo) setAvatarUrl(liveLogo);
+            const liveCover = resolveCanonicalBandCover(liveBand);
+            if (liveCover) setCoverUrl(liveCover);
+            if (liveBand.spotify) setSpotifyUrl(liveBand.spotify);
+            if (liveBand.bandcamp) setBandcampUrl(liveBand.bandcamp);
+            if (liveBand.metal_archives_url) setMetalArchivesUrl(liveBand.metal_archives_url);
+            if (liveBand.featured_youtube_url) setYoutubeUrl(liveBand.featured_youtube_url);
+
+            parsedLiveLineup = parseBandLineup(liveBand.lineup);
+            if (!lineupDirtyRef.current) {
+              if (isGorgasm && isStaleGorgasmLineup(parsedLiveLineup)) {
+                setLineup(GORGASM_OFFICIAL_LINEUP);
+              } else if (parsedLiveLineup.length > 0) {
+                setLineup(parsedLiveLineup);
+              } else if (isBirdflesh) {
+                setLineup([
+                  { id: 'bf-1', name: 'Adde Mitroulis', role: 'Drums, Vocals', status: 'active', years: '1997–present' },
+                  { id: 'bf-2', name: 'Joakim Svensson', role: 'Bass, Vocals', status: 'active', years: '2007–present' },
+                  { id: 'bf-3', name: 'Elis Edin Markskog', role: 'Guitars, Vocals', status: 'active', years: '2011–present' }
+                ]);
+              }
+            }
+          }
+
+          if (liveReleases && Array.isArray(liveReleases) && liveReleases.length > 0) {
+            const mappedReleases: DiscographyRelease[] = liveReleases.map((r: any) => {
+              const cover = getReleaseCoverUrl(r);
+              return {
+                id: r.id,
+                title: r.title,
+                year: resolveAuthenticReleaseYear(r) || r.year || '',
+                type: r.type || 'album',
+                image_url: cover,
+                cover_url: cover,
+                cover_image: cover,
+                coverUrl: cover,
+                coverImage: cover,
+                image: cover,
+                release_info: r.label || '',
+                catalog_id: r.catalog_id || '',
+                label: r.label || '',
+                tracks: Array.isArray(r.tracks) ? r.tracks : []
+              };
+            });
+            const mergedReleases = deduplicateDiscography([...initialAlbums, ...mappedReleases], bandName);
+            setAlbums(mergedReleases.sort((a: any, b: any) => parseInt(b.year || '0') - parseInt(a.year || '0')));
+            if (band.id) saveBandDiscographyToCache(band.id, band.name, mergedReleases);
+            if (liveBand?.id) saveBandDiscographyToCache(liveBand.id, liveBand.band_name, mergedReleases);
+          }
+
+          if (liveBand) {
+            const effectiveLineup = parsedLiveLineup.length > 0 ? parsedLiveLineup : cleanLineup;
+            const liveLogo = resolveCanonicalBandLogo(liveBand) || resolveCanonicalBandLogo(band);
+            const liveCover = resolveCanonicalBandCover(liveBand) || resolveCanonicalBandCover(band);
+            const refreshedBand: CommunityBandRecord = {
+              ...band,
+              ...liveBand,
+              name: liveBand.band_name || liveBand.name || band.name,
+              band_name: liveBand.band_name || liveBand.name || band.name,
+              avatar_url: liveLogo,
+              logo_url: liveLogo,
+              cover_url: liveCover,
+              banner_url: liveCover,
+              status: liveBand.status || ((liveBand as any).is_split_up ? 'split-up' : band.status),
+              lineup: (isGorgasm && isStaleGorgasmLineup(effectiveLineup)) ? GORGASM_OFFICIAL_LINEUP : effectiveLineup,
+              discography: (liveReleases && liveReleases.length > 0) ? deduplicateDiscography([...initialAlbums, ...liveReleases], bandName) : band.discography
+            };
+            communityBandManager.upsertBand(refreshedBand, { isNew: false, skipRemoteSync: true });
+            setSelectedBand(refreshedBand);
+            selectedBandRef.current = refreshedBand;
+          }
+        }).catch(() => {});
+      }
+    } catch (_) {}
+  };
+
+  // Delete Community Band Archive with clean in-app confirmation
+  const handleDeleteBand = (band: CommunityBandRecord) => {
+    setConfirmDeleteBand(band);
+  };
+
+  const executeDeleteBand = async (band: CommunityBandRecord) => {
+    setIsDeleting(true);
+    try {
+      const bandTitle = band.name || 'this band';
+      const res = await communityBandManager.deleteCommunityBand(band.id, true);
+      if (res.success) {
+        try {
+          localStorage.removeItem(`nexus_core_band_lineup_${band.id}`);
+          localStorage.removeItem(`nexus_core_band_lineup_${ensureUUID(band.id)}`);
+          if (band.name) localStorage.removeItem(`nexus_core_band_lineup_${band.name.toLowerCase().trim()}`);
+          localStorage.removeItem(`nexus_core_band_logo_${band.id}`);
+          localStorage.removeItem(`nexus_core_band_cover_${band.id}`);
+        } catch {}
+        setBandsList(prev => prev.filter(b => b.id !== band.id && ensureUUID(b.id) !== ensureUUID(band.id) && (b.name || '').toLowerCase().trim() !== (band.name || '').toLowerCase().trim()));
+        triggerNotification?.(`🗑️ Deleted community archive for "${bandTitle}".`);
+        loadBands();
+        if (selectedBand?.id === band.id) {
+          resetForm();
+          setActivePage('list');
+        }
+      } else {
+        triggerNotification?.(`❌ Failed to delete archive: ${res.error || 'Unknown error'}`);
+      }
+    } finally {
+      setIsDeleting(false);
+      setConfirmDeleteBand(null);
+    }
+  };
+
+  const resetForm = () => {
+    populateReqIdRef.current++;
+    lineupDirtyRef.current = false;
+    setSelectedBand(null);
+    selectedBandRef.current = null;
+    setIsCreatingNew(true);
+    setName('');
+    setGenre('Extreme Metal');
+    setMicroGenres(['Death Metal']);
+    setFoundedYear('');
+    setBandStatus('active');
+    setCity('');
+    setStateProvince('');
+    setCountry('USA');
+    setRecordLabel('');
+    setBio('Not written yet.');
+    setAvatarUrl('');
+    setCoverUrl('');
+    setSpotifyUrl('');
+    setBandcampUrl('');
+    setMetalArchivesUrl('');
+    setYoutubeUrl('');
+    setCuratorHandle(userProfile?.console_handle || userProfile?.handle || '@community_archivist');
+    setLineup([]);
+    setAlbums([]);
+    setEditingAlbumIdx(null);
+    setEditingMemberIdx(null);
+    resetReleaseInputs();
+    setActivePage('editor');
+  };
+
+  const resetReleaseInputs = () => {
+    setReleaseTitle('');
+    setReleaseYear(new Date().getFullYear().toString());
+    setReleaseType('album');
+    setReleaseLabel('');
+    setReleaseCatalogId('');
+    setReleaseImageUrl('');
+    setReleaseTracks([]);
+    setNewTrackTitle('');
+    setNewTrackDuration('');
+    setNewTrackLyrics('');
+    setShowNewTrackLyricsInput(false);
+    setEditingAlbumIdx(null);
+  };
+
+  // Lineup Handlers
+  const handleAddOrUpdateMember = () => {
+    if (!newMemberName.trim()) return;
+    lineupDirtyRef.current = true;
+
+    if (editingMemberIdx !== null) {
+      const updated = [...lineup];
+      updated[editingMemberIdx] = {
+        ...updated[editingMemberIdx],
+        name: newMemberName.trim(),
+        role: newMemberRole.trim() || 'Musician',
+        status: newMemberStatus,
+        years: newMemberYears.trim() || 'Present'
+      };
+      setLineup(updated);
+      setEditingMemberIdx(null);
+    } else {
+      const newMem: LineupMember = {
+        id: `mem-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+        name: newMemberName.trim(),
+        role: newMemberRole.trim() || 'Musician',
+        status: newMemberStatus,
+        years: newMemberYears.trim() || 'Present'
+      };
+      setLineup([...lineup, newMem]);
+    }
+
+    setNewMemberName('');
+    setNewMemberRole('');
+    setNewMemberYears('');
+    setNewMemberStatus('active');
+  };
+
+  const handleEditMember = (idx: number) => {
+    const mem = lineup[idx];
+    setEditingMemberIdx(idx);
+    setNewMemberName(mem.name);
+    setNewMemberRole(mem.role);
+    setNewMemberStatus(mem.status || 'active');
+    setNewMemberYears(mem.years || '');
+  };
+
+  const handleRemoveMember = (idx: number) => {
+    lineupDirtyRef.current = true;
+    setLineup(lineup.filter((_, i) => i !== idx));
+    if (editingMemberIdx === idx) {
+      setEditingMemberIdx(null);
+      setNewMemberName('');
+      setNewMemberRole('');
+      setNewMemberYears('');
+    }
+  };
+
+  // Discography & Tracklist Handlers
+  const handleLoadReleaseForEdit = (idx: number) => {
+    const alb = albums[idx];
+    setEditingAlbumIdx(idx);
+    setReleaseTitle(alb.title);
+    setReleaseYear(alb.year);
+    setReleaseType((['album', 'ep', 'single', 'demo'].includes((alb.type || '').toLowerCase()) ? (alb.type.toLowerCase() as any) : 'album'));
+    setReleaseLabel(alb.label || alb.release_info || '');
+    setReleaseCatalogId(alb.catalog_id || '');
+    setReleaseImageUrl(getReleaseCoverUrl(alb));
+    setReleaseTracks(alb.tracks || []);
+    setNewTrackTitle('');
+    setNewTrackDuration('');
+  };
+
+  const handleSaveRelease = () => {
+    if (!releaseTitle.trim()) return;
+
+    const releaseId = editingAlbumIdx !== null 
+      ? (albums[editingAlbumIdx]?.id ? ensureUUID(albums[editingAlbumIdx].id) : generateUUID())
+      : generateUUID();
+
+    const coverVal = releaseImageUrl.trim() || undefined;
+    const releaseData: DiscographyRelease = {
+      id: releaseId,
+      title: releaseTitle.trim(),
+      year: releaseYear.trim() || new Date().getFullYear().toString(),
+      type: releaseType,
+      image_url: coverVal,
+      cover_url: coverVal,
+      cover_image: coverVal,
+      coverUrl: coverVal,
+      coverImage: coverVal,
+      image: coverVal,
+      label: releaseLabel.trim() || undefined,
+      release_info: releaseLabel.trim() || undefined,
+      catalog_id: releaseCatalogId.trim() || undefined,
+      tracks: releaseTracks
+    };
+
+    let updated = [...albums];
+    if (editingAlbumIdx !== null) {
+      updated[editingAlbumIdx] = releaseData;
+    } else {
+      updated.push(releaseData);
+    }
+    updated.sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0'));
+    setAlbums(updated);
+
+    resetReleaseInputs();
+  };
+
+  const handleRemoveAlbum = (idx: number) => {
+    const targetAlbum = albums[idx];
+    if (targetAlbum) {
+      markReleaseDeletedInStorage(targetAlbum.id, targetAlbum.title, selectedBand?.id || selectedBand?.name);
+      if (targetAlbum.id) {
+        deleteReleaseFromDatabase(targetAlbum.id, undefined, selectedBand?.id || selectedBand?.name, targetAlbum.title);
+      }
+    }
+    setAlbums(albums.filter((_, i) => i !== idx));
+    if (editingAlbumIdx === idx) {
+      resetReleaseInputs();
+    }
+  };
+
+  const handleAddTrackToRelease = () => {
+    if (!newTrackTitle.trim()) return;
+    const trackNum = releaseTracks.length + 1;
+    const newTrack: DiscographyTrack = {
+      number: trackNum,
+      title: newTrackTitle.trim(),
+      duration: newTrackDuration.trim() || '3:30',
+      lyrics: newTrackLyrics.trim() || undefined
+    };
+    setReleaseTracks([...releaseTracks, newTrack]);
+    setNewTrackTitle('');
+    setNewTrackDuration('');
+    setNewTrackLyrics('');
+    setShowNewTrackLyricsInput(false);
+  };
+
+  const handleRemoveTrack = (tIdx: number) => {
+    const filtered = releaseTracks.filter((_, i) => i !== tIdx).map((t, idx) => ({
+      ...t,
+      number: idx + 1
+    }));
+    setReleaseTracks(filtered);
+  };
+
+  // Full Save to Supabase and Local Storage
+  const handleSave = async () => {
+    if (isSaving || isSavingRef.current || !name.trim()) return;
+
+    isSavingRef.current = true;
+    setIsSaving(true);
+    populateReqIdRef.current++;
+
+    try {
+      // Auto-commit any currently typed lineup member in the input fields
+      let finalLineup = [...lineup];
+      if (newMemberName.trim()) {
+        const pendingMember: LineupMember = {
+          id: editingMemberIdx !== null && lineup[editingMemberIdx]?.id
+            ? lineup[editingMemberIdx].id
+            : `mem-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+          name: newMemberName.trim(),
+          role: newMemberRole.trim() || 'Musician',
+          status: newMemberStatus,
+          years: newMemberYears.trim() || 'Present'
+        };
+        if (editingMemberIdx !== null && editingMemberIdx < finalLineup.length) {
+          finalLineup[editingMemberIdx] = pendingMember;
+        } else {
+          finalLineup.push(pendingMember);
+        }
+        setLineup(finalLineup);
+        setNewMemberName('');
+        setNewMemberRole('');
+        setNewMemberYears('');
+        setEditingMemberIdx(null);
+      }
+
+      // Auto-commit any currently typed release in the input fields
+      let finalAlbums = [...albums];
+      if (releaseTitle.trim()) {
+        const releaseId = editingAlbumIdx !== null && albums[editingAlbumIdx]?.id
+          ? ensureUUID(albums[editingAlbumIdx].id)
+          : generateUUID();
+        const coverVal = releaseImageUrl.trim() || undefined;
+        const pendingRelease: DiscographyRelease = {
+          id: releaseId,
+          title: releaseTitle.trim(),
+          year: releaseYear.trim() || new Date().getFullYear().toString(),
+          type: releaseType,
+          image_url: coverVal,
+          cover_url: coverVal,
+          cover_image: coverVal,
+          coverUrl: coverVal,
+          coverImage: coverVal,
+          image: coverVal,
+          label: releaseLabel.trim() || undefined,
+          release_info: releaseLabel.trim() || undefined,
+          catalog_id: releaseCatalogId.trim() || undefined,
+          tracks: releaseTracks
+        };
+        if (editingAlbumIdx !== null && editingAlbumIdx < finalAlbums.length) {
+          finalAlbums[editingAlbumIdx] = pendingRelease;
+        } else {
+          finalAlbums.push(pendingRelease);
+        }
+        finalAlbums.sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0'));
+        setAlbums(finalAlbums);
+        resetReleaseInputs();
+      }
+
+      const resolvedCreatorId = selectedBand?.creator_id || userProfile?.id || (userProfile?.console_handle ? userProfile.console_handle : undefined);
+
+      const parsedFoundedYear = foundedYear.trim() ? parseInt(foundedYear.trim(), 10) : undefined;
+      const validFoundedYear = (parsedFoundedYear && !isNaN(parsedFoundedYear) && parsedFoundedYear > 0) ? parsedFoundedYear : undefined;
+
+      // Assign valid UUID: new generation for new band, preserved UUID for existing band
+      const bandId = isCreatingNew
+        ? generateUUID()
+        : (selectedBand?.id ? ensureUUID(selectedBand.id) : generateUUID());
+
+      const rawLineupToSave = (finalLineup.length === 0 && !lineupDirtyRef.current && selectedBand?.lineup)
+        ? parseBandLineup(selectedBand.lineup)
+        : finalLineup;
+      const finalLineupToSave = deduplicateLineup(rawLineupToSave);
+      const isExplicitLineupClear = Boolean(lineupDirtyRef.current && finalLineupToSave.length === 0);
+      const finalAlbumsToSave = finalAlbums;
+
+      const bandPayload: Partial<CommunityBandRecord> & { band_name: string } = {
+        id: bandId,
+        band_name: name.trim(),
+        name: name.trim(),
+        genre: genre || (microGenres.length > 0 ? microGenres[0] : 'Extreme Metal'),
+        micro_genres: microGenres.length > 0 ? microGenres : (genre ? [genre] : ['Extreme Metal']),
+        subgenres: microGenres.length > 0 ? microGenres : (genre ? [genre] : ['Extreme Metal']),
+        founded_year: validFoundedYear !== undefined ? String(validFoundedYear) : undefined,
+        status: bandStatus,
+        is_split_up: bandStatus === 'split-up',
+        city: city.trim(),
+        state_province: stateProvince.trim(),
+        country: country.trim(),
+        record_label: recordLabel.trim() || undefined,
+        label: recordLabel.trim() || undefined,
+        bio: bio.trim(),
+        avatar_url: avatarUrl.trim(),
+        logo_url: avatarUrl.trim(),
+        cover_url: coverUrl.trim(),
+        banner_url: coverUrl.trim(),
+        spotify_url: spotifyUrl.trim() || undefined,
+        spotify: spotifyUrl.trim() || undefined,
+        bandcamp_url: bandcampUrl.trim() || undefined,
+        bandcamp: bandcampUrl.trim() || undefined,
+        metal_archives_url: metalArchivesUrl.trim() || undefined,
+        youtube_url: youtubeUrl.trim() || undefined,
+        featured_youtube_url: youtubeUrl.trim() || undefined,
+        lineup: finalLineupToSave,
+        discography: finalAlbumsToSave,
+        creator_id: resolvedCreatorId,
+        curated_by: curatorHandle || userProfile?.console_handle || userProfile?.handle || '@fan_archivist',
+        curator_name: userProfile?.full_name || userProfile?.name || 'Community Archivist',
+        verification_status: selectedBand?.verification_status || 'community_archive'
+      };
+
+      // Update local state/cache immediately without triggering a competing background Supabase sync
+      const savedRecord = communityBandManager.upsertCommunityBand(bandPayload, {
+        isNew: isCreatingNew,
+        skipRemoteSync: true,
+        allowEmptyLineup: isExplicitLineupClear
+      });
+
+      // Cache or clear lineup in localStorage for immediate cross-portal availability
+      try {
+        const nameKey = name.trim().toLowerCase();
+        const lineupKeys = Array.from(new Set([
+          `nexus_core_band_lineup_${bandId}`,
+          `nexus_core_band_lineup_${ensureUUID(bandId)}`,
+          savedRecord?.id ? `nexus_core_band_lineup_${savedRecord.id}` : null,
+          savedRecord?.id ? `nexus_core_band_lineup_${ensureUUID(savedRecord.id)}` : null,
+          nameKey ? `nexus_core_band_lineup_${nameKey}` : null,
+          nameKey ? `nexus_core_band_lineup_${nameKey.replace(/[^a-z0-9]/g, '_')}` : null,
+          nameKey ? `nexus_core_band_lineup_${nameKey.replace(/[^a-z0-9]/g, '-')}` : null
+        ].filter(Boolean) as string[]));
+
+        if (finalLineupToSave.length > 0) {
+          const serializedLineup = JSON.stringify(finalLineupToSave);
+          lineupKeys.forEach(k => localStorage.setItem(k, serializedLineup));
+        } else if (isExplicitLineupClear) {
+          lineupKeys.forEach(k => localStorage.setItem(k, '[]'));
+        }
+        window.dispatchEvent(new CustomEvent('nexus_band_lineup_updated', {
+          detail: { bandId: savedRecord?.id || bandId, lineup: finalLineupToSave }
+        }));
+      } catch {}
+
+      // Cache discography to localStorage and memory for permanent resilience
+      try {
+        saveBandDiscographyToCache(bandId, name, finalAlbumsToSave);
+        if (savedRecord?.id) {
+          saveBandDiscographyToCache(savedRecord.id, name, finalAlbumsToSave);
+        }
+        window.dispatchEvent(new CustomEvent('nexus_band_discography_updated', {
+          detail: { bandId: savedRecord?.id || bandId, discography: finalAlbumsToSave }
+        }));
+      } catch {}
+
+      // Single serialized Supabase sync (awaits completion with explicit lineup intent)
+      try {
+        const syncPayload: CommunityBandRecord = {
+          ...savedRecord,
+          lineup: finalLineupToSave,
+          discography: finalAlbumsToSave
+        };
+        const syncRes = await communityBandManager.syncToSupabaseTables(syncPayload, {
+          isNew: isCreatingNew,
+          allowEmptyLineup: isExplicitLineupClear
+        });
+        if (!syncRes.success && syncRes.error) {
+          console.error('[CommunityBandCuratorModal] Remote Supabase sync error:', syncRes.error);
+          triggerNotification?.(`⚠️ Saved locally, cloud sync notice: ${syncRes.error}`);
+        } else {
+          triggerNotification?.(`⚡ Saved & synchronized "${savedRecord.name}" (${finalLineupToSave.length} members, ${finalAlbumsToSave.length} releases) to cloud archive!`);
+        }
+      } catch (syncErr: any) {
+        console.warn('[CommunityBandCuratorModal] Remote Supabase sync deferred (offline / offline queue active):', syncErr);
+        triggerNotification?.(`⚡ Saved locally (${savedRecord.name}). Remote sync queued.`);
+      }
+
+      setSavedFeedback(true);
+      setTimeout(() => setSavedFeedback(false), 3000);
+
+      // Re-fetch authoritative record ID/fields after sync without re-running populateForm's racy async re-clobber
+      const canonicalSaved = communityBandManager.findByName(savedRecord.name || name.trim()) || savedRecord;
+      const normalizedSaved: CommunityBandRecord = {
+        ...canonicalSaved,
+        lineup: finalLineupToSave,
+        discography: finalAlbumsToSave
+      };
+      setIsCreatingNew(false);
+      setSelectedBand(normalizedSaved);
+      selectedBandRef.current = normalizedSaved;
+      lineupDirtyRef.current = false;
+      prevBandKeyRef.current = `${normalizedSaved.id || ''}:${normalizedSaved.name || ''}`;
+      setLineup(finalLineupToSave);
+      setAlbums(finalAlbumsToSave);
+      loadBands();
+      onSaved?.(normalizedSaved);
+    } catch (error) {
+      console.error('Failed to save archive:', error);
+      triggerNotification?.(`❌ Failed to save band archive: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const filteredBands = bandsList
+    .filter((b) =>
+      (b.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (b.genre || '').toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true }));
+
+  return (
+    <div className="fixed inset-0 z-[1000005] bg-black/90 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 md:p-6 pb-0 sm:pb-6 overflow-y-auto animate-in fade-in duration-200">
+      <div className="w-full max-w-4xl bg-[#090a0f] border border-zinc-800 rounded-none sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full max-h-[100dvh] sm:max-h-[88vh] sm:h-[88vh]">
+        
+        {/* Global Modal Header - Compact on mobile */}
+        <div className="px-3 py-2 sm:px-5 sm:py-3.5 border-b border-zinc-850 bg-gradient-to-r from-zinc-950 via-zinc-900/70 to-zinc-950 flex items-center justify-between shrink-0 gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <h3 className="text-xs sm:text-base font-black text-white font-display uppercase tracking-wide truncate">
+                  {activePage === 'editor' 
+                    ? (name.trim() ? name : (isCreatingNew ? 'New Archive' : 'Band Editor')) 
+                    : 'Community Band Hub'}
+                </h3>
+                <span className="hidden xs:inline-block text-[8px] sm:text-[9px] font-mono font-black uppercase px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
+                  SUPABASE
+                </span>
+              </div>
+              <p className="text-[10px] sm:text-xs text-zinc-400 font-sans truncate hidden sm:block">
+                {activePage === 'list' 
+                  ? 'Select an existing archive or create a new community band profile.'
+                  : (isCreatingNew ? 'Creating New Archive' : `Editing: ${selectedBand?.name || 'Band'}`)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            {activePage === 'editor' && (
+              <>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 font-mono text-[11px] sm:text-xs font-bold uppercase flex items-center gap-1 transition-all cursor-pointer shadow"
+                  title="Start a blank band profile from scratch"
+                >
+                  <Plus className="w-3.5 h-3.5 text-zinc-400" />
+                  <span className="hidden sm:inline">Blank</span>
+                </button>
+
+                {selectedBand && !isCreatingNew && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteBand(selectedBand)}
+                    className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-500/40 font-mono text-[11px] sm:text-xs font-bold uppercase flex items-center gap-1 transition-all cursor-pointer shadow"
+                    title="Permanently delete this community band archive"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Delete</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setActivePage('list')}
+                  className="px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-400 font-mono text-[11px] sm:text-xs font-bold uppercase flex items-center gap-1 border border-zinc-800 cursor-pointer"
+                  title="Return to existing archives list"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline">List</span>
+                </button>
+              </>
+            )}
+
+            <button
+              onClick={onClose}
+              className="p-1.5 sm:p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer border border-zinc-800"
+              title="Close modal"
+            >
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* PAGE 1: EXISTING ARCHIVES LIST (Explorer) */}
+        {activePage === 'list' && (
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-8 sm:pb-6 space-y-4 bg-zinc-950/40">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-mono font-bold text-white uppercase tracking-wider">
+                  Existing Archives ({bandsList.length})
+                </h4>
+                <p className="text-xs text-zinc-400">
+                  Tap any archive to open the mobile-optimized editor, or create a brand new fan archive.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSyncAllToSupabase}
+                  disabled={isSyncingAll}
+                  className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-400 hover:text-amber-300 border border-amber-500/30 font-mono font-bold text-xs uppercase flex items-center justify-center gap-2 cursor-pointer transition-all shadow active:scale-95 disabled:opacity-50"
+                  title="Push all community archives, members, and discography tracklists directly to Supabase cloud tables"
+                >
+                  {isSyncingAll ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                      <span className="truncate max-w-[140px] sm:max-w-[200px]">{syncStatusText || 'Syncing...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Database className="w-4 h-4 text-amber-400" />
+                      <span>Push All to Supabase</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSyncingCloud}
+                  onClick={async () => {
+                    if (isSyncingCloud) return;
+                    setIsSyncingCloud(true);
+                    setFailedLogoKeys({});
+                    triggerNotification?.('🔄 Syncing all community bands from Supabase cloud...');
+                    try {
+                      const remote = await communityBandManager.fetchFromSupabase({ authoritative: true });
+                      const nextList = remote && remote.length > 0 ? remote : communityBandManager.getAll();
+                      setBandsList(nextList);
+                      if (remote && remote.length > 0) {
+                        triggerNotification?.(`✅ Synced ${remote.length} community bands from Supabase cloud!`);
+                      } else {
+                        triggerNotification?.(`✅ Loaded ${nextList.length} community bands from local archives.`);
+                      }
+                    } catch (err: any) {
+                      const fallbackList = communityBandManager.getAll();
+                      setBandsList(fallbackList);
+                      triggerNotification?.(`✅ Loaded ${fallbackList.length} community bands.`);
+                    } finally {
+                      setIsSyncingCloud(false);
+                    }
+                  }}
+                  className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-sky-400 hover:text-sky-300 border border-sky-500/30 font-mono font-bold text-xs uppercase flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow active:scale-95 disabled:opacity-50"
+                  title="Fetch latest updates from Supabase cloud"
+                >
+                  <RefreshCw className={`w-4 h-4 text-sky-400 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingCloud ? 'Syncing...' : 'Sync Cloud'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 font-mono font-bold text-xs uppercase flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow active:scale-95"
+                  title="Start a blank profile from scratch"
+                >
+                  <Plus className="w-4 h-4 text-zinc-400" /> Blank
+                </button>
+              </div>
+            </div>
+
+            {/* Search */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search by band name, genre, location..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm font-mono text-white placeholder-zinc-500 outline-none focus:border-amber-500/60 shadow-inner"
+              />
+            </div>
+
+            {/* Band Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-6">
+              {filteredBands.map((band, bIdx) => (
+                <div
+                  key={band.id ? `band-${band.id}-${bIdx}` : `band-${bIdx}`}
+                  onClick={() => populateForm(band)}
+                  className="w-full text-left p-3.5 sm:p-4 rounded-xl border bg-zinc-900/60 border-zinc-800/80 hover:border-amber-500/50 hover:bg-zinc-900 transition-all flex items-center gap-3.5 cursor-pointer shadow-sm group"
+                >
+                  {(() => {
+                    const cardKey = String(band.id || band.name || bIdx);
+                    const isGorg = isGorgasmBand(band.id || band.name || (band as any).band_name, (band as any).custom_slug);
+                    const bestAvatar = resolveCanonicalBandLogo(band) || (isGorg ? GORGASM_OFFICIAL_LOGO : '');
+                    const showMonogram = !bestAvatar || Boolean(failedLogoKeys[cardKey]);
+                    const initials = (band.name || (band as any).band_name || 'BD')
+                      .trim()
+                      .split(/\s+/)
+                      .slice(0, 2)
+                      .map((w: string) => w[0] || '')
+                      .join('')
+                      .toUpperCase() || 'BD';
+
+                    if (showMonogram) {
+                      return (
+                        <div
+                          aria-label={`${band.name} monogram placeholder`}
+                          className="w-14 h-14 rounded-xl bg-zinc-950 border border-zinc-700/80 shrink-0 flex items-center justify-center relative overflow-hidden group-hover:scale-105 transition-transform"
+                        >
+                          <svg
+                            viewBox="0 0 56 56"
+                            className="absolute inset-0 w-full h-full pointer-events-none opacity-45"
+                            aria-hidden="true"
+                          >
+                            <circle cx="28" cy="28" r="22" fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="4 3" />
+                          </svg>
+                          <span className="relative z-10 font-mono font-black text-sm tracking-wider text-zinc-200">
+                            {initials}
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <img
+                        src={bestAvatar}
+                        alt={band.name}
+                        className="w-14 h-14 rounded-xl object-cover border border-zinc-750 shrink-0 group-hover:scale-105 transition-transform"
+                        onError={(e) => {
+                          const imgEl = e.currentTarget as HTMLImageElement;
+                          if (isGorg && imgEl.src !== GORGASM_OFFICIAL_LOGO) {
+                            imgEl.src = GORGASM_OFFICIAL_LOGO;
+                          } else {
+                            setFailedLogoKeys(prev => (prev[cardKey] ? prev : { ...prev, [cardKey]: true }));
+                          }
+                        }}
+                      />
+                    );
+                  })()}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-bold text-white truncate font-display group-hover:text-amber-300 transition-colors">
+                        {band.name}
+                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+
+                        <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${
+                          band.verification_status === 'verified_official'
+                            ? 'bg-emerald-950/80 text-emerald-400 border-emerald-500/40'
+                            : 'bg-amber-950/80 text-amber-400 border-amber-500/40'
+                        }`}>
+                          {band.verification_status === 'verified_official' ? 'VERIFIED' : 'FAN ARCHIVE'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-zinc-400 truncate font-mono mt-1 flex items-center gap-1.5 flex-wrap">
+                      <span>{band.genre} • {band.city || band.country || 'Global'}</span>
+                      {(() => {
+                        const bStatus = resolveBandStatus(band);
+                        const label = getBandStatusLabel(bStatus);
+                        const badgeCls = getBandStatusBadgeClass(bStatus);
+                        return (
+                          <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${badgeCls}`}>
+                            {label}
+                          </span>
+                        );
+                      })()}
+                    </div>
+
+                    <div className="text-[10px] text-zinc-500 font-mono mt-1.5 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        {(() => {
+                          const cached = loadBandDiscographyFromCache(band.id, band.name) || [];
+                          const direct = band.discography || [];
+                          const combined = deduplicateDiscography([...direct, ...cached], band.name);
+                          const discoCount = combined.length;
+                          return <span>💿 {discoCount} {discoCount === 1 ? 'release' : 'releases'}</span>;
+                        })()}
+                        <span>👥 {parseBandLineup(band.lineup).length} members</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-amber-400 font-bold group-hover:underline text-xs">Edit →</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteBand(band);
+                          }}
+                          className="p-1 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-950/40 border border-transparent hover:border-red-500/40 transition-colors cursor-pointer"
+                          title={`Delete "${band.name}" archive`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {filteredBands.length === 0 && (
+                <div className="col-span-full py-12 text-center text-zinc-500 font-mono text-xs border border-dashed border-zinc-800 rounded-2xl">
+                  No band archives found matching "{searchQuery}". Click "Blank" above to create one.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* PAGE 2: EDITOR & CREATOR PAGE */}
+        {activePage === 'editor' && (
+          <div className="flex-1 flex flex-col overflow-hidden bg-[#090a0f]">
+            
+            {/* Top Sub-navigation Tabs */}
+            <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-zinc-850 bg-zinc-950/80 shrink-0 overflow-x-auto gap-2">
+              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('overview')}
+                  className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                    activeTab === 'overview'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  }`}
+                >
+                  <Info className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> <span>Overview</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('lineup')}
+                  className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                    activeTab === 'lineup'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  }`}
+                >
+                  <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> <span>Lineup ({lineup.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('discography')}
+                  className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                    activeTab === 'discography'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  }`}
+                >
+                  <Disc className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> <span>Releases ({albums.length})</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {savedFeedback && (
+                  <span className="text-[11px] font-mono font-bold text-emerald-400 flex items-center gap-1 animate-in fade-in">
+                    <Check className="w-3.5 h-3.5" /> Saved!
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSaving || !name.trim()}
+                  className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-mono font-black text-[10px] sm:text-xs uppercase tracking-wide cursor-pointer flex items-center gap-1.5 transition-all active:scale-95 shadow"
+                  title="Quick Save & Sync Archive"
+                >
+                  {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                  <span className="hidden xs:inline">Save</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Editor Content */}
+            <div className="flex-1 overflow-y-auto p-3 sm:p-5 pb-10 sm:pb-8 space-y-3.5">
+              
+              {/* TAB 1: OVERVIEW & MEDIA */}
+              {activeTab === 'overview' && (
+                <div className="space-y-3 animate-in fade-in duration-150">
+
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="space-y-1 sm:col-span-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Band / Artist Name *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Gorguts, Dying Fetus..."
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                      />
+                    </div>
+
+                    <div className="space-y-1 sm:col-span-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Founded Year</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 1991"
+                        value={foundedYear}
+                        onChange={(e) => setFoundedYear(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                      />
+                    </div>
+
+                    <div className="space-y-1 sm:col-span-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Activity Status</label>
+                      <select
+                        value={bandStatus}
+                        onChange={(e) => setBandStatus(e.target.value as BandActivityStatus)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                      >
+                        <option value="active">Active Band (displays &quot;(active)&quot;)</option>
+                        <option value="split-up">Split-Up / Disbanded (displays &quot;(split-up)&quot;)</option>
+                        <option value="on-hold">On Hold / Hiatus (displays &quot;(on-hold)&quot;)</option>
+                        <option value="unknown">Unknown Activity (displays &quot;(unknown)&quot;)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Smart Divergence Detection: If user edited an existing archive's name */}
+                  {selectedBand && !isCreatingNew && name.trim() && name.trim().toLowerCase() !== selectedBand.name.trim().toLowerCase() && (
+                    <div className="p-3 bg-amber-950/30 border border-amber-500/40 rounded-xl space-y-2 text-xs font-mono animate-in fade-in duration-200">
+                      <div className="flex items-center gap-1.5 text-amber-300 font-bold">
+                        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>Creating a new band or renaming &quot;{selectedBand.name}&quot;?</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-300 leading-relaxed">
+                        You changed the name while editing existing profile <strong>{selectedBand.name}</strong> ({albums.length} releases, {lineup.length} members). 
+                        To prevent copying {selectedBand.name}&apos;s discography to <strong>{name}</strong>, choose an action:
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedBand(null);
+                            setIsCreatingNew(true);
+                            setAlbums([]);
+                            setLineup([]);
+                            setBio('');
+                            setRecordLabel('');
+                            setSpotifyUrl('');
+                            setBandcampUrl('');
+                            setMetalArchivesUrl('');
+                            setYoutubeUrl('');
+                            triggerNotification?.(`✨ Started fresh archive for "${name}". Old releases and lineup cleared.`);
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-black uppercase text-[10px] cursor-pointer flex items-center gap-1.5 shadow"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" /> Start Fresh Archive for {name} (Clear Releases)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedBand({ ...selectedBand, name: name.trim() });
+                            triggerNotification?.(`🏷️ Will rename "${selectedBand.name}" to "${name.trim()}".`);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-750 font-bold uppercase text-[10px] cursor-pointer"
+                        >
+                          Keep Releases &amp; Rename {selectedBand.name}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Primary Sonic Classification</label>
+                      <select 
+                        value={genre}
+                        onChange={(e) => {
+                          setGenre(e.target.value);
+                          const cluster = MASTER_GENRES.find(c => c.name === e.target.value);
+                          if (cluster && cluster.tags.length > 0) {
+                            setMicroGenres([cluster.tags[0].label]);
+                          } else {
+                            setMicroGenres([]);
+                          }
+                        }}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-amber-400 focus:border-amber-500 outline-none shadow-inner"
+                      >
+                        <option value="">SELECT CLASSIFICATION...</option>
+                        {MASTER_GENRES.map((g, gIdx) => (
+                          <option key={`${g.name}-${gIdx}`} value={g.name}>{g.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Record Label</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Relapse Records, Season of Mist..."
+                        value={recordLabel}
+                        onChange={(e) => setRecordLabel(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                      />
+                    </div>
+                  </div>
+
+                  {genre && (
+                    <div className="space-y-1.5 p-3 bg-zinc-950 border border-zinc-850 rounded-xl">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
+                        <span>Genre Tags & Subgenres (Maps to `micro_genres`)</span>
+                        <span className="text-[9px] text-amber-400 font-mono">{microGenres.length} selected</span>
+                      </label>
+                      <div className="flex flex-wrap gap-1.5 p-2 bg-black/60 border border-zinc-800 rounded-lg max-h-28 overflow-y-auto">
+                        {MASTER_GENRES.find(c => c.name === genre)?.tags.map((tagObj, idx) => {
+                          const tag = tagObj.label;
+                          const isSelected = microGenres.includes(tag);
+                          return (
+                            <button
+                              key={`${tagObj.id}-${idx}`}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setMicroGenres(microGenres.filter(t => t !== tag));
+                                } else {
+                                  if (microGenres.length < 5) {
+                                    setMicroGenres([...microGenres, tag]);
+                                  }
+                                }
+                              }}
+                              className={`text-[9px] font-mono px-2 py-1 rounded-md border transition-colors ${
+                                isSelected 
+                                  ? 'bg-amber-950/80 border-amber-500 text-amber-300 font-bold shadow-sm' 
+                                  : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                              }`}
+                            >
+                              {tag}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">City</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Montreal..."
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">State / Province</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Quebec, MD..."
+                        value={stateProvince}
+                        onChange={(e) => setStateProvince(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Country</label>
+                      <input
+                        type="text"
+                        placeholder="USA, Canada, Germany..."
+                        value={country}
+                        onChange={(e) => setCountry(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="curator-band-bio" className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
+                      <span>Bio / Band Description</span>
+                      <span className="text-[9px] text-zinc-500 font-mono">History & Background</span>
+                    </label>
+                    <textarea
+                      id="curator-band-bio"
+                      rows={3}
+                      placeholder="Origins, classic lineup, signature sound, lyrical themes..."
+                      value={bio}
+                      onChange={(e) => setBio(e.target.value)}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-zinc-600 focus:border-amber-500 outline-none shadow-inner resize-y transition-colors"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-zinc-950 border border-zinc-850 rounded-xl space-y-1.5">
+                    <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Youtube className="w-3.5 h-3.5 text-red-500" />
+                        <span>Featured YouTube URL</span>
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      value={youtubeUrl}
+                      onChange={(e) => setYoutubeUrl(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 focus:border-red-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Uploaders */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="space-y-1.5 bg-zinc-950 border border-zinc-850 p-3 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center gap-1.5">
+                          <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Avatar / Logo</span>
+                        </label>
+                        {isUploadingAvatar && (
+                          <span className="text-[9px] font-mono text-amber-400 flex items-center gap-1">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" /> Uploading...
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 shadow-inner">
+                          {avatarUrl ? (
+                            <img
+                              src={avatarUrl}
+                              alt="Avatar"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <span className="text-zinc-600 font-mono text-[9px]">NO IMG</span>
+                          )}
+                        </div>
+
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="relative inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition-colors shadow-sm overflow-hidden">
+                            <Upload className="w-3 h-3 pointer-events-none" />
+                            <span className="pointer-events-none">Upload Avatar</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleDeviceFileUpload(file, 'community-bands', 'community-avatar', (url) => setAvatarUrl(url), setIsUploadingAvatar);
+                                }
+                                if (e.target) e.target.value = '';
+                              }}
+                            />
+                          </label>
+                          {avatarUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setAvatarUrl('')}
+                              className="text-[9px] font-mono text-zinc-500 hover:text-red-400 text-left"
+                            >
+                              Remove avatar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 bg-zinc-950 border border-zinc-850 p-3 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center gap-1.5">
+                          <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Cover Banner</span>
+                        </label>
+                        {isUploadingCover && (
+                          <span className="text-[9px] font-mono text-amber-400 flex items-center gap-1">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" /> Uploading...
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-14 h-10 rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 shadow-inner">
+                          {coverUrl ? (
+                            <img src={coverUrl} alt="Cover" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-zinc-600 font-mono text-[9px]">NO BANNER</span>
+                          )}
+                        </div>
+
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="relative inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition-colors shadow-sm overflow-hidden">
+                            <Upload className="w-3 h-3 pointer-events-none" />
+                            <span className="pointer-events-none">Upload Banner</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleDeviceFileUpload(file, 'community-bands', 'community-banner', (url) => setCoverUrl(url), setIsUploadingCover);
+                                }
+                                if (e.target) e.target.value = '';
+                              }}
+                            />
+                          </label>
+                          {coverUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setCoverUrl('')}
+                              className="text-[9px] font-mono text-zinc-500 hover:text-red-400 text-left"
+                            >
+                              Remove banner
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Spotify URL</label>
+                      <input
+                        type="text"
+                        placeholder="https://open.spotify.com/artist/..."
+                        value={spotifyUrl}
+                        onChange={(e) => setSpotifyUrl(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-300 outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Bandcamp URL</label>
+                      <input
+                        type="text"
+                        placeholder="https://band.bandcamp.com"
+                        value={bandcampUrl}
+                        onChange={(e) => setBandcampUrl(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-300 outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Metal Archives URL</label>
+                      <input
+                        type="text"
+                        placeholder="https://metal-archives.com/..."
+                        value={metalArchivesUrl}
+                        onChange={(e) => setMetalArchivesUrl(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-300 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Danger Zone: Delete Community Archive */}
+                  {selectedBand && !isCreatingNew && (
+                    <div className="p-4 rounded-xl border border-red-900/30 bg-red-950/10 space-y-2 mt-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-mono font-bold text-red-400 uppercase flex items-center gap-1.5">
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete Community Archive</span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                            Permanently remove this community archive profile for &quot;{selectedBand.name}&quot; ({albums.length} releases, {lineup.length} members).
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteBand(selectedBand)}
+                          className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/40 text-xs font-mono font-bold uppercase flex items-center gap-1.5 cursor-pointer shadow transition-all shrink-0 active:scale-95"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete Archive</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 2: LINEUP */}
+              {activeTab === 'lineup' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+
+
+                  <div className="p-4 bg-zinc-950 border border-zinc-850 rounded-2xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                        <UserPlus className="w-4 h-4 text-amber-400" />
+                        {editingMemberIdx !== null ? `Edit Lineup Member #${editingMemberIdx + 1}` : 'Add Band Member'}
+                      </span>
+                      {editingMemberIdx !== null && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingMemberIdx(null);
+                            setNewMemberName('');
+                            setNewMemberRole('');
+                            setNewMemberYears('');
+                            setNewMemberStatus('active');
+                          }}
+                          className="text-xs font-mono text-zinc-400 hover:text-white"
+                        >
+                          Cancel Edit
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Musician Name *</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Trey Williams, Chuck Schuldiner"
+                          value={newMemberName}
+                          onChange={(e) => setNewMemberName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddOrUpdateMember();
+                            }
+                          }}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs font-mono text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Role / Instrument</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Drums, Vocals"
+                          value={newMemberRole}
+                          onChange={(e) => setNewMemberRole(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddOrUpdateMember();
+                            }
+                          }}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs font-mono text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Years Active</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 1993–present"
+                          value={newMemberYears}
+                          onChange={(e) => setNewMemberYears(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddOrUpdateMember();
+                            }
+                          }}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs font-mono text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-zinc-400">Status:</span>
+                        <div className="flex items-center gap-1.5">
+                          {(['active', 'past', 'touring'] as const).map((st, idx) => (
+                            <button
+                              key={`status-${st}-${idx}`}
+                              type="button"
+                              onClick={() => setNewMemberStatus(st)}
+                              className={`px-3 py-1 rounded-lg text-xs font-mono uppercase font-bold transition-all ${
+                                newMemberStatus === st
+                                  ? 'bg-amber-500 text-black shadow-sm'
+                                  : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                              }`}
+                            >
+                              {st}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleAddOrUpdateMember}
+                        disabled={!newMemberName.trim()}
+                        className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-mono font-black text-xs uppercase cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+                      >
+                        <Plus className="w-4 h-4" />
+                        {editingMemberIdx !== null ? 'Update Member' : 'Add to Lineup'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono font-bold text-zinc-400 uppercase">Current Lineup List ({lineup.length})</span>
+                      {lineup.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLineup([]);
+                            setEditingMemberIdx(null);
+                            triggerNotification?.('Cleared lineup members from form.');
+                          }}
+                          className="text-[11px] font-mono text-zinc-400 hover:text-red-400 flex items-center gap-1 cursor-pointer transition-colors px-2 py-1 rounded hover:bg-red-950/20 border border-transparent hover:border-red-900/40"
+                        >
+                          <Trash2 className="w-3 h-3" /> Clear Lineup
+                        </button>
+                      )}
+                    </div>
+                    {lineup.length === 0 ? (
+                      <div className="p-6 text-center rounded-xl border border-dashed border-zinc-800 text-zinc-500 font-mono text-xs">
+                        No lineup members added yet. Use the form above to add members.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {lineup.map((mem, mIdx) => (
+                          <div
+                            key={`mem-${mem.id || 'new'}-${mIdx}`}
+                            className="p-3 bg-zinc-950 border border-zinc-850 rounded-xl flex items-center justify-between gap-3"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-white font-display">{mem.name}</span>
+                                <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded uppercase ${
+                                  mem.status === 'active' ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' :
+                                  mem.status === 'touring' ? 'bg-blue-950 text-blue-400 border border-blue-500/30' :
+                                  'bg-zinc-800 text-zinc-400'
+                                }`}>
+                                  {mem.status || 'active'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                                {mem.role} • {mem.years || 'Present'}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleEditMember(mIdx)}
+                                className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-mono"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMember(mIdx)}
+                                className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-900"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: DISCOGRAPHY */}
+              {activeTab === 'discography' && (
+                <div className="space-y-3.5 animate-in fade-in duration-150">
+
+
+                  <div className="p-3 bg-zinc-950 border border-zinc-850 rounded-2xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <Disc className="w-3.5 h-3.5 text-amber-400" />
+                        {editingAlbumIdx !== null ? `Edit Release: ${releaseTitle}` : 'Add Album / EP / Demo Release'}
+                      </span>
+                      {editingAlbumIdx !== null && (
+                        <button
+                          type="button"
+                          onClick={resetReleaseInputs}
+                          className="text-[10px] font-mono text-zinc-400 hover:text-white"
+                        >
+                          Cancel Edit
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Release Title */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono text-zinc-400 uppercase">Release Title *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Considerated, Effigy of the Forgotten"
+                        value={releaseTitle}
+                        onChange={(e) => setReleaseTitle(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    {/* Release Year & Release Type on the same level */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Release Year</label>
+                        <input
+                          type="text"
+                          placeholder="1991"
+                          value={releaseYear}
+                          onChange={(e) => setReleaseYear(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Release Type</label>
+                        <select
+                          value={releaseType}
+                          onChange={(e: any) => setReleaseType(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
+                        >
+                          <option value="album">Full Album</option>
+                          <option value="ep">EP</option>
+                          <option value="single">Single</option>
+                          <option value="demo">Demo</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Shrunk Label input & Catalog ID next to it */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Record Label</label>
+                        <input
+                          type="text"
+                          placeholder="Roadrunner"
+                          value={releaseLabel}
+                          onChange={(e) => setReleaseLabel(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Catalog ID (Cat #)</label>
+                        <input
+                          type="text"
+                          placeholder="ROAR-019"
+                          value={releaseCatalogId}
+                          onChange={(e) => setReleaseCatalogId(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Album Artwork & Image Uploader */}
+                    <div className="space-y-1.5 bg-zinc-900/80 border border-zinc-850 p-3 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center gap-1.5">
+                          <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Release Artwork / Cover Image</span>
+                        </label>
+                        {isUploadingAlbumImg && (
+                          <span className="text-[9px] font-mono text-amber-400 flex items-center gap-1">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" /> Uploading...
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-black border border-zinc-800 flex items-center justify-center shrink-0 shadow-inner mt-0.5">
+                          {releaseImageUrl ? (
+                            <img src={releaseImageUrl} alt="Cover" className="w-full h-full object-cover" />
+                          ) : (
+                            <Disc className="w-4 h-4 text-zinc-600" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 space-y-2">
+                          <input
+                            type="text"
+                            placeholder="Paste image URL..."
+                            value={releaseImageUrl}
+                            onChange={(e) => setReleaseImageUrl(e.target.value)}
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white outline-none focus:border-amber-500"
+                          />
+
+                          <label className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition-colors shadow-sm">
+                            <Upload className="w-3 h-3" />
+                            <span>Upload Image File</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="sr-only"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleDeviceFileUpload(file, 'community-bands', 'release-art', (url) => setReleaseImageUrl(url), setIsUploadingAlbumImg);
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tracklist Builder */}
+                    <div
+                      onPaste={(e) => {
+                        const items = e.clipboardData?.items;
+                        if (!items) return;
+                        const files: File[] = [];
+                        for (let i = 0; i < items.length; i++) {
+                          if (items[i].type.startsWith('image/')) {
+                            const f = items[i].getAsFile();
+                            if (f) files.push(f);
+                          }
+                        }
+                        if (files.length > 0) {
+                          e.preventDefault();
+                          handleScanReleaseScreenshot(files);
+                        }
+                      }}
+                      className="pt-2 border-t border-zinc-850 space-y-2"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center gap-1.5">
+                          <span>Tracklist ({releaseTracks.length} tracks)</span>
+                        </label>
+                        <label
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-mono font-bold uppercase cursor-pointer transition-colors ${
+                            isScanningTracklistImg
+                              ? 'bg-red-500/20 border-red-500/40 text-red-300'
+                              : 'bg-red-600/15 hover:bg-red-600/25 border-red-500/30 text-red-300'
+                          }`}
+                          title="Upload or paste (Ctrl+V) a screenshot of a Metal-Archives tracklist to auto-fill all songs and album info"
+                        >
+                          {isScanningTracklistImg ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <span>Scanning Screenshot...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Camera className="w-3 h-3" />
+                              <span>Scan Screenshot to Fill Tracklist</span>
+                            </>
+                          )}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            disabled={isScanningTracklistImg}
+                            className="sr-only"
+                            onChange={(e) => {
+                              if (e.target.files?.length) {
+                                handleScanReleaseScreenshot(e.target.files);
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+
+                      {/* Song Title Input Full Width */}
+                      <div className="space-y-2 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-850">
+                        <input
+                          type="text"
+                          placeholder="Song Title (Full Width)..."
+                          value={newTrackTitle}
+                          onChange={(e) => setNewTrackTitle(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
+                        />
+
+                        {/* Under it: Duration, Add Lyrics button, Add Track button */}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="Duration (3:45)"
+                            value={newTrackDuration}
+                            onChange={(e) => setNewTrackDuration(e.target.value)}
+                            className="w-28 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white outline-none"
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => setShowNewTrackLyricsInput(!showNewTrackLyricsInput)}
+                            className={`px-2.5 py-1.5 rounded-lg border font-mono text-[10px] uppercase font-bold transition-colors ${
+                              showNewTrackLyricsInput || newTrackLyrics.trim()
+                                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                            }`}
+                          >
+                            {newTrackLyrics.trim() ? 'Lyrics Added ✓' : '+ Lyrics'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleAddTrackToRelease}
+                            disabled={!newTrackTitle.trim()}
+                            className="flex-1 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-mono text-xs uppercase font-bold shadow-sm"
+                          >
+                            + Track
+                          </button>
+                        </div>
+
+                        {showNewTrackLyricsInput && (
+                          <textarea
+                            placeholder="Paste track lyrics here..."
+                            value={newTrackLyrics}
+                            onChange={(e) => setNewTrackLyrics(e.target.value)}
+                            rows={3}
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-mono text-zinc-300 outline-none focus:border-amber-500"
+                          />
+                        )}
+                      </div>
+
+                      {releaseTracks.length > 0 && (
+                        <div className="space-y-1.5 pt-1 max-h-40 overflow-y-auto">
+                          {releaseTracks.map((tr, tIdx) => (
+                            <div key={`track-${tIdx}`} className="bg-zinc-900/60 border border-zinc-800 p-2 rounded-lg text-xs font-mono space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-zinc-300 font-bold">{tr.number}. {tr.title} <span className="text-zinc-500 font-normal">({tr.duration})</span></span>
+                                <div className="flex items-center gap-2">
+                                  {tr.lyrics && <span className="text-[9px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">Lyrics</span>}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveTrack(tIdx)}
+                                    className="text-zinc-500 hover:text-red-400"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                              {tr.lyrics && (
+                                <p className="text-[10px] text-zinc-400 italic line-clamp-1 pl-3 border-l border-zinc-800">{tr.lyrics}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleSaveRelease}
+                        disabled={!releaseTitle.trim()}
+                        className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-mono font-black text-xs uppercase tracking-wider cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        {editingAlbumIdx !== null ? 'Update Release' : 'Add Release'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Discography List */}
+                  <div className="space-y-2 pb-6">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-mono font-bold text-zinc-400 uppercase">Catalog Releases ({albums.length})</span>
+                      <div className="flex items-center gap-2">
+                        {albums.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (window.confirm(`Wipe all ${albums.length} albums for ${name || 'this band'} from local cache and database to get a clean start?`)) {
+                                setAlbums([]);
+                                resetReleaseInputs();
+                                const targetId = selectedBand?.id;
+                                if (targetId) {
+                                  await communityBandManager.wipeBandDiscography(targetId, name);
+                                }
+                                triggerNotification?.(`Wiped all releases for ${name || 'band'}! Ready for fresh import.`);
+                              }
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-500/40 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                            title="Wipe all albums from local storage and database for a clean start"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Wipe All Albums (Fresh Start)
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          id="btn-import-discography-hub"
+                          onClick={() => {
+                            setShowImporterModal(true);
+                            // Also dispatch custom event for any global listeners
+                            const event = new CustomEvent('open_metal_archives_import', { detail: { bandId: selectedBand?.id || 'band-1', bandName: name } });
+                            window.dispatchEvent(event);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/40 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow transition-all hover:scale-[1.02] active:scale-95"
+                        >
+                          <Disc className="w-3.5 h-3.5" /> Import Discography (Google, Metal-Archives, iTunes)
+                        </button>
+                      </div>
+                    </div>
+                    {albums.length === 0 ? (
+                      <div className="p-6 text-center rounded-xl border border-dashed border-zinc-800 text-zinc-500 text-xs font-mono">
+                        No releases added yet. Use the form above to add albums and tracklists.
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {albums.map((alb, i) => (
+                          <div
+                            key={alb.id ? `alb-${alb.id}-${i}` : `alb-${i}`}
+                            className="p-3.5 bg-zinc-950 border border-zinc-850 rounded-xl flex items-center justify-between gap-3"
+                          >
+                            <div className="flex items-center gap-3.5 min-w-0">
+                              <div className="w-12 h-12 rounded-xl bg-black border border-zinc-800 overflow-hidden flex items-center justify-center shrink-0 shadow">
+                                {(() => {
+                                  const coverSrc = getReleaseCoverUrl(alb, name || selectedBand?.name);
+                                  return coverSrc ? (
+                                    <img
+                                      src={coverSrc}
+                                      alt={alb.title}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        const target = e.currentTarget;
+                                        const fallback = findMasterReleaseCover(alb.title, name || selectedBand?.name);
+                                        if (fallback && target.src !== fallback) {
+                                          target.src = fallback;
+                                          target.style.display = 'block';
+                                        } else {
+                                          target.style.display = 'none';
+                                        }
+                                      }}
+                                    />
+                                  ) : null;
+                                })()}
+                                <Disc className="fallback-disc-icon w-5 h-5 text-zinc-600 hidden" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-white truncate font-display">{alb.title}</span>
+                                  <span className="uppercase text-[8px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                    {alb.type || 'album'}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                                  {alb.year} • {alb.label || 'Independent'} • {alb.tracks?.length || 0} tracks
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleLoadReleaseForEdit(i)}
+                                className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-mono uppercase font-bold"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveAlbum(i)}
+                                className="p-2 rounded-xl text-zinc-500 hover:text-red-400 hover:bg-zinc-900"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Integrated Bottom Page Action Section (Back to List, Supabase Status & Sync) */}
+              <div className="pt-5 border-t border-zinc-800/80 mt-6 space-y-3">
+                {/* Visual Supabase Connection Status & Real-Time Debug Log Terminal */}
+                {showUpsertBox && (
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-3.5 space-y-2 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-mono text-xs">
+                        <span className={`w-2.5 h-2.5 rounded-full ${
+                          connectionStatus === 'success' ? 'bg-emerald-400 animate-pulse' :
+                          connectionStatus === 'error' ? 'bg-red-400 animate-ping' :
+                          connectionStatus === 'syncing' ? 'bg-amber-400 animate-bounce' : 'bg-zinc-600'
+                        }`} />
+                        <span className="text-zinc-300 uppercase tracking-wider font-bold">Supabase Connection:</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-black ${
+                          connectionStatus === 'success' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                          connectionStatus === 'error' ? 'bg-red-950 text-red-300 border border-red-800' :
+                          connectionStatus === 'syncing' ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                        }`}>
+                          {connectionStatus === 'success' ? 'Synced & Active' :
+                           connectionStatus === 'error' ? 'Sync Error / Notice' :
+                           connectionStatus === 'syncing' ? 'Transferring Data...' : 'Standby / Ready'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSyncLogs([])}
+                          className="text-[10px] font-mono text-zinc-500 hover:text-zinc-300 uppercase tracking-wider px-2 py-1 rounded bg-zinc-900 border border-zinc-800 cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowDebugPanel(!showDebugPanel)}
+                          className="text-[10px] font-mono text-amber-400 hover:text-amber-300 uppercase tracking-wider px-2.5 py-1 rounded bg-amber-950/40 border border-amber-800/60 font-bold cursor-pointer"
+                        >
+                          {showDebugPanel ? 'Hide Logs' : `Logs (${syncLogs.length})`}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowUpsertBox(false)}
+                          className="p-1 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-900 cursor-pointer"
+                          title="Hide connection box"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {showDebugPanel && (
+                      <div className="bg-black/90 rounded-xl border border-zinc-850 p-2.5 max-h-36 overflow-y-auto font-mono text-[10px] space-y-1 shadow-inner select-text">
+                        {syncLogs.length === 0 ? (
+                          <div className="text-zinc-600 italic py-1 text-center">
+                            No active database transfer logs yet. Click &quot;Save & Sync Archive&quot; to initiate live Supabase upsert.
+                          </div>
+                        ) : (
+                          syncLogs.map((log, lIdx) => (
+                            <div key={`sync-log-${lIdx}-${log.timestamp}`} className="flex items-start gap-2 text-zinc-300 border-b border-zinc-900/60 pb-1 last:border-0">
+                              <span className="text-zinc-500 shrink-0">
+                                {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 })}
+                              </span>
+                              <span className={log.message.includes('Success') || log.message.includes('fully synced') ? 'text-emerald-400 font-bold' : log.message.includes('error') || log.message.includes('fail') || log.message.includes('notice') ? 'text-amber-400' : 'text-zinc-300'}>
+                                {log.message}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Main Action Bar at Bottom of Page */}
+                <div className="p-3 sm:p-4 rounded-2xl bg-zinc-950/90 border border-zinc-850 flex flex-wrap items-center justify-between gap-3 shadow-xl">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActivePage('list')}
+                      className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white font-mono text-xs uppercase font-bold border border-zinc-800 cursor-pointer flex items-center gap-1.5 transition-colors"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Back to List</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowUpsertBox(!showUpsertBox)}
+                      className={`px-2.5 py-2 rounded-xl text-[11px] font-mono border flex items-center gap-1.5 transition-all cursor-pointer ${
+                        showUpsertBox
+                          ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
+                          : 'bg-zinc-900 hover:bg-zinc-850 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                      }`}
+                      title="Toggle Supabase Upsert Connection Details & Live Logs"
+                    >
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${
+                        connectionStatus === 'success' ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' :
+                        connectionStatus === 'error' ? 'bg-red-400 shadow-[0_0_6px_#f87171]' :
+                        connectionStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : 'bg-zinc-600'
+                      }`} />
+                      <Database className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="font-bold">Supabase</span>
+                      {showUpsertBox ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={isSaving || !name.trim()}
+                    className="flex-1 sm:flex-initial px-5 sm:px-7 py-2.5 sm:py-3 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-mono font-black text-xs uppercase tracking-wider cursor-pointer shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95"
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Syncing to Supabase...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Save & Sync Archive</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* In-App Delete Confirmation Modal (Replaces blocked window.confirm) */}
+        {confirmDeleteBand && (
+          <div className="fixed inset-0 z-[1000020] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-zinc-950 border border-red-500/40 rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-950/60 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-white font-display uppercase tracking-wide">
+                    Delete Community Archive
+                  </h4>
+                  <p className="text-xs text-zinc-400 font-mono">
+                    This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-zinc-300 font-mono leading-relaxed bg-red-950/20 border border-red-900/30 rounded-xl p-3">
+                Permanently delete <strong className="text-white font-bold">&quot;{confirmDeleteBand.name}&quot;</strong> ({confirmDeleteBand.discography?.length || 0} releases, {parseBandLineup(confirmDeleteBand.lineup).length} members)? This will remove it from all community band archives.
+              </p>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteBand(null)}
+                  className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-mono text-xs font-bold uppercase border border-zinc-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => executeDeleteBand(confirmDeleteBand)}
+                  className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-mono text-xs font-black uppercase tracking-wider transition-all shadow-lg flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  <span>{isDeleting ? 'Deleting...' : 'Confirm Delete'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Integrated Direct Discography Importer Modal */}
+        <MetalArchivesImportModal
+          isOpen={showImporterModal}
+          onClose={() => setShowImporterModal(false)}
+          bandId={selectedBand?.id ? ensureUUID(selectedBand.id) : (name.trim() ? ensureUUID(name.trim().toLowerCase()) : 'band-1')}
+          bandName={name}
+          onImportSuccess={(count, importedReleases) => {
+            setShowImporterModal(false);
+            if (importedReleases && importedReleases.length > 0) {
+              setAlbums((prev) => {
+                const merged = [...prev];
+                for (const nr of importedReleases) {
+                  const normTitle = (nr.title || '').toLowerCase().trim();
+                  const existingIdx = merged.findIndex(
+                    (d) => (d.title || '').toLowerCase().trim() === normTitle || (d.id && d.id === nr.id)
+                  );
+                  if (existingIdx >= 0) {
+                    merged[existingIdx] = {
+                      ...merged[existingIdx],
+                      ...nr,
+                      tracks:
+                        nr.tracks && nr.tracks.length > 0 && nr.tracks.length >= (merged[existingIdx].tracks?.length || 0)
+                          ? nr.tracks
+                          : merged[existingIdx].tracks
+                    };
+                  } else {
+                    merged.push(nr);
+                  }
+                }
+                return deduplicateDiscography(merged, name || selectedBand?.id).sort(
+                  (a, b) => parseInt(b.year || '0', 10) - parseInt(a.year || '0', 10)
+                );
+              });
+            }
+            triggerNotification?.(`⚡ Successfully imported ${count} releases into catalog!`);
+          }}
+        />
+
+      </div>
+    </div>
+  );
+};
+
+export default CommunityBandCuratorModal;

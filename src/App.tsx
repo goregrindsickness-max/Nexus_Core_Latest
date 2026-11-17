@@ -1,0 +1,5357 @@
+import { syncPromoterProfileToSupabase } from './services/promoterService';
+import { cacheProfileMetadata, cacheProfileImage, hydrateProfileWithCache } from './services/profileImageCacheService';
+import { usePromoterOffers } from './hooks/usePromoterOffers';
+import { useTourNotes } from './hooks/useTourNotes';
+import { useGlobalDataSync } from './hooks/useGlobalDataSync';
+import { useBandManagement } from './hooks/useBandManagement';
+import { useTourLogistics } from './hooks/useTourLogistics';
+import { useModalStore } from './store/useModalStore';
+import { BAND_PORTAL_BILLING } from './config/billingMatrix';
+import { useBandState } from "./hooks/useBandState";
+import { useInventoryState } from "./hooks/useInventoryState";
+import { useOffersManagement } from "./hooks/useOffersManagement";
+import { useAuthSession } from "./hooks/useAuthSession";
+import { useFeedPosts } from "./hooks/useFeedPosts";
+import { useShows } from "./hooks/useShows";
+import { useUserEntities } from "./hooks/useUserEntities";
+import { IndustryProPortal } from "./components/portals/IndustryProPortal";
+import { FanPortal } from "./components/portals/FanPortal";
+import { tourPackageManager } from './lib/tourPackageManager';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, Suspense } from 'react';
+import { inventoryStore, posSalesStore, itinerariesStore, socialFeedStore, reviewsStore, showsStore, registrationStagingStore, venuesStore, offersStore, routingBeaconsStore, creativeNodesStore, expensesStore, profileStore } from './utils/indexedDB';
+import { safeSetLocalStorageItem } from './utils/safeStorage';
+import { initPushClient, handleInitialDeepLinkFromUrl } from './lib/pushClient';
+import { pushManager } from './lib/pushNotifications';
+import { initializeSonicActivityListeners } from './services/sonicFootprintService';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
+import { formatTimeAgo, extractUUID } from './utils/socialFeedUtils';
+import { isShowEmbargoedOrDraft } from './utils/showDisplayUtils';
+import { 
+  Menu, 
+  ChevronDown, 
+  ChevronUp,
+  Cloud, 
+  RefreshCw, 
+  Flag, 
+  Calendar, 
+  BarChart2, 
+  Settings, 
+  Trash2, 
+  Plus, 
+  Briefcase,
+  Check,
+  X,
+  Sparkles,
+  TrendingUp, 
+  MessageSquare, 
+  ExternalLink,
+  DollarSign,
+  MapPin,
+  Clock,
+  ArrowRight,
+  Database,
+  CheckCircle,
+  FileText,
+  Radio,
+  Send,
+  Star,
+  Play,
+  Mic,
+  Wifi,
+  WifiOff,
+  Disc,
+  Home,
+  Package,
+  ChevronRight,
+  ChevronLeft,
+  Tag,
+  CloudSun,
+  CloudOff,
+  Wind,
+  Sun,
+  CloudRain,
+  CloudSnow,
+  CloudLightning,
+  Truck,
+  Table,
+  CheckSquare,
+  Square,
+  ListTodo,
+  Compass,
+  Lock,
+  Coffee,
+  User,
+  Fuel,
+  Gauge,
+  Repeat,
+  Upload,
+  Edit2,
+  AlertTriangle,
+  Plane,
+  Share2,
+  Flame,
+  LogOut,
+  Award,
+  UserPlus,
+  BookOpen,
+  Printer,
+  HelpCircle,
+  Eye,
+  EyeOff,
+  Terminal,
+  Building,
+  Phone,
+  Copy,
+  Download,
+  Shield,
+  Globe,
+  ShoppingCart,
+  Users,
+  Bell,
+  Ticket,
+  TrendingDown,
+  Banknote,
+  CreditCard,
+  ShieldCheck,
+  ShieldAlert
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Sale, Show, InventoryItem, TourNote, Band, UserProfile, ChecklistItem, BankItem, Flight, InventoryAudit, UserReview, LoyaltyMember, Offer, DbNotification, SubscriptionTier, StagedDistroItem, AssetRevenueSplit, CashTransaction, BandJoinRequest, RegisteredWorkspaceRef, hasRegisteredWorkspace, normalizeRegisteredWorkspaces } from './types';
+import { communityBandManager, isCommunityBandRecord } from './lib/communityBands';
+import { isMiguelNameOrProfile, isLegacyAdminOrDummyProfile } from './components/social/utils/profileUtils';
+import { 
+  resolveCreativeName, 
+  resolveCreativeHandle, 
+  resolveCreativeLogo, 
+  resolveCreativeCover, 
+  resolveCreativeBio, 
+  resolveCreativeLocation,
+  resolvePromoterLogo,
+  resolvePromoterCover,
+  resolvePromoterHandle,
+  resolvePromoterLocation
+} from './utils/bandProfileUtils';
+import { initOfflineQueue, getSupabase, testSupabaseConnection, getSupabaseUrl, getSupabaseAnonKey, subscribeToTable, sanitizeInventoryItemForDb, executeWithSchemaResilience, getOfflineQueue, processOfflineQueue, isBypassRequiredError, handleDatabaseFailover, saveToFailoverCache, generateUUID, uploadBase64ToStorage, fetchUserBands, sanitizeBandPayload, ensureValidSupabaseAuthSession, autoSyncCreativeProfile, autoSyncPromoterProfile, normalizeLoadedProfile, fetchUserCreatives, resolveInventoryImageUrl, fetchInventoryItems } from './supabase';
+import { useOfflineSync } from './hooks/useOfflineSync';
+import { useSubscriptionTimer } from './hooks/useSubscriptionTimer';
+import SplashView from './components/SplashView';
+import { GENRE_REACTION_MATRICES } from './data/socialFeedMockData';
+import { FloatingChatHead } from './components/messaging/FloatingChatHead';
+import { AvatarPopupOverlay } from './components/messaging/AvatarPopupOverlay';
+import { FLAGS } from './types';
+
+const ArtistBandPortal = React.lazy(() =>
+  import('./components/portals/ArtistBandPortal').then((m) => ({ default: m.ArtistBandPortal }))
+);
+const PromoterVenuePortal = React.lazy(() =>
+  import('./components/portals/PromoterVenuePortal').then((m) => ({ default: m.PromoterVenuePortal }))
+);
+const CreativeDashboardViewV2 = React.lazy(() => import('./components/portals/Creative/CreativeDashboardViewV2'));
+const LabelDashboardViewV2 = React.lazy(() => import('./components/portals/Label/LabelDashboardViewV2'));
+const LoginView = React.lazy(() => import('./components/LoginView'));
+const NotificationCenterView = React.lazy(() => import('./components/NotificationCenterView'));
+const CustomerPayView = React.lazy(() => import('./components/sales/CustomerPayView'));
+const PublicVIPKioskView = React.lazy(() => import('./components/portals/Band/PublicVIPKioskView'));
+const LandingView = React.lazy(() => import('./components/LandingView'));
+const GuestPassConfirmView = React.lazy(() => import('./components/GuestPassConfirmView'));
+const AppNavigationBar = React.lazy(() =>
+  import('./components/navigation/AppNavigationBar').then((m) => ({ default: m.AppNavigationBar }))
+);
+const GlobalModalsContainer = React.lazy(() =>
+  import('./components/modals/GlobalModalsContainer').then((m) => ({ default: m.GlobalModalsContainer }))
+);
+const BugMonitorDrawer = React.lazy(() =>
+  import('./components/common/BugMonitorDrawer').then((m) => ({ default: m.BugMonitorDrawer }))
+);
+const SceneRadioPlayer = React.lazy(() =>
+  import('./components/social/player/SceneRadioPlayer').then((m) => ({ default: m.SceneRadioPlayer }))
+);
+
+const concertBg = "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/High%20energy%20concert%202.png";
+
+
+// Helper to resolve coordinates for a show
+function getShowCoordinates(show: Show): { lat: number; lng: number } {
+    if (show.id === "show_stop_102") return { lat: 40.7358, lng: -73.9546 };
+  if (show.id === "show_stop_103") return { lat: 39.6654, lng: -105.2054 };
+
+  const cityLower = (show.city || '').toLowerCase().trim();
+  const addressLower = (show.venue_address || '').toLowerCase().trim();
+
+  const cityMatches: { [key: string]: { lat: number; lng: number } } = {
+    chicago: { lat: 41.8781, lng: -87.6298 },
+    brooklyn: { lat: 40.7358, lng: -73.9546 },
+    "new york": { lat: 40.7128, lng: -74.0060 },
+    denver: { lat: 39.7392, lng: -104.9903 },
+    morrison: { lat: 39.6536, lng: -105.1911 },
+    austin: { lat: 30.2672, lng: -97.7431 },
+    seattle: { lat: 47.6062, lng: -122.3321 },
+    losangeles: { lat: 34.0522, lng: -118.2437 },
+    "los_angeles": { lat: 34.0522, lng: -118.2437 },
+    nashville: { lat: 36.1627, lng: -86.7816 },
+    london: { lat: 51.5074, lng: -0.1278 }
+  };
+
+  for (const [key, coords] of Object.entries(cityMatches)) {
+    if (cityLower.includes(key) || addressLower.includes(key)) {
+      return coords;
+    }
+  }
+
+  const str = (show.venue_address || show.name || show.id || '');
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const lat = 25.0 + Math.abs((hash % 1000) / 1000) * 24.0;
+  const lng = -124.0 + Math.abs(((hash >> 3) % 1000) / 1000) * 53.0;
+  return { lat, lng };
+}
+
+function compressImageAtModuleLevel(base64Str: string, maxWidth = 1920, maxHeight = 1080, quality = 0.92): Promise<string> {
+  return new Promise((resolve) => {
+    const img = document.createElement('img');
+    img.src = base64Str;
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width <= 0 || height <= 0) {
+        resolve(base64Str);
+        return;
+      }
+      if (width > maxWidth || height > maxHeight) {
+        if (width > height) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        } else {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+        try {
+          resolve(canvas.toDataURL('image/webp', quality));
+        } catch (e) {
+          resolve(base64Str);
+        }
+      } else {
+        resolve(base64Str);
+      }
+    };
+    img.onerror = () => {
+      resolve(base64Str);
+    };
+  });
+}
+
+// Haversine formula to find distance between two coordinates
+function calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const dKm = R * c;
+  const dMi = dKm * 0.621371;
+  return { miles: Math.round(dMi), km: Math.round(dKm) };
+}
+
+// A custom component to animate numbers/counts smoothly in real-time
+const CREATIVE_CORE_SKILLS: Record<string, string[]> = {
+  ARTIST_DESIGNER: ['LOGO_ART', 'ALBUM_ARTWORK', 'LAYOUT_DESIGN', 'GRAPHIC_DESIGN', 'MERCHANDISE_DESIGN', 'TYPOGRAPHY_LETTERING', 'ANIMATION_MOTION', '3D_RENDERING'],
+  SOUND_RECORDING: ['MIX_MASTER', 'FOH_SOUND', 'SYSTEM_MONITOR_TECH'],
+  PHOTO_VIDEO_SOCIAL: ['PHOTOGRAPHY', 'VIDEO_PRODUCTION', 'MUSIC_VIDEO_DIRECTOR'],
+  SESSION_MUSICIAN_TECHS: ['TOUR_MANAGEMENT', 'SESSION_MUSICIAN', 'LIGHTING_DIRECTOR', 'STAGE_DESIGN', 'BOOKING_AGENT']
+};
+
+const GENRE_CLUSTERS = [
+  {
+    name: 'CLUSTER 01: EXTREME METAL',
+    genres: ['DEATH METAL', 'SLAMMING BDM', 'BRUTAL DEATH METAL', 'BRUTAL DEATHCORE', 'TECHNICAL BDM', 'DEATH N\' ROLL', 'TECH DEATH', 'BLASTING BDM', 'GRINDCORE', 'DEATHGRIND', 'GOREGRIND/PORNOGRIND', 'THRASH METAL', 'DEATH THRASH', 'MELODIC DEATH', 'OSDM', 'DOOM', 'BLACK METAL', 'BLACKENED DEATH', 'SYMPHONIC BLACK', 'DEATHCORE', 'PROGRESSIVE DEATH']
+  },
+  {
+    name: 'CLUSTER 02: ROCK/HEAVY METAL',
+    genres: ['TRADITIONAL HEAVY METAL', 'DOOM METAL', 'STONER METAL', 'SLUDGE METAL', 'STONER ROCK', 'PROG METAL', 'POWER METAL', 'ALTERNATIVE ROCK', 'GOTHIC ROCK', 'HARD ROCK', 'NEW WAVE', 'FOLK METAL', 'AVANT-GARDE', 'DJENT', 'MATHCORE', 'MATH ROCK', 'SHOE GAZE', 'NOISE ROCK', 'INDIE ROCK', 'NU METAL']
+  },
+  {
+    name: 'CLUSTER 03: HARDCORE',
+    genres: ['TRADITIONAL HARDCORE', 'METALCORE', 'BEATDOWN', 'YOUTH CREW', 'FASTCORE', 'POST HARDCORE', 'MELODIC HARDCORE', 'SKRAMZ/SCREAMO', 'POWER VIOLENCE', 'MINCECORE']
+  },
+  {
+    name: 'CLUSTER 04: PUNK/ALTERNATIVE',
+    genres: ['PUNK ROCK', 'POP PUNK', 'MATH ROCK', 'MIDWEST EMO', 'SKATE PUNK', 'MELODIC PUNK', 'INDIE PUNK', 'POST PUNK', 'GRUNGE']
+  },
+  {
+    name: 'CLUSTER 05: INDUSTRIAL/EDM',
+    genres: ['EBM', 'SYNTHWAVE', 'DARKWAVE/COLD WAVE', 'AGGROTECH/TERROR EBM', 'TECHNO', 'INDUSTRIAL METAL', 'DUBSTEP', 'DRUM & BASS', 'GABBER/HARDSTYLE', 'BREAKCORE', 'HARSH NOISE WALL', 'WITCH HOUSE']
+  },
+  {
+    name: 'CLUSTER 06: HIP HOP/RAP',
+    genres: ['UNDERGROUND RAP', 'TRAP', 'BOOM BAP', 'PHONK', 'DRILL', 'CLOUD RAP', 'EXPERIMENTAL', 'GRIME']
+  }
+];
+
+interface LoginViewProps {
+  onLogin: (customProfile?: UserProfile, customBand?: Band, selectBandId?: string) => void;
+  userProfile: UserProfile;
+  initialTab?: 'unlock' | 'signup';
+  onTabChange?: (tab: 'unlock' | 'signup') => void;
+  triggerNotification?: (msg: string) => void;
+  isUpgradeMode?: boolean;
+}
+
+
+export default function App() {
+
+  const [userProfile, setUserProfile] = useState<any>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_core_user_profile');
+      if (!saved || saved === 'null') return null;
+      const parsed = JSON.parse(saved);
+      if (!parsed || isLegacyAdminOrDummyProfile(parsed)) {
+        localStorage.removeItem('nexus_core_user_profile');
+        profileStore.removeItem('nexus_core_user_profile').catch(() => {});
+        return null;
+      }
+      if (parsed) {
+        if (parsed.account_type === 'fan' || parsed.account_type === 'fan_only') {
+          parsed.active_workspace = 'fan_only';
+        } else if (parsed.active_workspace === 'promoter' || parsed.account_type === 'promoter') {
+          parsed.active_workspace = 'promoter';
+        } else {
+          parsed.active_workspace = parsed.active_workspace || 'industry_pro';
+          if (parsed.account_type === 'pro' || parsed.account_type === 'band' || parsed.account_type === 'creative' || parsed.account_type === 'label') {
+            parsed.account_type = 'industry_pro';
+          }
+        }
+        
+        const isOwnerMiguel = isMiguelNameOrProfile(parsed);
+        if (isOwnerMiguel) {
+          if (!parsed.console_handle || parsed.console_handle === 'user' || parsed.console_handle === '@user' || parsed.console_handle.toLowerCase().includes('virulent')) {
+            parsed.console_handle = '@bdmCEO';
+          }
+          if (!parsed.handle || parsed.handle === 'user' || parsed.handle === '@user' || parsed.handle.toLowerCase().includes('virulent')) {
+            parsed.handle = '@bdmCEO';
+          }
+        } else {
+          // If non-Miguel profile was mistakenly stamped with Miguel's handle or brand, heal and cleanse it
+          const rawH = parsed.console_handle || parsed.handle || '';
+          const isStaleAdminHandle = rawH.toLowerCase().includes('bdmceo') || rawH.toLowerCase().includes('goregrinder') || rawH.toLowerCase().includes('virulent');
+          if (isStaleAdminHandle || !parsed.console_handle || parsed.console_handle === 'user' || parsed.console_handle === '@user') {
+            const fallbackHandle = parsed.screen_name || parsed.username || (parsed.name && !parsed.name.toLowerCase().includes('miguel') ? parsed.name.replace(/\s+/g, '_').toLowerCase() : (parsed.email ? parsed.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') : 'member'));
+            parsed.console_handle = `@${fallbackHandle.replace(/^@+/, '')}`;
+            parsed.handle = parsed.console_handle;
+          }
+          if (parsed.name && (parsed.name.toLowerCase().includes('miguel') || parsed.name.toLowerCase().includes('goregrinder'))) {
+            parsed.name = parsed.full_name && !parsed.full_name.toLowerCase().includes('miguel') ? parsed.full_name : 'Member Profile';
+            parsed.full_name = parsed.name;
+          }
+        }
+        return normalizeLoadedProfile(parsed);
+      }
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  });
+  const {
+    bands, setBands,
+    activeBandId, setActiveBandId,
+    currentLoadedBandId, setCurrentLoadedBandId,
+    editingBand, setEditingBand,
+    deletingBandId, setDeletingBandId,
+    bandLineup, setBandLineup,
+    crewMembers, setCrewMembers,
+    bandLogoUrl, setBandLogoUrl,
+    bandCoverUrl, setBandCoverUrl,
+    selectedMicroGenres, setSelectedMicroGenres,
+    bandJoinRequests, setBandJoinRequests
+  } = useBandState();
+
+  // Centralized Modal Registry Store
+  const {
+    isModalOpen, setIsModalOpen,
+    modalType, setModalType,
+    selectedSaleReceipt, setSelectedSaleReceipt,
+    isBandModalOpen, setIsBandModalOpen,
+    isCashDrawerOpen, setIsCashDrawerOpen,
+    isQuickActionPanelOpen, setIsQuickActionPanelOpen,
+    isPttOpen, setIsPttOpen,
+    isTransferModalOpen, setIsTransferModalOpen,
+    transferPreselectedId, setTransferPreselectedId,
+    isLiveTeamActivityOpen, setIsLiveTeamActivityOpen,
+    showWorkspaceRegistration, setShowWorkspaceRegistration,
+    isSettingsDrawerOpen, setIsSettingsDrawerOpen,
+    openTransferModal, openCashDrawer, openBandModal, openWorkspaceRegistration, openSettingsDrawer
+  } = useModalStore();
+  
+  // Security Clearance and Member simulation state
+  const [activeClearanceLevel, setActiveClearanceLevel] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_core_active_clearance_level');
+      return saved ? Number(saved) : 5;
+    } catch (_) {
+      return 5;
+    }
+  });
+  const [simulatedMemberId, setSimulatedMemberId] = useState<string>(() => {
+    return localStorage.getItem('nexus_core_simulated_member_id') || 'l1';
+  });
+
+  useEffect(() => {
+    initPushClient().catch(() => {});
+    initializeSonicActivityListeners();
+    pushManager.requestPermission().catch(() => {});
+
+    // Handle deep-link URL params when opened from a closed-app push notification click
+    handleInitialDeepLinkFromUrl();
+  }, []);
+
+  // Keep Web Push / native token mapped to the active user's ID and email whenever they sign in or hydrate
+  useEffect(() => {
+    if (!userProfile?.id && !userProfile?.email) return;
+    pushManager
+      .ensureUserPushSubscription({
+        id: userProfile?.id,
+        email: userProfile?.email,
+      })
+      .catch(() => {});
+  }, [userProfile?.id, userProfile?.email]);
+
+  // Suppress "Invalid Refresh Token" from Supabase, Vite HMR WebSocket errors, and benign SW/storage race conditions
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const msg = String(event.reason?.message || event.reason || '');
+      const stack = String(event.reason?.stack || '');
+      if (
+        msg.includes('Invalid Refresh Token') ||
+        msg.includes('WebSocket') ||
+        msg.includes('@vite/client') ||
+        msg.includes('registration has been uninstalled') ||
+        msg.includes('dropInstance') ||
+        stack.includes('dropInstance') ||
+        stack.includes('@vite/client') ||
+        stack.includes('createWebSocketModuleRunnerTransport')
+      ) {
+        event.preventDefault(); // Prevents the error from crashing the app or showing Error Boundary
+      }
+    };
+    
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+  }, []);
+
+      const [isPttRecording, setIsPttRecording] = useState<boolean>(false);
+
+  const [isInitialHydrated, setIsInitialHydrated] = useState(false);
+  const activeBandIdRef = useRef<string>('');
+  const userProfileRef = useRef<any>(null);
+
+
+
+  const isRosterOwner = userProfile?.role === 'owner' || userProfile?.role === 'admin';
+
+  const isTabRestricted = (tab: string, clearance: number) => {
+    // Level 5 has unrestricted access to everything
+    if (clearance >= 5) return false;
+
+    // Level 1: Only events (shows) and social (social)
+    if (clearance === 1) {
+      const allowed = ['shows', 'social', 'home-v2', 'home', 'plans', 'terms', 'help-desk', 'checklist'];
+      return !allowed.includes(tab);
+    }
+
+    // Level 2: same as level 1 + POS checkout (new-sale)
+    if (clearance === 2) {
+      const allowed = ['shows', 'social', 'new-sale', 'home-v2', 'home', 'plans', 'terms', 'help-desk', 'checklist'];
+      return !allowed.includes(tab);
+    }
+
+    // Level 3: Level 1 & 2 + inventory (inventory, add-item)
+    if (clearance === 3) {
+      const allowed = ['shows', 'social', 'new-sale', 'inventory', 'add-item', 'home-v2', 'home', 'plans', 'terms', 'help-desk', 'checklist'];
+      return !allowed.includes(tab);
+    }
+
+    // Level 4: Level 1-3 + finance (reports)
+    if (clearance === 4) {
+      const allowed = ['shows', 'social', 'new-sale', 'inventory', 'add-item', 'reports', 'home-v2', 'home', 'plans', 'terms', 'help-desk', 'checklist'];
+      return !allowed.includes(tab);
+    }
+
+    return false;
+  };
+
+  const isSubNavRestricted = (nav: string, clearance: number) => {
+    if (clearance >= 5) return false;
+    
+    if (nav === 'SALES' && clearance < 2) return true;
+    if (nav === 'MERCH' && clearance < 3) return true;
+    if (nav === 'FINANCE' && clearance < 4) return true;
+    if (nav === 'SETTINGS' && clearance < 5) return true;
+    
+    return false;
+  };
+
+
+  // Navigation tabs and connection states
+  const [musicTrackCount, setMusicTrackCount] = useState<number>(0);
+  const [busCallTime, setBusCallTime] = useState<string>(() => { try { return localStorage.getItem('tour_bus_call_time') || "23:30"; } catch(e) { return "23:30"; } });
+  const [lockupTime, setLockupTime] = useState<string>(() => { try { return localStorage.getItem('tour_lockup_time') || "23:45"; } catch(e) { return "23:45"; } });
+  const [isTime24Hour, setIsTime24Hour] = useState<boolean>(() => { try { return localStorage.getItem('tour_time_is_24h') !== 'false'; } catch(e) { return true; } });
+  const [isEditingBusCall, setIsEditingBusCall] = useState<boolean>(false);
+  // Tour Logistics Hook
+  const tourLogistics = useTourLogistics();
+  const {
+    isWeatherForecastExpanded, setIsWeatherForecastExpanded,
+    customNavDestination, setCustomNavDestination,
+    isWaypointsExpanded, setIsWaypointsExpanded,
+    isInteractiveMapExpanded, setIsInteractiveMapExpanded,
+    isFuelCalculatorExpanded, setIsFuelCalculatorExpanded,
+    isPreDriveChecklistExpanded, setIsPreDriveChecklistExpanded,
+    isDriverRotationExpanded, setIsDriverRotationExpanded,
+    vehicleType, setVehicleType,
+    fuelPrice, setFuelPrice,
+    customMpg, setCustomMpg,
+    activeDriver, setActiveDriver,
+    driveHoursElapsed, setDriveHoursElapsed,
+    checkedPreDriveItems, setCheckedPreDriveItems,
+    waypoints, setWaypoints,
+    newWaypointName, setNewWaypointName,
+    newWaypointType, setNewWaypointType,
+    localWeather, weatherLoading, weatherError, currentCoords, fetchLocalWeather,
+    tourStatusIndex, setTourStatusIndex,
+    isTourStatusPaused, setIsTourStatusPaused,
+    isHoveringTourStatus, setIsHoveringTourStatus,
+    lastInteractionTime, registerTourStatusInteraction,
+    handleStatusTouchStart, handleStatusTouchMove, handleStatusTouchEnd
+  } = tourLogistics;
+  const [tempBusCallTime, setTempBusCallTime] = useState<string>("23:30");
+  const [tempLockupTime, setTempLockupTime] = useState<string>("23:45");
+  const [isOfflineSimActive, setIsOfflineSimActive] = useState<boolean>(false);
+  const [isSyncBadgeExpanded, setIsSyncBadgeExpanded] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<any>(() => {
+    try {
+      const savedTab = localStorage.getItem('nexus_core_active_tab');
+      if (savedTab && savedTab !== 'landing') return savedTab;
+    } catch (_) {}
+    return 'social';
+  });
+  const [showSceneRadio, setShowSceneRadio] = useState<boolean>(true);
+
+  // Sync activeTab to localStorage so session view state is remembered across minimizes/reloads
+  useEffect(() => {
+    if (activeTab && activeTab !== 'landing') {
+      try {
+        localStorage.setItem('nexus_core_active_tab', activeTab);
+      } catch (_) {}
+    }
+  }, [activeTab]);
+  const [distroDeckSubTab, setDistroDeckSubTab] = useState<'feed' | 'merch' | 'fans' | 'customizer' | 'alliances' | 'music'>('music');
+  const [settingsExpandedSection, setSettingsExpandedSection] = useState<string>('');
+  const [promoHubSubTab, setPromoHubSubTab] = useState<'distro' | 'stories' | 'loyalty'>('distro');
+  const [promoHubSelectedItemId, setPromoHubSelectedItemId] = useState<string | undefined>(undefined);
+  const [promoCardActiveSlot, setPromoCardActiveSlot] = useState<'distro' | 'stories' | 'loyalty'>('distro');
+  const [blackBookCardActiveSlot, setBlackBookCardActiveSlot] = useState<'A' | 'B'>('A');
+  const [onRouteVenueAddress, setOnRouteVenueAddress] = useState<string | null>(null);
+
+  const [inlineCashDrawerAddingType, setInlineCashDrawerAddingType] = useState<'starting_bank' | 'bank_drop' | 'payout' | 'expense' | 'cash_sale' | null>(null);
+  const [inlineCashDrawerAmount, setInlineCashDrawerAmount] = useState<string>('');
+  const [inlineCashDrawerDescription, setInlineCashDrawerDescription] = useState<string>('');
+  const [inlineCashDrawerActiveFilter, setInlineCashDrawerActiveFilter] = useState<'all' | 'starting_bank' | 'bank_drop' | 'payout' | 'expense' | 'cash_sale'>('all');
+
+  const [dashboardV2ActiveNav, setDashboardV2ActiveNav] = useState<'EVENTS' | 'SALES' | 'MERCH' | 'FINANCE' | 'SOCIAL' | 'SETTINGS' | 'STUDIO'>('EVENTS');
+
+  const [activeEventsSection, setActiveEventsSection] = useState<string | null>(null);
+  const [isV2StoryCreatorExpanded, setIsV2StoryCreatorExpanded] = useState<boolean>(false);
+  const [v2RoleMenuOpen, setV2RoleMenuOpen] = useState<boolean>(false);
+  const dashboardScrollPos = useRef<number>(0);
+  const dashboardRef = useRef<HTMLDivElement>(null);
+        
+
+  
+
+  // When returning to home tab, restore scroll position
+  useLayoutEffect(() => {
+    if (activeTab === 'home' && dashboardRef.current) {
+      dashboardRef.current.scrollTop = dashboardScrollPos.current;
+    }
+  }, [activeTab]);
+
+  // Swipeable Post Preview Feed in Promo card
+  const [allianceActivePostIndex, setAllianceActivePostIndex] = useState<number>(0);
+  const [allianceCommentText, setAllianceCommentText] = useState<string>('');
+  const [previewReactionMenuOpenFor, setPreviewReactionMenuOpenFor] = useState<string | null>(null);
+  const [previewFollowedActs, setPreviewFollowedActs] = useState<Record<string, boolean>>({});
+  const [alliancePosts, setAlliancePosts] = useState<any[]>(() => {
+    const cached = localStorage.getItem('distro_db_announcements');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    const defaultAnnouncements = [
+      {
+        id: 'post_4',
+        type: 'merch_drop',
+        timestamp: 'June 23, 20260 at 2:40 PM',
+        message: 'New "Desert Decay" long sleeves just hit the store. Heavyweight cotton, discharge print. Grab yours before they are gone.',
+        tag: 'Merch Haul',
+        author: { name: 'GATECREEPER', avatar: 'GC', role: 'Artist' },
+        merchData: {
+          name: 'Desert Decay Longsleeve',
+          price: 35,
+          thumbnail: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
+          sizes: ['S', 'M', 'L', 'XL']
+        },
+        likes_count: 215,
+        user_liked: false,
+        comments: [
+          { id: 'c_gc1', username: 'riff_lord', text: 'Discharge print quality on these is top tier! Copped an XL.', time: '2 hours ago' },
+          { id: 'c_gc1_r1', parent_comment_id: 'c_gc1', username: 'GATECREEPER', text: 'Hell yeah! Shipping out today. Thanks for the support!', time: '1 hour ago' }
+        ]
+      },
+      {
+        id: 'post_5',
+        type: 'promo',
+        timestamp: 'June 18, 2026 at 4:32 PM',
+        message: '🔴 NEW VINYL DROP! The Ritual Sewer Gates Double Splatter LP is now staged on our physical distribution desk. Strictly limited to 300 heavy wax pieces worldwide.',
+        tag: 'Band Announcement',
+        author: { name: 'Artist', avatar: 'BD', role: 'Artist', isYou: true },
+        image_url: 'https://images.unsplash.com/photo-1542208998-f6dbbb27a72f?q=80&w=650&auto=format&fit=crop',
+        likes_count: 42,
+        user_liked: false,
+        comments: [
+          { id: 'c_1', username: 'analog_fiend', text: 'Stunning double wax colorway! Just triggered simulated order checkout.', time: '1 hour ago' },
+          { id: 'c_2', username: 'synth_cultist', text: 'Will these be loaded into the tour van stash for the Detroit gig?', time: '30 mins ago' },
+          { id: 'c_2_r1', parent_comment_id: 'c_2', username: 'TOMB MOLD', text: 'Yes! Stashing 50 copies for the merch table at the Sanctuary.', time: '15 mins ago' }
+        ]
+      }
+    ];
+    return defaultAnnouncements;
+  });
+
+  const handleAlliancePostReaction = (postId: string, reactionType: string) => {
+    const updated = alliancePosts.map((post) => {
+      if (post.id === postId) {
+        let reactions = post.reactions;
+        if (!reactions || !Array.isArray(reactions)) {
+          reactions = [
+            { type: 'hype', count: post.likes_count || 12, active: post.user_liked || false },
+            { type: 'token_heavy_energy', count: Math.round((post.likes_count || 12) * 0.4), active: false },
+            { type: 'token_movement_vibe', count: 0, active: false },
+            { type: 'token_collectible_classic', count: 0, active: false },
+            { type: 'token_aesthetic', count: Math.round((post.likes_count || 12) * 0.25), active: false },
+            { type: 'token_disappointment', count: 0, active: false },
+            { type: 'token_rejection', count: 0, active: false }
+          ];
+        } else {
+          reactions = reactions.map((r: any) => ({ ...r }));
+        }
+
+        reactions = reactions.map((r: any) => {
+          if (r.type === reactionType) {
+            const newActive = !r.active;
+            return {
+              ...r,
+              active: newActive,
+              count: newActive ? r.count + 1 : Math.max(0, r.count - 1)
+            };
+          }
+          return r;
+        });
+
+        const hypeReact = reactions.find((r: any) => r.type === 'hype');
+        return {
+          ...post,
+          reactions,
+          likes_count: hypeReact ? hypeReact.count : post.likes_count,
+          user_liked: hypeReact ? hypeReact.active : post.user_liked
+        };
+      }
+      return post;
+    });
+    setAlliancePosts(updated);
+    localStorage.setItem('distro_db_announcements', JSON.stringify(updated));
+    
+    const matrix = GENRE_REACTION_MATRICES['metal'] || {};
+    const emoji = matrix[reactionType]?.icon || '🔥';
+    const label = matrix[reactionType]?.label || 'Hype';
+    
+    // Sync Notification to Supabase for author only
+    const targetPost = alliancePosts.find((p) => p.id === postId);
+    if (targetPost) {
+      const actorName = userProfile?.name || userProfile?.console_handle || 'A user';
+      const postSnippet = (targetPost.content || targetPost.message || 'transmission').substring(0, 50);
+      const targetUserId = targetPost.author?.email || targetPost.author?.name || 'author';
+      
+      // Resolve target receiver UUID for the author (never fall back to current user)
+      const validReceiverUUID = (targetUserId && extractUUID(targetUserId)) || null;
+      
+      if (validReceiverUUID && validReceiverUUID !== userProfile?.id && validReceiverUUID !== userProfile?.email) {
+        const notifId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : (extractUUID(postId) || '00000000-0000-0000-0000-000000000000');
+        const notifItem = {
+          id: notifId,
+          user_id: validReceiverUUID,
+          actor_id: userProfile?.id || null,
+          actor_email: userProfile?.email || null,
+          title: `🔥 NEW REACTION`,
+          message: `${actorName} reacted (${label}) to your transmission: "${postSnippet}"`,
+          category: 'REACTION',
+          timeAgo: 'Just now',
+          timestamp: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          read: false,
+          is_read: false,
+          type: 'post_reaction',
+          postId: postId,
+          linkTab: 'feed',
+        };
+
+        try {
+          const supabaseClient = getSupabase();
+          if (supabaseClient) {
+            supabaseClient.from('nexus_notifications').insert([{
+              id: notifItem.id,
+              user_id: validReceiverUUID,
+              actor_id: userProfile?.id || null,
+              title: notifItem.title,
+              message: notifItem.message,
+              type: 'post_reaction',
+              is_read: false,
+              data: {
+                ...notifItem,
+                category: 'REACTION'
+              },
+              created_at: new Date().toISOString(),
+            }]).then(({ error }) => {
+              if (error) console.error("Notification insert error:", error);
+            });
+          }
+        } catch (err) {
+          console.warn('Sync notice:', err);
+        }
+      }
+    }
+  };
+
+  // Blocked Promoters state
+
+  // Monospace dark-brutalist notification states
+
+
+  const [notifications, setNotifications] = useState<DbNotification[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_core_notifications');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          // Safeguard: Deduplicate stored notifications
+          const seenIds = new Set<string>();
+          const seenMessages = new Map<string, number>();
+          return parsed.filter((notif: DbNotification) => {
+            if (!notif || !notif.id) return false;
+            if (seenIds.has(notif.id)) return false;
+            seenIds.add(notif.id);
+
+            const msgKey = `${notif.category || ''}:${notif.message}`;
+            const notifTime = new Date(notif.created_at).getTime();
+            if (seenMessages.has(msgKey)) {
+              const prevTime = seenMessages.get(msgKey)!;
+              if (Math.abs(notifTime - prevTime) < 5000) {
+                return false;
+              }
+            }
+            seenMessages.set(msgKey, notifTime);
+            return true;
+          });
+        }
+      }
+    } catch (_) {}
+    return [];
+  });
+
+  const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(false);
+  const [isNavMenuOpen, setIsNavMenuOpen] = useState(false);
+  const [pendingOpenShowsForm, setPendingOpenShowsForm] = useState(false);
+  const [pendingFlightIsAdding, setPendingFlightIsAdding] = useState(false);
+  const [autoExpandShowId, setAutoExpandShowId] = useState<string | null>(null);
+  const [autoOpenSettlementShowId, setAutoOpenSettlementShowId] = useState<string | null>(null);
+  const [isLoggedOut, setIsLoggedOut] = useState(() => {
+    try {
+      const saved = localStorage.getItem('nexus_core_user_profile');
+      if (!saved || saved === 'null') return true;
+      const parsed = JSON.parse(saved);
+      return !parsed || isLegacyAdminOrDummyProfile(parsed);
+    } catch (_) {
+      return true;
+    }
+  });
+  const [showSplash, setShowSplash] = useState(() => {
+    try {
+      const saved = localStorage.getItem('nexus_core_user_profile');
+      if (!saved || saved === 'null') return true;
+      const parsed = JSON.parse(saved);
+      return !parsed || isLegacyAdminOrDummyProfile(parsed);
+    } catch (_) {
+      return true;
+    }
+  });
+  const [loginInitialTab, setLoginInitialTab] = useState<'unlock' | 'signup'>('unlock');
+  const [isUpgradeMode, setIsUpgradeMode] = useState<boolean>(false);
+
+  // Handle Capacitor App lifecycle events (app minimized / backgrounded & resumed on Android/iOS)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !Capacitor.isNativePlatform()) return;
+
+    let appListener: any;
+    try {
+      appListener = CapacitorApp.addListener('appStateChange', (state) => {
+        if (state.isActive) {
+          console.log('[AppLifecycle] App resumed to foreground from background.');
+          const savedProfileStr = localStorage.getItem('nexus_core_user_profile');
+          if (savedProfileStr && savedProfileStr !== 'null') {
+            try {
+              const savedProfile = JSON.parse(savedProfileStr);
+              if (savedProfile && !isLegacyAdminOrDummyProfile(savedProfile)) {
+                setUserProfile((prev: any) => prev || savedProfile);
+                setIsLoggedOut(false);
+                setShowSplash(false);
+              } else {
+                localStorage.removeItem('nexus_core_user_profile');
+                profileStore.removeItem('nexus_core_user_profile').catch(() => {});
+              }
+            } catch (_) {}
+          }
+          const client = getSupabase();
+          if (client) {
+            ensureValidSupabaseAuthSession(client).catch(() => {});
+          }
+          communityBandManager.fetchFromSupabase().catch(() => {});
+        }
+      });
+    } catch (e) {
+      console.warn('[AppLifecycle] App state listener notice:', e);
+    }
+
+    return () => {
+      if (appListener && typeof appListener.remove === 'function') {
+        appListener.remove();
+      }
+    };
+  }, []);
+
+
+  // Seamless sign-up on page load for team invitations
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('accept_invite') === '1') {
+      setLoginInitialTab('signup');
+      setIsLoggedOut(true);
+      setShowSplash(false);
+      triggerNotification?.("📋 Invite accepted: Welcome to the team registration gate.");
+    }
+
+    // Handle Stripe Checkout Return Handshake
+    if (params.get('checkout_success') === '1') {
+      const sessionId = params.get('session_id') || `cs_${Date.now()}`;
+
+      // 1. Check for pending cart order
+      const pendingCartRaw = localStorage.getItem('nexus_pending_cart_order');
+      if (pendingCartRaw) {
+        try {
+          const pending = JSON.parse(pendingCartRaw);
+          const orderId = `STRP-${sessionId.slice(-6).toUpperCase()}`;
+          const newPurchases = (pending.cartItems || []).map((item: any, idx: number) => ({
+            id: `col_${Date.now()}_${idx}`,
+            orderId,
+            transactionId: sessionId,
+            type: 'merch' as const,
+            data: {
+              id: item.productId || item.id,
+              name: item.name,
+              thumbnail: item.image || item.thumbnail,
+              price: item.price,
+              band: item.bandName,
+              sizes: item.size ? [item.size] : [],
+              shippingAddress: pending.shippingAddress
+            },
+            quantity: item.quantity || 1,
+            paymentMethod: 'STRIPE_LIVE',
+            date: new Date()
+          }));
+
+          const existing = JSON.parse(localStorage.getItem('nexus_my_collections_v1') || '[]');
+          localStorage.setItem('nexus_my_collections_v1', JSON.stringify([...newPurchases, ...existing]));
+          localStorage.removeItem('nexus_pending_cart_order');
+          triggerNotification?.(`⚡ Order Confirmed! Stripe verified your payment for ${newPurchases.length} items. Added to Collections.`);
+        } catch (e) {
+          console.warn('Failed parsing pending cart order:', e);
+        }
+      }
+
+      // 2. Check for pending single ticket/merch order
+      const pendingSingleRaw = localStorage.getItem('nexus_pending_single_order');
+      if (pendingSingleRaw) {
+        try {
+          const pending = JSON.parse(pendingSingleRaw);
+          const orderId = `STRP-${sessionId.slice(-6).toUpperCase()}`;
+          const newRecord = {
+            id: `col_${Date.now()}`,
+            orderId,
+            transactionId: sessionId,
+            type: pending.type || (pending.isTicket ? 'ticket' : 'merch'),
+            data: {
+              ...pending.rawItem,
+              name: pending.isTicket ? `${pending.rawItem?.headliner || 'Concert'} Pass` : (pending.rawItem?.name || 'Tour Item'),
+              ticketType: pending.activeTierConfig?.name,
+              tierCode: pending.selectedTier,
+              pricePerUnit: pending.unitPrice,
+              attendees: pending.attendeeDetails || [],
+              ticketCode: `TKT-${orderId.slice(-4)}-1`,
+              thumbnail: pending.rawItem?.thumbnail || pending.rawItem?.image || pending.post?.image_url,
+              shippingAddress: {
+                name: pending.shippingName,
+                street: pending.shippingStreet,
+                city: pending.shippingCity,
+                state: pending.shippingState,
+                zip: pending.shippingZip,
+                phone: pending.shippingPhone
+              }
+            },
+            quantity: pending.quantity || 1,
+            totalAmount: pending.grandTotal || 25,
+            paymentMethod: 'STRIPE_LIVE',
+            date: new Date()
+          };
+
+          const existing = JSON.parse(localStorage.getItem('nexus_my_collections_v1') || '[]');
+          localStorage.setItem('nexus_my_collections_v1', JSON.stringify([newRecord, ...existing]));
+          localStorage.removeItem('nexus_pending_single_order');
+          triggerNotification?.(`⚡ Ticket Confirmed! Stripe verified your booking. Digital pass added to My Collections.`);
+        } catch (e) {
+          console.warn('Failed parsing pending single order:', e);
+        }
+      }
+
+      // Clean query parameter from URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  // Sync pathname /pay with activeTab
+  useEffect(() => {
+    const handleLocationChange = () => {
+      if (window.location.pathname === '/pay') {
+        setActiveTab('pay-portal');
+      }
+    };
+    handleLocationChange();
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
+
+  useEffect(() => {
+    if (userProfile?.email) {
+      const client = getSupabase();
+      if (client) {
+        ensureValidSupabaseAuthSession(client).then((session) => {
+          if (session) {
+            console.log('[Supabase Auth] Proactive background session verified for:', userProfile.email);
+          }
+        }).catch((err) => {
+          console.warn('[Supabase Auth] Proactive background session notice:', err);
+        });
+      }
+    }
+  }, [userProfile?.email, userProfile?.pin]);
+
+  useEffect(() => {
+    const handleProfileUpdate = (e: any) => {
+      if (e.detail) {
+        setUserProfile(e.detail);
+        if (activeTab === 'social') return;
+        const ws = e.detail.active_workspace || e.detail.account_type;
+        if (ws === 'band') {
+          setActiveTab('home-v2');
+          setDashboardV2ActiveNav('EVENTS');
+        } else if (ws === 'promoter') {
+          setActiveTab('promoter' as any);
+        } else if (ws === 'creative') {
+          setActiveTab('creative' as any);
+        } else if (ws === 'label') {
+          setActiveTab('label' as any);
+        } else if (ws === 'industry_pro' || ws === 'fan_only') {
+          setActiveTab('social');
+        }
+      }
+    };
+    window.addEventListener('nexus_core_user_profile_updated', handleProfileUpdate);
+    return () => window.removeEventListener('nexus_core_user_profile_updated', handleProfileUpdate);
+  }, [activeTab]);
+
+  useEffect(() => {
+    const handleRegisterWorkspace = (e: any) => {
+      const target = e.detail?.target;
+      if (target && typeof window !== 'undefined') {
+        localStorage.setItem('nexus_target_register_workspace', target.toUpperCase());
+      }
+      setShowWorkspaceRegistration(true);
+    };
+    window.addEventListener('nexus_target_register_workspace', handleRegisterWorkspace);
+    return () => window.removeEventListener('nexus_target_register_workspace', handleRegisterWorkspace);
+  }, []);
+
+  useEffect(() => {
+    const handleNavigate = (e: any) => {
+      if (e.detail && typeof e.detail === 'string') {
+        setActiveTab(e.detail as any);
+      } else if (e.detail && typeof e.detail === 'object') {
+        if (e.detail.subNav) {
+          setDashboardV2ActiveNav(e.detail.subNav);
+        }
+        if (e.detail.tab) {
+          setActiveTab(e.detail.tab);
+        }
+      }
+    };
+    const handleTourShowsUpdate = (e: any) => {
+      const tour = e.detail?.tour;
+      if (!tour) return;
+      const isPublished = tour.publicationStatus === 'public_announced';
+      const isEmbargoed = tour.publicationStatus === 'embargoed_private';
+
+      setShows(prevShows => {
+        return prevShows.map(s => {
+          let belongsToTour = false;
+          if (s.additional_notes) {
+            try {
+              const extra = typeof s.additional_notes === 'string' ? JSON.parse(s.additional_notes) : s.additional_notes;
+              if (extra.tour_id === tour.id) belongsToTour = true;
+            } catch (_) {}
+          }
+          if (!belongsToTour && (s as any).show_name && (s as any).show_name.startsWith(tour.title)) {
+            belongsToTour = true;
+          }
+          if (belongsToTour) {
+            return {
+              ...s,
+              is_published: isPublished,
+              publication_status: tour.publicationStatus,
+              embargo_until_date: tour.embargoUntilDate,
+              status: isEmbargoed ? 'Embargoed' : (s.status === 'Embargoed' ? 'Active' : s.status)
+            };
+          }
+          return s;
+        });
+      });
+    };
+
+    window.addEventListener('shows_updated_from_tour_manager', handleTourShowsUpdate);
+    window.addEventListener('nexus_navigate', handleNavigate);
+    window.addEventListener('nexus_navigate_tab', handleNavigate);
+    return () => {
+      window.removeEventListener('shows_updated_from_tour_manager', handleTourShowsUpdate);
+      window.removeEventListener('nexus_navigate', handleNavigate);
+      window.removeEventListener('nexus_navigate_tab', handleNavigate);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'pay-portal') {
+      if (window.location.pathname !== '/pay') {
+        window.history.pushState(null, '', '/pay' + window.location.search);
+      }
+    } else {
+      if (window.location.pathname === '/pay') {
+        window.history.pushState(null, '', '/');
+      }
+    }
+  }, [activeTab]);
+
+
+  const playPttSound = (type: 'beep-on' | 'beep-off' | 'static') => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      
+      if (type === 'beep-on') {
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+        
+        osc1.frequency.value = 880;
+        osc2.frequency.value = 1109;
+        osc1.type = 'sine';
+        osc2.type = 'sine';
+        
+        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+        
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc1.start();
+        osc2.start();
+        osc1.stop(ctx.currentTime + 0.15);
+        osc2.stop(ctx.currentTime + 0.15);
+      } else if (type === 'beep-off') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        
+        osc.frequency.setValueAtTime(554, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(370, ctx.currentTime + 0.2);
+        osc.type = 'triangle';
+        
+        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.start();
+        osc.stop(ctx.currentTime + 0.25);
+      } else if (type === 'static') {
+        const bufferSize = ctx.sampleRate * 0.25;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 1000;
+        filter.Q.value = 1.2;
+        
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.03, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+        
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        
+        noise.start();
+        noise.stop(ctx.currentTime + 0.25);
+      }
+    } catch (e) {
+      console.warn("AudioContext warning:", e);
+    }
+  };
+  
+  const renderTime = (time24Str: string) => {
+    try {
+      const parts = (time24Str || "").split(':');
+      if (parts.length < 2) return time24Str;
+      if (isTime24Hour) {
+        return time24Str;
+      }
+      let hr = parseInt(parts[0], 10);
+      const min = parts[1];
+      if (isNaN(hr)) return time24Str;
+      const ampm = hr >= 12 ? 'PM' : 'AM';
+      hr = hr % 12;
+      if (hr === 0) hr = 12;
+      return `${hr}:${min} ${ampm}`;
+    } catch (_) {
+      return time24Str;
+    }
+  };
+  
+  // Live Trial Timer & Active Subscription custom hook
+  const { activePlan, setActivePlan, currentTime, getTrialCountdownStr, isTrialExpired } = useSubscriptionTimer();
+
+  // Long-press behavior for "New Sale" button
+  const newSalePressTimer = useRef<NodeJS.Timeout | null>(null);
+  const [isLongPressTriggered, setIsLongPressTriggered] = useState(false);
+
+  const handleNewSalePointerDown = () => {
+    setIsLongPressTriggered(false);
+    if (newSalePressTimer.current) clearTimeout(newSalePressTimer.current);
+    newSalePressTimer.current = setTimeout(() => {
+      setIsLongPressTriggered(true);
+      setIsCashDrawerOpen(true);
+      // Removed triggerNotification here to avoid "not defined" errors if declared later
+    }, 600);
+  };
+
+  const handleNewSalePointerUp = () => {
+    if (newSalePressTimer.current) {
+      clearTimeout(newSalePressTimer.current);
+      newSalePressTimer.current = null;
+    }
+  };
+
+  const handleNewSaleClick = () => {
+    if (isLongPressTriggered) {
+      setIsLongPressTriggered(false);
+      return;
+    }
+    setActiveTab('new-sale');
+  };
+
+  // Profile Cards Carousel
+  const [profileCarouselIndex, setProfileCarouselIndex] = useState(0); // 0 = User Profile, 1 = Band Profile
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setProfileCarouselIndex(prev => (prev === 0 ? 1 : 0));
+    }, 6000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Helper to determine the current or next show
+  const getNextShow = () => {
+    if (shows.length === 0) return null;
+    const isEmbargoedOrConfirming = (s: any) => {
+      if (s.is_published === false) return true;
+      if (s.publication_status === 'embargoed_private' || s.publication_status === 'draft') return true;
+      if (s.status === 'Draft' || s.status === 'Embargoed') return true;
+      return false;
+    };
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const upcoming = shows
+      .filter(s => !isEmbargoedOrConfirming(s) && s.date >= todayStr)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (upcoming.length > 0) return upcoming[0];
+    
+    // Fallback: pick only from unembargoed shows
+    const unembargoed = shows.filter(s => !isEmbargoedOrConfirming(s));
+    if (unembargoed.length === 0) return null;
+    const sorted = [...unembargoed].sort((a, b) => b.date.localeCompare(a.date));
+    return sorted[0];
+  };
+
+  // Helper to load setlist info from localStorage
+  const getSetlistDetailsForShow = (showId: string | undefined) => {
+    if (!showId) return { count: 0, durationStr: '0:00', allottedStr: '60:00' };
+    try {
+      const saved = localStorage.getItem('nexus_core_setlists');
+      if (saved) {
+        const setlistsMap = JSON.parse(saved);
+        const sl = setlistsMap[showId];
+        if (sl) {
+          const count = (sl.songs || []).filter((s: any) => s.vibe !== 'break' && !s.name.toLowerCase().includes('break')).length;
+          const totalSecs = (sl.songs || []).reduce((acc: number, s: any) => acc + (s.minutes * 60) + s.seconds, 0);
+          const minutes = Math.floor(totalSecs / 60);
+          const seconds = totalSecs % 60;
+          return {
+            count,
+            durationStr: `${minutes}:${seconds.toString().padStart(2, '0')}`,
+            allottedStr: `${sl.allottedMinutes || 60}:${(sl.allottedSeconds || 0).toString().padStart(2, '0')}`
+          };
+        }
+      }
+    } catch (_) {}
+    return { count: 0, durationStr: '0:00', allottedStr: '60:00' };
+  };
+
+  // Test diagnostic connection
+  useEffect(() => {
+    testSupabaseConnection().then(res => {
+      console.log('Diagnostic test completed:', res);
+      if (!res.success) {
+        console.warn('Silent Connection Test Diagnostic Result:', res.message);
+      } else {
+        console.log('Diagnostic test success:', res.message);
+      }
+    });
+  }, []);
+
+
+
+  // Supabase Configuration Status
+  const [supabaseUrl] = useState<string>(getSupabaseUrl());
+  const [supabaseKey] = useState<string>(getSupabaseAnonKey());
+  const isSupabaseConfigured = !!supabaseUrl && !!supabaseKey;
+  const [dbStatus, setDbStatus] = useState<'connected' | 'unconfigured' | 'error'>(
+    isSupabaseConfigured ? 'connected' : 'unconfigured'
+  );
+
+  // Real-time browser online status state
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+
+  // Local state to track the offline queue count dynamically
+  const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
+
+  useEffect(() => {
+    // Check initial queue size
+    setPendingSyncCount(getOfflineQueue().length);
+
+    const handleQueueChanged = (e: any) => {
+      if (e.detail && typeof e.detail.queueLength === 'number') {
+        setPendingSyncCount(e.detail.queueLength);
+      }
+    };
+
+    window.addEventListener('nexus_core_offline_queue_changed', handleQueueChanged);
+    return () => {
+      window.removeEventListener('nexus_core_offline_queue_changed', handleQueueChanged);
+    };
+  }, []);
+
+  // DB subscription / fetch logs for dev debugging feedback
+  const [logs, setLogs] = useState<string[]>(['Application local state initialized.']);
+
+  // Helper to append a log message
+  const addLog = React.useCallback((msg: string) => {
+    setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev.slice(0, 99)]);
+  }, []);
+
+  // Helper to add an offline queued action to localStorage
+  const queueOfflineAction = (type: 'sale' | 'show' | 'note', operation: 'insert' | 'update' | 'delete', payload: any) => {
+    try {
+      const existingQueueStr = localStorage.getItem('nexus_core_offline_queue');
+      const queue = existingQueueStr ? JSON.parse(existingQueueStr) : [];
+      queue.push({
+        id: Math.random().toString(36).substring(2, 9),
+        type,
+        operation,
+        payload,
+        timestamp: new Date().toISOString()
+      });
+      localStorage.setItem('nexus_core_offline_queue', JSON.stringify(queue));
+      addLog(`[OFFLINE CACHE] Cached ${operation} for ${type} in local standby queue.`);
+    } catch (err) {
+      console.error('Error queuing offline action', err);
+    }
+  };
+
+  // Application database-backed state with realistic seed data
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [shows, setShows] = useState<Show[]>([]);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+
+
+  const [showNotification, setShowNotification] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastToastRef = useRef<{ msg: string; time: number }>({ msg: '', time: 0 });
+
+  // Trigger temporary floating in-app toast notification (never spams OS/Android push notifications)
+  const triggerNotification = React.useCallback((msg: string) => {
+    if (!msg) return;
+    const now = Date.now();
+    // Suppress duplicate identical toasts within a 4-second window
+    if (lastToastRef.current.msg === msg && now - lastToastRef.current.time < 4000) {
+      return;
+    }
+    lastToastRef.current = { msg, time: now };
+
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setShowNotification(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setShowNotification(null);
+      toastTimeoutRef.current = null;
+    }, 2200);
+  }, []);
+
+
+
+  // Promoter Offers Hook
+  const promoterOffers = usePromoterOffers({
+    isHydrated,
+    bands,
+    activeBandId,
+    setShows,
+    triggerNotification,
+    addLog
+  });
+  const {
+    offers, setOffers,
+    blockedPromoters, setBlockedPromoters,
+    handleCreateOffer, handleUpdateOffer,
+    handleAcceptOffer, handleDeclineOffer,
+    handleBlockPromoter, handleRenegotiateOffer
+  } = promoterOffers;
+
+  const [notes, setNotes] = useState<TourNote[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_core_notes_offline');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const mockIds = new Set(["note_01", "note_02"]);
+        return parsed.filter((item: any) => !mockIds.has(item.id));
+      }
+    } catch (_) {}
+    return [];
+  });
+
+  // Tour Notes & Checklist Hook
+  const tourNotes = useTourNotes({
+    notes,
+    setNotes,
+    isOnline,
+    triggerNotification,
+    addLog,
+    queueOfflineAction
+  });
+  const {
+    isNoteExpanded, setIsNoteExpanded,
+    inlineNoteEditingId, setInlineNoteEditingId,
+    inlineNoteText, setInlineNoteText,
+    inlineNoteCategory, setInlineNoteCategory,
+    inlineNoteTag, setInlineNoteTag,
+    activeNoteIndex, setActiveNoteIndex,
+    isTourNotesCardCollapsed, setIsTourNotesCardCollapsed,
+    NOTE_CATEGORIES, NOTE_STATUSES,
+    handleNoteTouchStart, handleNoteTouchMove, handleNoteTouchEnd,
+    handleDeleteNote, handleUpdateNote,
+    isChecklistModalOpen, setIsChecklistModalOpen,
+    isFlightModalOpen, setIsFlightModalOpen,
+    checklistItems, setChecklistItems,
+    checklistBank, setChecklistBank,
+    toggleChecklistItem
+  } = tourNotes;
+
+
+  // Asynchronous Offline Hydration from IndexedDB Stores
+  useEffect(() => {
+    const hydrateStores = async () => {
+      try {
+        await initOfflineQueue();
+        const inv = await inventoryStore.getItem('nexus_master_inventory');
+        if (inv) setInventory(JSON.parse(inv as string));
+        
+        const pos = await posSalesStore.getItem('nexus_master_pos_sales');
+        if (pos) setSales(JSON.parse(pos as string));
+        else {
+          const old = localStorage.getItem('nexus_core_sales_offline');
+          if (old) setSales(JSON.parse(old));
+        }
+
+        const shws = await showsStore.getItem('nexus_master_shows');
+        if (shws) setShows(JSON.parse(shws as string));
+
+        const flts = await itinerariesStore.getItem('nexus_master_itineraries');
+        if (flts) setFlights(JSON.parse(flts as string));
+
+        const revs = await reviewsStore.getItem('nexus_master_reviews');
+        if (revs) setUserReviews(JSON.parse(revs as string));
+
+        const vens = await venuesStore.getItem('nexus_master_venues');
+        if (vens) setVenues(JSON.parse(vens as string));
+        else {
+          const oldV = localStorage.getItem('nexus_core_venues');
+          if (oldV) setVenues(JSON.parse(oldV));
+        }
+
+        const offs = await offersStore.getItem('nexus_master_offers');
+        if (offs) setOffers(JSON.parse(offs as string));
+        else {
+          const oldO = localStorage.getItem('nexus_core_offers_offline');
+          if (oldO) setOffers(JSON.parse(oldO));
+        }
+
+        const exps = await expensesStore.getItem('nexus_master_expenses');
+        if (exps) setExpenses(JSON.parse(exps as string));
+        else {
+          const oldE = localStorage.getItem('nexus_core_expenses');
+          if (oldE) setExpenses(JSON.parse(oldE));
+        }
+
+        const lm = localStorage.getItem('nexus_core_loyalty_members');
+        if (lm) setLoyaltyMembers(JSON.parse(lm));
+        
+        const ct = localStorage.getItem('nexus_core_cash_transactions');
+        if (ct) setCashTransactions(JSON.parse(ct));
+        
+        const bp = localStorage.getItem('nexus_core_blocked_promoters');
+        if (bp) setBlockedPromoters(JSON.parse(bp));
+
+        const activeLocalProfileStr = localStorage.getItem('nexus_core_user_profile');
+        const prof = await profileStore.getItem('nexus_core_user_profile');
+        if (prof && activeLocalProfileStr && activeLocalProfileStr !== 'null') {
+          const parsed = typeof prof === 'string' ? JSON.parse(prof) : prof;
+          if (parsed?.id && !isLegacyAdminOrDummyProfile(parsed)) {
+            const hydrated = await hydrateProfileWithCache(parsed.id, parsed);
+            setUserProfile(hydrated);
+          } else {
+            await profileStore.removeItem('nexus_core_user_profile').catch(() => {});
+          }
+        } else if (prof) {
+          // If localStorage has no active session (clean install or logged out), purge stale IndexedDB profile
+          await profileStore.removeItem('nexus_core_user_profile').catch(() => {});
+        }
+
+        setIsHydrated(true);
+
+
+      } catch (err) {
+        console.error('IDB Hydration Error:', err);
+        setIsHydrated(true);
+      }
+    };
+    hydrateStores();
+  }, []);
+
+  // Merge seed shows with extended local storage metadata on initial mount
+  useEffect(() => {
+    try {
+      const existing = localStorage.getItem('nexus_core_shows_extended');
+      if (existing) {
+        const extendedMap = JSON.parse(existing);
+        setShows(prev => prev.map(s => {
+          const extra = extendedMap[s.id];
+          if (extra) {
+            return { ...s, ...extra };
+          }
+          return s;
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to merge extended show metadata on mount:', err);
+    }
+  }, []);
+
+  // Listen to Tour Manager package and publication updates to retroactively update shows in real-time
+  useEffect(() => {
+    const handleTourSync = (e: any) => {
+      const tour = e.detail?.tour;
+      if (!tour) return;
+      const isEmbargoed = tour.publicationStatus === 'embargoed_private';
+      const isPublished = tour.publicationStatus === 'public_announced';
+
+      setShows(prevShows => {
+        const stopMap = new Map<string, any>();
+        if (Array.isArray(tour.stops)) {
+          tour.stops.forEach((st: any) => {
+            stopMap.set(st.id, st);
+            const hexId = (st.id || '').replace(/[^a-f0-9]/gi, '').padEnd(32, '0').slice(0, 32);
+            const stopUuid = hexId.slice(0, 8) + '-' + hexId.slice(8, 12) + '-4' + hexId.slice(13, 16) + '-a' + hexId.slice(17, 20) + '-' + hexId.slice(20, 32);
+            stopMap.set(stopUuid, st);
+          });
+        }
+
+        const updated = prevShows.map(s => {
+          let matches = false;
+          if (s.additional_notes) {
+            try {
+              const extra = typeof s.additional_notes === 'string' ? JSON.parse(s.additional_notes) : s.additional_notes;
+              if (extra.tour_id === tour.id || (extra.stop_id && stopMap.has(extra.stop_id))) {
+                matches = true;
+              }
+            } catch (_) {}
+          }
+          if (!matches && (s as any).show_name && (s as any).show_name.toLowerCase().startsWith((tour.title || '').toLowerCase())) {
+            matches = true;
+          }
+          if (!matches && stopMap.has(s.id)) {
+            matches = true;
+          }
+
+          if (matches) {
+            return {
+              ...s,
+              status: isEmbargoed ? 'Embargoed' : 'Active',
+              is_published: isPublished,
+              publication_status: tour.publicationStatus,
+              embargo_until_date: tour.embargoUntilDate
+            };
+          }
+          return s;
+        });
+
+        // Save updated shows to stores
+        showsStore.setItem('nexus_master_shows', JSON.stringify(updated)).catch(console.warn);
+        try {
+          localStorage.setItem('nexus_core_shows_offline', JSON.stringify(updated));
+        } catch (_) {}
+        return updated;
+      });
+    };
+
+    window.addEventListener('shows_updated_from_tour_manager', handleTourSync);
+    return () => {
+      window.removeEventListener('shows_updated_from_tour_manager', handleTourSync);
+    };
+  }, []);
+  
+  const isLoadedFromDbRef = useRef(false);
+  const { inventory, setInventory, editingItem, setEditingItem, stagedDistroItems, setStagedDistroItems, inventoryAudits, setInventoryAudits } = useInventoryState();
+
+
+
+
+  const [dailySalesGoal, setDailySalesGoal] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_core_sales_goal');
+      if (saved) return Number(saved);
+    } catch (_) {}
+    return 250;
+  });
+
+  const [cashTransactions, setCashTransactions] = useState<import('./types').CashTransaction[]>([]);
+
+  const [expenses, setExpenses] = useState<{ id: string; description: string; amount: number; date: string }[]>([]);
+  const [venues, setVenues] = useState<import('./types').Venue[]>([]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    try {
+      venuesStore.setItem('nexus_master_venues', JSON.stringify(venues)).catch(e => console.warn(e));
+      localStorage.setItem('nexus_core_venues', JSON.stringify(venues));
+    } catch (e) {
+      console.error('Failed to save venues:', e);
+    }
+  }, [venues, isHydrated]);
+
+  // Sync bands list with localStorage namespaced by profile ID
+  useEffect(() => {
+    if (!userProfile) return;
+    try {
+      profileStore.setItem(`nexus_core_${userProfile?.id}_bands`, bands);
+    } catch (e) {
+      console.error('Failed to save namespaced bands to localStorage:', e);
+    }
+  }, [bands, userProfile?.id]);
+
+  // Sync active band ID with localStorage namespaced by profile ID
+  useEffect(() => {
+    if (!userProfile) return;
+    try {
+      profileStore.setItem(`nexus_core_${userProfile?.id}_active_band_id`, activeBandId);
+    } catch (e) {
+      console.error('Failed to save namespaced active band ID to localStorage:', e);
+    }
+  }, [activeBandId, userProfile?.id]);
+
+  // Sync user profile changes back to localStorage and IndexedDB and Supabase
+  useEffect(() => {
+    if (userProfile && !isLegacyAdminOrDummyProfile(userProfile)) {
+      try {
+        profileStore.setItem('nexus_core_user_profile', userProfile);
+        safeSetLocalStorageItem('nexus_core_user_profile', userProfile);
+      } catch (e) {
+        console.warn('Failed to save userProfile to local DB:', e);
+      }
+    }
+  }, [userProfile, isOnline]);
+
+  // Proactively hydrate userProfile from Supabase profiles table on startup & when coming online ONLY when logged in
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase || !navigator.onLine || isLoggedOut || !userProfile || isLegacyAdminOrDummyProfile(userProfile)) return;
+
+    let isSubscribed = true;
+    const syncProfileFromSupabase = async () => {
+      try {
+        await ensureValidSupabaseAuthSession(supabase).catch(() => {});
+        const targetId = userProfile?.id && userProfile.id !== 'guest' ? userProfile.id : null;
+        const targetEmail = (userProfile?.email || '').trim();
+
+        if (!targetId && !targetEmail) return;
+
+        let query = supabase.from('profiles').select('*');
+        if (targetId && targetEmail) {
+          query = query.or(`id.eq.${targetId},email.ilike.${targetEmail}`);
+        } else if (targetId) {
+          query = query.eq('id', targetId);
+        } else if (targetEmail) {
+          query = query.ilike('email', targetEmail);
+        }
+
+        const { data, error } = await query.maybeSingle();
+        if (data && !error && isSubscribed && !isLegacyAdminOrDummyProfile(data)) {
+          // Also fetch live record from promoters table if accessible
+          let promoterRecord: any = null;
+          try {
+            const { data: pData } = await supabase
+              .from('promoters')
+              .select('*')
+              .or(`id.eq.${data.id},user_id.eq.${data.id}`)
+              .maybeSingle();
+            if (pData) promoterRecord = pData;
+          } catch (_) {}
+
+          const normalized = normalizeLoadedProfile(data);
+          if (promoterRecord) {
+            normalized.promoter_id = promoterRecord.id || normalized.promoter_id;
+            normalized.promoter_name = promoterRecord.entity_name || promoterRecord.brand_name || promoterRecord.name || normalized.promoter_name;
+            normalized.promoter_agency = promoterRecord.entity_name || promoterRecord.agency_name || normalized.promoter_agency;
+            normalized.promoter_brand = promoterRecord.entity_name || promoterRecord.brand_name || normalized.promoter_brand;
+            normalized.promoter_logo = promoterRecord.promoter_logo || normalized.promoter_logo;
+            normalized.promoter_cover_image = promoterRecord.promoter_cover_image || normalized.promoter_cover_image;
+            normalized.promoter_bio = promoterRecord.bio || normalized.promoter_bio;
+            normalized.promoter_metadata = {
+              ...(normalized.promoter_metadata || {}),
+              ...promoterRecord,
+              brand_name: normalized.promoter_name,
+              agency_name: normalized.promoter_agency,
+              logo_url: normalized.promoter_logo,
+              banner_url: normalized.promoter_cover_image,
+              bio: normalized.promoter_bio
+            };
+          }
+
+          setUserProfile((prev: any) => {
+            if (!prev) return normalized;
+            const merged = {
+              ...prev,
+              ...normalized,
+              birthday_month: normalized.birthday_month ?? prev.birthday_month ?? null,
+              birthday_day: normalized.birthday_day ?? prev.birthday_day ?? null,
+              show_birthday_shoutout:
+                data.show_birthday_shoutout !== undefined
+                  ? Boolean(data.show_birthday_shoutout)
+                  : (prev.show_birthday_shoutout ?? normalized.show_birthday_shoutout ?? true),
+              active_workspace: normalized.active_workspace || prev.active_workspace || 'industry_pro',
+              account_type: normalized.account_type || prev.account_type || 'industry pro',
+              promoter_id: normalized.promoter_id ?? prev.promoter_id,
+              promoter_name: normalized.promoter_name ?? prev.promoter_name,
+              promoter_agency: normalized.promoter_agency ?? prev.promoter_agency,
+              promoter_brand: normalized.promoter_brand ?? prev.promoter_brand,
+              promoter_logo: normalized.promoter_logo ?? prev.promoter_logo,
+              promoter_cover_image: normalized.promoter_cover_image ?? prev.promoter_cover_image,
+              promoter_bio: normalized.promoter_bio ?? prev.promoter_bio,
+              promoter_metadata: normalized.promoter_metadata !== undefined
+                ? {
+                    ...(prev.promoter_metadata || {}),
+                    ...(normalized.promoter_metadata || {})
+                  }
+                : prev.promoter_metadata
+            };
+            try {
+              profileStore.setItem('nexus_core_user_profile', merged);
+              safeSetLocalStorageItem('nexus_core_user_profile', merged);
+              if (merged.id) {
+                cacheProfileMetadata(merged.id, merged).catch(() => {});
+              }
+              if (merged.console_handle || merged.username) {
+                cacheProfileMetadata(merged.console_handle || merged.username, merged).catch(() => {});
+              }
+              if (merged.avatar_url) {
+                localStorage.setItem('nexus_user_avatar', merged.avatar_url);
+                localStorage.setItem('nexus_avatar', merged.avatar_url);
+                cacheProfileImage(merged.avatar_url, merged.avatar_url).catch(() => {});
+              }
+              if (merged.banner_url) {
+                localStorage.setItem('nexus_user_banner', merged.banner_url);
+                localStorage.setItem('nexus_banner', merged.banner_url);
+                cacheProfileImage(merged.banner_url, merged.banner_url).catch(() => {});
+              }
+              if (merged.bio) {
+                localStorage.setItem('nexus_user_bio', merged.bio);
+              }
+              if (merged.promoter_metadata?.bio) {
+                localStorage.setItem('nexus_promoter_bio', merged.promoter_metadata.bio);
+              }
+              if (merged.promoter_metadata?.logo_url) {
+                localStorage.setItem('nexus_promoter_logo', merged.promoter_metadata.logo_url);
+              }
+              if (merged.promoter_metadata?.cover_url || merged.promoter_metadata?.banner_url) {
+                localStorage.setItem('nexus_promoter_cover', merged.promoter_metadata.cover_url || merged.promoter_metadata.banner_url);
+              }
+            } catch (_) {}
+            return merged;
+          });
+        }
+      } catch (err) {
+        console.warn('[App] Proactive Supabase profile hydration notice:', err);
+      }
+    };
+
+    syncProfileFromSupabase();
+    return () => { isSubscribed = false; };
+  }, [userProfile?.id, isOnline]);
+
+  // Load account-specific offline caches instantly upon context/tenant switch to allow pristine clean slates
+  useEffect(() => {
+    // Fetch live community band profiles and full discographies from Supabase in the background
+    const supabase = getSupabase();
+    if (supabase && navigator.onLine) {
+      communityBandManager.fetchFromSupabase().catch((err) => {
+        console.warn('[App] Background Supabase band fetch notice:', err);
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!userProfile) return;
+    
+    const loadCaches = async () => {
+    try {
+      // 1. First setup namespaced bands lists & active contexts to assure decoupling
+      let cachedBands = await profileStore.getItem(`nexus_core_${userProfile?.id}_bands`);
+      let cachedActiveBandIdStr = await profileStore.getItem(`nexus_core_${userProfile?.id}_active_band_id`);
+      
+      // Fallback to localStorage for backward compatibility if IndexedDB is empty
+      if (!cachedBands) {
+        const legacyBands = localStorage.getItem(`nexus_core_${userProfile?.id}_bands`);
+        if (legacyBands) cachedBands = JSON.parse(legacyBands);
+      }
+      if (!cachedActiveBandIdStr) {
+        cachedActiveBandIdStr = localStorage.getItem(`nexus_core_${userProfile?.id}_active_band_id`);
+      }
+      
+
+      let currentActiveBandId = activeBandId;
+
+      if (userProfile?.id === 'profile_admin') {
+        const adminBands = (cachedBands && Array.isArray(cachedBands) && cachedBands.length > 0) ? cachedBands : [];
+        setBands(adminBands as any[]);
+        const adminActiveId = cachedActiveBandIdStr || (adminBands[0]?.id || '');
+        setActiveBandId(adminActiveId as string);
+        currentActiveBandId = adminActiveId as string;
+      } else {
+        let userBands: any[] = [];
+        const supabase = getSupabase();
+        let remoteBands: any[] | null = null;
+        if (supabase && navigator.onLine && userProfile?.id) {
+          try {
+            const userBandsData = await fetchUserBands(userProfile.id);
+            if (Array.isArray(userBandsData)) {
+              remoteBands = userBandsData;
+            }
+          } catch (_) {}
+        }
+
+        if (remoteBands !== null) {
+          userBands = remoteBands.map((b: any) => ({
+            ...b,
+            name: b.band_name || b.name || 'Artist'
+          }));
+        } else if (cachedBands && Array.isArray(cachedBands) && cachedBands.length > 0) {
+          userBands = cachedBands;
+        } else if (bands && bands.length > 0) {
+          userBands = bands;
+        } else {
+          userBands = [];
+        }
+
+        const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+
+        if (isOwnerMiguel) {
+          // Restrict userBands strictly to Virulent Excision workspace for Miguel
+          userBands = userBands.filter((b: any) => {
+            const bId = String(b.id || '').trim();
+            const bName = String(b.name || b.band_name || '').trim().toLowerCase();
+            return bId === 'cbddb810-259b-4230-9968-3d402dfdb872' || bName.includes('virulent excision');
+          });
+          if (userBands.length === 0) {
+            userBands = [{
+              id: 'cbddb810-259b-4230-9968-3d402dfdb872',
+              name: 'Virulent Excision',
+              band_name: 'Virulent Excision',
+              genre: 'Brutal Death Metal',
+              logo_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396',
+              cover_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-cover_1787467851123.jpg?t=1787467851123',
+              owner_id: userProfile?.id
+            }];
+          }
+        } else {
+          // Cleanse any accidentally inherited Virulent Excision bands for non-Miguel users
+          userBands = userBands.filter((b: any) => {
+            const bId = String(b.id || '').trim();
+            const bName = String(b.name || b.band_name || '').trim().toLowerCase();
+            return bId !== 'cbddb810-259b-4230-9968-3d402dfdb872' && !bName.includes('virulent excision');
+          });
+          if (userProfile?.band_name && userProfile.band_name.toLowerCase().includes('virulent')) {
+            userProfile.band_name = null;
+            userProfile.bandName = null;
+            userProfile.band_id = null;
+            try {
+              safeSetLocalStorageItem('nexus_core_user_profile', userProfile);
+              localStorage.removeItem('nexus_my_band_profile');
+            } catch (_) {}
+          }
+        }
+
+        if (userProfile?.id) {
+          profileStore.setItem(`nexus_core_${userProfile?.id}_bands`, userBands);
+        }
+        setBands(userBands);
+
+        // Ensure strict separation between Personal Bio and Promoter Bio, and heal if overwritten
+        const authenticPersonalBio = 'Chicago born artist, musician, promoter and entrepreneur with 25 years of history in the extreme metal underground. Probably best known for the Chicago/Texas Domination Fest that ran from 2014-2024. I am also the vocalist of Virulent Excision. Currently my latest ambition has been the creation of this very platform. I wanted to create the sickest all-in-one system for bands, labels, promoters and creators to link up free of algorithms of corporate junk and ads found on the platforms. Enjoy!';
+        const authenticPromoterBio = 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.';
+        const currentBio = userProfile?.bio || '';
+        const promoterBio = (userProfile as any)?.promoter_metadata?.bio || (userProfile as any)?.promoter_bio;
+
+        if (isOwnerMiguel && currentBio && (currentBio === promoterBio || currentBio.toLowerCase().includes('booking management for underground'))) {
+          userProfile.bio = authenticPersonalBio;
+          try {
+            localStorage.setItem('nexus_user_bio', authenticPersonalBio);
+            safeSetLocalStorageItem('nexus_core_user_profile', userProfile);
+          } catch (_) {}
+          if (supabase && userProfile.id) {
+            supabase.from('profiles').update({ bio: authenticPersonalBio }).eq('id', userProfile.id).then();
+          }
+        }
+
+        // Cleanse corrupted band_id or band_name from userProfile if it was set to a community archive or mismatched
+        const isCorruptCommunityBand = Boolean(
+          (userProfile?.band_id && isCommunityBandRecord(userProfile.band_id)) ||
+          (userProfile?.band_name && (isCommunityBandRecord(userProfile.band_name) || userProfile.band_name.toLowerCase().includes('necroticgorebeast') || userProfile.band_name.toLowerCase().includes('molested') || userProfile.band_name.toLowerCase() === 'dying fetus')) ||
+          (userProfile?.bandName && (isCommunityBandRecord(userProfile.bandName) || userProfile.bandName.toLowerCase().includes('necroticgorebeast') || userProfile.bandName.toLowerCase().includes('molested') || userProfile.bandName.toLowerCase() === 'dying fetus'))
+        );
+
+        if (isOwnerMiguel || isCorruptCommunityBand) {
+          const needsVEFix = isOwnerMiguel && (
+            userProfile?.band_id !== 'cbddb810-259b-4230-9968-3d402dfdb872' ||
+            userProfile?.band_name !== 'Virulent Excision' ||
+            userProfile?.bandName !== 'Virulent Excision'
+          );
+
+          if (isCorruptCommunityBand || needsVEFix) {
+            userProfile.band_id = isOwnerMiguel ? 'cbddb810-259b-4230-9968-3d402dfdb872' : null;
+            userProfile.band_name = isOwnerMiguel ? 'Virulent Excision' : null;
+            userProfile.bandName = isOwnerMiguel ? 'Virulent Excision' : null;
+            try {
+              safeSetLocalStorageItem('nexus_core_user_profile', userProfile);
+              if (isOwnerMiguel) {
+                localStorage.setItem('nexus_active_band_id', 'cbddb810-259b-4230-9968-3d402dfdb872');
+              }
+            } catch (_) {}
+            if (supabase && userProfile.id) {
+              supabase.from('profiles').update({
+                band_id: userProfile.band_id,
+                band_name: userProfile.band_name,
+                bandName: userProfile.bandName
+              }).eq('id', userProfile.id).then();
+            }
+          }
+        }
+
+        // Backfill userProfile band_id / band_name if user has a valid band registered
+        if (userBands.length > 0 && userProfile?.id) {
+          const primaryBand = userBands[0];
+          const hasMissingBandFields = !userProfile.band_id || !userProfile.band_name || !userProfile.bandName;
+          const isPrimaryValid = !isCommunityBandRecord(primaryBand.id) && !isCommunityBandRecord(primaryBand.name);
+          if (isPrimaryValid && ((isOwnerMiguel && userProfile.band_name !== 'Virulent Excision') || (!isOwnerMiguel && hasMissingBandFields && !primaryBand.name?.toLowerCase().includes('virulent')))) {
+            const updatedProfile = {
+              ...userProfile,
+              band_id: isOwnerMiguel ? 'cbddb810-259b-4230-9968-3d402dfdb872' : (userProfile.band_id || primaryBand.id),
+              band_name: isOwnerMiguel ? 'Virulent Excision' : (userProfile.band_name || userProfile.bandName || primaryBand.band_name || primaryBand.name),
+              bandName: isOwnerMiguel ? 'Virulent Excision' : (userProfile.bandName || userProfile.band_name || primaryBand.band_name || primaryBand.name),
+              active_workspace: userProfile.active_workspace || ((userProfile.account_type === 'fan' || userProfile.account_type === 'fan_only') ? 'fan_only' : 'industry_pro'),
+              account_type: (userProfile.account_type === 'fan' || userProfile.account_type === 'fan_only') ? 'fan' : 'industry pro'
+            };
+            setUserProfile(updatedProfile);
+            try {
+              safeSetLocalStorageItem('nexus_core_user_profile', updatedProfile);
+            } catch (_) {}
+
+            if (supabase) {
+              supabase.from('profiles').update({
+                band_id: updatedProfile.band_id,
+                band_name: updatedProfile.band_name,
+                bandName: updatedProfile.bandName,
+                active_workspace: updatedProfile.active_workspace,
+                account_type: updatedProfile.account_type
+              }).eq('id', userProfile.id).then();
+            }
+          }
+        }
+
+        // Auto-heal existing creative profile ONLY if workspace is registered or Miguel
+        const hasCreativeAccess = hasRegisteredWorkspace(userProfile, 'creative') || 
+          userProfile?.account_type === 'creative' || 
+          userProfile?.active_workspace === 'creative' || 
+          Boolean(userProfile?.creative_id && userProfile?.creative_id !== userProfile?.id) || 
+          isOwnerMiguel;
+
+        if (supabase && navigator.onLine && userProfile?.id && userProfile.id !== 'guest' && hasCreativeAccess) {
+          autoSyncCreativeProfile(userProfile).then((synced) => {
+            if (synced) {
+              setUserProfile((prev: any) => {
+                if (!prev) return prev;
+                const cName = synced.business_name || synced.creative_name || resolveCreativeName(prev);
+                const cHandle = synced.creative_handle || resolveCreativeHandle(prev);
+                const cAvatar = synced.avatar_url || synced.creative_avatar || resolveCreativeLogo(prev);
+                const cBanner = synced.banner_url || synced.creative_banner || resolveCreativeCover(prev);
+                const cBio = synced.bio || resolveCreativeBio(prev);
+                const healedProfile = {
+                  ...prev,
+                  creative_id: synced.id || prev.creative_id || (isOwnerMiguel ? 'c-vortex' : generateUUID()),
+                  creative_name: cName,
+                  creative_business_name: cName,
+                  creative_handle: cHandle,
+                  creative_avatar: cAvatar,
+                  creative_banner: cBanner,
+                  creative_bio: cBio,
+                  creative_metadata: {
+                    ...(prev.creative_metadata || {}),
+                    ...synced,
+                    business_name: cName,
+                    creative_handle: cHandle,
+                    avatar_url: cAvatar,
+                    banner_url: cBanner,
+                    bio: cBio,
+                  }
+                };
+                try {
+                  safeSetLocalStorageItem('nexus_core_user_profile', healedProfile);
+                  if (cName) localStorage.setItem('nexus_creative_business_name', cName);
+                  if (cHandle) localStorage.setItem('nexus_creative_handle', cHandle);
+                  if (cAvatar) localStorage.setItem('nexus_creative_avatar', cAvatar);
+                  if (cBanner) localStorage.setItem('nexus_creative_banner', cBanner);
+                  if (cBio) localStorage.setItem('nexus_creative_bio', cBio);
+                } catch (_) {}
+                return healedProfile;
+              });
+            }
+          }).catch((err) => console.warn('Creative auto-sync notice:', err));
+        }
+
+        // Auto-heal existing promoter profile from Supabase ONLY if user is registered promoter or Miguel
+        const hasPromoterAccess = hasRegisteredWorkspace(userProfile, 'promoter') || 
+          userProfile?.account_type === 'promoter' || 
+          userProfile?.active_workspace === 'promoter' || 
+          Boolean(userProfile?.promoter_id && userProfile?.promoter_id !== userProfile?.id) || 
+          isOwnerMiguel;
+
+        if (supabase && navigator.onLine && userProfile?.id && userProfile.id !== 'guest' && hasPromoterAccess) {
+          autoSyncPromoterProfile(userProfile).then((synced) => {
+            if (synced) {
+              setUserProfile((prev: any) => {
+                if (!prev) return prev;
+                const healedProfile = {
+                  ...prev,
+                  promoter_id: synced.id || prev.promoter_id,
+                  promoter_name: synced.brand_name || synced.name || prev.promoter_name,
+                  promoter_agency: synced.agency_name || synced.brand_name || prev.promoter_agency,
+                  promoter_brand: synced.brand_name || prev.promoter_brand,
+                  promoter_logo: synced.promoter_logo || synced.logo_url || prev.promoter_logo,
+                  promoter_cover_image: synced.promoter_cover_image || synced.banner_url || prev.promoter_cover_image,
+                  promoter_bio: synced.bio || prev.promoter_bio,
+                  promoter_metadata: {
+                    ...(prev.promoter_metadata || {}),
+                    ...synced
+                  }
+                };
+                try {
+                  safeSetLocalStorageItem('nexus_core_user_profile', healedProfile);
+                  if (synced.bio) localStorage.setItem('nexus_promoter_bio', synced.bio);
+                  if (synced.promoter_logo || synced.logo_url) localStorage.setItem('nexus_promoter_logo', synced.promoter_logo || synced.logo_url);
+                  if (synced.promoter_cover_image || synced.banner_url) localStorage.setItem('nexus_promoter_cover', synced.promoter_cover_image || synced.banner_url);
+                } catch (_) {}
+                return healedProfile;
+              });
+            }
+          }).catch((err) => console.warn('Promoter auto-sync notice:', err));
+        } else if (!hasPromoterAccess && !isOwnerMiguel && userProfile) {
+          if (userProfile.promoter_agency || userProfile.promoter_brand || userProfile.promoter_name || (userProfile.promoter_id && userProfile.promoter_id === userProfile.id)) {
+            setUserProfile((prev: any) => {
+              if (!prev) return prev;
+              const cleaned = { ...prev };
+              delete cleaned.promoter_agency;
+              delete cleaned.promoter_brand;
+              delete cleaned.promoter_name;
+              delete cleaned.promoter_id;
+              try { safeSetLocalStorageItem('nexus_core_user_profile', cleaned); } catch (_) {}
+              return cleaned;
+            });
+          }
+        }
+
+        let userActiveId = '';
+        if (isOwnerMiguel) {
+          userActiveId = 'cbddb810-259b-4230-9968-3d402dfdb872';
+        } else if (cachedActiveBandIdStr && userBands.some((b: any) => String(b.id) === String(cachedActiveBandIdStr))) {
+          userActiveId = String(cachedActiveBandIdStr);
+        } else if (userProfile?.band_id && userBands.some((b: any) => String(b.id) === String(userProfile.band_id))) {
+          userActiveId = String(userProfile.band_id);
+        } else if (userBands.length > 0 && userBands[0]?.id) {
+          userActiveId = String(userBands[0].id);
+        }
+        setActiveBandId(userActiveId);
+        currentActiveBandId = userActiveId;
+      }
+
+      // 2. Load context collections namespaced by current active context suffix
+      const suffix = currentActiveBandId || userProfile?.id || 'offline';
+      
+      const cachedSalesStr = localStorage.getItem(`nexus_core_${suffix}_sales_offline`);
+      const cachedShowsStr = localStorage.getItem(`nexus_core_${suffix}_shows_offline`);
+      const cachedNotesStr = localStorage.getItem(`nexus_core_${suffix}_notes_offline`);
+      const cachedAuditsStr = localStorage.getItem(`nexus_core_${suffix}_audits_offline`);
+      const cachedInventoryStr = localStorage.getItem(`nexus_core_${suffix}_inventory_offline`);
+      const cachedExpensesStr = localStorage.getItem(`nexus_core_${suffix}_expenses`);
+      const cachedCashTransactionsStr = localStorage.getItem(`nexus_core_${suffix}_cash_transactions`);
+      const cachedSalesGoalStr = localStorage.getItem(`nexus_core_${suffix}_sales_goal`);
+      
+      if (userProfile?.id === 'profile_admin') {
+        const defaultExpenses = [
+          { id: 'exp_1', description: 'Gas refill (van)', amount: 65.00, date: new Date().toISOString().split('T')[0] },
+          { id: 'exp_2', description: 'Hotel room booking', amount: 150.00, date: new Date().toISOString().split('T')[0] },
+          { id: 'exp_3', description: 'Highway tolls', amount: 35.00, date: new Date().toISOString().split('T')[0] }
+        ];
+        setSales(cachedSalesStr ? JSON.parse(cachedSalesStr) : []);
+        setShows(cachedShowsStr ? JSON.parse(cachedShowsStr) : []);
+        setNotes(cachedNotesStr ? JSON.parse(cachedNotesStr) : []);
+        setInventoryAudits(cachedAuditsStr ? JSON.parse(cachedAuditsStr) : []);
+        setInventory(cachedInventoryStr ? JSON.parse(cachedInventoryStr) : []);
+        setExpenses(cachedExpensesStr ? JSON.parse(cachedExpensesStr) : defaultExpenses);
+        setCashTransactions(cachedCashTransactionsStr ? JSON.parse(cachedCashTransactionsStr) : []);
+        setDailySalesGoal(cachedSalesGoalStr ? Number(cachedSalesGoalStr) : 250);
+      } else {
+        // Pristine, completely clean slate for newly registered test accounts!
+        setSales(cachedSalesStr ? JSON.parse(cachedSalesStr) : []);
+        setShows(cachedShowsStr ? JSON.parse(cachedShowsStr) : []);
+        setNotes(cachedNotesStr ? JSON.parse(cachedNotesStr) : []);
+        setInventoryAudits(cachedAuditsStr ? JSON.parse(cachedAuditsStr) : []);
+        setInventory(cachedInventoryStr ? JSON.parse(cachedInventoryStr) : []);
+        setExpenses(cachedExpensesStr ? JSON.parse(cachedExpensesStr) : []);
+        setCashTransactions(cachedCashTransactionsStr ? JSON.parse(cachedCashTransactionsStr) : []);
+        setDailySalesGoal(cachedSalesGoalStr ? Number(cachedSalesGoalStr) : 250);
+      }
+      setIsInitialHydrated(true);
+    } catch (e) {
+      console.error('Failed to swap context collections:', e);
+    }
+    };
+    
+    loadCaches();
+  }, [activeBandId, userProfile?.id]);
+
+  // Sync core collections with localStorage to maintain offline durability namespaced by current profile suffix
+  useEffect(() => {
+    if (!isInitialHydrated) return;
+    try {
+      const suffix = activeBandId || userProfile?.id || 'offline';
+      localStorage.setItem(`nexus_core_${suffix}_sales_offline`, JSON.stringify(sales));
+    } catch (_) {}
+  }, [sales, isInitialHydrated]);
+
+  useEffect(() => {
+    if (!isInitialHydrated) return;
+    try {
+      const suffix = activeBandId || userProfile?.id || 'offline';
+      localStorage.setItem(`nexus_core_${suffix}_shows_offline`, JSON.stringify(shows));
+    } catch (_) {}
+  }, [shows, isInitialHydrated]);
+
+  useEffect(() => {
+    if (!isInitialHydrated) return;
+    try {
+      const suffix = activeBandId || userProfile?.id || 'offline';
+      localStorage.setItem(`nexus_core_${suffix}_notes_offline`, JSON.stringify(notes));
+    } catch (_) {}
+  }, [notes, isInitialHydrated]);
+
+  useEffect(() => {
+    if (!isInitialHydrated) return;
+    try {
+      const suffix = activeBandId || userProfile?.id || 'offline';
+      localStorage.setItem(`nexus_core_${suffix}_audits_offline`, JSON.stringify(inventoryAudits));
+    } catch (_) {}
+  }, [inventoryAudits, isInitialHydrated]);
+
+  useEffect(() => {
+    if (!isInitialHydrated) return;
+    try {
+      const suffix = activeBandId || userProfile?.id || 'offline';
+      localStorage.setItem(`nexus_core_${suffix}_inventory_offline`, JSON.stringify(inventory));
+      const variantsCache = inventory.reduce((acc, item) => {
+        if (item.variants && item.variants.length > 0) acc[item.id] = item.variants;
+        return acc;
+      }, {} as Record<string, any>);
+      localStorage.setItem(`nexus_core_${suffix}_variants_cache`, JSON.stringify(variantsCache));
+    } catch (_) {}
+  }, [inventory, isInitialHydrated]);
+
+  useEffect(() => {
+    if (!isInitialHydrated) return;
+    try {
+      const suffix = activeBandId || userProfile?.id || 'offline';
+      localStorage.setItem(`nexus_core_${suffix}_cash_transactions`, JSON.stringify(cashTransactions));
+    } catch (_) {}
+  }, [cashTransactions, isInitialHydrated]);
+
+  useEffect(() => {
+    if (!isInitialHydrated) return;
+    try {
+      const suffix = activeBandId || userProfile?.id || 'offline';
+      localStorage.setItem(`nexus_core_${suffix}_expenses`, JSON.stringify(expenses));
+    } catch (_) {}
+  }, [expenses, isInitialHydrated]);
+
+  const isBandRegistered = useMemo(() => {
+    if (!userProfile) return false;
+    return (
+      hasRegisteredWorkspace(userProfile, 'band') ||
+      Boolean(userProfile.band_id || userProfile.bandName || userProfile.band_name) ||
+      (bands && bands.length > 0)
+    );
+  }, [userProfile, bands]);
+
+  const activeBand = useMemo(() => {
+    if (!isBandRegistered) return null;
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+    if (isOwnerMiguel) {
+      const veBand = bands.find(b => b.id === 'cbddb810-259b-4230-9968-3d402dfdb872' || (b.name || '').toLowerCase().includes('virulent excision')) || bands[0];
+      if (veBand && (veBand.id === 'cbddb810-259b-4230-9968-3d402dfdb872' || (veBand.name || veBand.band_name || '').toLowerCase().includes('virulent excision'))) {
+        return veBand;
+      }
+      return {
+        id: 'cbddb810-259b-4230-9968-3d402dfdb872',
+        name: 'Virulent Excision',
+        band_name: 'Virulent Excision',
+        genre: 'Brutal Death Metal',
+        logo_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396',
+        cover_url: 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-cover_1787467851123.jpg?t=1787467851123',
+        owner_id: userProfile?.id
+      };
+    }
+
+    if (!bands || bands.length === 0) return null;
+    if (activeBandId) {
+      const matched = bands.find(b => String(b.id) === String(activeBandId));
+      if (matched) return matched;
+    }
+    if (userProfile?.band_id) {
+      const matchedByProfile = bands.find(b => String(b.id) === String(userProfile.band_id));
+      if (matchedByProfile) return matchedByProfile;
+    }
+    return bands[0] || null;
+  }, [bands, activeBandId, isBandRegistered, userProfile]);
+
+
+  // 1. When activeBand changes, load its authoritative Supabase data first, falling back to localStorage only when DB fields are undefined
+  useEffect(() => {
+    if (!activeBand) return;
+    const bandId = activeBand.id;
+    const isOnlineNow = typeof navigator === 'undefined' || navigator.onLine !== false;
+
+    // Load lineup: prioritize authoritative activeBand.lineup from Supabase (including explicit empty array [])
+    let loadedLineup: any[] | null = null;
+    const rawLineup = (activeBand as any).lineup;
+    const hasExplicitBandLineup = rawLineup !== undefined && rawLineup !== null && String(rawLineup).trim() !== '';
+
+    if (hasExplicitBandLineup) {
+      if (Array.isArray(rawLineup)) {
+        loadedLineup = rawLineup.map((m: any, idx: number) => ({
+          ...m,
+          clearanceLevel: m.clearanceLevel || (idx === 0 ? 5 : idx === 1 ? 4 : idx === 2 ? 3 : 2)
+        }));
+      } else if (typeof rawLineup === 'string') {
+        try {
+          const parsed = JSON.parse(rawLineup);
+          if (Array.isArray(parsed)) {
+            loadedLineup = parsed.map((m: any, idx: number) => ({
+              ...m,
+              clearanceLevel: m.clearanceLevel || (idx === 0 ? 5 : idx === 1 ? 4 : idx === 2 ? 3 : 2)
+            }));
+          }
+        } catch (_) {
+          const parts = rawLineup.split(',').map((s: string) => s.trim()).filter(Boolean);
+          loadedLineup = parts.map((part: string, idx: number) => ({
+            id: `l_${Date.now()}_${idx}`,
+            name: part,
+            role: 'Member',
+            clearanceLevel: idx === 0 ? 5 : 4,
+            inviteStatus: 'accepted'
+          }));
+        }
+      }
+    }
+
+    if (loadedLineup === null) {
+      const savedLineup = localStorage.getItem(`nexus_core_band_lineup_${bandId}`);
+      if (savedLineup !== null && savedLineup !== undefined && String(savedLineup).trim() !== '') {
+        try {
+          const parsed = JSON.parse(savedLineup);
+          if (Array.isArray(parsed)) {
+            loadedLineup = parsed.map((m: any, idx: number) => ({
+              ...m,
+              clearanceLevel: m.clearanceLevel || (idx === 0 ? 5 : idx === 1 ? 4 : idx === 2 ? 3 : 2)
+            }));
+          }
+        } catch (_) {}
+      }
+    }
+
+    setBandLineup(loadedLineup ?? []);
+
+    // Load cover: prioritize activeBand.cover_url from Supabase when online
+    const dbCover = activeBand.cover_url || (activeBand as any).banner_url || '';
+    const savedCover = isOnlineNow
+      ? (dbCover || localStorage.getItem(`nexus_core_band_cover_${bandId}`) || '')
+      : (localStorage.getItem(`nexus_core_band_cover_${bandId}`) || dbCover || '');
+    setBandCoverUrl(savedCover);
+
+    // Load logo: prioritize activeBand.logo_url from Supabase when online
+    const dbLogo = activeBand.logo_url || activeBand.avatar_url || (activeBand as any).avatar || '';
+    const savedLogo = isOnlineNow
+      ? (dbLogo || localStorage.getItem(`nexus_core_band_logo_${bandId}`) || '')
+      : (localStorage.getItem(`nexus_core_band_logo_${bandId}`) || dbLogo || '');
+    setBandLogoUrl(savedLogo);
+
+    // Load crew: never inject fake placeholder crew members
+    const savedCrew = localStorage.getItem(`nexus_core_crew_members_${bandId}`);
+    if (savedCrew) {
+      try {
+        const parsedCrew = JSON.parse(savedCrew);
+        setCrewMembers(Array.isArray(parsedCrew) ? parsedCrew : []);
+      } catch (_) {
+        setCrewMembers([]);
+      }
+    } else {
+      setCrewMembers([]);
+    }
+
+    setCurrentLoadedBandId(bandId);
+  }, [activeBand?.id, (activeBand as any)?.lineup, activeBand?.logo_url, activeBand?.cover_url]);
+
+  useEffect(() => {
+    if (!isInitialHydrated || !activeBand || currentLoadedBandId !== activeBand.id) return;
+    try {
+      localStorage.setItem(`nexus_core_crew_members_${activeBand.id}`, JSON.stringify(crewMembers));
+    } catch (_) {}
+  }, [crewMembers, activeBand?.id, currentLoadedBandId, isInitialHydrated]);
+
+  useEffect(() => {
+    if (!isInitialHydrated || !activeBand || currentLoadedBandId !== activeBand.id) return;
+    try {
+      localStorage.setItem(`nexus_core_band_lineup_${activeBand.id}`, JSON.stringify(bandLineup));
+    } catch (_) {}
+  }, [bandLineup, activeBand?.id, currentLoadedBandId, isInitialHydrated]);
+
+  useEffect(() => {
+    if (!isInitialHydrated || !activeBand || currentLoadedBandId !== activeBand.id) return;
+    try {
+      localStorage.setItem(`nexus_core_band_logo_${activeBand.id}`, bandLogoUrl);
+    } catch (_) {}
+  }, [bandLogoUrl, activeBand?.id, currentLoadedBandId, isInitialHydrated]);
+
+  useEffect(() => {
+    if (!isInitialHydrated || !activeBand || currentLoadedBandId !== activeBand.id) return;
+    try {
+      localStorage.setItem(`nexus_core_band_cover_${activeBand.id}`, bandCoverUrl);
+    } catch (_) {}
+  }, [bandCoverUrl, activeBand?.id, currentLoadedBandId, isInitialHydrated]);
+
+  // Find active simulated member in the lineup or crew
+  const activeSimulatedMember = useMemo(() => {
+    const list = Array.isArray(bandLineup) ? bandLineup : [];
+    const crewList = Array.isArray(crewMembers) ? crewMembers : [];
+    const combined = [
+      ...list.map((m: any) => ({ ...m, clearanceLevel: m.clearanceLevel || 5 })),
+      ...crewList.map((c: any) => ({ ...c, clearanceLevel: c.clearanceLevel || 1 }))
+    ];
+    const found = combined.find((m: any) => m.id === simulatedMemberId);
+    if (found) return found;
+    // Default to first member of current lineup if loaded, otherwise null (no fake placeholder member)
+    if (list.length > 0) return { ...list[0], clearanceLevel: list[0].clearanceLevel || 5 };
+    return null;
+  }, [bandLineup, crewMembers, simulatedMemberId]);
+
+  // Keep activeClearanceLevel in sync with activeSimulatedMember's level, and persist changes
+  useEffect(() => {
+    if (activeSimulatedMember) {
+      const lvl = activeSimulatedMember.clearanceLevel || 5;
+      if (lvl !== activeClearanceLevel) {
+        setActiveClearanceLevel(lvl);
+      }
+      localStorage.setItem('nexus_core_active_clearance_level', String(lvl));
+      localStorage.setItem('nexus_core_simulated_member_id', activeSimulatedMember.id);
+    }
+  }, [activeSimulatedMember?.id, activeSimulatedMember?.clearanceLevel, activeClearanceLevel]);
+
+  // Filtered lists for the active band context
+  const filteredShows = useMemo(() => {
+    const curBandName = (activeBand?.name || 'Virulent Excision').trim().toLowerCase();
+    const curBandId = (activeBandId || 'b1').trim();
+
+    return shows.filter(show => {
+      // 1. If marked as community-submitted, or created via community hub (sh_comm_), or band_id is 'community_hub' / starts with 'community':
+      const isCommunityOnly = show.is_community_submitted === true || 
+        (typeof show.id === 'string' && (show.id.startsWith('sh_comm_') || show.id.startsWith('df000000'))) || 
+        (show.band_id && (show.band_id === 'community_hub' || show.band_id.startsWith('community')));
+
+      if (isCommunityOnly) {
+        // Only include in band workspace if explicitly assigned to this specific band's ID
+        return Boolean(show.band_id && show.band_id === curBandId && show.band_id !== 'community_hub');
+      }
+
+      // Check additional_notes for tour package metadata or external band info
+      let tourId = '';
+      let tourHeadliner = '';
+      let tourTitle = '';
+      if (show.additional_notes) {
+        try {
+          const extra = typeof show.additional_notes === 'string' ? JSON.parse(show.additional_notes) : show.additional_notes;
+          tourId = extra.tour_id || '';
+          tourHeadliner = extra.headliner || '';
+          tourTitle = extra.tour_title || extra.tour_name || '';
+        } catch (_) {}
+      }
+
+      // If show has a headliner that is explicitly another band (e.g. Molested Divinity, Dying Fetus, Vader):
+      const showHeadliner = (show.headliner || tourHeadliner || '').toLowerCase().trim();
+      const showTitle = (show.name || show.show_name || show.festival_name || tourTitle || '').toLowerCase().trim();
+
+      if (showHeadliner && !showHeadliner.includes(curBandName) && !curBandName.includes(showHeadliner)) {
+        return false;
+      }
+
+      // Specific check for Primordial Hatred Tour, Dying Fetus, or Reign Forever Kingdom
+      if (showTitle.includes('primordial hatred') || showTitle.includes('dying fetus') || showTitle.includes('reign forever kingdom')) {
+        if (!curBandName.includes('molested') && !curBandName.includes('dying fetus') && !curBandName.includes('vader')) {
+          return false;
+        }
+      }
+
+      // 2. Regular band shows: belong to this band
+      if (show.band_id) {
+        return show.band_id === curBandId;
+      }
+
+      // If show has no band_id, check that it is not a managed client tour stop belonging to another tour
+      if (show.is_managed_client_booking || tourId) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [shows, activeBandId, activeBand?.name]);
+
+  const filteredSales = useMemo(() => {
+    return sales.filter(sale => !sale.band_id || sale.band_id === activeBandId);
+  }, [sales, activeBandId]);
+
+  const filteredInventory = useMemo(() => {
+    return inventory.filter(item => !item.band_id || item.band_id === activeBandId);
+  }, [inventory, activeBandId]);
+
+  const filteredNotes = useMemo(() => {
+    return notes.filter(note => {
+      // Hide internal NEXUS storage notes
+      if (note.category?.startsWith('NEXUS_')) return false;
+      return !note.band_id || note.band_id === activeBandId;
+    });
+  }, [notes, activeBandId]);
+
+
+  const handleDeleteBand = (bandId: string, name: string) => {
+    if (bands.length <= 1) {
+      triggerNotification('Cannot delete. At least one artist profile must remain.');
+      return;
+    }
+
+    setBands(prev => prev.filter(b => b.id !== bandId));
+
+    if (activeBandId === bandId) {
+      const remaining = bands.filter(b => b.id !== bandId);
+      if (remaining.length > 0) {
+        setActiveBandId(remaining[0].id);
+      }
+    }
+
+    addLog(`Deleted artist profile from roster: ${name}`);
+    triggerNotification(`Removed ${name} from roster.`);
+    setDeletingBandId(null);
+  };
+
+  const handleCreateBand = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const currentLimit = 
+      userProfile?.sub_tier === 'touring_pro_plus' ? BAND_PORTAL_BILLING.tiers.touring_pro_plus.bandProfileLimit :
+      userProfile?.sub_tier === 'touring_pro' ? BAND_PORTAL_BILLING.tiers.touring_pro.bandProfileLimit :
+      userProfile?.sub_tier === 'enterprise_circuit' ? 999 :
+      userProfile?.sub_tier === 'power_user_pro' ? 2 : 1;
+      
+    if (bands.length >= currentLimit) {
+      triggerNotification(`Band Profile limit reached (${currentLimit}). Upgrade your subscription to add more.`);
+      return;
+    }
+
+    if (!newBandForm.name.trim()) {
+      triggerNotification('Please provide a valid band name.');
+      return;
+    }
+
+    const newId = generateUUID();
+    let bandLogo = newBandForm.logo_url || logoPresets[customLogoPreset];
+    let bandCover = (newBandForm as any).cover_url || undefined;
+
+    if (bandLogo && bandLogo.startsWith('data:')) {
+      try {
+        const publicUrl = await uploadBase64ToStorage(bandLogo, 'community-bands', userProfile?.id || newId, 'band-logo');
+        if (publicUrl && !publicUrl.startsWith('data:')) {
+          bandLogo = publicUrl;
+        }
+      } catch (err) {
+        console.warn('Failed to upload new band logo to storage:', err);
+      }
+    }
+
+    if (bandCover && bandCover.startsWith('data:')) {
+      try {
+        const publicUrl = await uploadBase64ToStorage(bandCover, 'community-bands', userProfile?.id || newId, 'band-cover');
+        if (publicUrl && !publicUrl.startsWith('data:')) {
+          bandCover = publicUrl;
+        }
+      } catch (err) {
+        console.warn('Failed to upload new band cover to storage:', err);
+      }
+    }
+
+    const newBand: Band = {
+      id: newId,
+      name: newBandForm.name.trim(),
+      band_name: newBandForm.name.trim(),
+      genre: newBandForm.genre.trim() || '',
+      logo_url: bandLogo,
+      cover_url: bandCover
+    };
+
+    // Store new band
+    setBands(prev => [...prev, newBand]);
+    try {
+      const existingBandsStr = localStorage.getItem('nexus_bands_list');
+      const existingBands = existingBandsStr ? JSON.parse(existingBandsStr) : [];
+      const updatedBands = [newBand, ...existingBands.filter((b: any) => b.id !== newBand.id)];
+      localStorage.setItem('nexus_bands_list', JSON.stringify(updatedBands));
+    } catch (_) {}
+
+    // Synchronize to Supabase bands table
+    try {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        const cleanPayload = sanitizeBandPayload({
+          ...newBand,
+          creator_id: userProfile?.id || null
+        });
+        await executeWithSchemaResilience(
+          async (payload) => await supabase.from('bands').upsert([payload]),
+          cleanPayload
+        );
+      }
+    } catch (err) {
+      console.warn('Error persisting new band to Supabase:', err);
+    }
+
+    // Synchronize active userProfile workspace attributes
+    if (userProfile) {
+      const allowed = Array.from(new Set([...(userProfile.allowed_workspaces || []), 'band']));
+      const bandRef: RegisteredWorkspaceRef = { type: 'band', id: newBand.id, name: newBand.name };
+      const registered = normalizeRegisteredWorkspaces(userProfile.registered_workspaces, [bandRef]);
+      const updatedProfile = {
+        ...userProfile,
+        active_workspace: 'band',
+        allowed_workspaces: allowed,
+        registered_workspaces: registered,
+        band_id: newBand.id,
+        band_name: newBand.name,
+        bandName: newBand.name
+      };
+      setUserProfile(updatedProfile);
+      try {
+        localStorage.setItem('nexus_core_user_profile', JSON.stringify(updatedProfile));
+      } catch (_) {}
+    }
+
+    // Create seed items for this band so the manager has starter inventory
+    const seedInventoryItems: InventoryItem[] = [
+      {
+        id: 'i_new_' + Math.random().toString(36).substring(2, 9),
+        name: `${newBand.name} Classic Logo Tee`,
+        item_type: 'Multiple',
+        price: 30.00,
+        table_stock: 45,
+        van_stock: 120,
+        status: 'Healthy',
+        border_color: '#3b82f6',
+        image_url: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?q=80&w=200&auto=format&fit=crop',
+        band_id: newId
+      },
+      {
+        id: 'i_new_' + Math.random().toString(36).substring(2, 9),
+        name: `${newBand.name} Logo Stickers (x10)`,
+        item_type: 'Sticker',
+        price: 5.00,
+        table_stock: 110,
+        van_stock: 250,
+        status: 'Healthy',
+        border_color: '#eab308',
+        image_url: 'https://images.unsplash.com/photo-1496200186974-4293800e2c20?q=80&w=200&auto=format&fit=crop',
+        band_id: newId
+      }
+    ];
+
+    setInventory(prev => [...prev, ...seedInventoryItems]);
+
+    // Schedule kickoff show for this band
+    const seedShow: Show = {
+      id: 'sh_new_' + Math.random().toString(36).substring(2, 9),
+      created_at: new Date().toISOString(),
+      name: 'Madison Square Garden, NY',
+      festival_name: `${newBand.name} World Tour Kickoff`,
+      date: new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0],
+      status: 'Active',
+      revenue: 1400,
+      band_id: newId
+    };
+
+    setShows(prev => [seedShow, ...prev]);
+
+    // Auto switch to it and navigate to the band workspace EVENTS page
+    setActiveBandId(newId);
+    try {
+      localStorage.setItem('nexus_active_band_id', newId);
+    } catch (_) {}
+    setActiveTab('home-v2');
+    setDashboardV2ActiveNav('EVENTS');
+    setIsBandModalOpen(false);
+
+    // Reset form
+    setNewBandForm({
+      name: '',
+      genre: '',
+      logo_url: '',
+      is_managed_client: false,
+      management_role: 'tour_manager',
+      management_commission_pct: 15,
+      management_day_rate: 250,
+      executive_contact_name: '',
+      executive_contact_email: '',
+      executive_contact_phone: '',
+      client_roster_notes: ''
+    });
+    
+    addLog(`Registered new roster artist "${newBand.name}" and generated starter tour dataset.`);
+  };
+
+  const handleOpenMyProfile = () => {
+    const isOwnerMiguel = isMiguelNameOrProfile(userProfile);
+    const activeWs = userProfile?.active_workspace || userProfile?.account_type;
+
+    if (activeWs === 'creative') {
+      const creativeName = resolveCreativeName(userProfile);
+      const creativeLogo = resolveCreativeLogo(userProfile);
+      const creativeCover = resolveCreativeCover(userProfile);
+      const creativeHandle = resolveCreativeHandle(userProfile);
+      const creativeBio = resolveCreativeBio(userProfile);
+      const creativeLoc = resolveCreativeLocation(userProfile);
+
+      const detailPayload = {
+        id: (userProfile as any)?.creative_id || userProfile?.id || 'creative:vortex',
+        user_id: userProfile?.id,
+        name: creativeName,
+        legalName: userProfile?.full_name || userProfile?.name,
+        business_name: creativeName,
+        creative_name: creativeName,
+        creative_business_name: creativeName,
+        handle: creativeHandle.startsWith('@') ? creativeHandle : `@${creativeHandle}`,
+        console_handle: creativeHandle.startsWith('@') ? creativeHandle : `@${creativeHandle}`,
+        username: creativeHandle.startsWith('@') ? creativeHandle : `@${creativeHandle}`,
+        avatar: creativeLogo,
+        avatar_url: creativeLogo,
+        logo: creativeLogo,
+        logo_url: creativeLogo,
+        creative_avatar: creativeLogo,
+        banner: creativeCover,
+        banner_url: creativeCover,
+        cover_url: creativeCover,
+        creative_banner: creativeCover,
+        location: creativeLoc,
+        role: 'Creative',
+        account_type: 'creative',
+        type: 'creative',
+        portalRole: 'creative',
+        isPersonal: false,
+        isCreativeProfile: true,
+        isBandProfile: false,
+        isYou: true,
+        badges: ['🛠️ Creative Pro', '🎨 Designer'],
+        customBadges: ['🛠️ Creative Pro', '🎨 Designer'],
+        bio: creativeBio,
+        creative_metadata: (userProfile as any)?.creative_metadata || {}
+      };
+
+      setActiveTab('social');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
+      }, 100);
+      return;
+    }
+
+    if (activeWs === 'promoter') {
+      const pm = (userProfile as any)?.promoter_metadata || {};
+      const promoterName = pm.brand_name || pm.agency_name || (userProfile as any)?.promoter_agency || (isOwnerMiguel ? 'Nexus Live Productions' : (userProfile?.name ? `${userProfile.name} Productions` : 'Promoter Operations'));
+      const promoterLogo = resolvePromoterLogo(userProfile);
+      const promoterCover = resolvePromoterCover(userProfile);
+      const promoterBioText = pm.bio || (userProfile as any)?.promoter_bio || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent live event promoter.');
+      const rawHandle = (userProfile as any)?.promoter_handle || resolvePromoterHandle(userProfile);
+      const resolvedHandle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
+
+      const detailPayload = {
+        id: (userProfile as any)?.promoter_id || userProfile?.id || (isOwnerMiguel ? '5403162d-1947-43aa-b5f6-38a1bd2a1b80' : 'promoter_profile'),
+        user_id: userProfile?.id,
+        email: userProfile?.email || '',
+        name: promoterName,
+        legalName: userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Promoter User'),
+        full_name: userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Promoter User'),
+        handle: resolvedHandle,
+        console_handle: resolvedHandle,
+        username: resolvedHandle,
+        avatar: promoterLogo,
+        avatar_url: promoterLogo,
+        logo: promoterLogo,
+        logo_url: promoterLogo,
+        promoter_logo: promoterLogo,
+        banner: promoterCover,
+        banner_url: promoterCover,
+        cover: promoterCover,
+        cover_url: promoterCover,
+        promoter_cover_image: promoterCover,
+        location: resolvePromoterLocation(userProfile),
+        role: 'Event Promoter',
+        account_type: 'promoter',
+        type: 'promoter',
+        portalRole: 'promoter',
+        isPersonal: false,
+        isPromoterProfile: true,
+        is_promoter: true,
+        isBandProfile: false,
+        isYou: true,
+        badges: ['🎪 Event Promoter', '⚡ Nexus Live'],
+        customBadges: ['🎪 Event Promoter', '⚡ Nexus Live'],
+        bio: promoterBioText,
+        promoter_metadata: pm
+      };
+
+      setActiveTab('social');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
+      }, 100);
+      return;
+    }
+
+    if (activeWs === 'band' && activeBand) {
+      const bandName = activeBand?.name || 'Band';
+      const bandHandle = (activeBand as any)?.custom_slug || (activeBand as any)?.slug || '@band';
+      const bandLogo = (activeBand as any)?.logo_url || null;
+      const bandCover = (activeBand as any)?.banner_url || (activeBand as any)?.cover_url || null;
+      const bandBio = activeBand?.bio || 'Band profile.';
+      const detailPayload = {
+        id: activeBand?.id || 'band:active',
+        name: bandName,
+        legalName: bandName,
+        handle: bandHandle.startsWith('@') ? bandHandle : `@${bandHandle}`,
+        avatar: bandLogo,
+        avatar_url: bandLogo,
+        logo: bandLogo,
+        logo_url: bandLogo,
+        banner: bandCover,
+        banner_url: bandCover,
+        cover: bandCover,
+        cover_url: bandCover,
+        location: activeBand?.homebase || 'Global',
+        role: 'Band / Artist',
+        account_type: 'band',
+        type: 'band',
+        portalRole: 'band',
+        isPersonal: false,
+        isBandProfile: true,
+        isYou: true,
+        badges: ['⚡ Band Core', '🎵 Metal'],
+        bio: bandBio
+      };
+
+      setActiveTab('social');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('openPublicProfile', { detail: detailPayload }));
+      }, 100);
+      return;
+    }
+
+    const userFallbackHandle = userProfile?.console_handle || userProfile?.handle || userProfile?.username || userProfile?.screen_name || (userProfile?.name && !userProfile.name.toLowerCase().includes('miguel') ? userProfile.name.replace(/\s+/g, '_').toLowerCase() : (userProfile?.email ? userProfile.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') : (isOwnerMiguel ? 'bdmCEO' : 'member')));
+    const personalHandle = userProfile?.console_handle && (!userProfile.console_handle.toLowerCase().includes('virulent') || isOwnerMiguel) && (!userProfile.console_handle.toLowerCase().includes('bdmceo') || isOwnerMiguel) && userProfile.console_handle !== '@user' && userProfile.console_handle !== 'user'
+      ? (userProfile.console_handle.startsWith('@') ? userProfile.console_handle : `@${userProfile.console_handle}`)
+      : (userFallbackHandle.startsWith('@') ? userFallbackHandle : `@${userFallbackHandle}`);
+
+    const detailPayload = {
+      id: userProfile?.id,
+      name: userProfile?.name || userProfile?.full_name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Member Profile'),
+      legalName: userProfile?.full_name || userProfile?.name || (isOwnerMiguel ? 'Miguel Goregrinder Medina' : 'Member Profile'),
+      handle: personalHandle,
+      console_handle: personalHandle,
+      username: personalHandle,
+      avatar: userProfile?.avatar_url || null,
+      avatar_url: userProfile?.avatar_url || null,
+      banner: userProfile?.banner_url || null,
+      banner_url: userProfile?.banner_url || null,
+      cover_url: userProfile?.banner_url || null,
+      location: userProfile?.location || 'USA / Global',
+      role: userProfile?.account_type === 'industry_pro' ? 'Industry Pro' 
+          : 'Fan Listener',
+      type: 'user',
+      isPersonal: true,
+      isBandProfile: false,
+      isYou: true,
+      badges: userProfile?.badges || (
+        userProfile?.account_type === 'industry_pro' ? ['💼 Industry Pro'] : ['🤘 Fan']
+      ),
+      customBadges: userProfile?.badges || (
+        userProfile?.account_type === 'industry_pro' ? ['💼 Industry Pro'] : ['🤘 Fan']
+      ),
+      bio: userProfile?.bio || userProfile?.blurb || 'User profile on the Nexus network.',
+    };
+
+    setActiveTab('social');
+
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('openPublicProfile', {
+        detail: detailPayload
+      }));
+    }, 100);
+  };
+
+  const [reviewScore, setReviewScore] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [reviewerName, setReviewerName] = useState('');
+  const [reviewerGroup, setReviewerGroup] = useState('');
+  const [reviewLeft, setReviewLeft] = useState(false);
+  const [userReviews, setUserReviews] = useState<UserReview[]>([]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('nexus_core_user_reviews', JSON.stringify(userReviews));
+    } catch (_) {}
+  }, [userReviews]);
+
+  const [loyaltyMembers, setLoyaltyMembers] = useState<LoyaltyMember[]>(() => {
+    try {
+      const raw = localStorage.getItem('nexus_core_loyalty_members');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (_) {}
+    return [
+      {
+        id: 'loyalty_1',
+        created_at: new Date(Date.now() - 3600000 * 24 * 3).toISOString(),
+        name: 'Sarah Connor',
+        city: 'Los Angeles',
+        state: 'CA',
+        country: 'United States',
+        email: 'sarah.c@cyberdyne.com',
+        phone: '2135551984',
+        pin: '1984',
+        opt_in_promotions: true,
+        lifetime_discount_uses: 2
+      },
+      {
+        id: 'loyalty_2',
+        created_at: new Date(Date.now() - 3600000 * 24 * 1.5).toISOString(),
+        name: 'James Hetfield',
+        city: 'San Francisco',
+        state: 'CA',
+        country: 'United States',
+        email: 'papa.het@metallica.com',
+        phone: '4155551981',
+        pin: '1081',
+        opt_in_promotions: true,
+        lifetime_discount_uses: 1
+      },
+      {
+        id: 'loyalty_3',
+        created_at: new Date(Date.now() - 3600000 * 5).toISOString(),
+        name: 'Alex Mercer',
+        city: 'Toronto',
+        state: 'ON',
+        country: 'Canada',
+        email: 'alex_mercer@gentek.org',
+        phone: '4165552009',
+        pin: '2009',
+        opt_in_promotions: false,
+        lifetime_discount_uses: 0
+      }
+    ];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('nexus_core_loyalty_members', JSON.stringify(loyaltyMembers));
+    } catch (_) {}
+  }, [loyaltyMembers]);
+
+
+  useEffect(() => {
+    if (userProfile && !reviewerName && userProfile?.name) {
+      setReviewerName(userProfile.name);
+    }
+  }, [userProfile?.name, reviewerName]);
+
+  useEffect(() => {
+    if (activeBand && !reviewerGroup && activeBand?.name) {
+      setReviewerGroup(activeBand.name);
+    }
+  }, [activeBand?.name, reviewerGroup]);
+
+
+
+  const handleOfflineSyncSuccess = React.useCallback((msg: string) => {
+    addLog(`Offline sync completed: ${msg}`);
+  }, [addLog]);
+
+  const { isOnline: offlineSyncIsOnline, queueLength: offlineQueueLength, isSyncing: offlineIsSyncing } = useOfflineSync(handleOfflineSyncSuccess);
+
+  // Restock action
+  const handleRestock = () => {
+    setIsTransferModalOpen(true);
+  };
+
+  // Band Management Hook
+  const bandManagement = useBandManagement({
+    activeBand,
+    setBands,
+    userProfile,
+    setUserProfile,
+    triggerNotification,
+    addLog,
+    editingBand,
+    setEditingBand
+  });
+  const {
+    newBandForm, setNewBandForm,
+    customLogoPreset, setCustomLogoPreset,
+    logoPresets,
+    editName, setEditName,
+    editGenre, setEditGenre,
+    editLogoUrl, setEditLogoUrl,
+    editLogoPresetIdx, setEditLogoPresetIdx,
+    dragActive, setDragActive,
+    rosterFileInputRef, editRosterFileInputRef,
+    bandInfoName, setBandInfoName,
+    bandInfoHomebase, setBandInfoHomebase,
+    bandInfoFoundedYear, setBandInfoFoundedYear,
+    bandInfoBio, setBandInfoBio,
+    bandInfoCustomSlug, setBandInfoCustomSlug,
+    bandInfoBookingEmail, setBandInfoBookingEmail,
+    bandInfoBookingPhone, setBandInfoBookingPhone,
+    bandInfoYoutubeVideo, setBandInfoYoutubeVideo,
+    bandInfoStreamingUrl, setBandInfoStreamingUrl,
+    bandInfoTechRider, setBandInfoTechRider,
+    bandInfoTourVehicle, setBandInfoTourVehicle,
+    bandInfoMetalArchivesUrl, setBandInfoMetalArchivesUrl,
+    logoUploaderDragActive, setLogoUploaderDragActive,
+    coverUploaderDragActive, setCoverUploaderDragActive,
+    bandInfoLogoFileInputRef, bandInfoCoverFileInputRef,
+    handleBandInfoLogoUpload, handleBandInfoCoverUpload,
+    compressLogoImage, handleLogoUpload, handleUpdateBand
+  } = bandManagement;
+
+  const saveShowExtraMetadata = (showId: string, show: Show) => {
+    try {
+      const existing = localStorage.getItem('nexus_core_shows_extended');
+      const extendedMap = existing ? JSON.parse(existing) : {};
+      extendedMap[showId] = {
+        event_scope: show.event_scope,
+        tour_id: show.tour_id,
+        venue_address: show.venue_address,
+        city: show.city,
+        promoter_contact: show.promoter_contact,
+        load_in_time: show.load_in_time,
+        doors_time: show.doors_time,
+        set_time: show.set_time,
+        venue_cut_percentage: show.venue_cut_percentage,
+        guarantee_amount: show.guarantee_amount,
+        currency: show.currency,
+        tax_rate: show.tax_rate,
+        expected_attendance: show.expected_attendance,
+        guest_list: show.guest_list,
+        additional_notes: show.additional_notes,
+      };
+      localStorage.setItem('nexus_core_shows_extended', JSON.stringify(extendedMap));
+    } catch (err) {
+      console.error('Failed to save show extra metadata', err);
+    }
+  };
+
+  // Sync offline queued actions to live Supabase server
+  const [revenueSplits, setRevenueSplits] = useState<AssetRevenueSplit[]>([]);
+  const [flights, setFlights] = useState<Flight[]>([]);
+  const {
+    syncOfflineQueue,
+    commitInventoryMutation,
+    commitSaleMutation,
+    commitFlightMutation,
+    commitShowMutation,
+    commitReviewMutation,
+    processingGlobalSyncQueue,
+  } = useGlobalDataSync({
+    isOnline,
+    setIsOnline,
+    inventory,
+    setInventory,
+    sales,
+    setSales,
+    flights,
+    setFlights,
+    shows,
+    setShows,
+    userReviews,
+    setUserReviews,
+    revenueSplits,
+    addLog,
+    triggerNotification,
+  });
+
+  const handleDataSubmit = async (type: 'sale' | 'show' | 'note', payload: any) => {
+    const supabase = getSupabase();
+    const id = Math.random().toString(36).substring(2, 9);
+    const timestamp = new Date().toISOString();
+
+    if (type === 'sale') {
+      const newSale: Sale = {
+        id,
+        created_at: timestamp,
+        item_name: payload.item_name,
+        quantity: payload.quantity,
+        item_type: payload.item_type,
+        amount: payload.amount,
+        payment_method: payload.payment_method,
+        image_url: payload.image_url,
+        cart_items: payload.cart_items,
+        band_id: activeBandId,
+        team_member_id: payload.team_member_id,
+      };
+
+      commitSaleMutation(newSale);
+      triggerNotification(`Recorded sale: +$${((payload.amount ?? 0) * (payload.quantity ?? 1)).toFixed(2)}`);
+    }
+
+    if (type === 'show') {
+      const newShow: Show = {
+        id: payload.id || id,
+        created_at: payload.created_at || timestamp,
+        name: payload.name,
+        festival_name: payload.festival_name,
+        date: payload.date,
+        status: payload.status || 'Active',
+        revenue: payload.guarantee_amount || payload.revenue || 0,
+        show_type: payload.show_type || 'headliner',
+        band_id: activeBandId,
+
+        // High Fidelity Fields
+        event_scope: payload.event_scope,
+        tour_id: payload.tour_id,
+        venue_address: payload.venue_address,
+        city: payload.city,
+        state_province: payload.state_province,
+        country: payload.country,
+        promoter_contact: payload.promoter_contact,
+        load_in_time: payload.load_in_time,
+        doors_time: payload.doors_time,
+        set_time: payload.set_time,
+        curfew_time: payload.curfew_time,
+        venue_cut_percentage: payload.venue_cut_percentage,
+        guarantee_amount: payload.guarantee_amount,
+        currency: payload.currency,
+        tax_rate: payload.tax_rate,
+        expected_attendance: payload.expected_attendance,
+        guest_list: payload.guest_list,
+        additional_notes: payload.additional_notes,
+        merch_space_fee: payload.merch_space_fee,
+        seller_cost: payload.seller_cost,
+        tables_provided: payload.tables_provided,
+        hanging_grids_provided: payload.hanging_grids_provided,
+        shore_power: payload.shore_power,
+        parking_arrangements: payload.parking_arrangements,
+        age_restriction: payload.age_restriction,
+        wifi_network: payload.wifi_network,
+        wifi_password: payload.wifi_password,
+        merch_call_time: payload.merch_call_time,
+        soundcheck_time: payload.soundcheck_time,
+        dinner_arrangements: payload.dinner_arrangements,
+        local_food_notes: payload.local_food_notes,
+        emergency_medical_info: payload.emergency_medical_info,
+        local_pharmacy_info: payload.local_pharmacy_info,
+        support_lineup: payload.support_lineup,
+      };
+
+      commitShowMutation(newShow);
+      saveShowExtraMetadata(newShow.id, newShow);
+      
+      const isUpdate = !!payload.id;
+      addLog(isUpdate ? `Updated scheduled show: ${newShow.name}` : `Scheduled new show: ${newShow.name}`);
+      triggerNotification(isUpdate ? `Show updated successfully!` : `New show scheduled!`);
+    }
+
+    if (type === 'note') {
+      const newNote: TourNote = {
+        id,
+        created_at: timestamp,
+        category: payload.category || 'FINANCIALS',
+        text: payload.text,
+        tag_name: payload.tag_name || 'SETTLEMENT',
+        band_id: activeBandId,
+        show_id: payload.show_id || undefined,
+      };
+
+      if (supabase && isOnline) {
+        addLog(`Pushing tour note to Supabase Postgres 'notes' matrix...`);
+        const dbNote = { ...newNote };
+        delete dbNote.band_id;
+        try {
+          const { error } = await supabase.from('notes').insert([dbNote]);
+          if (error) {
+            addLog(`Supabase Error: ${error.message}. Saved to local container.`);
+            queueOfflineAction('note', 'insert', newNote);
+          } else {
+            addLog(`Note committed to live notes database.`);
+          }
+        } catch (e: any) {
+          addLog(`Network failed: ${e.message}. Saved to local sync queue.`);
+          queueOfflineAction('note', 'insert', newNote);
+        }
+      } else {
+        queueOfflineAction('note', 'insert', newNote);
+        addLog(`Added note details offline: "${newNote.text.substring(0, 20)}..."`);
+      }
+      setNotes(prev => [newNote, ...prev]);
+      setActiveNoteIndex(0);
+    }
+  };
+
+  const handleMarkNotificationAsRead = async (id: string) => {
+    setNotifications(prev => {
+      const updated = prev.map(n => n.id === id ? { ...n, is_read: true } : n);
+      localStorage.setItem('nexus_core_notifications', JSON.stringify(updated));
+      return updated;
+    });
+
+    const supabase = getSupabase();
+    if (supabase && isOnline) {
+      try {
+        await supabase
+          .from('nexus_notifications')
+          .update({ is_read: true })
+          .eq('id', id);
+        addLog(`Sent read state update to Supabase for alert [${id}]`);
+      } catch (err) {
+        console.error('Failed to update notification read state in Supabase:', err);
+      }
+    }
+  };
+
+  // Fetch tables and initiate real-time listeners upon mount/keys configuration
+  useEffect(() => {
+    // Active context-namespaced offline layout hydration is handled dynamically by context swap useEffect
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      setDbStatus('unconfigured');
+      addLog('Operating securely without active DB credentials. Tap mock generators below.');
+      isLoadedFromDbRef.current = true;
+      return;
+    }
+
+    if (!isOnline) {
+      setDbStatus('error');
+      addLog('Operating offline. Handshake with Supabase delayed until network returns.');
+      isLoadedFromDbRef.current = true;
+      return;
+    }
+
+    addLog('Attempting handshake with Supabase server schema...');
+
+    let active = true;
+    const unsubscribers: (() => void)[] = [];
+
+    const hydrateModuleData = async () => {
+      // Guard Clause: Ensure a valid active user session exists before querying Supabase
+      const session = await ensureValidSupabaseAuthSession(supabase);
+      if (!session) {
+        addLog('🔒 Database Handshake: Invalid or expired session token. Retaining secure local storage mode.');
+        setDbStatus('error');
+        isLoadedFromDbRef.current = true;
+        return;
+      }
+
+      try {
+        setDbStatus('connected');
+        addLog('Connecting to tour database... listening to real-time sync.');
+
+        // STEP 1 & 2: Local IndexedDB Hydration First
+        try {
+          const inv = await inventoryStore.getItem('nexus_master_inventory');
+          if (inv) setInventory(JSON.parse(inv as string));
+          
+          const pos = await posSalesStore.getItem('nexus_master_pos_sales');
+          if (pos) setSales(JSON.parse(pos as string));
+          else {
+            const old = localStorage.getItem('nexus_core_sales_offline');
+            if (old) setSales(JSON.parse(old));
+          }
+
+          const shws = await showsStore.getItem('nexus_master_shows');
+          if (shws) {
+            const parsed = JSON.parse(shws as string);
+            if (Array.isArray(parsed)) {
+              setShows(parsed);
+            }
+          }
+
+          const flts = await itinerariesStore.getItem('nexus_master_itineraries');
+          if (flts) setFlights(JSON.parse(flts as string));
+
+          const revs = await reviewsStore.getItem('nexus_master_reviews');
+          if (revs) setUserReviews(JSON.parse(revs as string));
+        } catch (err) {
+          console.error('IDB Hydration Error:', err);
+        }
+
+        // Try load sales
+        try {
+          const { data: salesDb, error: salesErr } = await supabase
+            .from('sales')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!salesErr && salesDb) {
+            if (salesDb.length > 0) {
+              const mockSaleIds = new Set([].map(s => s.id));
+              const realSales = salesDb.filter((s: any) => !mockSaleIds.has(s.id));
+
+              if (salesDb.length > realSales.length) {
+                // Clean up mock sales from DB
+                supabase.from('sales').delete().in('id', Array.from(mockSaleIds)).then();
+              }
+
+              setSales(realSales);
+              posSalesStore.setItem('nexus_master_pos_sales', JSON.stringify(realSales)).catch(console.warn);
+              addLog(`Synchronized ${realSales.length} sales from database table.`);
+            } else {
+              addLog(`Sales table is empty in live database.`);
+            }
+          } else if (salesErr) {
+            // Silently catch egress block, preserving UI state!
+          }
+        } catch (err: any) {
+          // Silently catch egress block, preserving UI state!
+        }
+
+        // Try load shows
+        try {
+          const { data: showsDb, error: showsErr } = await supabase
+            .from('shows')
+            .select('id, show_name, headliner, show_date, date, doors_time, venue_name, city, price, support_lineup, flyer_url, created_at')
+            .order('date', { ascending: true });
+          if (!showsErr && showsDb) {
+            if (showsDb.length > 0) {
+              const mockShowIds = new Set([].map(s => s.id));
+              const realShows = showsDb.filter((s: any) => !mockShowIds.has(s.id));
+
+              if (showsDb.length > realShows.length) {
+                // Clean up mock shows from DB
+                supabase.from('shows').delete().in('id', Array.from(mockShowIds)).then();
+              }
+
+              let mergedShows = (realShows as any[]) as Show[];
+              try {
+                const existing = localStorage.getItem('nexus_core_shows_extended');
+                const extendedMap = existing ? JSON.parse(existing) : {};
+                let deletedShowIds = new Set<string>();
+                try {
+                  const rawDel = localStorage.getItem('nexus_deleted_community_shows');
+                  if (rawDel) {
+                    const delList: string[] = JSON.parse(rawDel);
+                    delList.forEach(item => deletedShowIds.add(String(item).toLowerCase().trim()));
+                  }
+                  const rawPromoterDel = localStorage.getItem('nexus_promoter_deleted_shows');
+                  if (rawPromoterDel) {
+                    const pDelList: string[] = JSON.parse(rawPromoterDel);
+                    pDelList.forEach(item => deletedShowIds.add(String(item).toLowerCase().trim()));
+                  }
+                } catch (_) {}
+
+                const seenShowIds = new Set<string>();
+                const seenShowSigs = new Set<string>();
+                const uniqueShows: Show[] = [];
+
+                for (const s of (realShows as any[])) {
+                  const extra = extendedMap[s.id] || (s.show_name ? Object.values(extendedMap).find((v: any) => v.name === s.show_name || v.show_name === s.show_name || (v.date === s.date && v.city === s.city)) : null);
+                  const formatted: Show = {
+                    ...s,
+                    name: s.name || s.show_name || s.venue || s.headliner || 'Scheduled Show',
+                    show_name: s.show_name || s.name || 'Scheduled Show',
+                    venue: s.venue || s.venue_name || s.venue_address || s.name || s.show_name,
+                    venue_name: s.venue_name || s.venue || s.name,
+                    date: s.date || s.show_date,
+                    status: s.status || 'confirmed',
+                    ...(extra || {})
+                  };
+
+                  const sId = String(formatted.id || '').trim();
+                  const sName = String((formatted as any).headliner || formatted.name || (formatted as any).show_name || '').toLowerCase().trim();
+                  const sDate = String(formatted.date || '').toLowerCase().trim();
+                  const sSig = `${sName}__${sDate}`;
+
+                  if (sId && deletedShowIds.has(sId.toLowerCase())) continue;
+                  if (sName && sDate && deletedShowIds.has(sSig)) continue;
+
+                  if (sId && seenShowIds.has(sId)) continue;
+                  if (sName && sDate && seenShowSigs.has(sSig)) continue;
+
+                  if (sId) seenShowIds.add(sId);
+                  if (sName && sDate) seenShowSigs.add(sSig);
+                  uniqueShows.push(formatted);
+                }
+                mergedShows = uniqueShows;
+              } catch (_) {}
+              setShows(mergedShows);
+              showsStore.setItem('nexus_master_shows', JSON.stringify(mergedShows)).catch(console.warn);
+              try {
+                tourPackageManager.incorporateShowsFromDb(showsDb);
+                tourPackageManager.purgeCommunityTours();
+              } catch (_) {}
+              addLog(`Synchronized ${realShows.length} tours from database table.`);
+            } else {
+              addLog(`Shows table is empty in live database.`);
+            }
+          } else if (showsErr) {
+             // Silently catch egress block, preserving UI state!
+          }
+        } catch (err: any) {
+           // Silently catch egress block, preserving UI state!
+        }
+
+        // Try load notes
+        try {
+          const { data: notesDb, error: notesErr } = await supabase
+            .from('notes')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!notesErr && notesDb) {
+            if (notesDb.length > 0) {
+              const mockNoteIds = new Set([].map(n => n.id));
+              const realNotes = notesDb.filter((n: any) => !mockNoteIds.has(n.id));
+
+              if (notesDb.length > realNotes.length) {
+                supabase.from('notes').delete().in('id', Array.from(mockNoteIds)).then();
+              }
+
+              setNotes(realNotes);
+              saveToFailoverCache('notes', realNotes);
+              addLog(`Synchronized ${realNotes.length} tour notes.`);
+            } else {
+              addLog(`Notes table is empty in live database.`);
+              setNotes([]);
+              saveToFailoverCache('notes', []);
+            }
+          } else if (notesErr) {
+            if (isBypassRequiredError(notesErr)) {
+              addLog(`⚡ [EGRESS LOCK] Blocked standard 'notes' API gateway. Failover active.`);
+              const localNotes = handleDatabaseFailover('notes', []);
+              setNotes(localNotes);
+            } else {
+              addLog(`Querying 'notes' failed: ${notesErr.message}`);
+            }
+          }
+        } catch (err: any) {
+          if (isBypassRequiredError(err)) {
+            addLog(`⚡ [EGRESS LOCK] Blocked standard 'notes' network. Failover active.`);
+            const localNotes = handleDatabaseFailover('notes', []);
+            setNotes(localNotes);
+          } else {
+            console.error('Unhandled notes fetch exception:', err);
+          }
+        }
+
+        // Try load inventory
+        try {
+          const fetchedItems = await fetchInventoryItems(activeBandIdRef.current || undefined);
+          let cachedVariants: Record<string, any> = {};
+          try {
+            const cvStr = localStorage.getItem('nexus_core_variants_cache');
+            if (cvStr) cachedVariants = JSON.parse(cvStr);
+          } catch (_) {}
+
+          const formatted = (fetchedItems || []).map((item: any) => ({
+            ...item,
+            image_url: resolveInventoryImageUrl(item),
+            image_path: item.image_path || undefined,
+            variants: item.variants || cachedVariants[item.id],
+            band_id: item.band_id || activeBandIdRef.current
+          }));
+
+          // --- OFFLINE/BYPASS UNION MERGE ---
+          const suffix = activeBandIdRef.current || userProfileRef.current?.id || 'offline';
+          let existingLocal: InventoryItem[] = [];
+          try {
+            const cachedStr = localStorage.getItem(`nexus_core_${suffix}_inventory_offline`);
+            if (cachedStr) existingLocal = JSON.parse(cachedStr);
+          } catch (_) {}
+
+          const dbIdSet = new Set(formatted.map(item => item.id));
+          const localOnlyItems = existingLocal.filter(item => item && item.id && !dbIdSet.has(item.id));
+          const merged = [...formatted, ...localOnlyItems];
+
+          setInventory(merged as InventoryItem[]);
+          inventoryStore.setItem('nexus_master_inventory', JSON.stringify(merged)).catch(console.warn);
+
+          if (formatted.length > 0) {
+            addLog(`Synchronized ${formatted.length} inventory products from Supabase and global cloud sync.`);
+          } else {
+            addLog(`Inventory synced. Loaded ${localOnlyItems.length} cached items.`);
+          }
+        } catch (e: any) {
+          console.warn('Inventory loading warning:', e);
+        }
+
+        // Try load inventory audits
+        try {
+          const { data: auditsDb, error: auditsErr } = await supabase
+            .from('inventory_audits')
+            .select('*');
+          if (!auditsErr && auditsDb && auditsDb.length > 0) {
+            setInventoryAudits(auditsDb as any[]);
+            saveToFailoverCache('inventory_audits', auditsDb as any[]);
+            addLog(`Synchronized ${auditsDb.length} inventory audits from Supabase.`);
+          } else if (auditsErr) {
+            if (isBypassRequiredError(auditsErr)) {
+              addLog(`⚡ [EGRESS LOCK] Blocked 'inventory_audits' API gateway. Failover active.`);
+              const localAudits = handleDatabaseFailover('inventory_audits', []);
+              setInventoryAudits(localAudits);
+            }
+          }
+        } catch (e: any) {
+          if (isBypassRequiredError(e)) {
+            addLog(`⚡ [EGRESS LOCK] Blocked 'inventory_audits' network. Failover active.`);
+            const localAudits = handleDatabaseFailover('inventory_audits', []);
+            setInventoryAudits(localAudits);
+          } else {
+            console.error('Error loading audits from Supabase:', e);
+          }
+        }
+
+        // Try load flights
+        try {
+          const { data: flightsDb, error: flightsErr } = await supabase
+            .from('flights')
+            .select('*');
+          if (!flightsErr && flightsDb) {
+            if (flightsDb.length > 0) {
+              const formattedFlights: Flight[] = flightsDb.map((f: any) => ({
+                id: f.id,
+                travelerName: f.traveler_name,
+                airline: f.airline,
+                flightNumber: f.flight_number,
+                departureAirport: f.departure_airport,
+                arrivalAirport: f.arrival_airport,
+                departureTime: f.departure_time,
+                arrivalTime: f.arrival_time,
+                status: f.status,
+                gate: f.gate || '',
+                notes: f.notes || ''
+              }));
+              setFlights(formattedFlights);
+              itinerariesStore.setItem('nexus_master_itineraries', JSON.stringify(formattedFlights)).catch(console.warn);
+              addLog(`Synchronized ${formattedFlights.length} crew flights from Supabase.`);
+            } else {
+              addLog(`Flights table is empty in live database.`);
+            }
+          } else if (flightsErr) {
+             // Silently catch egress block, preserving UI state!
+          }
+        } catch (e: any) {
+           // Silently catch egress block, preserving UI state!
+        }
+
+        // Try load music_tracks count
+        try {
+          if (activeBandId && activeBandId.trim() !== '') {
+            const { count, error: mCountErr } = await supabase
+              .from('music_tracks')
+              .select('*', { count: 'exact', head: true })
+              .eq('band_id', activeBandId);
+            if (!mCountErr && count !== null) {
+              setMusicTrackCount(count);
+            } else {
+              setMusicTrackCount(0);
+            }
+          } else {
+            console.warn('[Tracks] Skipped fetch: activeBandId is missing or empty.');
+            setMusicTrackCount(0);
+          }
+        } catch (e: any) {
+          setMusicTrackCount(0);
+        }
+
+        // Try load user reviews
+        try {
+          const { data: reviewsDb, error: reviewsErr } = await supabase
+            .from('user_reviews')
+            .select('*');
+          if (!reviewsErr && reviewsDb && reviewsDb.length > 0) {
+            setUserReviews(reviewsDb as UserReview[]);
+            reviewsStore.setItem('nexus_master_reviews', JSON.stringify(reviewsDb)).catch(console.warn);
+            addLog(`Synchronized ${reviewsDb.length} user reviews from Supabase.`);
+          } else if (reviewsErr) {
+             // Silently catch egress block, preserving UI state!
+          }
+        } catch (e: any) {
+           // Silently catch egress block, preserving UI state!
+        }
+
+        // Try load loyalty members
+        try {
+          const { data: loyaltyDb, error: loyaltyErr } = await supabase
+            .from('loyalty_members')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!loyaltyErr && loyaltyDb) {
+            if (loyaltyDb.length > 0) {
+              setLoyaltyMembers(loyaltyDb as LoyaltyMember[]);
+              saveToFailoverCache('loyalty_members', loyaltyDb as LoyaltyMember[]);
+              addLog(`Synchronized ${loyaltyDb.length} legacy loyalty program members from Supabase.`);
+            } else {
+              addLog(`Loyalty members table is clean in live database.`);
+            }
+          } else if (loyaltyErr) {
+            if (isBypassRequiredError(loyaltyErr)) {
+              addLog(`⚡ [EGRESS LOCK] Blocked 'loyalty_members' API gateway. Failover active.`);
+              const localLoyalty = handleDatabaseFailover('loyalty_members', []);
+              setLoyaltyMembers(localLoyalty);
+            }
+          }
+        } catch (e: any) {
+          if (isBypassRequiredError(e)) {
+            addLog(`⚡ [EGRESS LOCK] Blocked 'loyalty_members' network. Failover active.`);
+            const localLoyalty = handleDatabaseFailover('loyalty_members', []);
+            setLoyaltyMembers(localLoyalty);
+          } else {
+            console.error('Error loading loyalty members from Supabase:', e);
+          }
+        }
+
+        // Try load asset_revenue_splits
+        try {
+          const { data: splitsDb, error: splitsErr } = await supabase
+            .from('asset_revenue_splits')
+            .select('*');
+          if (!splitsErr && splitsDb) {
+             setRevenueSplits(splitsDb as AssetRevenueSplit[]);
+          }
+        } catch (e: any) {}
+
+        // Try load band_join_requests_v1
+        try {
+          const { data: bjrDb, error: bjrErr } = await supabase
+            .from('band_join_requests_v1')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!bjrErr && bjrDb) {
+             setBandJoinRequests(bjrDb as BandJoinRequest[]);
+             saveToFailoverCache('band_join_requests_v1', bjrDb as BandJoinRequest[]);
+          } else if (bjrErr) {
+            if (isBypassRequiredError(bjrErr)) {
+              addLog(`⚡ [EGRESS LOCK] Blocked 'band_join_requests_v1' API gateway. Failover active.`);
+              const localBjr = handleDatabaseFailover('band_join_requests_v1', []);
+              if (localBjr.length > 0) setBandJoinRequests(localBjr);
+            }
+          }
+        } catch (e: any) {
+          if (isBypassRequiredError(e)) {
+            addLog(`⚡ [EGRESS LOCK] Blocked 'band_join_requests_v1' network. Failover active.`);
+            const localBjr = handleDatabaseFailover('band_join_requests_v1', []);
+            if (localBjr.length > 0) setBandJoinRequests(localBjr);
+          }
+        }
+
+        // Try load nexus_notifications
+        try {
+          const { data: notificationsDb, error: notifErr } = await supabase
+            .from('nexus_notifications')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!notifErr && notificationsDb && notificationsDb.length > 0) {
+            // Deduplicate loaded notifications to guarantee no duplicates reach the state
+            const seenIds = new Set<string>();
+            const seenMessages = new Map<string, number>();
+            const myId = userProfile?.id;
+            const myEmail = userProfile?.email;
+
+            const cleanNotifs = (notificationsDb as any[]).map(row => ({
+              ...row,
+              message: row.message || row.content || row.title || row.body || '',
+              category: row.category || row.type || 'SYSTEM'
+            })).filter(notif => {
+              if (!notif || !notif.id) return false;
+              if (seenIds.has(notif.id)) return false;
+
+              // Never show self-notifications (where current user was the actor)
+              if (myId && (notif.actor_id === myId || notif.data?.actor_id === myId)) return false;
+              if (myEmail && (notif.actor_email === myEmail || notif.data?.actor_email === myEmail)) return false;
+
+              const isReaction = notif.category === 'REACTION' || notif.type === 'post_reaction' || (notif.title && String(notif.title).toUpperCase().includes('REACTION'));
+              if (isReaction) {
+                const isForMe = Boolean(
+                  (myId && notif.user_id === myId) ||
+                  (myEmail && (notif.user_id === myEmail || notif.data?.user_id === myEmail))
+                );
+                if (!isForMe) return false;
+              } else if (notif.user_id) {
+                const isForMe = Boolean(
+                  (myId && notif.user_id === myId) ||
+                  (myEmail && (notif.user_id === myEmail || notif.data?.user_id === myEmail))
+                );
+                if (!isForMe) return false;
+              }
+
+              seenIds.add(notif.id);
+
+              const msgKey = `${notif.category || ''}:${notif.message}`;
+              const notifTime = new Date(notif.created_at || Date.now()).getTime();
+              if (seenMessages.has(msgKey)) {
+                const prevTime = seenMessages.get(msgKey)!;
+                if (Math.abs(notifTime - prevTime) < 5000) {
+                  return false;
+                }
+              }
+              seenMessages.set(msgKey, notifTime);
+              return true;
+            });
+            setNotifications(cleanNotifs);
+            saveToFailoverCache('nexus_notifications', cleanNotifs);
+            addLog(`Synchronized ${cleanNotifs.length} security broadcast alerts from Supabase (deduplicated).`);
+          } else if (notifErr) {
+            if (isBypassRequiredError(notifErr)) {
+              addLog(`⚡ [EGRESS LOCK] Blocked 'nexus_notifications' API gateway. Failover active.`);
+              const localNotif = handleDatabaseFailover('nexus_notifications', []);
+              setNotifications(localNotif);
+            }
+          }
+        } catch (e: any) {
+          if (isBypassRequiredError(e)) {
+            addLog(`⚡ [EGRESS LOCK] Blocked 'nexus_notifications' network. Failover active.`);
+            const localNotif = handleDatabaseFailover('nexus_notifications', []);
+            setNotifications(localNotif);
+          } else {
+            console.error('Error loading notifications from Supabase:', e);
+          }
+        }
+
+        // Set live DB load completion flag
+        isLoadedFromDbRef.current = true;
+
+
+        // Guard against race conditions where the component has already unmounted before async loads resolved
+        if (!active) return;
+
+        // Realtime Subscription listeners
+        const unsubscribeSales = subscribeToTable('sales', (payload) => {
+          addLog(`[REALTIME SALES] received: ${payload.eventType}`);
+          if (payload.eventType === 'INSERT') {
+            setSales(prev => {
+              // 1. Deduplicate by precise ID
+              if ((prev || []).some(s => s.id === payload.new.id)) {
+                return prev;
+              }
+              // 2. Clear out seed/fallback entries if we have them
+              // 3. Prevent duplicate cards for identical transaction values inserted within 15 seconds of an optimistic local addition (in case database rewrote/ignored the client ID)
+              const payloadTime = new Date(payload.new.created_at).getTime();
+              const isRecentDuplicate = (prev || []).some(s => 
+                s.item_name === payload.new.item_name &&
+                Math.abs(s.amount - payload.new.amount) < 0.01 &&
+                Math.abs(new Date(s.created_at).getTime() - payloadTime) < 15000
+              );
+              if (isRecentDuplicate) {
+                // Replace the optimistic one with the real one (so it features the official database ID)
+                return prev.map(s => {
+                  const checkTime = new Date(s.created_at).getTime();
+                  if (s.item_name === payload.new.item_name &&
+                      Math.abs(s.amount - payload.new.amount) < 0.01 &&
+                      Math.abs(checkTime - payloadTime) < 15000) {
+                    return payload.new as Sale;
+                  }
+                  return s;
+                });
+              }
+              return [payload.new as Sale, ...prev];
+            });
+            triggerNotification('Live sale alert!');
+          } else if (payload.eventType === 'UPDATE') {
+            setSales(prev => prev.map(s => s.id === payload.new.id ? (payload.new as Sale) : s));
+          } else if (payload.eventType === 'DELETE') {
+            setSales(prev => prev.filter(s => s.id !== payload.old.id));
+          }
+        });
+        if (unsubscribeSales) {
+          if (!active) unsubscribeSales();
+          else unsubscribers.push(unsubscribeSales);
+        }
+
+        const unsubscribeShows = subscribeToTable('shows', (payload) => {
+          addLog(`[REALTIME SHOWS] received: ${payload.eventType}`);
+          if (payload.eventType === 'INSERT') {
+            setShows(prev => {
+              if ((prev || []).some(s => s.id === payload.new.id)) {
+                return prev;
+              }
+              return [...prev, payload.new as Show];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setShows(prev => prev.filter(s => s.id !== payload.old.id));
+          }
+        });
+        if (unsubscribeShows) {
+          if (!active) unsubscribeShows();
+          else unsubscribers.push(unsubscribeShows);
+        }
+
+        const unsubscribeNotes = subscribeToTable('notes', (payload) => {
+          addLog(`[REALTIME NOTES] received: ${payload.eventType}`);
+          if (payload.eventType === 'INSERT') {
+            setNotes(prev => {
+              if ((prev || []).some(n => n.id === payload.new.id)) {
+                return prev;
+              }
+              const isFallback = (prev || []).some(n => n.id === 'note_01' || n.id === 'note_02');
+              if (isFallback) {
+                return [payload.new as TourNote];
+              }
+              return [payload.new as TourNote, ...prev];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setNotes(prev => prev.filter(n => n.id !== payload.old.id));
+          }
+        });
+        if (unsubscribeNotes) {
+          if (!active) unsubscribeNotes();
+          else unsubscribers.push(unsubscribeNotes);
+        }
+
+        const unsubscribeFlights = subscribeToTable('flights', (payload) => {
+          addLog(`[REALTIME FLIGHTS] received: ${payload.eventType}`);
+          if (payload.eventType === 'INSERT') {
+            const formatted = {
+              id: payload.new.id,
+              travelerName: payload.new.traveler_name,
+              airline: payload.new.airline,
+              flightNumber: payload.new.flight_number,
+              departureAirport: payload.new.departure_airport,
+              arrivalAirport: payload.new.arrival_airport,
+              departureTime: payload.new.departure_time,
+              arrivalTime: payload.new.arrival_time,
+              status: payload.new.status,
+              gate: payload.new.gate || '',
+              notes: payload.new.notes || ''
+            };
+            setFlights(prev => {
+              if ((prev || []).some(f => f.id === formatted.id)) return prev;
+              return [formatted, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const formatted = {
+              id: payload.new.id,
+              travelerName: payload.new.traveler_name,
+              airline: payload.new.airline,
+              flightNumber: payload.new.flight_number,
+              departureAirport: payload.new.departure_airport,
+              arrivalAirport: payload.new.arrival_airport,
+              departureTime: payload.new.departure_time,
+              arrivalTime: payload.new.arrival_time,
+              status: payload.new.status,
+              gate: payload.new.gate || '',
+              notes: payload.new.notes || ''
+            };
+            setFlights(prev => prev.map(f => f.id === formatted.id ? formatted : f));
+          } else if (payload.eventType === 'DELETE') {
+            setFlights(prev => prev.filter(f => f.id !== payload.old.id));
+          }
+        });
+        if (unsubscribeFlights) {
+          if (!active) unsubscribeFlights();
+          else unsubscribers.push(unsubscribeFlights);
+        }
+
+        const unsubscribeReviews = subscribeToTable('user_reviews', (payload) => {
+          addLog(`[REALTIME REVIEWS] received: ${payload.eventType}`);
+          if (payload.eventType === 'INSERT') {
+            setUserReviews(prev => {
+              if ((prev || []).some(r => r.id === payload.new.id)) return prev;
+              return [payload.new as UserReview, ...prev];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setUserReviews(prev => prev.filter(r => r.id !== payload.old.id));
+          }
+        });
+        if (unsubscribeReviews) {
+          if (!active) unsubscribeReviews();
+          else unsubscribers.push(unsubscribeReviews);
+        }
+
+        const unsubscribeAudits = subscribeToTable('inventory_audits', (payload) => {
+          addLog(`[REALTIME AUDITS] received: ${payload.eventType}`);
+          if (payload.eventType === 'INSERT') {
+            setInventoryAudits(prev => {
+              if ((prev || []).some(a => a.id === payload.new.id)) return prev;
+              return [payload.new as InventoryAudit, ...prev];
+            });
+          }
+        });
+        if (unsubscribeAudits) {
+          if (!active) unsubscribeAudits();
+          else unsubscribers.push(unsubscribeAudits);
+        }
+
+        const unsubscribeLoyalty = subscribeToTable('loyalty_members', (payload) => {
+          addLog(`[REALTIME LOYALTY] received: ${payload.eventType}`);
+          if (payload.eventType === 'INSERT') {
+            setLoyaltyMembers(prev => {
+              if ((prev || []).some(m => m.id === payload.new.id)) return prev;
+              return [payload.new as LoyaltyMember, ...prev];
+            });
+            triggerNotification(`🎉 VIP Loyalty signup: ${payload.new.name}!`);
+          } else if (payload.eventType === 'UPDATE') {
+            setLoyaltyMembers(prev => prev.map(m => m.id === payload.new.id ? (payload.new as LoyaltyMember) : m));
+          } else if (payload.eventType === 'DELETE') {
+            setLoyaltyMembers(prev => prev.filter(m => m.id !== payload.old.id));
+          }
+        });
+        if (unsubscribeLoyalty) {
+          if (!active) unsubscribeLoyalty();
+          else unsubscribers.push(unsubscribeLoyalty);
+        }
+
+      } catch (e: any) {
+        setDbStatus('error');
+        addLog(`Database link issue: ${e.message}`);
+      }
+    };
+
+    hydrateModuleData();
+
+    return () => {
+      active = false;
+      unsubscribers.forEach((unsub) => {
+        try {
+          unsub();
+        } catch (unsubErr) {
+          console.error('Error executing subscript cleanup hook:', unsubErr);
+        }
+      });
+    };
+  }, [supabaseUrl, supabaseKey, isOnline]);
+
+  // 4-card auto carousel states for left dashboard metrics
+  const [leftCarouselIndex, setLeftCarouselIndex] = useState(0);
+  const [isLeftCardPaused, setIsLeftCardPaused] = useState(false);
+  const [isMetricCarouselPaused, setIsMetricCarouselPaused] = useState(false);
+  const [isGlobalHoverPaused, setIsGlobalHoverPaused] = useState(false);
+  const [isEditingSalesGoal, setIsEditingSalesGoal] = useState(false);
+  const [salesGoalInput, setSalesGoalInput] = useState('');
+  const [newExpenseDesc, setNewExpenseDesc] = useState('');
+  const [newExpenseAmount, setNewExpenseAmount] = useState('');
+
+  // Mobile Swipe/Touch Ref Tracker for left metrics carousel
+  const leftTouchStartXRef = useRef<number | null>(null);
+  const leftTouchEndXRef = useRef<number | null>(null);
+  const leftTouchTimerRef = useRef<any>(null);
+
+  const handleLeftTouchStart = (e: React.TouchEvent) => {
+    leftTouchStartXRef.current = e.targetTouches[0].clientX;
+    leftTouchEndXRef.current = e.targetTouches[0].clientX;
+    
+    if (leftTouchTimerRef.current) {
+      clearTimeout(leftTouchTimerRef.current);
+      leftTouchTimerRef.current = null;
+    }
+    
+    // Pause immediately on mobile touch start so it does not auto-advance while they are looking, tapping or dragging
+    setIsLeftCardPaused(true);
+    setIsGlobalHoverPaused(true);
+  };
+
+  const handleLeftTouchMove = (e: React.TouchEvent) => {
+    leftTouchEndXRef.current = e.targetTouches[0].clientX;
+    setIsLeftCardPaused(true);
+    setIsGlobalHoverPaused(true);
+  };
+
+  const handleLeftTouchEnd = () => {
+    if (leftTouchStartXRef.current === null || leftTouchEndXRef.current === null) return;
+    const diffX = leftTouchStartXRef.current - leftTouchEndXRef.current;
+    if (Math.abs(diffX) > 40) {
+      if (diffX > 0) {
+        // swipe left -> show next card
+        setLeftCarouselIndex((prev) => (prev + 1) % 4);
+      } else {
+        // swipe right -> show prev card
+        setLeftCarouselIndex((prev) => (prev - 1 + 4) % 4);
+      }
+    }
+    // reset trackers
+    leftTouchStartXRef.current = null;
+    leftTouchEndXRef.current = null;
+
+    if (leftTouchTimerRef.current) {
+      clearTimeout(leftTouchTimerRef.current);
+    }
+    
+    // Set a timeout of 12 seconds of complete idle-ness on touch end, 
+    // before auto-rotating resumes. This gives them plenty of time 
+    // to view, interact, click, type or look without interruption.
+    leftTouchTimerRef.current = setTimeout(() => {
+      const activeEl = document.activeElement;
+      const isEditing = isEditingSalesGoal || (activeEl && ['INPUT', 'TEXTAREA'].includes(activeEl.tagName));
+      if (!isEditing) {
+        setIsLeftCardPaused(false);
+        setIsGlobalHoverPaused(false);
+      }
+    }, 12000);
+  };
+
+  // Derived dashboard metrics
+  const todayStrValForSales = new Date().toISOString().split('T')[0];
+  const todaySalesOnly = filteredSales.filter(sale => {
+    if (!sale.created_at) return false;
+    return sale.created_at.split('T')[0] === todayStrValForSales;
+  });
+  const todayRevenue = todaySalesOnly.reduce((sum, item) => sum + (item.amount * (item.quantity || 1)), 0);
+  const isCritical = (filteredInventory || []).some(i => (i.table_stock || 0) <= 25);
+  const totalTableStock = filteredInventory.reduce((sum, item) => sum + (item.table_stock || 0), 0);
+  const totalVanStock = filteredInventory.reduce((sum, item) => sum + (item.van_stock || 0), 0);
+
+  // Derived expense metrics
+  const dailyExpensesTotal = useMemo(() => {
+    const todayStrVal = new Date().toISOString().split('T')[0];
+    return expenses
+      .filter(e => e.date === todayStrVal)
+      .reduce((sum, e) => sum + e.amount, 0);
+  }, [expenses]);
+  
+  const runningExpensesTotal = useMemo(() => {
+    return expenses.reduce((sum, e) => sum + e.amount, 0);
+  }, [expenses]);
+
+  const expensePerShow = useMemo(() => {
+    const showsCount = filteredShows.length || 1;
+    return runningExpensesTotal / showsCount;
+  }, [runningExpensesTotal, filteredShows.length]);
+
+  // Derived top selling items with active images from inventory
+  const topSellingItems = useMemo(() => {
+    // Collect and sum quantities
+    const itemMap: Record<string, number> = {};
+    filteredSales.forEach(sale => {
+      itemMap[sale.item_name] = (itemMap[sale.item_name] || 0) + (sale.quantity || 1);
+    });
+
+    const sortedList = Object.entries(itemMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const mapped = sortedList.slice(0, 3).map(si => {
+      const dbMatch = inventory.find(inv => inv.name === si.name);
+      return {
+        name: si.name,
+        count: si.count,
+        imageUrl: dbMatch?.image_url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop'
+      };
+    });
+
+    // Handle under 3 sold fallback to showcase live catalog
+    if (mapped.length < 3) {
+      const activeNames = new Set(mapped.map(m => m.name));
+      const fallbackPool = [...inventory].sort((a, b) => b.van_stock - a.van_stock);
+      for (const item of fallbackPool) {
+        if (mapped.length >= 3) break;
+        if (!activeNames.has(item?.name)) {
+          mapped.push({
+            name: item?.name,
+            count: 0,
+            imageUrl: item.image_url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=200&auto=format&fit=crop'
+          });
+          activeNames.add(item?.name);
+        }
+      }
+    }
+
+    return mapped;
+  }, [filteredSales, inventory]);
+
+  // Active or next scheduled show (closest to today, within 1 year in the future)
+  const sortedShows = useMemo(() => {
+    return [...filteredShows].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [filteredShows]);
+
+  const publicAnnouncedShows = useMemo(() => {
+    const allTours = tourPackageManager.getAllTours();
+    return sortedShows.filter(s => !isShowEmbargoedOrDraft(s, allTours));
+  }, [sortedShows]);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const oneYearFromNow = new Date();
+  oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+  const oneYearFromNowStr = oneYearFromNow.toISOString().split('T')[0];
+  
+  const currentOrNextShow = publicAnnouncedShows.find(s => s.date >= todayStr && s.date <= oneYearFromNowStr) || null;
+  
+  // Calculate active shows needing settlement
+  const showsNeedingSettlement = useMemo(() => {
+    return filteredShows.filter(show => {
+      if (show.status !== 'Active') return false;
+      
+      const parts = show.date.split('-');
+      if (parts.length !== 3) return false;
+      const [year, month, day] = parts.map(Number);
+      
+      let targetHour = 23; // Default 11:00 PM local time
+      let targetMinute = 0;
+      
+      if (show.curfew_time) {
+        const timeParts = show.curfew_time.split(':');
+        if (timeParts.length >= 2) {
+          const h = Number(timeParts[0]);
+          const m = Number(timeParts[1]);
+          if (!isNaN(h) && !isNaN(m)) {
+            targetHour = h;
+            targetMinute = m;
+          }
+        }
+      }
+      
+      const endThreshold = new Date(year, month - 1, day, targetHour, targetMinute, 0);
+      
+      // If curfew hour is early AM (like 2am), shift the date by 1 to have 2 AM on the next day
+      if (targetHour < 5) {
+        endThreshold.setDate(endThreshold.getDate() + 1);
+      }
+      
+      return currentTime >= endThreshold;
+    });
+  }, [filteredShows, currentTime]);
+
+  const hasSettleReminder = showsNeedingSettlement.length > 0;
+  const firstShowToSettle = showsNeedingSettlement[0] || null;
+
+  const activeShowDisplay = currentOrNextShow 
+    ? (currentOrNextShow.festival_name || currentOrNextShow.name)
+    : "No Shows or Tours Currently booked";
+
+  // Countdown calculations
+  const countdownString = useMemo(() => {
+    if (!currentOrNextShow) return "No Shows or Tours Currently booked";
+    
+    const [year, month, day] = currentOrNextShow.date.split('-').map(Number);
+    const targetDate = new Date(year, month - 1, day, 20, 0, 0); // 8:00 PM local time
+    
+    const diffMs = targetDate.getTime() - currentTime.getTime();
+    if (diffMs <= 0) {
+      const endWindow = targetDate.getTime() + (3 * 60 * 60 * 1000); // 3-hour show window
+      if (currentTime.getTime() < endWindow) {
+        return "SHOW IN PROGRESS ● LIVE NOW";
+      }
+      return "Show concluded";
+    }
+    
+    const totalSecs = Math.floor(diffMs / 1000);
+    const hours = Math.floor(totalSecs / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+    
+    return `${hours}h ${minutes}m ${seconds}s until show start`;
+  }, [currentOrNextShow?.date, currentTime]);
+
+  // Show specific notes
+  const showSpecificNotes = useMemo(() => {
+    if (!currentOrNextShow) return [];
+    return filteredNotes.filter(n => n.show_id === currentOrNextShow.id);
+  }, [filteredNotes, currentOrNextShow?.id]);
+
+  // Table stock percentages
+  const tableStockPercent = useMemo(() => {
+    const maxPotential = (totalTableStock + totalVanStock) || 1;
+    return Math.min(100, Math.round((totalTableStock / maxPotential) * 100));
+  }, [totalTableStock, totalVanStock]);
+
+  // Metric Carousel states & derived metrics
+  const totalSalesCount = filteredSales.length;
+  const todaySalesCount = todaySalesOnly.length;
+  const todayItemsSold = todaySalesOnly.reduce((sum, item) => sum + (item.quantity || 1), 0);
+  const tourTotalRevenue = filteredSales.reduce((sum, item) => sum + (item.amount * (item.quantity || 1)), 0);
+  const averageSaleValue = totalSalesCount > 0 ? tourTotalRevenue / totalSalesCount : 0;
+
+  // Find top seller item name
+  const itemCounts = filteredSales.reduce((acc, saleItem) => {
+    acc[saleItem.item_name] = (acc[saleItem.item_name] || 0) + (saleItem.quantity || 1);
+    return acc;
+  }, {} as Record<string, number>);
+
+  let topSellerName = "None";
+  let maxCount = 0;
+  (Object.entries(itemCounts) as [string, number][]).forEach(([name, count]) => {
+    if (count > maxCount) {
+      maxCount = count;
+      topSellerName = name;
+    }
+  });
+
+  const [currentMetricIndex, setCurrentMetricIndex] = useState(0);
+
+  useEffect(() => {
+    if (isMetricCarouselPaused || isGlobalHoverPaused) return;
+    const timer = setInterval(() => {
+      setCurrentMetricIndex(prev => (prev + 1) % 5);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, [isMetricCarouselPaused, isGlobalHoverPaused]);
+
+  // Team Carousel Slider state
+  const [teamCarouselIndex, setTeamCarouselIndex] = useState(0);
+  const [isTeamCarouselPaused, setIsTeamCarouselPaused] = useState(false);
+
+  // Auto-rotate Live Team/Activity every 5 seconds
+  useEffect(() => {
+    if (isTeamCarouselPaused || isGlobalHoverPaused) return;
+    const timer = setInterval(() => {
+      setTeamCarouselIndex(prev => (prev === 0 ? 1 : 0));
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [isTeamCarouselPaused, isGlobalHoverPaused]);
+
+  // Dashboard Block 8 Carousel (Setlist / Guestlist) states
+  const [dashboardCarouselIndex, setDashboardCarouselIndex] = useState(0); // 0 = Setlists, 1 = Guestlist
+  const [selectedGuestlistShowId, setSelectedGuestlistShowId] = useState<string>('');
+
+  // Left card auto-rotation handler (runs every 6.5s unless paused)
+  useEffect(() => {
+    if (isLeftCardPaused || isGlobalHoverPaused) return;
+    const timer = setInterval(() => {
+      setLeftCarouselIndex(prev => (prev + 1) % 4);
+    }, 6500);
+    return () => clearInterval(timer);
+  }, [isLeftCardPaused, isGlobalHoverPaused]);
+
+  const handleAddExpense = (description: string, amount: number) => {
+    const newExp = {
+      id: 'exp_' + Date.now(),
+      description: description.trim(),
+      amount,
+      date: new Date().toISOString().split('T')[0]
+    };
+    setExpenses(prev => {
+      const updated = [newExp, ...prev];
+      localStorage.setItem('nexus_core_expenses', JSON.stringify(updated));
+      return updated;
+    });
+    addLog(`Recorded tour expense: "${description}" for $${amount}`);
+    triggerNotification(`Added expense: $${amount}`);
+  };
+
+  const handleSaveSalesGoal = (amount: number) => {
+    setDailySalesGoal(amount);
+    localStorage.setItem('nexus_core_sales_goal', String(amount));
+    addLog(`Daily sales goal updated to $${amount}`);
+    triggerNotification(`Sales goal set to $${amount}`);
+  };
+
+
+  // Core Crew Checklist states
+  useEffect(() => {
+    try {
+      localStorage.setItem('nexus_core_flights', JSON.stringify(flights));
+    } catch (_) {}
+  }, [flights]);
+
+  const teamMembers = useMemo(() => {
+    const bandId = activeBandId || '';
+    const savedTeam = localStorage.getItem(`nexus_core_team_members_${bandId}`);
+    let list: any[] = [];
+    if (savedTeam) {
+      try {
+        list = JSON.parse(savedTeam);
+      } catch (e) {
+        list = [];
+      }
+    }
+    
+    // Ensure we always have at least one or fallback members if none saved
+    if (list.length === 0) {
+      list = [
+        {
+          id: 't1',
+          name: 'Band Member 1',
+          role: 'Merch Crew Lead',
+          avatar_url: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&q=80&w=120',
+        },
+        {
+          id: 't2',
+          name: 'Sarah Connor',
+          role: 'Tour Manager',
+          avatar_url: 'https://images.unsplash.com/photo-1484876065684-b683cf17d276?auto=format&fit=crop&q=80&w=120',
+        },
+        {
+          id: 't3',
+          name: 'David Grohl',
+          role: 'Owner / Band Manager',
+          avatar_url: 'https://images.unsplash.com/photo-1519892300165-cb5542fb47c7?auto=format&fit=crop&q=80&w=120',
+        },
+        {
+          id: 't4',
+          name: activeBand ? activeBand?.name : 'Vocalist/Guitar',
+          role: 'Artist Rep',
+          avatar_url: 'https://images.unsplash.com/photo-1525201548942-d8c8b097a3c3?auto=format&fit=crop&q=80&w=120',
+        }
+      ];
+    }
+
+    // Now format them to fit the team carousel display format
+    return list.map((m, idx) => {
+      // Pick or map avatar
+      let avatar = m.avatar_url || (m.isYou ? userProfile?.avatar_url : undefined);
+      if (!avatar) {
+        const avatars = [
+          'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Nexus%20Icon%20Circuits.png',
+          'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Nexus%20Icon%20Circuits.png',
+          'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Nexus%20Icon%20bars.png',
+          'https://images.unsplash.com/photo-1525201548942-d8c8b097a3c3?auto=format&fit=crop&q=80&w=120',
+        ];
+        avatar = avatars[idx % avatars.length];
+      }
+      return {
+        id: m.id || `member-${idx}-${m.name || 'item'}`,
+        name: m.name,
+        role: m.role,
+        avatar: avatar,
+        status: idx === 0 || idx % 2 === 0 ? 'active' : 'idle',
+        lastActive: idx === 0 ? 'Active now' : `Active ${idx * 4}m ago`
+      };
+    });
+  }, [activeBandId, userProfile, activeTab, activeBand]);
+
+  const teamActivities = useMemo(() => {
+    const list: { id: string; user: string; avatar: string; text: string; time: string; type: string; timestamp: number }[] = [];
+
+    // 1. Convert real sales into activity items
+    filteredSales.slice(0, 20).forEach((sale, index) => {
+      // Pick a real team member dynamically
+      const member = teamMembers[index % teamMembers.length] || {
+        name: 'Band Member 1',
+        avatar: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&q=80&w=120'
+      };
+      
+      const timeMs = sale.created_at ? Date.parse(sale.created_at) : Date.now() - index * 60000;
+const timeAgo = sale.created_at ? formatTimeAgo(sale.created_at) : 'Just now';
+list.push({
+  id: `sale-activity-${sale.id || index}`,
+  user: member?.name,
+  avatar: member.avatar,
+  text: `sold ${sale.quantity || 1}x ${sale.item_name} via ${sale.payment_method} ($${((sale.amount ?? 0) * (sale.quantity || 1)).toFixed(2)})`,
+  time: timeAgo,
+  type: 'sale',
+  timestamp: timeMs
+});
+    });
+
+    // 2. Convert real notes into activity items
+    filteredNotes.slice(0, 20).forEach((note, index) => {
+      // Pick a real team member dynamically from members (starting from index 1 to vary)
+      const member = teamMembers[(index + 1) % teamMembers.length] || {
+        name: 'Sarah Connor',
+        avatar: 'https://images.unsplash.com/photo-1484876065684-b683cf17d276?auto=format&fit=crop&q=80&w=120'
+      };
+      
+      const timeMs = note.created_at ? Date.parse(note.created_at) : Date.now() - index * 120000;
+const timeAgo = note.created_at ? formatTimeAgo(note.created_at) : 'A while ago';
+list.push({
+  id: `note-activity-${note.id || index}`,
+  user: member?.name,
+  avatar: member.avatar,
+  text: `added tour note: "${note.text.length > 28 ? note.text.substring(0, 28) + '...' : note.text}"`,
+  time: timeAgo,
+  type: 'note',
+  timestamp: timeMs
+});
+    });
+
+    // Sort combined activities by timestamp descending
+    list.sort((a, b) => b.timestamp - a.timestamp);
+
+    // 3. Fallback simulated entries to keep the view active and collaborative
+    if (list.length < 3) {
+      const m0 = teamMembers[0] || { name: 'Band Member 1', avatar: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&q=80&w=120' };
+      const m1 = teamMembers[1] || m0;
+      const m2 = teamMembers[2] || m0;
+
+      list.push({
+        id: 'init-1',
+        user: m0.name,
+        avatar: m0.avatar,
+        text: 'synchronized table stock counts for tonight',
+        time: '5m ago',
+        type: 'stock',
+        timestamp: Date.now() - 5 * 60000
+      });
+      list.push({
+        id: 'init-2',
+        user: m1.name,
+        avatar: m1.avatar,
+        text: 'updated guestlist door instructions',
+        time: '12m ago',
+        type: 'logistics',
+        timestamp: Date.now() - 12 * 60000
+      });
+      list.push({
+        id: 'init-3',
+        user: m2.name,
+        avatar: m2.avatar,
+        text: 'confirmed Sound Check clear with Venue PA',
+        time: '1h ago',
+        type: 'show',
+        timestamp: Date.now() - 60 * 65000
+      });
+      list.sort((a, b) => b.timestamp - a.timestamp);
+    }
+
+    return list.slice(0, 20);
+  }, [filteredSales, filteredNotes, teamMembers]);
+
+  const totalInventoryValue = useMemo(() => {
+    return filteredInventory.reduce((sum, item) => sum + ((item.table_stock || 0) + (item.van_stock || 0)) * (item.price || 0), 0);
+  }, [filteredInventory]);
+
+  const metrics = [
+    {
+      id: "revenue",
+      title: "Today's Revenue",
+      value: `$${todayRevenue.toFixed(2)}`,
+      color: "#00d195",
+      textColor: "text-[#00ffcc]",
+      bgClass: "from-emerald-950/15 via-zinc-900/10 to-emerald-900/15",
+      borderClass: "border-[#00d195]/40 hover:border-[#00d195]",
+      dotClass: "bg-[#00ffcc]",
+      icon: <DollarSign className="w-3.5 h-3.5 text-[#00d195]" />
+    },
+    {
+      id: "topseller",
+      title: "Top Seller",
+      value: topSellerName.length > 22 ? topSellerName.substring(0, 20) + "..." : topSellerName,
+      color: "#a3e635",
+      textColor: "text-[#a3e635]",
+      bgClass: "from-lime-950/15 via-zinc-900/10 to-lime-950/15",
+      borderClass: "border-[#a3e635]/40 hover:border-[#a3e635]",
+      dotClass: "bg-[#a3e635]",
+      icon: <Star className="w-3.5 h-3.5 text-[#a3e635]" />
+    },
+    {
+      id: "salescount",
+      title: "Sales Count",
+      value: `${todaySalesCount} ${todaySalesCount === 1 ? 'Sale' : 'Sales'}`,
+      color: "#a855f7",
+      textColor: "text-[#a855f7]",
+      bgClass: "from-purple-950/15 via-zinc-900/10 to-purple-950/15",
+      borderClass: "border-[#a855f7]/40 hover:border-[#a855f7]",
+      dotClass: "bg-[#a855f7]",
+      icon: <RefreshCw className="w-3.5 h-3.5 text-[#a855f7]" />
+    },
+    {
+      id: "itemssold",
+      title: "Items Sold",
+      value: `${todayItemsSold} ${todayItemsSold === 1 ? 'Item' : 'Items'}`,
+      color: "#3b82f6",
+      textColor: "text-[#3b82f6]",
+      bgClass: "from-blue-950/15 via-zinc-900/10 to-blue-950/15",
+      borderClass: "border-[#3b82f6]/40 hover:border-[#3b82f6]",
+      dotClass: "bg-[#3b82f6]",
+      icon: <BarChart2 className="w-3.5 h-3.5 text-[#3b82f6]" />
+    },
+    {
+      id: "averagesale",
+      title: "Average Sale",
+      value: `$${averageSaleValue.toFixed(2)}`,
+      color: "#f59e0b",
+      textColor: "text-[#f59e0b]",
+      bgClass: "from-amber-950/15 via-zinc-900/10 to-amber-950/15",
+      borderClass: "border-[#f59e0b]/40 hover:border-[#f59e0b]",
+      dotClass: "bg-[#f59e0b]",
+      icon: <TrendingUp className="w-3.5 h-3.5 text-[#f59e0b]" />
+    }
+  ];
+
+
+  const getCashDrawerSummary = () => {
+    let startingBank = 0;
+    let cashSales = 0;
+    let totalPayouts = 0;
+    let totalExpenses = 0;
+    let bankDrops = 0;
+
+    cashTransactions.forEach(t => {
+      switch (t.type) {
+        case 'starting_bank': startingBank += t.amount; break;
+        case 'cash_sale': cashSales += t.amount; break;
+        case 'payout': totalPayouts += t.amount; break;
+        case 'expense': totalExpenses += t.amount; break;
+        case 'bank_drop': bankDrops += t.amount; break;
+      }
+    });
+
+    const netCash = startingBank + cashSales - totalPayouts - totalExpenses - bankDrops;
+    return { startingBank, cashSales, totalPayouts, totalExpenses, bankDrops, netCash };
+  };
+
+
+
+
+
+  if (window.location.search.includes('guest_confirm=1')) {
+    return (
+      <Suspense fallback={null}>
+        <GuestPassConfirmView 
+          onGoToApp={() => {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('guest_confirm');
+            url.searchParams.delete('email');
+            url.searchParams.delete('guestName');
+            url.searchParams.delete('band');
+            url.searchParams.delete('date');
+            url.searchParams.delete('venue');
+            url.searchParams.delete('pass_type');
+            window.history.pushState(null, '', url.pathname + url.search);
+            setActiveTab('home-v2');
+          }}
+        />
+      </Suspense>
+    );
+  }
+
+  if (window.location.search.includes('signup=vip')) {
+    return (
+      <Suspense fallback={null}>
+        <PublicVIPKioskView 
+          activeBandName={activeBand?.name || "Artist"} 
+          shows={shows}
+          loyaltyMembers={loyaltyMembers}
+          onBackToApp={() => {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('signup');
+            window.history.pushState(null, '', url.pathname + url.search);
+            setActiveTab('home-v2');
+          }}
+          onSignUp={(member) => {
+            setLoyaltyMembers(prev => {
+              const index = prev.findIndex(m => m.id === member.id || m.phone === member.phone);
+              if (index !== -1) {
+                const updated = [...prev];
+                updated[index] = member;
+                return updated;
+              }
+              return [member, ...prev];
+            });
+          }}
+          onUpdateMember={(member) => {
+            setLoyaltyMembers(prev => prev.map(m => m.id === member.id ? member : m));
+          }}
+        />
+      </Suspense>
+    );
+  }
+
+  if (activeTab === 'pay-portal' || window.location.pathname === '/pay') {
+    return (
+      <Suspense fallback={null}>
+        <CustomerPayView onBackToApp={() => setActiveTab('home-v2')} />
+      </Suspense>
+    );
+  }
+
+  if (activeTab === 'landing' || window.location.pathname === '/landing') {
+    return (
+      <Suspense fallback={null}>
+        <LandingView onEnterApp={() => setActiveTab('home-v2')} />
+      </Suspense>
+    );
+  }
+
+  return (
+    <div className={`w-full min-h-screen text-[#f3f4f6] font-sans flex flex-col justify-start relative overflow-x-hidden ${
+      (isLoggedOut && loginInitialTab === 'signup') || userProfile?.account_type === 'label' || (!isLoggedOut && (userProfile?.account_type === 'promoter' || userProfile?.account_type === 'creative'))
+        ? `${(!isLoggedOut && (userProfile?.account_type === 'promoter' || userProfile?.account_type === 'creative')) ? 'bg-[#07080a]' : 'bg-[#0c0e12]'} pb-0`
+        : `sm:max-w-[620px] sm:mx-auto sm:border-x sm:border-zinc-800 ${
+            (showSplash || isLoggedOut) 
+              ? 'bg-[#0c0e12] pb-0' 
+              : (userProfile?.account_type === 'creative' || userProfile?.account_type === 'promoter') 
+                ? 'bg-[#07080a] pb-0' 
+                : (userProfile?.account_type === 'industry_pro' || userProfile?.account_type === 'fan_only')
+                  ? 'bg-black pb-0'
+                  : 'bg-[#0c0e12] pb-20'
+          }`
+    }`} style={{ fontSize: '16px' }}>
+      
+      {/* Dynamic Alert Banner */}
+      <AnimatePresence>
+        {showNotification && (
+          <motion.div 
+            key="dynamic-alert-banner"
+            initial={{ opacity: 1, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 1, y: -20 }}
+            className="fixed top-[calc(1rem+env(safe-area-inset-top))] left-4 right-4 sm:max-w-sm sm:left-auto sm:right-4 z-[9999] bg-[#12b295] text-black px-4 py-3 rounded-lg shadow-2xl font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-2 border border-black/20"
+          >
+            <Radio className="w-4 h-4 animate-ping" />
+            {showNotification}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Global NotificationCenterView Overlay */}
+      {userProfile && isNotificationDrawerOpen && (
+        <Suspense fallback={null}>
+          <NotificationCenterView
+            userProfile={userProfile}
+            notifications={notifications}
+            setNotifications={setNotifications}
+            onMarkAsRead={handleMarkNotificationAsRead}
+            onNavigateToInventory={() => {
+              setActiveTab('inventory');
+              setIsTransferModalOpen(true);
+            }}
+            onNavigateToPost={(postId) => {
+              setActiveTab('social');
+              setIsNotificationDrawerOpen(false);
+              setTimeout(() => {
+                const postEl = document.getElementById(`post`);
+                if (postEl) {
+                  postEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  postEl.classList.add('ring-2', 'ring-purple-500', 'scale-[1.01]', 'duration-500');
+                  setTimeout(() => {
+                    postEl.classList.remove('ring-2', 'ring-purple-500', 'scale-[1.01]');
+                  }, 3000);
+                }
+              }, 300);
+            }}
+            isOpen={isNotificationDrawerOpen}
+            onClose={() => setIsNotificationDrawerOpen(false)}
+            triggerNotification={triggerNotification}
+            hideTrigger={true}
+          />
+        </Suspense>
+      )}
+
+      <Suspense fallback={null}>
+      <div className="flex-1 w-full flex flex-col relative">
+        {showSplash ? (
+          <div className="fixed inset-0 z-[9999] bg-[#07080a] overflow-y-auto custom-scrollbar">
+            <SplashView 
+              isLoggedOut={isLoggedOut}
+              onGoToDashboard={() => {
+                let validSavedProfile = false;
+                try {
+                  const saved = localStorage.getItem('nexus_core_user_profile');
+                  if (saved && saved !== 'null') {
+                    const parsed = JSON.parse(saved);
+                    if (parsed && !isLegacyAdminOrDummyProfile(parsed)) {
+                      validSavedProfile = true;
+                    } else {
+                      localStorage.removeItem('nexus_core_user_profile');
+                      profileStore.removeItem('nexus_core_user_profile').catch(() => {});
+                    }
+                  }
+                } catch (_) {}
+
+                if (validSavedProfile) {
+                  setIsLoggedOut(false);
+                } else {
+                  setLoginInitialTab('unlock');
+                  setIsLoggedOut(true);
+                }
+                setShowSplash(false);
+              }} 
+              onCreateAccount={() => {
+                setLoginInitialTab('signup');
+                setIsLoggedOut(true);
+                setShowSplash(false);
+              }}
+            />
+          </div>
+        ) : isLoggedOut ? (
+          <LoginView 
+            initialTab={loginInitialTab} 
+            triggerNotification={triggerNotification}
+            isUpgradeMode={isUpgradeMode}
+            userProfile={userProfile || undefined}
+            onBackToSplash={() => setShowSplash(true)}
+            onLogin={(customProfile, customBand, selectBandId) => {
+              setIsUpgradeMode(false);
+              setIsTime24Hour(localStorage.getItem('tour_time_is_24h') !== 'false');
+              const savedPlan = localStorage.getItem('nexus_core_active_plan');
+              if (savedPlan) {
+                setActivePlan(savedPlan);
+              }
+              if (customProfile) {
+                const workspaces = customProfile.allowed_workspaces || [];
+                const isFanAccount = customProfile.account_type === 'fan' || customProfile.account_type === 'fan_only';
+                const isProfessional = !isFanAccount && (workspaces.includes('creative') || workspaces.includes('band') || workspaces.includes('promoter') || workspaces.includes('label') || customProfile.account_type === 'pro' || customProfile.account_type === 'industry_pro' || customProfile.role === 'Industry Pro');
+                
+                const hasUnlockedBandWorkspace = Boolean(
+                  customBand ||
+                  selectBandId ||
+                  customProfile.account_type === 'band' ||
+                  customProfile.band_id ||
+                  customProfile.bandName ||
+                  customProfile.band_name ||
+                  hasRegisteredWorkspace(customProfile, 'band')
+                );
+
+                // On login, ensure active_workspace defaults to 'industry_pro' (or 'fan_only')
+                if (isFanAccount) {
+                  customProfile.account_type = 'fan';
+                  customProfile.active_workspace = 'fan_only';
+                } else {
+                  customProfile.account_type = 'industry_pro';
+                  customProfile.active_workspace = 'industry_pro';
+                }
+
+                if (hasUnlockedBandWorkspace) {
+                  if (customBand) {
+                    customProfile.band_id = customBand.id;
+                    customProfile.band_name = customBand.name || customBand.band_name || customProfile.band_name;
+                    customProfile.bandName = customBand.name || customBand.band_name || customProfile.bandName;
+                  }
+                  if (!hasRegisteredWorkspace(customProfile, 'band')) {
+                    customProfile.registered_workspaces = normalizeRegisteredWorkspaces(customProfile.registered_workspaces, [{
+                      type: 'band',
+                      id: customProfile.band_id || selectBandId || customBand?.id || generateUUID(),
+                      name: customProfile.band_name || customProfile.bandName || customBand?.name || 'Band Workspace'
+                    }]);
+                  }
+                }
+
+                const isOwnerMiguel = isMiguelNameOrProfile(customProfile);
+                const cleanPromoterBrand = (v: any) => (v && typeof v === 'string' && v.trim() && (isOwnerMiguel || !v.toLowerCase().includes('nexus live'))) ? v.trim() : '';
+                const hasUnlockedPromoterWorkspace = Boolean(
+                  isOwnerMiguel ||
+                  (customProfile.promoter_id && customProfile.promoter_id !== customProfile.id && !String(customProfile.promoter_name || customProfile.promoter_agency || '').toLowerCase().includes('nexus live')) ||
+                  cleanPromoterBrand(customProfile.promoter_agency) ||
+                  cleanPromoterBrand(customProfile.promoter_brand) ||
+                  cleanPromoterBrand(customProfile.promoter_name) ||
+                  cleanPromoterBrand(customProfile.promoter_metadata?.brand_name) ||
+                  cleanPromoterBrand(customProfile.promoter_metadata?.agency_name) ||
+                  (hasRegisteredWorkspace(customProfile, 'promoter') && customProfile.account_type !== 'fan' && customProfile.account_type !== 'fan_only' && customProfile.promoter_metadata?.is_registered === true)
+                );
+
+                if (hasUnlockedPromoterWorkspace) {
+                  const pName = cleanPromoterBrand(customProfile.promoter_metadata?.brand_name) || cleanPromoterBrand(customProfile.promoter_metadata?.agency_name) || cleanPromoterBrand(customProfile.promoter_agency) || cleanPromoterBrand(customProfile.promoter_brand) || cleanPromoterBrand(customProfile.promoter_name) || (isOwnerMiguel ? 'Nexus Live Productions' : 'Promoter Operations');
+                  const pId = customProfile.promoter_id || (customProfile.promoter_metadata as any)?.id || customProfile.id;
+                  const pLogo = customProfile.promoter_logo || customProfile.promoter_metadata?.logo_url || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-avatar_1790307456601.webp?t=1790307456601' : (customProfile.avatar_url || ''));
+                  const pCover = customProfile.promoter_cover_image || customProfile.promoter_metadata?.banner_url || customProfile.promoter_metadata?.cover_url || (isOwnerMiguel ? 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/bannersv2/5403162d-1947-43aa-b5f6-38a1bd2a1b80/promoter-banner_1790307913635.webp?t=1790307913635' : (customProfile.banner_url || ''));
+                  const pBio = customProfile.promoter_bio || customProfile.promoter_metadata?.bio || (isOwnerMiguel ? 'While Nexus Live Productions itself is new the history behind it is anything but. Having gone through several iterations since 2002. I have a lengthy history in the underground extreme metal scene with several festivals under my name most notably the Chicago/ Texas Domination Fest that ran from 2014-2024. The next evolution is set to move to another new market more details on that in the near future.' : 'Independent concert promoter and live events coordinator.');
+
+                  customProfile.promoter_id = pId;
+                  customProfile.promoter_agency = pName;
+                  customProfile.promoter_brand = pName;
+                  customProfile.promoter_name = pName;
+                  customProfile.promoter_logo = pLogo;
+                  customProfile.promoter_cover_image = pCover;
+                  customProfile.promoter_bio = pBio;
+
+                  if (!hasRegisteredWorkspace(customProfile, 'promoter')) {
+                    customProfile.registered_workspaces = normalizeRegisteredWorkspaces(customProfile.registered_workspaces, [{
+                      type: 'promoter',
+                      id: pId,
+                      name: pName
+                    }]);
+                  }
+                  // Automatically sync promoter profile to Supabase public.promoters
+                  syncPromoterProfileToSupabase(customProfile).catch((err) => {
+                    console.warn('[Supabase Promoter Sync Warning]:', err);
+                  });
+                } else if (!isOwnerMiguel) {
+                  delete customProfile.promoter_id;
+                  delete customProfile.promoter_agency;
+                  delete customProfile.promoter_brand;
+                  delete customProfile.promoter_name;
+                  delete customProfile.promoter_logo;
+                  delete customProfile.promoter_cover_image;
+                  delete customProfile.promoter_bio;
+                  delete customProfile.promoter_metadata;
+                }
+
+                const hasUnlockedCreativeWorkspace = Boolean(
+                  customProfile.creative_id ||
+                  customProfile.creative_business_name ||
+                  customProfile.creative_name ||
+                  customProfile.creative_metadata?.business_name ||
+                  hasRegisteredWorkspace(customProfile, 'creative') ||
+                  isMiguelNameOrProfile(customProfile)
+                );
+
+                if (hasUnlockedCreativeWorkspace) {
+                  const isOwnerMiguel = isMiguelNameOrProfile(customProfile);
+                  const cName = resolveCreativeName(customProfile);
+                  const cHandle = resolveCreativeHandle(customProfile);
+                  const cId = customProfile.creative_id || (isOwnerMiguel ? 'c-vortex' : generateUUID());
+                  const cLogo = resolveCreativeLogo(customProfile);
+                  const cCover = resolveCreativeCover(customProfile);
+                  const cBio = resolveCreativeBio(customProfile);
+                  const cLoc = resolveCreativeLocation(customProfile);
+
+                  customProfile.creative_id = cId;
+                  customProfile.creative_business_name = cName;
+                  customProfile.creative_name = cName;
+                  customProfile.creative_handle = cHandle;
+                  customProfile.creative_avatar = cLogo;
+                  customProfile.creative_banner = cCover;
+                  customProfile.creative_bio = cBio;
+                  customProfile.creative_metadata = {
+                    ...(customProfile.creative_metadata || {}),
+                    business_name: cName,
+                    creative_handle: cHandle,
+                    avatar_url: cLogo,
+                    banner_url: cCover,
+                    bio: cBio,
+                    city: customProfile.creative_metadata?.city || (isOwnerMiguel ? 'Denison' : customProfile.city || ''),
+                    state_province: customProfile.creative_metadata?.state_province || (isOwnerMiguel ? 'TX' : customProfile.state_province || ''),
+                    country: customProfile.creative_metadata?.country || customProfile.country || 'USA'
+                  };
+
+                  if (!hasRegisteredWorkspace(customProfile, 'creative')) {
+                    customProfile.registered_workspaces = normalizeRegisteredWorkspaces(customProfile.registered_workspaces, [{
+                      type: 'creative',
+                      id: cId,
+                      name: cName
+                    }]);
+                  }
+                }
+
+                if (isMiguelNameOrProfile(customProfile)) {
+                  const veLogo = 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/avatars/5403162d-1947-43aa-b5f6-38a1bd2a1b80/band-logo_1786739491396.jpg?t=1786739491396';
+                  if (!customProfile.band_logo || customProfile.band_logo === customProfile.promoter_logo) {
+                    customProfile.band_logo = veLogo;
+                  }
+                }
+
+                // Preserve personal profile avatar & banner (DO NOT overwrite with band logo)
+                if (customBand && customBand.name) {
+                  customProfile.bandName = customBand.name;
+                  customProfile.band_name = customBand.name;
+                }
+
+                setUserProfile(customProfile);
+                try {
+                  localStorage.setItem('nexus_core_user_profile', JSON.stringify(customProfile));
+                } catch (_) {}
+              }
+              if (customBand) {
+                if (customBand.lineup) {
+                  try {
+                    localStorage.setItem(
+                      `nexus_core_band_lineup_${customBand.id}`,
+                      typeof customBand.lineup === 'string' ? customBand.lineup : JSON.stringify(customBand.lineup)
+                    );
+                  } catch (_) {}
+                }
+                setBands(prev => {
+                  const exists = (prev || []).some(b => b.id === customBand.id);
+                  if (exists) return (prev || []).map(b => b.id === customBand.id ? customBand : b);
+                  return [customBand, ...(prev || [])];
+                });
+                try {
+                  const existingBandsStr = localStorage.getItem('nexus_bands_list');
+                  const existingBands = existingBandsStr ? JSON.parse(existingBandsStr) : [];
+                  const updatedBands = [customBand, ...existingBands.filter((b: any) => b.id !== customBand.id)];
+                  localStorage.setItem('nexus_bands_list', JSON.stringify(updatedBands));
+                } catch (_) {}
+              }
+              const targetBandId = selectBandId || customBand?.id || customProfile?.band_id;
+              if (targetBandId) {
+                setActiveBandId(targetBandId);
+                try {
+                  localStorage.setItem('nexus_active_band_id', targetBandId);
+                } catch (_) {}
+              }
+
+              // Fresh logins ALWAYS land on the Industry Pro dashboard
+              setActiveTab('social');
+
+              setIsLoggedOut(false);
+              addLog(customProfile ? `New crew profile signed up: ${customProfile.name} (${customProfile.role}) for ${customBand?.name || 'Artist'}` : 'Session restored.');
+            }} 
+          />
+        ) : ((activeTab as string) === 'social') ? (
+          (userProfile?.account_type === 'fan' || userProfile?.account_type === 'fan_only' || userProfile?.active_workspace === 'fan_only') ? (
+            <FanPortal
+              userProfile={userProfile}
+              setUserProfile={setUserProfile}
+              bandJoinRequests={bandJoinRequests}
+              setBandJoinRequests={setBandJoinRequests}
+              bands={bands}
+              setBands={setBands}
+              activeBand={activeBand}
+              activeBandId={activeBandId}
+              showSceneRadio={showSceneRadio}
+              setShowSceneRadio={setShowSceneRadio}
+              onLogout={() => {
+                localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
+              }}
+              onBack={() => {
+                const target = userProfile?.active_workspace;
+                if (target === 'creative') setActiveTab('creative');
+                else if (target === 'label') setActiveTab('label');
+                else if (target === 'promoter') setActiveTab('promoter');
+                else setActiveTab('home-v2');
+              }}
+              onNavigateToTab={(tab: string, subNav?: string) => {
+                if (subNav) {
+                  setDashboardV2ActiveNav(subNav as any);
+                }
+                setActiveTab(tab as any);
+              }}
+              setActiveTab={setActiveTab}
+              setDashboardV2ActiveNav={setDashboardV2ActiveNav}
+              dashboardV2ActiveNav={dashboardV2ActiveNav}
+              onUpgradeToPro={() => {
+                setShowWorkspaceRegistration(true);
+              }}
+              triggerNotification={triggerNotification}
+              addLog={addLog}
+              onUpdateBandLogo={(newUrl) => {
+                if (activeBand) {
+                  const updatedBand = { ...activeBand, logo_url: newUrl };
+                  setBands((prevBands) =>
+                    prevBands.map((b) => (b.id === activeBand.id ? updatedBand : b))
+                  );
+                }
+              }}
+            />
+          ) : (
+            <IndustryProPortal
+              userProfile={userProfile}
+              setUserProfile={setUserProfile}
+              portalRole={
+                userProfile?.active_workspace === 'creative' ? 'creative' :
+                userProfile?.active_workspace === 'label' ? 'label' :
+                userProfile?.active_workspace === 'promoter' ? 'promoter' :
+                userProfile?.active_workspace === 'band' ? 'band' :
+                'industry_pro'
+              }
+              bandJoinRequests={bandJoinRequests}
+              setBandJoinRequests={setBandJoinRequests}
+              bands={bands}
+              setBands={setBands}
+              activeBand={activeBand}
+              activeBandId={activeBandId}
+              setActiveBandId={setActiveBandId}
+              showSceneRadio={showSceneRadio}
+              setShowSceneRadio={setShowSceneRadio}
+              onLogout={() => {
+                localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
+              }}
+              onBack={() => {
+                const target = userProfile?.active_workspace;
+                if (target === 'creative') setActiveTab('creative');
+                else if (target === 'label') setActiveTab('label');
+                else if (target === 'promoter') setActiveTab('promoter');
+                else setActiveTab('home-v2');
+              }}
+              onNavigateToTab={(tab: string, subNav?: string) => {
+                if (subNav) {
+                  setDashboardV2ActiveNav(subNav as any);
+                }
+                setActiveTab(tab as any);
+              }}
+              setActiveTab={setActiveTab}
+              setDashboardV2ActiveNav={setDashboardV2ActiveNav}
+              dashboardV2ActiveNav={dashboardV2ActiveNav}
+              onUpgradeToPro={() => {
+                setShowWorkspaceRegistration(true);
+              }}
+              triggerNotification={triggerNotification}
+              addLog={addLog}
+              onUpdateBandLogo={(newUrl) => {
+                if (activeBand) {
+                  const updatedBand = { ...activeBand, logo_url: newUrl };
+                  setBands((prevBands) =>
+                    prevBands.map((b) => (b.id === activeBand.id ? updatedBand : b))
+                  );
+                }
+              }}
+            />
+          )
+        ) : (userProfile?.account_type === 'creative' || userProfile?.active_workspace === 'creative' || (activeTab as string) === 'creative') ? (
+          <div className="flex-grow overflow-y-auto">
+              <CreativeDashboardViewV2
+                onUpgradeToPro={() => setShowWorkspaceRegistration(true)}
+                userProfile={userProfile}
+                setUserProfile={setUserProfile}
+                notifications={notifications}
+                onOpenNotifications={() => setIsNotificationDrawerOpen(true)}
+                setActiveTab={setActiveTab as any}
+                onLogout={() => {
+                  localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
+                }}
+                onBack={() => {
+                  if (userProfile && (userProfile.band_id || hasRegisteredWorkspace(userProfile, 'band'))) {
+                    const updated = { ...userProfile, account_type: 'industry_pro', active_workspace: 'band' };
+                    setUserProfile(updated);
+                    try { localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated)); } catch (_) {}
+                    setActiveTab('home-v2');
+                  } else {
+                    const updated = { ...userProfile, account_type: 'industry_pro', active_workspace: 'industry_pro' };
+                    setUserProfile(updated);
+                    try { localStorage.setItem('nexus_core_user_profile', JSON.stringify(updated)); } catch (_) {}
+                    setActiveTab('social');
+                  }
+                }}
+                triggerNotification={triggerNotification}
+                addLog={addLog}
+              />
+          </div>
+        ) : (userProfile?.account_type === 'label' || userProfile?.active_workspace === 'label' || (activeTab as string) === 'label') ? (
+            <LabelDashboardViewV2
+              userProfile={userProfile}
+              setUserProfile={setUserProfile}
+              notifications={notifications}
+              onOpenNotifications={() => setIsNotificationDrawerOpen(true)}
+              triggerNotification={triggerNotification}
+              setActiveTab={setActiveTab as any}
+              onLogout={() => {
+                localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
+              }}
+            />
+        ) : (FLAGS.ENABLE_PROMOTER_PORTAL && (userProfile?.account_type === 'promoter' || userProfile?.active_workspace === 'promoter' || (activeTab as string) === 'promoter')) ? (
+            <PromoterVenuePortal
+              onUpgradeToPro={() => setShowWorkspaceRegistration(true)}
+              userProfile={userProfile}
+              setUserProfile={setUserProfile}
+              onLogout={() => {
+                localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
+              }}
+              onBack={() => {
+                localStorage.removeItem('nexus_core_user_profile'); setUserProfile(null); window.location.reload();
+              }}
+              notifications={notifications}
+              onOpenNotifications={() => setIsNotificationDrawerOpen(true)}
+              triggerNotification={triggerNotification}
+              setActiveTab={setActiveTab as any}
+              addLog={addLog}
+              bands={bands}
+              offers={offers}
+              onCreateOffer={handleCreateOffer}
+              onUpdateOffer={handleUpdateOffer}
+              shows={shows}
+              onMarkAsRead={handleMarkNotificationAsRead}
+              activeBand={activeBand}
+              activeBandId={activeBandId}
+              setActiveBandId={setActiveBandId}
+              isOfflineSimActive={isOfflineSimActive}
+              setIsOfflineSimActive={setIsOfflineSimActive}
+              isOnline={isOnline}
+            />
+        ) : (
+          <ArtistBandPortal
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            setDashboardV2ActiveNav={setDashboardV2ActiveNav}
+            triggerNotification={triggerNotification}
+            pendingSyncCount={pendingSyncCount}
+            processOfflineQueue={processOfflineQueue}
+            isRosterOwner={isRosterOwner}
+            activePlan={activePlan}
+            getTrialCountdownStr={getTrialCountdownStr}
+            activeClearanceLevel={activeClearanceLevel}
+            activeSimulatedMember={activeSimulatedMember}
+            userProfile={userProfile}
+            notifications={notifications}
+            setIsNotificationDrawerOpen={setIsNotificationDrawerOpen}
+            v2RoleMenuOpen={v2RoleMenuOpen}
+            setV2RoleMenuOpen={setV2RoleMenuOpen}
+            activeBand={activeBand}
+            bands={bands}
+            simulatedMemberId={simulatedMemberId}
+            setSimulatedMemberId={setSimulatedMemberId}
+            bandLineup={bandLineup}
+            crewMembers={crewMembers}
+            handleOpenMyProfile={handleOpenMyProfile}
+            setUserProfile={setUserProfile}
+            isOfflineSimActive={isOfflineSimActive}
+            setIsOfflineSimActive={setIsOfflineSimActive}
+            isOnline={isOnline}
+            setShowWorkspaceRegistration={setShowWorkspaceRegistration}
+            setIsSettingsDrawerOpen={setIsSettingsDrawerOpen}
+            isTabRestricted={isTabRestricted}
+            isBandRegistered={isBandRegistered}
+            dashboardRef={dashboardRef}
+            dashboardScrollPos={dashboardScrollPos}
+            addLog={addLog}
+            musicTrackCount={musicTrackCount}
+            setDistroDeckSubTab={setDistroDeckSubTab}
+            isSyncBadgeExpanded={isSyncBadgeExpanded}
+            setIsSyncBadgeExpanded={setIsSyncBadgeExpanded}
+            status={status}
+            setIsMetricCarouselPaused={setIsMetricCarouselPaused}
+            setCurrentMetricIndex={setCurrentMetricIndex}
+            metrics={metrics}
+            currentMetricIndex={currentMetricIndex}
+            setIsHoveringTourStatus={setIsHoveringTourStatus}
+            registerTourStatusInteraction={registerTourStatusInteraction}
+            handleStatusTouchStart={handleStatusTouchStart}
+            handleStatusTouchMove={handleStatusTouchMove}
+            handleStatusTouchEnd={handleStatusTouchEnd}
+            hasSettleReminder={hasSettleReminder}
+            firstShowToSettle={firstShowToSettle}
+            setAutoExpandShowId={setAutoExpandShowId}
+            shows={shows}
+            setTourStatusIndex={setTourStatusIndex}
+            tourStatusIndex={tourStatusIndex}
+            activeShowDisplay={activeShowDisplay}
+            currentOrNextShow={currentOrNextShow}
+            countdownString={countdownString}
+            inventory={inventory}
+            isCritical={isCritical}
+            totalTableStock={totalTableStock}
+            totalVanStock={totalVanStock}
+            notes={notes}
+            filteredNotes={filteredNotes}
+            isNoteExpanded={isNoteExpanded}
+            setIsNoteExpanded={setIsNoteExpanded}
+            inlineNoteEditingId={inlineNoteEditingId}
+            setInlineNoteEditingId={setInlineNoteEditingId}
+            inlineNoteText={inlineNoteText}
+            setInlineNoteText={setInlineNoteText}
+            inlineNoteCategory={inlineNoteCategory}
+            setInlineNoteCategory={setInlineNoteCategory}
+            inlineNoteTag={inlineNoteTag}
+            setInlineNoteTag={setInlineNoteTag}
+            activeNoteIndex={activeNoteIndex}
+            setActiveNoteIndex={setActiveNoteIndex}
+            isTourNotesCardCollapsed={isTourNotesCardCollapsed}
+            setIsTourNotesCardCollapsed={setIsTourNotesCardCollapsed}
+            handleNoteTouchStart={handleNoteTouchStart}
+            handleNoteTouchMove={handleNoteTouchMove}
+            handleNoteTouchEnd={handleNoteTouchEnd}
+            handleDeleteNote={handleDeleteNote}
+            handleUpdateNote={handleUpdateNote}
+            handleDataSubmit={handleDataSubmit}
+            showSpecificNotes={showSpecificNotes}
+            localWeather={localWeather}
+            weatherLoading={weatherLoading}
+            weatherError={weatherError}
+            currentCoords={currentCoords}
+            customNavDestination={customNavDestination}
+            setCustomNavDestination={setCustomNavDestination}
+            venues={venues}
+            fetchLocalWeather={fetchLocalWeather}
+            setIsWeatherForecastExpanded={setIsWeatherForecastExpanded}
+            isWeatherForecastExpanded={isWeatherForecastExpanded}
+            isEditingBusCall={isEditingBusCall}
+            isTime24Hour={isTime24Hour}
+            setIsTime24Hour={setIsTime24Hour}
+            tempBusCallTime={tempBusCallTime}
+            setTempBusCallTime={setTempBusCallTime}
+            tempLockupTime={tempLockupTime}
+            setTempLockupTime={setTempLockupTime}
+            setIsEditingBusCall={setIsEditingBusCall}
+            setBusCallTime={setBusCallTime}
+            setLockupTime={setLockupTime}
+            renderTime={renderTime}
+            busCallTime={busCallTime}
+            lockupTime={lockupTime}
+            checklistItems={checklistItems}
+            toggleChecklistItem={toggleChecklistItem}
+            flights={flights}
+            tableStockPercent={tableStockPercent}
+            handleRestock={handleRestock}
+            handleNewSaleClick={handleNewSaleClick}
+            handleNewSalePointerDown={handleNewSalePointerDown}
+            handleNewSalePointerUp={handleNewSalePointerUp}
+            setIsGlobalHoverPaused={setIsGlobalHoverPaused}
+            setDashboardCarouselIndex={setDashboardCarouselIndex}
+            dashboardCarouselIndex={dashboardCarouselIndex}
+            getNextShow={getNextShow}
+            getSetlistDetailsForShow={getSetlistDetailsForShow}
+            selectedGuestlistShowId={selectedGuestlistShowId}
+            setSelectedGuestlistShowId={setSelectedGuestlistShowId}
+            sales={sales}
+            setModalType={setModalType}
+            setIsModalOpen={setIsModalOpen}
+            sortedShows={sortedShows}
+            setPromoCardActiveSlot={setPromoCardActiveSlot}
+            promoCardActiveSlot={promoCardActiveSlot}
+            alliancePosts={alliancePosts}
+            previewReactionMenuOpenFor={previewReactionMenuOpenFor}
+            setPreviewReactionMenuOpenFor={setPreviewReactionMenuOpenFor}
+            handleAlliancePostReaction={handleAlliancePostReaction}
+            setAlliancePosts={setAlliancePosts}
+            previewFollowedActs={previewFollowedActs}
+            setPreviewFollowedActs={setPreviewFollowedActs}
+            filteredInventory={filteredInventory}
+            setPromoHubSelectedItemId={setPromoHubSelectedItemId}
+            setPromoHubSubTab={setPromoHubSubTab}
+            loyaltyMembers={loyaltyMembers}
+            reviewLeft={reviewLeft}
+            userReviews={userReviews}
+            setReviewLeft={setReviewLeft}
+            setReviewText={setReviewText}
+            setReviewScore={setReviewScore}
+            reviewScore={reviewScore}
+            reviewText={reviewText}
+            reviewerName={reviewerName}
+            setReviewerName={setReviewerName}
+            reviewerGroup={reviewerGroup}
+            setReviewerGroup={setReviewerGroup}
+            setUserReviews={setUserReviews}
+            dashboardV2ActiveNav={dashboardV2ActiveNav}
+            setIsV2StoryCreatorExpanded={setIsV2StoryCreatorExpanded}
+            isV2StoryCreatorExpanded={isV2StoryCreatorExpanded}
+            stagedDistroItems={stagedDistroItems}
+            setStagedDistroItems={setStagedDistroItems}
+            setBands={setBands}
+            bandJoinRequests={bandJoinRequests}
+            setBandJoinRequests={setBandJoinRequests}
+            isSubNavRestricted={isSubNavRestricted}
+            activeDriver={activeDriver}
+            activeEventsSection={activeEventsSection}
+            checkedPreDriveItems={checkedPreDriveItems}
+            checklistBank={checklistBank}
+            commitFlightMutation={commitFlightMutation}
+            customMpg={customMpg}
+            driveHoursElapsed={driveHoursElapsed}
+            filteredSales={filteredSales}
+            filteredShows={filteredShows}
+            fuelPrice={fuelPrice}
+            handleUpdateOffer={handleUpdateOffer}
+            isDriverRotationExpanded={isDriverRotationExpanded}
+            isFuelCalculatorExpanded={isFuelCalculatorExpanded}
+            isInteractiveMapExpanded={isInteractiveMapExpanded}
+            isPreDriveChecklistExpanded={isPreDriveChecklistExpanded}
+            isWaypointsExpanded={isWaypointsExpanded}
+            newWaypointName={newWaypointName}
+            newWaypointType={newWaypointType}
+            offers={offers}
+            onRouteVenueAddress={onRouteVenueAddress}
+            setActiveDriver={setActiveDriver}
+            setActiveEventsSection={setActiveEventsSection}
+            setCheckedPreDriveItems={setCheckedPreDriveItems}
+            setChecklistBank={setChecklistBank}
+            setChecklistItems={setChecklistItems}
+            setCustomMpg={setCustomMpg}
+            setDriveHoursElapsed={setDriveHoursElapsed}
+            setFlights={setFlights}
+            setFuelPrice={setFuelPrice}
+            setIsDriverRotationExpanded={setIsDriverRotationExpanded}
+            setIsFuelCalculatorExpanded={setIsFuelCalculatorExpanded}
+            setIsInteractiveMapExpanded={setIsInteractiveMapExpanded}
+            setIsPreDriveChecklistExpanded={setIsPreDriveChecklistExpanded}
+            setIsWaypointsExpanded={setIsWaypointsExpanded}
+            setNewWaypointName={setNewWaypointName}
+            setNewWaypointType={setNewWaypointType}
+            setShows={setShows}
+            setVehicleType={setVehicleType}
+            setVenues={setVenues}
+            setWaypoints={setWaypoints}
+            vehicleType={vehicleType}
+            waypoints={waypoints}
+            bandCoverUrl={bandCoverUrl}
+            setInventory={setInventory}
+            setLoyaltyMembers={setLoyaltyMembers}
+            inventoryAudits={inventoryAudits}
+            setInventoryAudits={setInventoryAudits}
+            activeBandId={activeBandId}
+            setTransferPreselectedId={setTransferPreselectedId}
+            setIsTransferModalOpen={setIsTransferModalOpen}
+            setEditingItem={setEditingItem}
+            expenses={expenses}
+            setExpenses={setExpenses}
+            setEditingBand={setEditingBand}
+            setIsBandModalOpen={setIsBandModalOpen}
+            bandInfoBio={bandInfoBio}
+            setBandInfoBio={setBandInfoBio}
+            bandInfoCustomSlug={bandInfoCustomSlug}
+            setBandInfoCustomSlug={setBandInfoCustomSlug}
+            bandInfoBookingEmail={bandInfoBookingEmail}
+            setBandInfoBookingEmail={setBandInfoBookingEmail}
+            bandInfoBookingPhone={bandInfoBookingPhone}
+            setBandInfoBookingPhone={setBandInfoBookingPhone}
+            bandInfoYoutubeVideo={bandInfoYoutubeVideo}
+            setBandInfoYoutubeVideo={setBandInfoYoutubeVideo}
+            bandInfoStreamingUrl={bandInfoStreamingUrl}
+            setBandInfoStreamingUrl={setBandInfoStreamingUrl}
+            bandInfoTechRider={bandInfoTechRider}
+            setBandInfoTechRider={setBandInfoTechRider}
+            bandInfoTourVehicle={bandInfoTourVehicle}
+            setBandInfoTourVehicle={setBandInfoTourVehicle}
+            bandInfoMetalArchivesUrl={bandInfoMetalArchivesUrl}
+            setBandInfoMetalArchivesUrl={setBandInfoMetalArchivesUrl}
+            bandLogoUrl={bandLogoUrl}
+            setLogoUploaderDragActive={setLogoUploaderDragActive}
+            handleBandInfoLogoUpload={handleBandInfoLogoUpload}
+            logoUploaderDragActive={logoUploaderDragActive}
+            bandInfoLogoFileInputRef={bandInfoLogoFileInputRef}
+            setCoverUploaderDragActive={setCoverUploaderDragActive}
+            handleBandInfoCoverUpload={handleBandInfoCoverUpload}
+            coverUploaderDragActive={coverUploaderDragActive}
+            bandInfoCoverFileInputRef={bandInfoCoverFileInputRef}
+            bandInfoName={bandInfoName}
+            setBandInfoName={setBandInfoName}
+            selectedMicroGenres={selectedMicroGenres}
+            setSelectedMicroGenres={setSelectedMicroGenres}
+            bandInfoHomebase={bandInfoHomebase}
+            setBandInfoHomebase={setBandInfoHomebase}
+            bandInfoFoundedYear={bandInfoFoundedYear}
+            setBandInfoFoundedYear={setBandInfoFoundedYear}
+            setBandLineup={setBandLineup}
+            setCrewMembers={setCrewMembers}
+            setSales={setSales}
+            logs={logs}
+            dbStatus={dbStatus}
+            editingItem={editingItem}
+            commitInventoryMutation={commitInventoryMutation}
+            setIsCashDrawerOpen={setIsCashDrawerOpen}
+            setAutoOpenSettlementShowId={setAutoOpenSettlementShowId}
+            processingGlobalSyncQueue={processingGlobalSyncQueue}
+            getSupabase={getSupabase}
+            inventoryStore={inventoryStore}
+            pendingOpenShowsForm={pendingOpenShowsForm}
+            setPendingOpenShowsForm={setPendingOpenShowsForm}
+            autoExpandShowId={autoExpandShowId}
+            autoOpenSettlementShowId={autoOpenSettlementShowId}
+            setOnRouteVenueAddress={setOnRouteVenueAddress}
+            blockedPromoters={blockedPromoters}
+            handleAcceptOffer={handleAcceptOffer}
+            handleDeclineOffer={handleDeclineOffer}
+            handleRenegotiateOffer={handleRenegotiateOffer}
+            handleBlockPromoter={handleBlockPromoter}
+            setSettingsExpandedSection={setSettingsExpandedSection}
+            supabaseUrl={supabaseUrl}
+            supabaseKey={supabaseKey}
+            setActiveBandId={setActiveBandId}
+            settingsExpandedSection={settingsExpandedSection}
+            promoHubSubTab={promoHubSubTab}
+            promoHubSelectedItemId={promoHubSelectedItemId}
+            setActivePlan={setActivePlan}
+            pendingFlightIsAdding={pendingFlightIsAdding}
+            setPendingFlightIsAdding={setPendingFlightIsAdding}
+            distroDeckSubTab={distroDeckSubTab}
+          />
+        )}
+      </div>
+        {/* Offline Queue Reconciler bottom status bar banner */}
+        {(!offlineSyncIsOnline || isOfflineSimActive || offlineQueueLength > 0 || offlineIsSyncing) && (
+          <div id="offline-queue-indicator" className={`fixed ${(!isLoggedOut && !showSplash && (!userProfile?.account_type || userProfile?.account_type === 'band') && activeTab !== 'social') ? 'bottom-[72px]' : 'bottom-0'} w-full sm:max-w-[620px] bg-black/90 border-t border-b border-zinc-900 px-4 py-1.5 flex items-center justify-between z-45 font-mono text-[8.5px] uppercase tracking-wider text-[#00ffcc] select-none shadow-[0_-5px_15px_rgba(0,0,0,0.4)]`}>
+            <div className="flex items-center gap-1.5 font-bold">
+              <span className={`w-1.5 h-1.5 rounded-full inline-block ${offlineIsSyncing ? 'bg-[#00ffcc] animate-ping' : 'bg-amber-400 animate-pulse'}`} />
+              <span>
+                {offlineIsSyncing 
+                  ? '// SYNCING OFFLINE LEDGER...' 
+                  : `// OFFLINE QUEUE: [${offlineQueueLength}] PENDING INJECTS`
+                }
+              </span>
+            </div>
+            <div className="text-zinc-500 text-[8px] font-medium tracking-normal text-right font-mono">
+              [SUPABASE RESILIENCE ACTIVE]
+            </div>
+          </div>
+        )}
+
+        {/* Rectangular Navigation Bar (Push-to-talk, Quick Actions) - Band Workspace Only (not on Social Feed or Industry Pro) */}
+        {!isLoggedOut && !showSplash && isBandRegistered && (activeTab === 'home' || activeTab === 'home-v2') && (
+          <AppNavigationBar
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            setDashboardV2ActiveNav={setDashboardV2ActiveNav}
+            promoHubSubTab={promoHubSubTab}
+            setPromoHubSubTab={setPromoHubSubTab}
+            triggerNotification={triggerNotification}
+            addLog={addLog}
+            setIsQuickActionPanelOpen={setIsQuickActionPanelOpen}
+            isPttOpen={isPttOpen}
+            setIsPttOpen={setIsPttOpen}
+            isPttRecording={isPttRecording}
+            playPttSound={playPttSound}
+            isNavMenuOpen={isNavMenuOpen}
+            setIsNavMenuOpen={setIsNavMenuOpen}
+            activeBand={activeBand}
+            bandLogoUrl={bandLogoUrl}
+            userProfile={userProfile}
+            setUserProfile={setUserProfile}
+            handleOpenMyProfile={handleOpenMyProfile}
+            setLoginInitialTab={setLoginInitialTab}
+            setIsLoggedOut={setIsLoggedOut}
+            setShowSplash={setShowSplash}
+          />
+        )}
+
+
+      {/* GLOBAL MODALS & DRAWERS REGISTRY */}
+      <GlobalModalsContainer
+        userProfile={userProfile}
+        setUserProfile={setUserProfile}
+        activeTab={activeTab as string}
+        setActiveTab={setActiveTab as any}
+        shows={shows}
+        inventory={inventory}
+        setInventory={setInventory}
+        handleDataSubmit={handleDataSubmit}
+        triggerNotification={triggerNotification}
+        bandManagement={bandManagement}
+        bands={bands}
+        activeBand={activeBand}
+        activeBandId={activeBandId}
+        setActiveBandId={setActiveBandId}
+        addLog={addLog}
+        deletingBandId={deletingBandId}
+        setDeletingBandId={setDeletingBandId}
+        handleDeleteBand={handleDeleteBand}
+        cashTransactions={cashTransactions}
+        setCashTransactions={setCashTransactions}
+        checklistItems={checklistItems}
+        setChecklistItems={setChecklistItems}
+        checklistBank={checklistBank}
+        setChecklistBank={setChecklistBank}
+        setEditingItem={setEditingItem}
+        setPendingOpenShowsForm={setPendingOpenShowsForm}
+        setPendingFlightIsAdding={setPendingFlightIsAdding}
+        playPttSound={playPttSound}
+        commitInventoryMutation={commitInventoryMutation}
+        teamActivities={teamActivities}
+        setIsUpgradeMode={setIsUpgradeMode}
+        setLoginInitialTab={setLoginInitialTab}
+        setIsLoggedOut={setIsLoggedOut}
+      />
+
+      {/* Real-time overlay portals */}
+      <FloatingChatHead />
+      <AvatarPopupOverlay />
+
+      {/* Autonomous Shake & Instabug Bug Monitor (Private Owner Console) */}
+      <BugMonitorDrawer
+        userProfile={userProfile}
+        activeTab={activeTab as string}
+        activeBand={activeBand}
+      />
+
+      {/* Seamless Global Scene Radio Player (Maintains background playback continuously across all tabs and visibility changes) */}
+      {!isLoggedOut && !showSplash && userProfile && (
+        <SceneRadioPlayer
+          showSceneRadio={showSceneRadio}
+          setShowSceneRadio={setShowSceneRadio}
+          activeTab={activeTab as string}
+          portalRole={userProfile?.active_workspace || (userProfile?.account_type === 'fan' ? 'fan_only' : 'band')}
+          userProfile={userProfile}
+          triggerNotification={triggerNotification}
+        />
+      )}
+      </Suspense>
+    </div>
+  );
+}
+

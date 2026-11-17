@@ -1,0 +1,385 @@
+### [MASS BUG DIAGNOSTICS BATCH REPORT] (75 Unresolved Issues)
+
+#### 1. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases?select=id%2Ctitle&or=%28band_id.eq.92b270b9-828b-4da1-a3b9-078753fb7dc2%2Cband_id.eq.92b270b9-828b-4da1-a3b9-078753fb7dc2%2Cband_name.ilike.Birdflesh%29 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column releases.band_name does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases?select=id%2Ctitle&or=%28band_id.eq.92b270b9-828b-4da1-a3b9-078753fb7dc2%2Cband_id.eq.92b270b9-828b-4da1-a3b9-078753fb7dc2%2Cband_name.ilike.Birdflesh%29 (400)
+
+#### 2. [SILENT_API] API Error 400: HEAD //cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows
+- *Severity:* medium | *Occurrences:* 3
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows?select=*&or=%28followed_id.eq.2e4753ed-3af6-454d-912a-0512c544fb12%2Cartist_id.eq.2e4753ed-3af6-454d-912a-0512c544fb12%29 failed with status 400 (). Response: No response body
+- *Endpoint:* HEAD https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows?select=*&or=%28followed_id.eq.2e4753ed-3af6-454d-912a-0512c544fb12%2Cartist_id.eq.2e4753ed-3af6-454d-912a-0512c544fb12%29 (400)
+
+#### 3. [SILENT_API] API Error 400: GET s://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/shows
+- *Severity:* medium | *Occurrences:* 3
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/shows?select=*&band_id=eq.2e4753ed-3af6-454d-912a-0512c544fb12 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column shows.band_id does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/shows?select=*&band_id=eq.2e4753ed-3af6-454d-912a-0512c544fb12 (400)
+
+#### 4. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases
+- *Severity:* medium | *Occurrences:* 4
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases?select=id%2Ctitle&or=%28band_id.eq.2e4753ed-3af6-454d-912a-0512c544fb12%2Cband_id.eq.2e4753ed-3af6-454d-912a-0512c544fb12%2Cband_name.ilike.Extermination+Dismemberment%29 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column releases.band_name does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases?select=id%2Ctitle&or=%28band_id.eq.2e4753ed-3af6-454d-912a-0512c544fb12%2Cband_id.eq.2e4753ed-3af6-454d-912a-0512c544fb12%2Cband_name.ilike.Extermination+Dismemberment%29 (400)
+
+#### 5. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25carcass%25%2CbandName.ilike.%25carcass%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25carcass%25%2CbandName.ilike.%25carcass%25%29&limit=1 (400)
+
+#### 6. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 2
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25dead+infection%25%2CbandName.ilike.%25dead+infection%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25dead+infection%25%2CbandName.ilike.%25dead+infection%25%29&limit=1 (400)
+
+#### 7. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases?select=id%2Ctitle&or=%28band_id.eq.2e4753ed-3af6-454d-912a-0512c544fb12%2Cband_id.eq.2e4753ed-3af6-454d-912a-0512c544fb12%2Cband_name.ilike.EXTERMINATION+DISMEMBERMENT%29 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column releases.band_name does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases?select=id%2Ctitle&or=%28band_id.eq.2e4753ed-3af6-454d-912a-0512c544fb12%2Cband_id.eq.2e4753ed-3af6-454d-912a-0512c544fb12%2Cband_name.ilike.EXTERMINATION+DISMEMBERMENT%29 (400)
+
+#### 8. [SILENT_API] API Error 400: GET jnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts?select=*&profile_id=eq.artist-extermination-dismemberment&order=created_at.desc failed with status 400 (). Response: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type uuid: \"artist-extermination-dismemberment\""}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts?select=*&profile_id=eq.artist-extermination-dismemberment&order=created_at.desc (400)
+
+#### 9. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25extermination+dismemberment%25%2CbandName.ilike.%25extermination+dismemberment%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25extermination+dismemberment%25%2CbandName.ilike.%25extermination+dismemberment%25%29&limit=1 (400)
+
+#### 10. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25fleshgore%25%2CbandName.ilike.%25fleshgore%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25fleshgore%25%2CbandName.ilike.%25fleshgore%25%29&limit=1 (400)
+
+#### 11. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 3
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25extirpating+the+infected%25%2CbandName.ilike.%25extirpating+the+infected%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25extirpating+the+infected%25%2CbandName.ilike.%25extirpating+the+infected%25%29&limit=1 (400)
+
+#### 12. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25horrendous+festering+transmutations%25%2CbandName.ilike.%25horrendous+festering+transmutations%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25horrendous+festering+transmutations%25%2CbandName.ilike.%25horrendous+festering+transmutations%25%29&limit=1 (400)
+
+#### 13. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 4
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25unknown+artist%25%2CbandName.ilike.%25unknown+artist%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25unknown+artist%25%2CbandName.ilike.%25unknown+artist%25%29&limit=1 (400)
+
+#### 14. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25guttural+disease%25%2CbandName.ilike.%25guttural+disease%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25guttural+disease%25%2CbandName.ilike.%25guttural+disease%25%29&limit=1 (400)
+
+#### 15. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25deadborn%25%2CbandName.ilike.%25deadborn%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25deadborn%25%2CbandName.ilike.%25deadborn%25%29&limit=1 (400)
+
+#### 16. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25aborted+fetus%25%2CbandName.ilike.%25aborted+fetus%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25aborted+fetus%25%2CbandName.ilike.%25aborted+fetus%25%29&limit=1 (400)
+
+#### 17. [SILENT_API] API Error 400: HEAD //cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows?select=*&or=%28followed_id.eq.0f365267-3742-4ddb-a853-ad458a233c62%2Cartist_id.eq.0f365267-3742-4ddb-a853-ad458a233c62%29 failed with status 400 (). Response: No response body
+- *Endpoint:* HEAD https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows?select=*&or=%28followed_id.eq.0f365267-3742-4ddb-a853-ad458a233c62%2Cartist_id.eq.0f365267-3742-4ddb-a853-ad458a233c62%29 (400)
+
+#### 18. [SILENT_API] API Error 400: GET s://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/shows
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/shows?select=*&band_id=eq.0f365267-3742-4ddb-a853-ad458a233c62 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column shows.band_id does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/shows?select=*&band_id=eq.0f365267-3742-4ddb-a853-ad458a233c62 (400)
+
+#### 19. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases
+- *Severity:* medium | *Occurrences:* 6
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases?select=id%2Ctitle&or=%28band_id.eq.0f365267-3742-4ddb-a853-ad458a233c62%2Cband_id.eq.0f365267-3742-4ddb-a853-ad458a233c62%2Cband_name.ilike.Aeon%29 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column releases.band_name does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases?select=id%2Ctitle&or=%28band_id.eq.0f365267-3742-4ddb-a853-ad458a233c62%2Cband_id.eq.0f365267-3742-4ddb-a853-ad458a233c62%2Cband_name.ilike.Aeon%29 (400)
+
+#### 20. [SILENT_API] API Error 400: GET jnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts
+- *Severity:* medium | *Occurrences:* 2
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts?select=*&profile_id=eq.artist-aeon&order=created_at.desc failed with status 400 (). Response: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type uuid: \"artist-aeon\""}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts?select=*&profile_id=eq.artist-aeon&order=created_at.desc (400)
+
+#### 21. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25aeon%25%2CbandName.ilike.%25aeon%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25aeon%25%2CbandName.ilike.%25aeon%25%29&limit=1 (400)
+
+#### 22. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25archspire%25%2CbandName.ilike.%25archspire%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25archspire%25%2CbandName.ilike.%25archspire%25%29&limit=1 (400)
+
+#### 23. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25organectomy%25%2CbandName.ilike.%25organectomy%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25organectomy%25%2CbandName.ilike.%25organectomy%25%29&limit=1 (400)
+
+#### 24. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases
+- *Severity:* medium | *Occurrences:* 2
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases?select=id%2Ctitle&or=%28band_id.eq.79d52419-d9a3-4e3f-a5fd-a7a6578be2ee%2Cband_id.eq.79d52419-d9a3-4e3f-a5fd-a7a6578be2ee%2Cband_name.ilike.Visceral+Disgorge%29 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column releases.band_name does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/releases?select=id%2Ctitle&or=%28band_id.eq.79d52419-d9a3-4e3f-a5fd-a7a6578be2ee%2Cband_id.eq.79d52419-d9a3-4e3f-a5fd-a7a6578be2ee%2Cband_name.ilike.Visceral+Disgorge%29 (400)
+
+#### 25. [SILENT_API] API Error 400: HEAD //cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows
+- *Severity:* medium | *Occurrences:* 3
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows?select=*&or=%28followed_id.eq.79d52419-d9a3-4e3f-a5fd-a7a6578be2ee%2Cartist_id.eq.79d52419-d9a3-4e3f-a5fd-a7a6578be2ee%29 failed with status 400 (). Response: No response body
+- *Endpoint:* HEAD https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows?select=*&or=%28followed_id.eq.79d52419-d9a3-4e3f-a5fd-a7a6578be2ee%2Cartist_id.eq.79d52419-d9a3-4e3f-a5fd-a7a6578be2ee%29 (400)
+
+#### 26. [SILENT_API] API Error 400: GET s://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/shows
+- *Severity:* medium | *Occurrences:* 3
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/shows?select=*&band_id=eq.79d52419-d9a3-4e3f-a5fd-a7a6578be2ee failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column shows.band_id does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/shows?select=*&band_id=eq.79d52419-d9a3-4e3f-a5fd-a7a6578be2ee (400)
+
+#### 27. [SILENT_API] API Error 400: HEAD //cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows?select=*&or=%28followed_id.eq.90ebf1e5-7aa7-4c0c-8bbb-054fb2c56001%2Cartist_id.eq.90ebf1e5-7aa7-4c0c-8bbb-054fb2c56001%29 failed with status 400 (). Response: No response body
+- *Endpoint:* HEAD https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows?select=*&or=%28followed_id.eq.90ebf1e5-7aa7-4c0c-8bbb-054fb2c56001%2Cartist_id.eq.90ebf1e5-7aa7-4c0c-8bbb-054fb2c56001%29 (400)
+
+#### 28. [SILENT_API] API Error 400: GET s://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/shows
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/shows?select=*&band_id=eq.90ebf1e5-7aa7-4c0c-8bbb-054fb2c56001 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column shows.band_id does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/shows?select=*&band_id=eq.90ebf1e5-7aa7-4c0c-8bbb-054fb2c56001 (400)
+
+#### 29. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25dimmu+borgir%25%2CbandName.ilike.%25dimmu+borgir%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25dimmu+borgir%25%2CbandName.ilike.%25dimmu+borgir%25%29&limit=1 (400)
+
+#### 30. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25behemoth%25%2CbandName.ilike.%25behemoth%25%29&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \"profiles.band_name\".","message":"column profiles.bandName does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28full_name.ilike.%25behemoth%25%2CbandName.ilike.%25behemoth%25%29&limit=1 (400)
+
+#### 31. [SILENT_API] Network Failure: GET dr7esx5hy-148981064113.us-west2.run.app/api/venues
+- *Severity:* high | *Occurrences:* 1
+- *Message:* Failed to execute fetch to https://ais-pre-s6jhaejrxpqgkdr7esx5hy-148981064113.us-west2.run.app/api/venues: Failed to fetch
+- *Endpoint:* GET https://ais-pre-s6jhaejrxpqgkdr7esx5hy-148981064113.us-west2.run.app/api/venues (N/A)
+- *Stack snippet:* TypeError: Failed to fetch
+
+#### 32. [SILENT_API] Network Failure: GET https://photon.komoot.io/api/
+- *Severity:* high | *Occurrences:* 4
+- *Message:* Failed to execute fetch to https://photon.komoot.io/api/?q=costco&lat=33.7553&lon=-96.54121&limit=15: Failed to fetch
+- *Endpoint:* GET https://photon.komoot.io/api/?q=costco&lat=33.7553&lon=-96.54121&limit=15 (N/A)
+- *Stack snippet:* TypeError: Failed to fetch
+
+#### 33. [CONSOLE_ERROR] Console Error: {"message":"Could not obtain location in time. Try with a higher timeo
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* {"message":"Could not obtain location in time. Try with a higher timeout.","code":"OS-PLUG-GLOC-0010"}
+- *Stack snippet:*     at Object.logFromNative (<anonymous>:330:27)
+
+#### 34. [SILENT_API] API Error 400: GET onskfzpmqo.supabase.co/rest/v1/nexus_notifications
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLchMzReuuu_9bhcmdqiiwZjzR4TL0Lt1r failed with status 400 (). Response: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type uuid: \"playlist_cache_PLchMzReuuu_9bhcmdqiiwZjzR4TL0Lt1r\""}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLchMzReuuu_9bhcmdqiiwZjzR4TL0Lt1r (400)
+
+#### 35. [SILENT_API] API Error 400: GET onskfzpmqo.supabase.co/rest/v1/nexus_notifications
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLBWvM6w9IQeR1uy-3_eIf2g8fHFccXWzZ failed with status 400 (). Response: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type uuid: \"playlist_cache_PLBWvM6w9IQeR1uy-3_eIf2g8fHFccXWzZ\""}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLBWvM6w9IQeR1uy-3_eIf2g8fHFccXWzZ (400)
+
+#### 36. [SILENT_API] API Error 400: POST onskfzpmqo.supabase.co/rest/v1/nexus_notifications
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?on_conflict=id&columns=%22id%22%2C%22user_id%22%2C%22actor_id%22%2C%22title%22%2C%22message%22%2C%22category%22%2C%22type%22%2C%22is_read%22%2C%22data%22%2C%22created_at%22 failed with status 400 (). Response: {"code":"PGRST204","details":null,"hint":null,"message":"Could not find the 'category' column of 'nexus_notifications' in the schema cache"}
+- *Endpoint:* POST https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?on_conflict=id&columns=%22id%22%2C%22user_id%22%2C%22actor_id%22%2C%22title%22%2C%22message%22%2C%22category%22%2C%22type%22%2C%22is_read%22%2C%22data%22%2C%22created_at%22 (400)
+
+#### 37. [SILENT_API] API Error 400: POST jnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts?on_conflict=id&columns=%22id%22%2C%22profile_id%22%2C%22content%22%2C%22media_url%22%2C%22reactions%22%2C%22likes_count%22%2C%22data%22%2C%22created_at%22 failed with status 400 (). Response: {"code":"PGRST204","details":null,"hint":null,"message":"Could not find the 'likes_count' column of 'nexus_posts' in the schema cache"}
+- *Endpoint:* POST https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts?on_conflict=id&columns=%22id%22%2C%22profile_id%22%2C%22content%22%2C%22media_url%22%2C%22reactions%22%2C%22likes_count%22%2C%22data%22%2C%22created_at%22 (400)
+
+#### 38. [SILENT_API] API Error 400: GET jnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts?select=id%2Cdata%2Creactions%2Clikes_count&id=eq.980f594c-0a4a-4b76-8d96-6bb0b56556fe&limit=1 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column nexus_posts.likes_count does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts?select=id%2Cdata%2Creactions%2Clikes_count&id=eq.980f594c-0a4a-4b76-8d96-6bb0b56556fe&limit=1 (400)
+
+#### 39. [SILENT_API] API Error 400: GET onskfzpmqo.supabase.co/rest/v1/nexus_notifications
+- *Severity:* medium | *Occurrences:* 3
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLchMzReuuu_8av4RYcuW8rptIqmr0kSHS failed with status 400 (). Response: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type uuid: \"playlist_cache_PLchMzReuuu_8av4RYcuW8rptIqmr0kSHS\""}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLchMzReuuu_8av4RYcuW8rptIqmr0kSHS (400)
+
+#### 40. [SILENT_API] API Error 400: GET onskfzpmqo.supabase.co/rest/v1/nexus_notifications
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLchMzReuuu__jJpKhyYVGfavwrgHBdtK2 failed with status 400 (). Response: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type uuid: \"playlist_cache_PLchMzReuuu__jJpKhyYVGfavwrgHBdtK2\""}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLchMzReuuu__jJpKhyYVGfavwrgHBdtK2 (400)
+
+#### 41. [SILENT_API] Network Failure: GET //api.bigdatacloud.net/data/reverse-geocode-client
+- *Severity:* high | *Occurrences:* 1
+- *Message:* Failed to execute fetch to https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=33.7530925&longitude=-96.5434026&localityLanguage=en: Failed to fetch
+- *Endpoint:* GET https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=33.7530925&longitude=-96.5434026&localityLanguage=en (N/A)
+- *Stack snippet:* TypeError: Failed to fetch
+
+#### 42. [SILENT_API] Network Failure: GET https://nominatim.openstreetmap.org/reverse
+- *Severity:* high | *Occurrences:* 1
+- *Message:* Failed to execute fetch to https://nominatim.openstreetmap.org/reverse?lat=33.7530925&lon=-96.5434026&format=json: Failed to fetch
+- *Endpoint:* GET https://nominatim.openstreetmap.org/reverse?lat=33.7530925&lon=-96.5434026&format=json (N/A)
+- *Stack snippet:* TypeError: Failed to fetch
+
+#### 43. [SILENT_API] Network Failure: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* high | *Occurrences:* 2
+- *Message:* Failed to execute fetch to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&limit=100: Failed to fetch
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&limit=100 (N/A)
+- *Stack snippet:* TypeError: Failed to fetch
+
+#### 44. [SILENT_API] Network Failure: GET uneruonskfzpmqo.supabase.co/rest/v1/forum_comments
+- *Severity:* high | *Occurrences:* 2
+- *Message:* Failed to execute fetch to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/forum_comments?select=*&order=created_at.asc: Failed to fetch
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/forum_comments?select=*&order=created_at.asc (N/A)
+- *Stack snippet:* TypeError: Failed to fetch
+
+#### 45. [SILENT_API] Network Failure: GET puneruonskfzpmqo.supabase.co/rest/v1/forum_threads
+- *Severity:* high | *Occurrences:* 2
+- *Message:* Failed to execute fetch to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/forum_threads?select=*&order=created_at.desc&limit=30: Failed to fetch
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/forum_threads?select=*&order=created_at.desc&limit=30 (N/A)
+- *Stack snippet:* TypeError: Failed to fetch
+
+#### 46. [SILENT_API] Network Failure: GET /api/emails/test-connectivity
+- *Severity:* high | *Occurrences:* 2
+- *Message:* Failed to execute fetch to /api/emails/test-connectivity: Failed to fetch
+- *Endpoint:* GET /api/emails/test-connectivity (N/A)
+- *Stack snippet:* TypeError: Failed to fetch
+
+#### 47. [SILENT_API] Network Failure: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* high | *Occurrences:* 2
+- *Message:* Failed to execute fetch to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28id.eq.5403162d-1947-43aa-b5f6-38a1bd2a1b80%2Cemail.ilike.goregrindsickness%40gmail.com%29: Failed to fetch
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=*&or=%28id.eq.5403162d-1947-43aa-b5f6-38a1bd2a1b80%2Cemail.ilike.goregrindsickness%40gmail.com%29 (N/A)
+- *Stack snippet:* TypeError: Failed to fetch
+
+#### 48. [SILENT_API] API Error 401: GET eruonskfzpmqo.supabase.co/rest/v1/nexus_shop_items
+- *Severity:* medium | *Occurrences:* 2
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_shop_items?select=*&order=created_at.desc failed with status 401 (). Response: {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT ON public.nexus_shop_items TO anon;","message":"permission denied for table nexus_shop_items"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_shop_items?select=*&order=created_at.desc (401)
+
+#### 49. [SILENT_API] API Error 401: GET npuneruonskfzpmqo.supabase.co/rest/v1/nexus_events
+- *Severity:* medium | *Occurrences:* 2
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_events?select=*&order=created_at.desc failed with status 401 (). Response: {"code":"42501","details":null,"hint":"Grant the required privileges to the current role with: GRANT SELECT ON public.nexus_events TO anon;","message":"permission denied for table nexus_events"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_events?select=*&order=created_at.desc (401)
+
+#### 50. [SILENT_API] API Error 400: GET onskfzpmqo.supabase.co/rest/v1/nexus_notifications
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLchMzReuuu_8FppUXuwggPW9e86Jn6vFu failed with status 400 (). Response: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type uuid: \"playlist_cache_PLchMzReuuu_8FppUXuwggPW9e86Jn6vFu\""}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLchMzReuuu_8FppUXuwggPW9e86Jn6vFu (400)
+
+#### 51. [SILENT_API] API Error 400: GET onskfzpmqo.supabase.co/rest/v1/nexus_notifications
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLchMzReuuu_8tMyh0UKsCasYz6BlbKGmW failed with status 400 (). Response: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type uuid: \"playlist_cache_PLchMzReuuu_8tMyh0UKsCasYz6BlbKGmW\""}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLchMzReuuu_8tMyh0UKsCasYz6BlbKGmW (400)
+
+#### 52. [CONSOLE_ERROR] Console Error: {"message":"Location permission request was denied.","code":"OS-PLUG-G
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* {"message":"Location permission request was denied.","code":"OS-PLUG-GLOC-0003"}
+- *Stack snippet:*     at Object.logFromNative (<anonymous>:330:27)
+
+#### 53. [SILENT_API] API Error 400: POST onskfzpmqo.supabase.co/rest/v1/nexus_post_comments
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_post_comments?columns=%22id%22%2C%22post_id%22%2C%22user_id%22%2C%22parent_comment_id%22%2C%22content%22%2C%22created_at%22 failed with status 400 (). Response: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type uuid: \"comment_1792551122377_7dj1r\""}
+- *Endpoint:* POST https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_post_comments?columns=%22id%22%2C%22post_id%22%2C%22user_id%22%2C%22parent_comment_id%22%2C%22content%22%2C%22created_at%22 (400)
+
+#### 54. [SILENT_API] API Error 404: POST zpmqo.supabase.co/rest/v1/rpc/toggle_post_reaction
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/rpc/toggle_post_reaction failed with status 404 (). Response: {"code":"PGRST202","details":"Searched for the function public.toggle_post_reaction with parameters p_post_id, p_profile_id, p_reaction_type or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.","hint":"Perhaps you meant to call the function public.delete_post_direct","message":"Could not find the function public.toggle_post_reaction(p_post_id, p_profile_id, p_reaction_type) in the schema cache"}
+- *Endpoint:* POST https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/rpc/toggle_post_reaction (404)
+
+#### 55. [SILENT_API] API Error 400: GET jnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts
+- *Severity:* medium | *Occurrences:* 2
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts?select=id%2Cdata&or=%28id.eq.5f83c8cf-d550-4d83-8f3d-936ec1e372ff%2Cid.eq.nexus_post_5f83c8cf-d550-4d83-8f3d-936ec1e372ff%29&limit=1 failed with status 400 (). Response: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type uuid: \"nexus_post_5f83c8cf-d550-4d83-8f3d-936ec1e372ff\""}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts?select=id%2Cdata&or=%28id.eq.5f83c8cf-d550-4d83-8f3d-936ec1e372ff%2Cid.eq.nexus_post_5f83c8cf-d550-4d83-8f3d-936ec1e372ff%29&limit=1 (400)
+
+#### 56. [SILENT_API] API Error 400: GET //cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows?select=*&or=%28follower_id.eq.0be2c858-8f1e-45a8-9fe1-6b24776b9b92%2Cfan_profile_id.eq.0be2c858-8f1e-45a8-9fe1-6b24776b9b92%29 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column follows.fan_profile_id does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows?select=*&or=%28follower_id.eq.0be2c858-8f1e-45a8-9fe1-6b24776b9b92%2Cfan_profile_id.eq.0be2c858-8f1e-45a8-9fe1-6b24776b9b92%29 (400)
+
+#### 57. [SILENT_API] API Error 400: GET //cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows?select=*&or=%28followed_id.eq.0be2c858-8f1e-45a8-9fe1-6b24776b9b92%2Cartist_id.eq.0be2c858-8f1e-45a8-9fe1-6b24776b9b92%29 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column follows.artist_id does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/follows?select=*&or=%28followed_id.eq.0be2c858-8f1e-45a8-9fe1-6b24776b9b92%2Cartist_id.eq.0be2c858-8f1e-45a8-9fe1-6b24776b9b92%29 (400)
+
+#### 58. [SILENT_API] API Error 400: GET cyjnpuneruonskfzpmqo.supabase.co/rest/v1/creatives
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/creatives?select=*&or=%28business_name.ilike.%25Christopher+wirstrom%25%2Ccreative_name.ilike.%25Christopher+wirstrom%25%2Cname.ilike.%25Christopher+wirstrom%25%29 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column creatives.creative_name does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/creatives?select=*&or=%28business_name.ilike.%25Christopher+wirstrom%25%2Ccreative_name.ilike.%25Christopher+wirstrom%25%2Cname.ilike.%25Christopher+wirstrom%25%29 (400)
+
+#### 59. [SILENT_API] API Error 400: GET jnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts?select=*&or=%28profile_id.eq.24523979-7f72-422b-8fb6-85634345d81c%2Cauthor_id.eq.24523979-7f72-422b-8fb6-85634345d81c%2Cuser_id.eq.24523979-7f72-422b-8fb6-85634345d81c%29&order=created_at.desc failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column nexus_posts.author_id does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_posts?select=*&or=%28profile_id.eq.24523979-7f72-422b-8fb6-85634345d81c%2Cauthor_id.eq.24523979-7f72-422b-8fb6-85634345d81c%2Cuser_id.eq.24523979-7f72-422b-8fb6-85634345d81c%29&order=created_at.desc (400)
+
+#### 60. [SILENT_API] API Error 400: POST 162d-1947-43aa-b5f6-38a1bd2a1b80_1792551000306.jpg
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/assets/feed-post-1792551000298_5403162d-1947-43aa-b5f6-38a1bd2a1b80_1792551000306.jpg failed with status 400 (). Response: {"statusCode":"404","error":"Bucket not found","message":"Bucket not found","code":"NoSuchBucket"}
+- *Endpoint:* POST https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/assets/feed-post-1792551000298_5403162d-1947-43aa-b5f6-38a1bd2a1b80_1792551000306.jpg (400)
+
+#### 61. [SILENT_API] API Error 400: POST bd2a1b80/feed-post-1792551000298_1792551000306.jpg
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/assets/5403162d-1947-43aa-b5f6-38a1bd2a1b80/feed-post-1792551000298_1792551000306.jpg failed with status 400 (). Response: {"statusCode":"404","error":"Bucket not found","message":"Bucket not found","code":"NoSuchBucket"}
+- *Endpoint:* POST https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/assets/5403162d-1947-43aa-b5f6-38a1bd2a1b80/feed-post-1792551000298_1792551000306.jpg (400)
+
+#### 62. [SILENT_API] API Error 400: POST onskfzpmqo.supabase.co/rest/v1/nexus_notifications
+- *Severity:* medium | *Occurrences:* 15
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications failed with status 400 (). Response: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type uuid: \"playlist_cache_PLchMzReuuu_-fffjCRQpc5Mo50-QYzNMI\""}
+- *Endpoint:* POST https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications (400)
+
+#### 63. [SILENT_API] API Error 400: GET /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=id%2Cfull_name%2Cconsole_handle%2Cavatar_url%2Caccount_type%2Ccreative_avatar%2Cpromoter_logo%2Crole_badge&id=in.%285403162d-1947-43aa-b5f6-38a1bd2a1b80%29 failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column profiles.creative_avatar does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?select=id%2Cfull_name%2Cconsole_handle%2Cavatar_url%2Caccount_type%2Ccreative_avatar%2Cpromoter_logo%2Crole_badge&id=in.%285403162d-1947-43aa-b5f6-38a1bd2a1b80%29 (400)
+
+#### 64. [CONSOLE_ERROR] Console Error: {"message":"Missing the following permissions in AndroidManifest.xml:\
+- *Severity:* medium | *Occurrences:* 2
+- *Message:* {"message":"Missing the following permissions in AndroidManifest.xml:\nandroid.permission.ACCESS_FINE_LOCATION\nandroid.permission.ACCESS_COARSE_LOCATION\n"}
+- *Stack snippet:*     at Object.logFromNative (<anonymous>:330:27)
+
+#### 65. [SILENT_API] API Error 400: POST cyjnpuneruonskfzpmqo.supabase.co/rest/v1/promoters
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/promoters?on_conflict=id&columns=%22id%22%2C%22email%22%2C%22phone%22%2C%22bio%22%2C%22top_song_title%22%2C%22top_song_url%22%2C%22promoter_metadata%22 failed with status 400 (). Response: {"code":"PGRST204","details":null,"hint":null,"message":"Could not find the 'promoter_metadata' column of 'promoters' in the schema cache"}
+- *Endpoint:* POST https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/promoters?on_conflict=id&columns=%22id%22%2C%22email%22%2C%22phone%22%2C%22bio%22%2C%22top_song_title%22%2C%22top_song_url%22%2C%22promoter_metadata%22 (400)
+
+#### 66. [SILENT_API] API Error 404: GET jnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_clips
+- *Severity:* medium | *Occurrences:* 18
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_clips?select=*&order=created_at.desc failed with status 404 (). Response: {"code":"PGRST205","details":null,"hint":"Perhaps you meant the table 'public.nexus_chats'","message":"Could not find the table 'public.nexus_clips' in the schema cache"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_clips?select=*&order=created_at.desc (404)
+
+#### 67. [SILENT_API] API Error 400: POST cyjnpuneruonskfzpmqo.supabase.co/rest/v1/promoters
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/promoters?on_conflict=id&columns=%22id%22%2C%22email%22%2C%22phone%22%2C%22bio%22%2C%22top_song_title%22%2C%22top_song_url%22%2C%22promoter_metadata%22%2C%22genre_tags%22 failed with status 400 (). Response: {"code":"PGRST204","details":null,"hint":null,"message":"Could not find the 'genre_tags' column of 'promoters' in the schema cache"}
+- *Endpoint:* POST https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/promoters?on_conflict=id&columns=%22id%22%2C%22email%22%2C%22phone%22%2C%22bio%22%2C%22top_song_title%22%2C%22top_song_url%22%2C%22promoter_metadata%22%2C%22genre_tags%22 (400)
+
+#### 68. [SILENT_API] API Error 400: GET s://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/bands
+- *Severity:* medium | *Occurrences:* 14
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/bands?select=*&or=%28creator_id.eq.5403162d-1947-43aa-b5f6-38a1bd2a1b80%2Cowner_id.eq.5403162d-1947-43aa-b5f6-38a1bd2a1b80%29&order=created_at.desc failed with status 400 (). Response: {"code":"42703","details":null,"hint":null,"message":"column bands.owner_id does not exist"}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/bands?select=*&or=%28creator_id.eq.5403162d-1947-43aa-b5f6-38a1bd2a1b80%2Cowner_id.eq.5403162d-1947-43aa-b5f6-38a1bd2a1b80%29&order=created_at.desc (400)
+
+#### 69. [SILENT_API] API Error 400: POST cyjnpuneruonskfzpmqo.supabase.co/rest/v1/promoters
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/promoters?on_conflict=id&columns=%22id%22%2C%22email%22%2C%22phone%22%2C%22bio%22%2C%22top_song_title%22%2C%22top_song_url%22%2C%22promoter_metadata%22%2C%22full_name%22%2C%22genre_tags%22 failed with status 400 (). Response: {"code":"PGRST204","details":null,"hint":null,"message":"Could not find the 'full_name' column of 'promoters' in the schema cache"}
+- *Endpoint:* POST https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/promoters?on_conflict=id&columns=%22id%22%2C%22email%22%2C%22phone%22%2C%22bio%22%2C%22top_song_title%22%2C%22top_song_url%22%2C%22promoter_metadata%22%2C%22full_name%22%2C%22genre_tags%22 (400)
+
+#### 70. [SILENT_API] API Error 400: GET onskfzpmqo.supabase.co/rest/v1/nexus_notifications
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLchMzReuuu_-fffjCRQpc5Mo50-QYzNMI failed with status 400 (). Response: {"code":"22P02","details":null,"hint":null,"message":"invalid input syntax for type uuid: \"playlist_cache_PLchMzReuuu_-fffjCRQpc5Mo50-QYzNMI\""}
+- *Endpoint:* GET https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/nexus_notifications?select=data&id=eq.playlist_cache_PLchMzReuuu_-fffjCRQpc5Mo50-QYzNMI (400)
+
+#### 71. [SILENT_API] API Error 400: PATCH cyjnpuneruonskfzpmqo.supabase.co/rest/v1/promoters
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/promoters?or=%28id.eq.5403162d-1947-43aa-b5f6-38a1bd2a1b80%2Cuser_id.eq.5403162d-1947-43aa-b5f6-38a1bd2a1b80%29 failed with status 400 (). Response: {"code":"PGRST204","details":null,"hint":null,"message":"Could not find the 'full_name' column of 'promoters' in the schema cache"}
+- *Endpoint:* PATCH https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/promoters?or=%28id.eq.5403162d-1947-43aa-b5f6-38a1bd2a1b80%2Cuser_id.eq.5403162d-1947-43aa-b5f6-38a1bd2a1b80%29 (400)
+
+#### 72. [SILENT_API] API Error 400: PATCH /cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?id=eq.5403162d-1947-43aa-b5f6-38a1bd2a1b80 failed with status 400 (). Response: {"code":"PGRST204","details":null,"hint":null,"message":"Could not find the 'creative_business_name' column of 'profiles' in the schema cache"}
+- *Endpoint:* PATCH https://cyjnpuneruonskfzpmqo.supabase.co/rest/v1/profiles?id=eq.5403162d-1947-43aa-b5f6-38a1bd2a1b80 (400)
+
+#### 73. [SILENT_API] API Error 400: POST s://cyjnpuneruonskfzpmqo.supabase.co/auth/v1/token
+- *Severity:* medium | *Occurrences:* 4
+- *Message:* Network request to https://cyjnpuneruonskfzpmqo.supabase.co/auth/v1/token?grant_type=refresh_token failed with status 400 (). Response: {"code":"refresh_token_already_used","message":"Invalid Refresh Token: Already Used"}
+- *Endpoint:* POST https://cyjnpuneruonskfzpmqo.supabase.co/auth/v1/token?grant_type=refresh_token (400)
+
+#### 74. [CONSOLE_ERROR] Console Error: [NativePush] Error on push registration:
+- *Severity:* medium | *Occurrences:* 1
+- *Message:* [NativePush] Error on push registration: {"error":"Please set a valid API key. A Firebase API key is required to communicate with Firebase server APIs: It authenticates your project with Google.Please refer to https://firebase.google.com/support/privacy/init-options."}
+- *Stack snippet:*     at Object.callback (https://localhost/assets/index-wFidhyWN.js:5105:17267)
+
+#### 75. [CONSOLE_ERROR] Console Error: {"message":"Location permissions are not declared in manifest. Make su
+- *Severity:* medium | *Occurrences:* 3
+- *Message:* {"message":"Location permissions are not declared in manifest. Make sure at least ACCESS_COARSE_LOCATION is declared in AndroidManifest.xml, and optionally ACCESS_FINE_LOCATION if you require precise location access.","code":"OS-PLUG-GLOC-0018"}
+- *Stack snippet:*     at Object.logFromNative (<anonymous>:330:27)

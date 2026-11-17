@@ -1,0 +1,2346 @@
+import React, { useRef, useState } from 'react';
+import {
+  Pin,
+  Rocket,
+  Shield,
+  Sparkles,
+  MapPin,
+  MoreVertical,
+  Edit2,
+  Trash2,
+  Share2,
+  Check,
+  Tag,
+  MessageSquare,
+  X,
+  Send,
+  Image as ImageIcon,
+  Upload,
+  RefreshCw,
+  Plus,
+  Link,
+  AlertCircle,
+  Loader2,
+  Pencil,
+} from 'lucide-react';
+import { uploadBase64ToStorage } from '../../../supabase';
+import { isValidStorageOrImageUrl } from '../../../services/storageService';
+import { updateGlobalComment, deleteGlobalComment } from '../../../services/postInteractionsService';
+import {
+  FeedPost,
+  SongEmbedData,
+  AlbumEmbedData,
+  PollEmbedData,
+  REACTION_PALETTE,
+} from './types';
+import { FestivalLineupCard } from '../cards/FestivalLineupCard';
+import { renderPostMessage, renderCommentText } from './utils';
+import { CommentMentionInput } from './CommentMentionInput';
+import { formatPostTimestamp } from '../../../utils/socialFeedUtils';
+import {
+  LinkPreviewCard,
+  SongEmbedCard,
+  AlbumEmbedCard,
+  PollWidget,
+  TapeEmbedCard,
+  YouTubeEmbedCard,
+  MediaGalleryGrid,
+  TourEmbedCard,
+  EventEmbedCard,
+  MerchEmbedCard,
+  BandcampEmbedCard,
+  BulletinBoardPostCard,
+  GroundedVenueBadge,
+} from '../embeds';
+import { GigProximityPill } from './GigProximityPill';
+import { isMiguelNameOrProfile } from '../utils/profileUtils';
+import { resolveCreativeLogo, resolveBandLogo, resolvePromoterLogo, DEFAULT_PERSONAL_AVATAR, MIGUEL_DEFAULT_AVATAR, resolveCommentAvatar, resolveCommentAuthorName } from '../../../utils/bandProfileUtils';
+import { getResilientFallback } from '../../../utils/imageFallbacks';
+import { CommentMediaPicker } from './CommentMediaPicker';
+import { BirthdayShoutoutBadge } from '../BirthdayShoutoutBadge';
+import { buildBirthdayHornsMessage, isMutualConnection } from '../../../utils/birthdayUtils';
+import { isProfileFollowedGlobally } from '../../../utils/followSyncService';
+import { sendDirectMessage } from '../../../store/useChatStore';
+
+// Global cache of failed avatar URLs across all PostCard instances to prevent remount flashing loops
+const GLOBAL_FAILED_AVATAR_URLS = new Set<string>();
+
+interface PostCardProps {
+  post: FeedPost;
+  currentUserId?: string;
+  currentUserName?: string;
+  userProfile?: any;
+  portalRole?: string;
+  allProfiles?: any[];
+  discoverProfiles?: any[];
+  onAddComment?: (postId: string, commentText: string, parentCommentId?: string | null, mediaUrl?: string | null) => void;
+  onTriggerNotification?: (msg: string) => void;
+  boostData?: { isBoosted: boolean; boostGlowColor: 'blue' | 'purple'; boostType: string; boostedAt: string };
+  isCommentsOpen: boolean;
+  commentDraft: string;
+  replyingTo: { commentId: string; username: string } | null;
+  isEditing: boolean;
+  editingText: string;
+  editingImages?: string[];
+  isPostMenuOpen: boolean;
+  isReactionMenuOpen: boolean;
+  isHypeAnimated: boolean;
+  playingSongId: string | null;
+  songProgress: number;
+  songVolumeMuted: boolean;
+  pollVote?: { optionId: string; totalVotes: number; options: any[] };
+  playingTapeId: string | null;
+  tapeProgress: number;
+  isTourExpanded: boolean;
+  isRsvped: boolean;
+  rsvpCount: number;
+  unlockedVipPosts: Record<string, boolean>;
+  selectedSizesMap: Record<string, string>;
+  offerStatusMap: Record<string, any>;
+  activeNegotiationPostId: string | null;
+  offerValues: Record<string, string>;
+  shareToastActive: boolean;
+
+  onOpenProfile?: (authorId: string, authorName: string) => void;
+  onTogglePostMenu: () => void;
+  onClosePostMenu: () => void;
+  onTogglePin?: (postId: string) => void;
+  onStartEditing: () => void;
+  onCancelEditing: () => void;
+  onSaveEditing: (text: string, images?: string[]) => void;
+  onSetEditingText: (text: string) => void;
+  onSetEditingImages?: (images: string[]) => void;
+  onDeletePost?: (postId: string) => void;
+  onShareClick: () => void;
+  onOpenBoostModal: () => void;
+  onPlaySong?: (song: SongEmbedData) => void;
+  onTogglePlaySong: (song?: SongEmbedData) => void;
+  onSeekSong: (pct: number) => void;
+  onToggleMuteSong: () => void;
+  onOpenAlbumModalForSong: (song: SongEmbedData) => void;
+  onOpenAlbumModalForAlbum: (album: AlbumEmbedData) => void;
+  onBuyFormat: (format: string, priceStr: string, bandName: string, albumName: string) => void;
+  onVotePoll: (optionId: string, currentPoll: PollEmbedData) => void;
+  onTogglePlayTape: () => void;
+  onSeekTape: (progress: number) => void;
+  onStopTape: () => void;
+  onOpenLightbox: (images: string[], index: number) => void;
+  onToggleTourExpand: () => void;
+  onSelectTicketShow: (date: any) => void;
+  onOpenTicketModal?: (ticketData: any) => void;
+  onToggleRsvp: (postId: string) => void;
+  setSelectedSizesMap: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setOfferStatusMap: React.Dispatch<React.SetStateAction<Record<string, any>>>;
+  setActiveNegotiationPostId: React.Dispatch<React.SetStateAction<string | null>>;
+  setOfferValues: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  openMerchLightbox: (post: FeedPost, initialIndex?: number) => void;
+  onCheckoutMerch: (post: FeedPost, size: string, price: number, isNegotiated?: boolean) => void;
+  onAddToCart?: (item: { title: string; bandName: string; price: number; format: string }) => void;
+  setCartNotice: (notice: string | null) => void;
+  onToggleComments: () => void;
+  onCommentDraftChange: (text: string) => void;
+  onCommentSubmit: (e: React.FormEvent) => void;
+  onSetReplyingTo: (info: { commentId: string; username: string } | null) => void;
+  onTriggerEmojiReact: (type: string) => void;
+  onOpenReactionMenu: () => void;
+  onCloseReactionMenu: () => void;
+  onOpenShareModal: () => void;
+  onOpenReactionsModal?: () => void;
+  onEditComment?: (commentId: string, newText: string) => void;
+  onDeleteComment?: (commentId: string) => void;
+}
+
+const KNOWN_USER_FULL_NAMES: Record<string, string> = {
+  'goregrindslayer': 'Tyler Slamson',
+  'blastfiend999': 'Zachary Blaster',
+  'tapetrader99': 'Marcus Cassette',
+  'slamnation': 'Derek Riff',
+  'scene photographer': 'Dustin Shutter',
+  'deathmetalfan99': 'Alex Mercer',
+  'shutterbug_live': 'Leo Lens',
+  'stagediver_99': 'Chris Diver',
+  'circlepitking': 'Eric Circle',
+  'slamgod': 'Kevin Hammer',
+  'texasgore': 'Travis Gore',
+  'riffmaster': 'Dave Shredder',
+  'doomguy': 'Doom Guy',
+  'blastspeed': 'Brian Blast',
+  'nexus promoters': 'Marcus Vance',
+  'bdmceo': 'Miguel Goregrinder Medina',
+  '@bdmceo': 'Miguel Goregrinder Medina',
+  'goregrinder': 'Miguel Goregrinder Medina',
+  '@goregrinder': 'Miguel Goregrinder Medina',
+  'goregrindsickness': 'Miguel Goregrinder Medina',
+  'miguel medina': 'Miguel Goregrinder Medina',
+};
+
+export const PostCard: React.FC<PostCardProps> = ({
+  post,
+  currentUserId,
+  currentUserName,
+  userProfile,
+  portalRole,
+  allProfiles = [],
+  discoverProfiles = [],
+  onAddComment,
+  onTriggerNotification,
+  boostData,
+  isCommentsOpen,
+  commentDraft,
+  replyingTo,
+  isEditing,
+  editingText,
+  editingImages,
+  isPostMenuOpen,
+  isReactionMenuOpen,
+  isHypeAnimated,
+  playingSongId,
+  songProgress,
+  songVolumeMuted,
+  pollVote,
+  playingTapeId,
+  tapeProgress,
+  isTourExpanded,
+  isRsvped,
+  rsvpCount,
+  unlockedVipPosts,
+  selectedSizesMap,
+  offerStatusMap,
+  activeNegotiationPostId,
+  offerValues,
+  shareToastActive,
+  onOpenProfile,
+  onTogglePostMenu,
+  onClosePostMenu,
+  onTogglePin,
+  onStartEditing,
+  onCancelEditing,
+  onSaveEditing,
+  onSetEditingText,
+  onSetEditingImages,
+  onDeletePost,
+  onShareClick,
+  onOpenBoostModal,
+  onPlaySong,
+  onTogglePlaySong,
+  onSeekSong,
+  onToggleMuteSong,
+  onOpenAlbumModalForSong,
+  onOpenAlbumModalForAlbum,
+  onBuyFormat,
+  onVotePoll,
+  onTogglePlayTape,
+  onSeekTape,
+  onStopTape,
+  onOpenLightbox,
+  onToggleTourExpand,
+  onSelectTicketShow,
+  onOpenTicketModal,
+  onToggleRsvp,
+  setSelectedSizesMap,
+  setOfferStatusMap,
+  setActiveNegotiationPostId,
+  setOfferValues,
+  openMerchLightbox,
+  onCheckoutMerch,
+  onAddToCart,
+  setCartNotice,
+  onToggleComments,
+  onCommentDraftChange,
+  onCommentSubmit,
+  onSetReplyingTo,
+  onTriggerEmojiReact,
+  onOpenReactionMenu,
+  onCloseReactionMenu,
+  onOpenShareModal,
+  onOpenReactionsModal,
+  onEditComment,
+  onDeleteComment,
+}) => {
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressRef = useRef<boolean>(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Comment inline editing & media attachment states
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState<string>('');
+  const [attachedCommentMedia, setAttachedCommentMedia] = useState<{ url: string; type: 'image' | 'gif' } | null>(null);
+
+  // Comment & Reply reactions state
+  const [commentReactionsState, setCommentReactionsState] = useState<Record<string, { counts: Record<string, number>; user: Record<string, boolean> }>>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = localStorage.getItem('nexus_comment_reactions_v2');
+        if (raw) return JSON.parse(raw);
+      }
+    } catch (_) {}
+    return {};
+  });
+
+  const handleToggleCommentReaction = (commentId: string, type: 'flame' | 'horns' | 'like') => {
+    if (!commentId) return;
+    setCommentReactionsState(prev => {
+      const current = prev[commentId] || { counts: { flame: 0, horns: 0, like: 0 }, user: { flame: false, horns: false, like: false } };
+      const wasActive = Boolean(current.user[type]);
+      const nextUser = { ...current.user, [type]: !wasActive };
+      const nextCounts = {
+        ...current.counts,
+        [type]: Math.max(0, (current.counts[type] || 0) + (wasActive ? -1 : 1))
+      };
+      const updated = { ...prev, [commentId]: { counts: nextCounts, user: nextUser } };
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('nexus_comment_reactions_v2', JSON.stringify(updated));
+        }
+      } catch (_) {}
+      return updated;
+    });
+  };
+
+  const handleCommentEditStart = (commentId: string, currentText: string) => {
+    setEditingCommentId(commentId);
+    setEditingCommentText(currentText);
+  };
+
+  const handleCommentEditCancel = () => {
+    setEditingCommentId(null);
+    setEditingCommentText('');
+  };
+
+  const handleCommentEditSave = async (commentId: string) => {
+    const clean = editingCommentText.trim();
+    if (!clean) return;
+
+    if (onEditComment) {
+      onEditComment(commentId, clean);
+    }
+
+    setEditingCommentId(null);
+    setEditingCommentText('');
+
+    try {
+      await updateGlobalComment(post.id, commentId, clean);
+    } catch (err) {
+      console.warn('Failed to update comment in PostCard:', err);
+    }
+  };
+
+  const handleCommentDelete = async (commentId: string) => {
+    if (onDeleteComment) {
+      onDeleteComment(commentId);
+    }
+
+    try {
+      await deleteGlobalComment(post.id, commentId);
+    } catch (err) {
+      console.warn('Failed to delete comment in PostCard:', err);
+    }
+  };
+
+  // Image editing & replacement states
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+  const replaceSlotIndexRef = useRef<number | null>(null);
+  const [isProcessingEditMedia, setIsProcessingEditMedia] = useState(false);
+  const [showUrlAddInput, setShowUrlAddInput] = useState(false);
+  const [imageUrlDraft, setImageUrlDraft] = useState('');
+  const [editMediaError, setEditMediaError] = useState<string | null>(null);
+  const [isDragOverDropzone, setIsDragOverDropzone] = useState(false);
+
+  const getPostAttachedImages = React.useCallback((): string[] => {
+    if (post.images && Array.isArray(post.images) && post.images.length > 0) {
+      return post.images.filter(Boolean);
+    }
+    const single = post.image_url || post.image || post.mediaUrl || post.media_url;
+    return single ? [single] : [];
+  }, [post.images, post.image_url, post.image, post.mediaUrl, post.media_url]);
+
+  const initializedEditIdRef = useRef<string | null>(null);
+
+  const [localEditImages, setLocalEditImages] = useState<string[]>(() => {
+    return (editingImages && editingImages.length > 0) ? editingImages : getPostAttachedImages();
+  });
+
+  React.useEffect(() => {
+    if (isEditing) {
+      if (initializedEditIdRef.current !== post.id) {
+        initializedEditIdRef.current = post.id;
+        const initial = (editingImages && editingImages.length > 0) ? editingImages : getPostAttachedImages();
+        setLocalEditImages(initial);
+      }
+    } else {
+      initializedEditIdRef.current = null;
+    }
+  }, [isEditing, post.id, editingImages, getPostAttachedImages]);
+
+  const currentEditImages: string[] = localEditImages;
+
+  const handleUpdateEditImages = (next: string[]) => {
+    setLocalEditImages(next);
+    if (onSetEditingImages) {
+      onSetEditingImages(next);
+    }
+  };
+
+  const compressAndProcessImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          if (!e.target?.result) {
+            resolve('');
+            return;
+          }
+          const img = new Image();
+          img.onload = async () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const MAX_SIZE = 1920;
+            if (width > height) {
+              if (width > MAX_SIZE) {
+                height *= MAX_SIZE / width;
+                width = MAX_SIZE;
+              }
+            } else {
+              if (height > MAX_SIZE) {
+                width *= MAX_SIZE / height;
+                height = MAX_SIZE;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            let compressedBase64 = '';
+            if (ctx) {
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = 'high';
+              ctx.drawImage(img, 0, 0, width, height);
+              compressedBase64 = canvas.toDataURL('image/jpeg', 0.92);
+            } else {
+              compressedBase64 = e.target!.result as string;
+            }
+
+            try {
+              const uId = userProfile?.id || currentUserId || 'profile_anon';
+              const publicUrl = await uploadBase64ToStorage(compressedBase64, 'assets', uId, `edit-post-${Date.now()}`);
+              resolve(publicUrl || compressedBase64);
+            } catch (err) {
+              resolve(compressedBase64);
+            }
+          };
+          img.onerror = () => resolve(e.target!.result as string);
+          img.src = e.target.result as string;
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleProcessEditFiles = async (files: File[]) => {
+    if (!files || files.length === 0) return;
+    setEditMediaError(null);
+    setIsProcessingEditMedia(true);
+
+    try {
+      const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+      if (imageFiles.length === 0) {
+        setEditMediaError('Please select a valid image file (PNG, JPG, WEBP, GIF).');
+        setIsProcessingEditMedia(false);
+        return;
+      }
+
+      const oversized = imageFiles.find((f) => f.size > 15 * 1024 * 1024);
+      if (oversized) {
+        setEditMediaError('File exceeds 15MB limit. Please choose a smaller image.');
+        setIsProcessingEditMedia(false);
+        return;
+      }
+
+      const processedUrls: string[] = [];
+      for (const file of imageFiles) {
+        const url = await compressAndProcessImage(file);
+        if (url) {
+          processedUrls.push(url);
+        }
+      }
+
+      if (processedUrls.length > 0) {
+        if (replaceSlotIndexRef.current !== null && replaceSlotIndexRef.current >= 0) {
+          const next = [...currentEditImages];
+          next[replaceSlotIndexRef.current] = processedUrls[0];
+          handleUpdateEditImages(next);
+          replaceSlotIndexRef.current = null;
+        } else {
+          if (currentEditImages.length <= 1) {
+            handleUpdateEditImages(processedUrls);
+          } else {
+            handleUpdateEditImages([...currentEditImages, ...processedUrls].slice(0, 4));
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to process image attachment:', err);
+      setEditMediaError('Failed to process image. Please try another file or URL.');
+    } finally {
+      setIsProcessingEditMedia(false);
+    }
+  };
+
+  const commentList = post.comments || [];
+  const postRoleUpper = (post.authorRole || (post as any).author?.role || '').toUpperCase();
+
+  // Check if current post is explicitly authored by the current logged-in user
+  const targetPostAuthorId = post.authorId || (post as any).author?.id || (post as any).profile_id;
+  const postAuthorName = (post.authorName || (post as any).author?.name || '').trim();
+  const authorNameLower = postAuthorName.toLowerCase();
+
+  // Separate Handle and Real Legal/Full Name
+  const nameMatch = postAuthorName ? postAuthorName.match(/^(.*?)\s*\((.*?)\)$/) : null;
+  const handleDisplay = nameMatch ? nameMatch[1].trim() : (postAuthorName || 'User');
+
+  const isCurrentUserMiguel = isMiguelNameOrProfile(userProfile);
+  const isAuthorNameMatchingUser = Boolean(
+    (userProfile?.name && authorNameLower === userProfile.name.toLowerCase()) ||
+    (userProfile?.full_name && authorNameLower === userProfile.full_name.toLowerCase()) ||
+    (userProfile?.legal_name && authorNameLower === userProfile.legal_name.toLowerCase()) ||
+    (userProfile?.display_name && authorNameLower === userProfile.display_name.toLowerCase()) ||
+    (userProfile?.console_handle && (
+      handleDisplay.toLowerCase() === userProfile.console_handle.toLowerCase() ||
+      handleDisplay.toLowerCase() === userProfile.console_handle.replace(/^@/, '').toLowerCase() ||
+      authorNameLower === userProfile.console_handle.toLowerCase() ||
+      authorNameLower === userProfile.console_handle.replace(/^@/, '').toLowerCase()
+    )) ||
+    (isCurrentUserMiguel && (authorNameLower.includes('goregrinder') || authorNameLower.includes('bdmceo') || authorNameLower === 'miguel medina'))
+  );
+
+  const isPostExplicitlyOther = Boolean(
+    (targetPostAuthorId && currentUserId && currentUserId !== 'author' && currentUserId !== 'user' && targetPostAuthorId !== currentUserId && (!userProfile?.id || targetPostAuthorId !== userProfile.id) && !isAuthorNameMatchingUser) ||
+    ((post as any).isYou === false && !isAuthorNameMatchingUser) ||
+    ((post as any).author?.isYou === false && !isAuthorNameMatchingUser)
+  );
+
+  const isAuthorIdMatching = Boolean(
+    (currentUserId && currentUserId !== 'author' && currentUserId !== 'user' && (
+      (post.authorId && post.authorId === currentUserId) || 
+      ((post as any).author?.id && (post as any).author?.id === currentUserId)
+    )) ||
+    (userProfile?.id && userProfile.id !== 'author' && userProfile.id !== 'user' && (
+      (post.authorId && post.authorId === userProfile.id) || 
+      ((post as any).author?.id && (post as any).author?.id === userProfile.id)
+    ))
+  );
+
+  const isCurrentUser = !isPostExplicitlyOther && Boolean(
+    isAuthorIdMatching ||
+    isAuthorNameMatchingUser ||
+    (userProfile?.console_handle && 
+     userProfile.console_handle !== '@user' && 
+     userProfile.console_handle !== 'user' && 
+     userProfile.console_handle.trim() !== '' && (
+      handleDisplay.toLowerCase() === userProfile.console_handle.toLowerCase() ||
+      handleDisplay.toLowerCase() === userProfile.console_handle.replace(/^@/, '').toLowerCase()
+    )) ||
+    (userProfile?.email && (
+      Boolean((post as any).authorEmail && (post as any).authorEmail.toLowerCase() === userProfile.email.toLowerCase()) || 
+      Boolean((post as any).author?.email && (post as any).author?.email.toLowerCase() === userProfile.email.toLowerCase())
+    ))
+  );
+
+  const postWorkspaceType = ((post as any).workspace_type || (post as any).workspaceType || '').toLowerCase();
+
+  // 1. Band = Neon Green (#39ff14)
+  const isArtistOrBand = postWorkspaceType === 'band' || 
+    postRoleUpper === 'ARTIST' || 
+    postRoleUpper === 'BAND' || 
+    postRoleUpper === 'BAND / ARTIST' ||
+    postRoleUpper.includes('BAND') ||
+    postRoleUpper.includes('ARTIST') ||
+    Boolean((post as any).author?.isBand) ||
+    Boolean((post as any).isBandProfile);
+
+  // 2. Label = Neon Orange (#ff6b00)
+  const isLabel = !isArtistOrBand && (
+    postWorkspaceType === 'label' || 
+    postRoleUpper === 'LABEL' || 
+    postRoleUpper === 'RECORD LABEL' ||
+    postRoleUpper.includes('LABEL')
+  );
+
+  // 3. Creative = Magenta (#ff00aa)
+  const isCreative = !isArtistOrBand && !isLabel && (
+    postWorkspaceType === 'creative' || 
+    postRoleUpper.includes('CREATIVE') || 
+    postRoleUpper === 'PHOTOGRAPHER' || 
+    postRoleUpper.includes('MEDIA') ||
+    authorNameLower.includes('scene photographer') ||
+    (post as any).author?.role === 'Creative Pro'
+  );
+
+  // 4. Promoter = Neon Yellow (#ffff00)
+  const isPromoter = !isArtistOrBand && !isLabel && !isCreative && (
+    postWorkspaceType === 'promoter' || 
+    postRoleUpper === 'PROMOTER' || 
+    postRoleUpper === 'PROMOTER / VENUE' ||
+    postRoleUpper === 'VENUE PROMOTER' ||
+    postRoleUpper.includes('PROMOTER') ||
+    postRoleUpper.includes('VENUE')
+  );
+
+  // 5. Industry Pro = Deep Purple (#8b5cf6 / #7c3aed)
+  const isIndustryPro = !isArtistOrBand && !isLabel && !isCreative && !isPromoter && Boolean(
+    postWorkspaceType === 'industry_pro' ||
+    postWorkspaceType === 'pro' ||
+    postRoleUpper.includes('INDUSTRY PRO') ||
+    postRoleUpper === 'INDUSTRY' ||
+    postRoleUpper === 'PRO' ||
+    postRoleUpper === 'MANAGER' ||
+    postRoleUpper === 'EXECUTIVE' ||
+    postRoleUpper === 'PRODUCER' ||
+    postRoleUpper === 'ENGINEER' ||
+    (post as any).author?.role === 'Industry Pro' ||
+    (post as any).author?.account_type === 'industry pro' ||
+    (post as any).author?.account_type === 'industry_pro' ||
+    (isCurrentUser && (
+      userProfile?.account_type === 'industry pro' ||
+      userProfile?.account_type === 'industry_pro' ||
+      userProfile?.account_type === 'pro' ||
+      userProfile?.role === 'Industry Pro' ||
+      portalRole === 'industry_pro' ||
+      userProfile?.active_workspace === 'industry_pro'
+    ))
+  );
+
+  // 6. Fan = Cyan Blue (#00f0ff)
+  const isFan = !isArtistOrBand && !isLabel && !isCreative && !isPromoter && !isIndustryPro;
+
+  // Canonical Role Colors:
+  // Band = Neon Green (#39ff14)
+  // Label = Neon Orange (#ff6b00)
+  // Creative = Magenta (#ff00aa)
+  // Promoter = Neon Yellow (#ffff00)
+  // Fan = Cyan Blue (#00f0ff)
+  // Industry Pro = Deep Purple (#8b5cf6)
+  const roleTheme = isArtistOrBand
+    ? {
+        name: 'Band / Artist',
+        colorHex: '#39ff14',
+        ringClasses: 'border-[#39ff14] text-[#39ff14] shadow-[0_0_14px_rgba(57,255,20,0.65)] ring-2 ring-[#39ff14]/35 ring-offset-1 ring-offset-zinc-950',
+        shieldClasses: 'text-[#39ff14] fill-[#39ff14]/20',
+        fullNameClass: 'text-[#39ff14]',
+        badgeDotClass: 'bg-[#39ff14] shadow-[0_0_8px_rgba(57,255,20,0.85)]',
+        badgeTextClass: 'text-[#39ff14]',
+        tagLabel: postRoleUpper === 'BAND' || postRoleUpper === 'BAND / ARTIST' ? 'Band / Artist' : (post.authorRole || (post as any).author?.role || 'Band / Artist')
+      }
+    : isLabel
+    ? {
+        name: 'Record Label',
+        colorHex: '#ff6b00',
+        ringClasses: 'border-[#ff6b00] text-[#ff6b00] shadow-[0_0_14px_rgba(255,107,0,0.65)] ring-2 ring-[#ff6b00]/35 ring-offset-1 ring-offset-zinc-950',
+        shieldClasses: 'text-[#ff6b00] fill-[#ff6b00]/20',
+        fullNameClass: 'text-[#ff6b00]',
+        badgeDotClass: 'bg-[#ff6b00] shadow-[0_0_8px_rgba(255,107,0,0.85)]',
+        badgeTextClass: 'text-[#ff6b00]',
+        tagLabel: 'Record Label'
+      }
+    : isCreative
+    ? {
+        name: 'Creative Pro',
+        colorHex: '#ff00aa',
+        ringClasses: 'border-[#ff00aa] text-[#ff00aa] shadow-[0_0_14px_rgba(255,0,170,0.65)] ring-2 ring-[#ff00aa]/35 ring-offset-1 ring-offset-zinc-950',
+        shieldClasses: 'text-[#ff00aa] fill-[#ff00aa]/20',
+        fullNameClass: 'text-[#ff00aa]',
+        badgeDotClass: 'bg-[#ff00aa] shadow-[0_0_8px_rgba(255,0,170,0.85)]',
+        badgeTextClass: 'text-[#ff00aa]',
+        tagLabel: 'Creative Pro'
+      }
+    : isPromoter
+    ? {
+        name: 'Venue Promoter',
+        colorHex: '#ffff00',
+        ringClasses: 'border-[#ffff00] text-[#ffff00] shadow-[0_0_14px_rgba(255,255,0,0.65)] ring-2 ring-[#ffff00]/35 ring-offset-1 ring-offset-zinc-950',
+        shieldClasses: 'text-[#ffff00] fill-[#ffff00]/20',
+        fullNameClass: 'text-[#ffff00]',
+        badgeDotClass: 'bg-[#ffff00] shadow-[0_0_8px_rgba(255,255,0,0.85)]',
+        badgeTextClass: 'text-[#ffff00]',
+        tagLabel: 'Venue Promoter'
+      }
+    : isIndustryPro
+    ? {
+        name: 'Industry Pro',
+        colorHex: '#8b5cf6',
+        ringClasses: 'border-[#8b5cf6] text-[#a78bfa] shadow-[0_0_14px_rgba(139,92,246,0.65)] ring-2 ring-[#8b5cf6]/35 ring-offset-1 ring-offset-zinc-950',
+        shieldClasses: 'text-[#a78bfa] fill-[#8b5cf6]/20',
+        fullNameClass: 'text-[#a78bfa]',
+        badgeDotClass: 'bg-[#8b5cf6] shadow-[0_0_8px_rgba(139,92,246,0.85)]',
+        badgeTextClass: 'text-[#a78bfa]',
+        tagLabel: 'Industry Pro'
+      }
+    : {
+        name: 'Fan Supporter',
+        colorHex: '#00f0ff',
+        ringClasses: 'border-[#00f0ff] text-[#00f0ff] shadow-[0_0_14px_rgba(0,240,255,0.65)] ring-2 ring-[#00f0ff]/35 ring-offset-1 ring-offset-zinc-950',
+        shieldClasses: 'text-[#00f0ff] fill-[#00f0ff]/20',
+        fullNameClass: 'text-[#00f0ff]',
+        badgeDotClass: 'bg-[#00f0ff] shadow-[0_0_8px_rgba(0,240,255,0.85)]',
+        badgeTextClass: 'text-[#00f0ff]',
+        tagLabel: 'Fan Supporter'
+      };
+
+  // Comprehensive Avatar Resolution & Initials Generator
+  const postDataObj = typeof (post as any).data === 'string' 
+    ? (() => { try { return JSON.parse((post as any).data); } catch { return {}; } })() 
+    : ((post as any).data || {});
+
+  let localStoredAvatar: string | null = null;
+  if (typeof window !== 'undefined') {
+    localStoredAvatar = localStorage.getItem('nexus_avatar') || localStorage.getItem('nexus_user_avatar') || null;
+    if (!localStoredAvatar) {
+      try {
+        const bOverride = localStorage.getItem('band_profile_override');
+        if (bOverride) {
+          const parsed = JSON.parse(bOverride);
+          localStoredAvatar = parsed.avatar_url || parsed.logo_url || parsed.avatar || null;
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  const liveSelfAvatar = userProfile?.avatar || userProfile?.avatar_url || userProfile?.profile_avatar || (userProfile as any)?.profile_image || localStoredAvatar;
+  const validLiveSelfAvatar = (liveSelfAvatar && isValidStorageOrImageUrl(liveSelfAvatar)) ? liveSelfAvatar : null;
+  
+  const rawPostAvatar = 
+    post.authorAvatar || 
+    (post as any).author?.avatar || 
+    (post as any).author?.avatar_url ||
+    (post as any).author?.avatarUrl ||
+    (post as any).author?.logo_url ||
+    (post as any).avatar ||
+    (post as any).avatar_url ||
+    (post as any).profile_avatar ||
+    (post as any).author_avatar ||
+    (post as any).logo_url ||
+    postDataObj.author?.avatar ||
+    postDataObj.authorAvatar ||
+    postDataObj.avatar ||
+    postDataObj.avatar_url ||
+    postDataObj.profile_avatar ||
+    postDataObj.logo_url;
+
+  const validRawPostAvatar = (rawPostAvatar && isValidStorageOrImageUrl(rawPostAvatar)) ? rawPostAvatar : null;
+
+  const isAuthorSelf = Boolean(isCurrentUser || isAuthorNameMatchingUser);
+  const isRawAvatarKnownFailed = Boolean(validRawPostAvatar && GLOBAL_FAILED_AVATAR_URLS.has(validRawPostAvatar));
+
+  const isPostAuthorMiguel = Boolean(
+    targetPostAuthorId === '5403162d-1947-43aa-b5f6-38a1bd2a1b80' ||
+    authorNameLower.includes('bdmceo') ||
+    authorNameLower.includes('goregrinder') ||
+    authorNameLower === 'miguel medina' ||
+    handleDisplay.toLowerCase() === '@bdmceo' ||
+    handleDisplay.toLowerCase() === 'bdmceo'
+  );
+
+  // Determine appropriate live workspace avatar fallback ONLY when the post belongs to the viewer
+  const liveAuthorAvatar = isAuthorSelf ? (
+    isCreative
+      ? resolveCreativeLogo(userProfile, validRawPostAvatar)
+      : isArtistOrBand
+      ? resolveBandLogo(post, userProfile)
+      : isPromoter
+      ? resolvePromoterLogo(userProfile, validRawPostAvatar)
+      : validLiveSelfAvatar
+  ) : null;
+
+  const isPersonalAvatarUrl = Boolean(
+    validRawPostAvatar && (
+      validRawPostAvatar === validLiveSelfAvatar ||
+      validRawPostAvatar === userProfile?.avatar_url ||
+      validRawPostAvatar === DEFAULT_PERSONAL_AVATAR ||
+      validRawPostAvatar.includes('photo-1535713875002') ||
+      validRawPostAvatar.includes('photo-1534528741775')
+    )
+  );
+
+  // For dedicated workspace posts (Creative Pro, Venue Promoter, Band / Artist), if validRawPostAvatar is missing or is just the author's personal user avatar, force the dedicated workspace logo!
+  const isWorkspaceRole = isCreative || isPromoter || isArtistOrBand || isLabel;
+  const useWorkspaceLogo = isWorkspaceRole && isAuthorSelf && (isPersonalAvatarUrl || !validRawPostAvatar);
+
+  const fallbackNonSelfAvatar = isPostAuthorMiguel ? MIGUEL_DEFAULT_AVATAR : null;
+
+  // Priority: Use workspace logo for workspace posts; otherwise fall back to raw post avatar
+  const displayAvatar = (useWorkspaceLogo && liveAuthorAvatar)
+    ? liveAuthorAvatar
+    : ((!isRawAvatarKnownFailed && validRawPostAvatar)
+        ? validRawPostAvatar
+        : (isAuthorSelf ? (liveAuthorAvatar || validLiveSelfAvatar || null) : (isRawAvatarKnownFailed ? fallbackNonSelfAvatar : (validRawPostAvatar || fallbackNonSelfAvatar))));
+
+  const [avatarImgSrc, setAvatarImgSrc] = useState<string | null>(() => {
+    if (displayAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar)) return displayAvatar;
+    if (isAuthorSelf && liveAuthorAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(liveAuthorAvatar)) return liveAuthorAvatar;
+    return null;
+  });
+  const [hasAvatarImgError, setHasAvatarImgError] = useState<boolean>(() => {
+    if (displayAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar)) return false;
+    if (isAuthorSelf && liveAuthorAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(liveAuthorAvatar)) return false;
+    return Boolean(displayAvatar && GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar));
+  });
+
+  React.useEffect(() => {
+    if (displayAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(displayAvatar)) {
+      setAvatarImgSrc(displayAvatar);
+      setHasAvatarImgError(false);
+    } else if (isAuthorSelf && liveAuthorAvatar && !GLOBAL_FAILED_AVATAR_URLS.has(liveAuthorAvatar)) {
+      setAvatarImgSrc(liveAuthorAvatar);
+      setHasAvatarImgError(false);
+    } else {
+      setAvatarImgSrc(null);
+      setHasAvatarImgError(true);
+    }
+  }, [displayAvatar, liveAuthorAvatar, isAuthorSelf]);
+
+  const getInitials = (str?: string) => {
+    if (!str) return 'NX';
+    const clean = str.replace(/^@/, '').trim();
+    if (clean.toLowerCase() === 'user' || clean.toLowerCase() === 'anonymous' || clean.toLowerCase() === 'anon') {
+      if (userProfile?.console_handle && userProfile.console_handle !== '@user') {
+        return userProfile.console_handle.replace(/^@/, '').substring(0, 2).toUpperCase();
+      }
+      if (userProfile?.name) {
+        return userProfile.name.substring(0, 2).toUpperCase();
+      }
+      return 'NX';
+    }
+    const words = clean.split(/[\s_-]+/);
+    if (words.length >= 2 && words[0] && words[1]) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return clean.substring(0, 2).toUpperCase();
+  };
+
+  const displayInitials = getInitials(isCurrentUser ? (userProfile?.console_handle || userProfile?.name || handleDisplay) : handleDisplay);
+
+  const isPostBoosted = Boolean(post.isBoosted || boostData?.isBoosted);
+  const auraColor = boostData?.boostGlowColor || post.boostGlowColor || (
+    isArtistOrBand ? 'green' :
+    isLabel ? 'orange' :
+    isCreative ? 'fuchsia' :
+    isPromoter ? 'yellow' :
+    isIndustryPro ? 'purple' : 'blue'
+  );
+
+  // Resolve full_name from Supabase profiles table
+  const localSavedFullName = typeof window !== 'undefined'
+    ? (localStorage.getItem('nexus_full_legal_name') || localStorage.getItem('nexus_user_full_name'))
+    : null;
+
+  const currentProfileFullName =
+    userProfile?.full_name ||
+    userProfile?.legal_name ||
+    (userProfile as any)?.legal_full_name ||
+    localSavedFullName ||
+    (userProfile?.name && userProfile.name !== 'User' && userProfile.name !== 'New User' ? userProfile.name : undefined);
+
+  const rawPostFullName =
+    (post as any).author?.full_name ||
+    (post as any).author?.legal_name ||
+    (post as any).author?.legalName ||
+    (post as any).author?.realName ||
+    post.legalName ||
+    post.realName ||
+    (nameMatch ? nameMatch[2].trim() : undefined);
+
+  const fullNameDisplay = isCurrentUser
+    ? ((isCreative || isArtistOrBand || isLabel || isPromoter) ? rawPostFullName : (currentProfileFullName || rawPostFullName))
+    : (rawPostFullName || KNOWN_USER_FULL_NAMES[handleDisplay.toLowerCase()] || KNOWN_USER_FULL_NAMES[authorNameLower] || (isPostAuthorMiguel ? 'Miguel Goregrinder Medina' : undefined));
+
+  const authorBirthdayProfile = React.useMemo(() => {
+    if (isCurrentUser && userProfile) {
+      return {
+        ...post,
+        ...((post as any).author || {}),
+        ...userProfile,
+      };
+    }
+    const cleanAuthorName = (post.authorName || fullNameDisplay || '').trim().toLowerCase();
+    const cleanHandle = (handleDisplay || '').replace(/^@/, '').trim().toLowerCase();
+    const pool = [...(allProfiles || []), ...(discoverProfiles || [])];
+    const matched = pool.find((p: any) => {
+      if (!p) return false;
+      if (post.authorId && p.id && String(p.id) === String(post.authorId)) return true;
+      const pName = String(p.name || p.username || '').trim().toLowerCase();
+      const pHandle = String(p.console_handle || p.handle || '').replace(/^@/, '').trim().toLowerCase();
+      return (
+        (cleanAuthorName && (pName === cleanAuthorName || pHandle === cleanAuthorName)) ||
+        (cleanHandle && (pHandle === cleanHandle || pName === cleanHandle))
+      );
+    });
+    return {
+      ...post,
+      ...((post as any).author || {}),
+      ...(matched || {}),
+    };
+  }, [isCurrentUser, userProfile, post, fullNameDisplay, handleDisplay, allProfiles, discoverProfiles]);
+
+  const isAuthorMutual = !isCurrentUser && Boolean(
+    isMutualConnection(authorBirthdayProfile, userProfile) ||
+    isProfileFollowedGlobally(authorBirthdayProfile)
+  );
+
+  const handleSendBirthdayHornsOnPost = () => {
+    const recipientName = fullNameDisplay || post.authorName || handleDisplay || 'Friend';
+    const message = buildBirthdayHornsMessage(recipientName);
+    if (onAddComment) {
+      onAddComment(post.id, message);
+    }
+    const senderId = String(currentUserId || userProfile?.id || 'guest');
+    const targetId = authorBirthdayProfile?.id || post.authorId;
+    if (targetId && String(targetId) !== senderId) {
+      sendDirectMessage(senderId, String(targetId), message, {
+        senderName: currentUserName || userProfile?.name || 'Scene Member',
+      });
+    }
+    onTriggerNotification?.(`🤘 Sent Birthday Horns to ${recipientName}!`);
+  };
+
+  // Location fallback
+  const locationDisplay = post.location || post.venue;
+
+  // Tag display determination
+  const displayTag = post.tag || (
+    post.songData ? 'SONG SHARE' :
+    post.albumData ? 'ALBUM RELEASE' :
+    post.pollData ? 'SLAM DISCUSSION' :
+    post.tapeData ? 'LIVE BOOTLEG' :
+    undefined
+  );
+
+  // Calculate reactions total count
+  const totalReactions = 
+    (post.reactions?.likes || 0) + 
+    (post.reactions?.horns || 0) + 
+    (post.reactions?.hype || 0) + 
+    (post.reactions?.brutal || 0) + 
+    (post.reactions?.respect || 0) + 
+    (post.reactions?.crushed || 0) +
+    (post.reactions?.thumbs || 0) +
+    (post.reactions?.heavy || 0) +
+    (post.reactions?.flame || 0) +
+    (post.reactions?.heart || 0) || 
+    post.likes_count || 0;
+
+  // Active reaction emojis
+  const activeReactionIcons: string[] = [];
+  if ((post.reactions?.likes || 0) > 0 || (post.reactions?.thumbs || 0) > 0 || (post.reactions?.heart || 0) > 0 || post.user_reactions?.likes || post.user_reactions?.like || post.user_liked) activeReactionIcons.push('👍');
+  if ((post.reactions?.horns || 0) > 0 || post.user_reactions?.horns) activeReactionIcons.push('🤘');
+  if ((post.reactions?.hype || 0) > 0 || (post.reactions?.flame || 0) > 0 || post.user_reactions?.hype || post.user_reactions?.flame) activeReactionIcons.push('🔥');
+  if ((post.reactions?.brutal || 0) > 0 || (post.reactions?.heavy || 0) > 0 || post.user_reactions?.brutal || post.user_reactions?.heavy) activeReactionIcons.push('🔨');
+  if ((post.reactions?.respect || 0) > 0 || post.user_reactions?.respect) activeReactionIcons.push('👊');
+  if ((post.reactions?.crushed || 0) > 0 || post.user_reactions?.crushed) activeReactionIcons.push('⚓');
+
+  // User active reaction
+  const hasUserReacted = post.user_liked || Object.values(post.user_reactions || {}).some(Boolean);
+  const userActiveReactionKey = Object.keys(post.user_reactions || {}).find(k => post.user_reactions?.[k]);
+  const activePaletteItem = REACTION_PALETTE.find(r => r.id === userActiveReactionKey) || 
+                            (post.user_liked ? { id: 'likes', emoji: '👍', label: 'Like', color: 'text-sky-400' } : null);
+
+  const defaultReactionId = post.tag === 'SONG SHARE' ? 'brutal' : post.tag === 'ALBUM RELEASE' ? 'hype' : 'likes';
+
+  // Check if post belongs to logged-in user
+  const isUserOwnPost = Boolean(
+    isCurrentUser ||
+    (currentUserId && currentUserId !== 'author' && currentUserId !== 'user' && (
+      post.authorId === currentUserId || 
+      (post as any).author?.id === currentUserId
+    )) ||
+    (currentUserName && currentUserName !== 'User' && currentUserName !== 'New User' && post.authorName?.toLowerCase() === currentUserName?.toLowerCase())
+  );
+
+  const formattedTimestamp = formatPostTimestamp(post, post.created_at || post.timestamp);
+
+  const startLongPress = () => {
+    isLongPressRef.current = false;
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      onOpenReactionMenu();
+    }, 380);
+  };
+
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleReactionButtonClick = (defaultType: string) => {
+    if (isLongPressRef.current) {
+      isLongPressRef.current = false;
+      return;
+    }
+    if (isReactionMenuOpen) {
+      onCloseReactionMenu();
+      return;
+    }
+    onTriggerEmojiReact(defaultType);
+  };
+
+  const handleDelete = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const isClassifiedOrGear = Boolean(
+    post.classifiedData ||
+    post.classified_data ||
+    post.category === 'gear' ||
+    post.category === 'classifieds' ||
+    post.type === 'gear' ||
+    post.type === 'classifieds' ||
+    post.tag === 'GEAR SWAP' ||
+    post.tag === 'CLASSIFIED'
+  );
+
+  if (isClassifiedOrGear) {
+    return (
+      <BulletinBoardPostCard
+        post={post}
+        currentUserId={currentUserId}
+        currentUserName={currentUserName}
+        userProfile={userProfile}
+        portalRole={portalRole}
+        boostData={boostData}
+        isCommentsOpen={isCommentsOpen}
+        commentDraft={commentDraft}
+        replyingTo={replyingTo}
+        isPostMenuOpen={isPostMenuOpen}
+        isReactionMenuOpen={isReactionMenuOpen}
+        isHypeAnimated={isHypeAnimated}
+        shareToastActive={shareToastActive}
+        onOpenProfile={onOpenProfile}
+        onTogglePostMenu={onTogglePostMenu}
+        onClosePostMenu={onClosePostMenu}
+        onTogglePin={onTogglePin}
+        onDeletePost={onDeletePost}
+        onShareClick={onShareClick}
+        onOpenBoostModal={onOpenBoostModal}
+        onToggleComments={onToggleComments}
+        onReactionClick={onTriggerEmojiReact}
+        onToggleReactionMenu={onOpenReactionMenu}
+        onCloseReactionMenu={onCloseReactionMenu}
+        onCommentDraftChange={onCommentDraftChange}
+        onCommentSubmit={onCommentSubmit}
+        onSetReplyingTo={onSetReplyingTo}
+        openLightbox={(url: string) => onOpenLightbox?.([url], 0)}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`bg-[#0d0e11] border rounded-2xl p-4 sm:p-5 shadow-2xl transition-all relative overflow-hidden space-y-3.5 ${
+        isPostBoosted
+          ? (auraColor === 'purple'
+              ? 'border-2 border-purple-500/90 shadow-[0_0_30px_rgba(168,85,247,0.4)] bg-gradient-to-b from-purple-950/25 via-[#0d0e11] to-[#0d0e11]'
+              : 'border-2 border-sky-400/90 shadow-[0_0_30px_rgba(56,189,248,0.4)] bg-gradient-to-b from-sky-950/25 via-[#0d0e11] to-[#0d0e11]'
+            )
+          : post.is_pinned
+          ? 'border-rose-500/70 bg-gradient-to-b from-rose-950/20 via-[#0d0e11] to-[#0d0e11]'
+          : post.isVipExclusive
+          ? 'border-amber-500/60 shadow-[0_0_20px_rgba(245,158,11,0.12)] bg-gradient-to-b from-amber-950/20 via-[#0d0e11] to-[#0d0e11]'
+          : 'border-zinc-800/90 hover:border-zinc-700/80'
+      }`}
+    >
+      {showDeleteConfirm && (
+        <div className="absolute inset-0 bg-[#0d0e11]/98 backdrop-blur-md z-50 flex flex-col items-center justify-center p-5 text-center animate-in fade-in duration-200">
+          <div className="w-12 h-12 rounded-full bg-rose-950/40 border border-rose-500/30 flex items-center justify-center mb-3 text-rose-500 shadow-[0_0_15px_rgba(239,68,68,0.15)]">
+            <Trash2 className="w-5 h-5 animate-pulse" />
+          </div>
+          <h4 className="text-xs font-black text-white font-mono uppercase tracking-widest">Delete Transmission?</h4>
+          <p className="text-[10px] text-zinc-400 mt-2 max-w-[240px] leading-relaxed font-mono">
+            Are you sure you want to permanently delete this signal from the timeline? This action cannot be undone.
+          </p>
+          <div className="flex items-center gap-3 mt-5 w-full max-w-[240px]">
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(false)}
+              className="flex-1 px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-[10px] font-mono font-bold text-zinc-300 hover:bg-zinc-850 hover:text-white transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowDeleteConfirm(false);
+                if (onDeletePost) {
+                  onDeletePost(post.id);
+                }
+              }}
+              className="flex-1 px-3.5 py-2 rounded-xl bg-rose-950/50 border border-rose-500/60 text-[10px] font-mono font-bold text-rose-400 hover:bg-rose-900/60 transition-all cursor-pointer"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Boosted Post Neon Banner Badge */}
+      {isPostBoosted && (
+        <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+          <div className={`flex items-center gap-1.5 text-[10px] font-mono font-black uppercase tracking-widest px-3 py-1 rounded-full ${
+            auraColor === 'purple'
+              ? 'bg-purple-950/90 border border-purple-500/80 text-purple-200 shadow-[0_0_12px_rgba(168,85,247,0.4)] animate-pulse'
+              : 'bg-sky-950/90 border border-sky-400/80 text-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.4)] animate-pulse'
+          }`}>
+            <Rocket className="w-3.5 h-3.5" />
+            <span>⚡ 24H PIT BOOSTED</span>
+          </div>
+          <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-widest bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+            {boostData?.boostType === 'free' ? '🎁 Monthly Perk' : '⚡ Promoted Signal'}
+          </span>
+        </div>
+      )}
+
+      {/* Pinned Network Announcement Tag */}
+      {post.is_pinned && (
+        <div className="flex items-center gap-1.5 text-[9px] font-mono font-black text-rose-400 uppercase tracking-widest pb-1 border-b border-rose-900/30">
+          <Pin className="w-3 h-3 fill-rose-400/30 text-rose-400" />
+          <span>Pinned Network Announcement</span>
+        </div>
+      )}
+
+      {/* Post Header Row */}
+      <div className="flex items-start justify-between gap-3">
+        {/* Author Info */}
+        <div
+          className="flex items-start gap-3 cursor-pointer group flex-1 min-w-0 pt-0.5"
+          onClick={() => {
+            const authorPayload = {
+              id: targetPostAuthorId,
+              name: post.authorName || (post as any).author?.name || (post as any).author?.full_name || handleDisplay,
+              full_name: (post as any).author?.full_name || post.authorName,
+              avatar: displayAvatar || rawPostAvatar,
+              avatar_url: displayAvatar || rawPostAvatar,
+              role: post.authorRole || (post as any).author?.role || roleTheme.tagLabel,
+              workspace_type: postWorkspaceType,
+              workspaceType: postWorkspaceType,
+              isYou: isCurrentUser,
+              isBandProfile: isArtistOrBand,
+              band_name: isArtistOrBand ? (post.authorName || (post as any).author?.name) : undefined,
+              ...((post as any).author || {})
+            };
+            onOpenProfile?.(targetPostAuthorId || post.authorName, authorPayload as any);
+          }}
+        >
+          <div className="relative group/avatar shrink-0">
+            {/* Micro glow avatar container - static stroke + glow */}
+            <div 
+              className="relative p-[2px] rounded-full transition-transform duration-200 group-hover/avatar:scale-105"
+              style={{
+                backgroundColor: roleTheme.colorHex,
+                boxShadow: `0 0 12px ${roleTheme.colorHex}66, 0 0 24px ${roleTheme.colorHex}26`
+              }}
+            >
+              <div className="w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] rounded-full flex items-center justify-center font-black font-mono text-xs sm:text-sm overflow-hidden shrink-0 bg-zinc-950 border border-zinc-950">
+                {avatarImgSrc && !hasAvatarImgError ? (
+                  <img 
+                    src={avatarImgSrc} 
+                    alt={post.authorName} 
+                    referrerPolicy="no-referrer"
+                    onError={() => {
+                      const fallback = getResilientFallback(avatarImgSrc, 'avatar');
+                      if (fallback && fallback !== avatarImgSrc) {
+                        setAvatarImgSrc(fallback);
+                        setHasAvatarImgError(false);
+                      } else if (isAuthorSelf && liveAuthorAvatar && liveAuthorAvatar !== avatarImgSrc) {
+                        setAvatarImgSrc(liveAuthorAvatar);
+                        setHasAvatarImgError(false);
+                      } else {
+                        setAvatarImgSrc(null);
+                        setHasAvatarImgError(true);
+                      }
+                    }}
+                    className="w-full h-full object-cover rounded-full" 
+                  />
+                ) : (
+                  <span style={{ color: roleTheme.colorHex }}>{displayInitials}</span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            {/* Line 1: Handle + Verified Badge + Birthday Badge */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h3 className="text-xs sm:text-sm font-mono font-black tracking-wider transition-colors flex items-center gap-1.5 truncate leading-tight text-white group-hover:text-purple-300">
+                <span className="truncate">{handleDisplay}</span>
+                {(isCreative || isArtistOrBand || isIndustryPro || isLabel || isPromoter || post.isVerified) && (
+                  <Shield className={`w-3.5 h-3.5 shrink-0 ${roleTheme.shieldClasses}`} />
+                )}
+              </h3>
+              <BirthdayShoutoutBadge
+                profile={authorBirthdayProfile}
+                isOwnProfile={isCurrentUser}
+                isMutual={isAuthorMutual}
+                compact
+                onSendBirthdayHorns={handleSendBirthdayHornsOnPost}
+              />
+            </div>
+
+            {/* Line 2: Person's Full Name under the handle */}
+            {fullNameDisplay && (
+              <p className={`text-[11px] sm:text-xs font-mono font-bold tracking-wider mt-0.5 truncate uppercase ${roleTheme.fullNameClass}`}>
+                {fullNameDisplay.toUpperCase()}
+              </p>
+            )}
+
+            {/* Line 3: Date / Timestamp (+ optional location) */}
+            <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest flex items-center mt-0.5 truncate">
+              <span>{formattedTimestamp}</span>
+              {locationDisplay && (
+                <>
+                  <span className="mx-1 text-zinc-700 shrink-0">•</span>
+                  <span className="truncate flex items-center gap-1 text-zinc-400 font-semibold">
+                    <MapPin className="w-3 h-3 text-rose-500 shrink-0 inline" />
+                    <span className="truncate">{locationDisplay.toUpperCase()}</span>
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Line 4: Role badge with glowing micro-indicator dot */}
+            <div className="mt-0.5 flex items-center gap-1">
+              <span className={`text-[10px] font-mono font-bold tracking-wider uppercase flex items-center gap-1.5 ${roleTheme.badgeTextClass}`}>
+                <span className={`w-1.5 h-1.5 rounded-full inline-block ${roleTheme.badgeDotClass}`} />
+                {roleTheme.tagLabel}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 3-Dot Options Dropdown Menu */}
+        <div className="relative shrink-0 mt-0.5">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePostMenu();
+            }}
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${
+              isPostMenuOpen
+                ? 'bg-zinc-800 border-zinc-600 text-white shadow-lg'
+                : 'bg-zinc-900/90 border-zinc-800/80 text-zinc-400 hover:text-white hover:border-zinc-700'
+            }`}
+            title="Post Options"
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+
+          {/* Popup Dropdown Modal */}
+          {isPostMenuOpen && (
+            <>
+              <div 
+                className="fixed inset-0 z-30" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClosePostMenu();
+                }} 
+              />
+              <div 
+                className="absolute right-0 top-11 z-40 w-48 bg-[#121319] border border-zinc-700/80 rounded-xl shadow-2xl p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-100"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {onTogglePin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onTogglePin(post.id);
+                      onClosePostMenu();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono text-zinc-200 hover:bg-zinc-800/90 hover:text-white transition-colors text-left"
+                  >
+                    <Pin className={`w-3.5 h-3.5 ${post.is_pinned ? 'text-rose-400 fill-rose-400' : 'text-zinc-400'}`} />
+                    <span>{post.is_pinned ? 'Unpin Post' : 'Pin Post'}</span>
+                  </button>
+                )}
+
+                {onStartEditing && isUserOwnPost && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isEditing) {
+                        onCancelEditing();
+                      } else {
+                        onStartEditing();
+                      }
+                      onClosePostMenu();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono text-zinc-200 hover:bg-amber-500/10 hover:text-amber-300 transition-colors text-left"
+                  >
+                    <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{isEditing ? 'Cancel Edit' : 'Edit Post'}</span>
+                  </button>
+                )}
+
+                {onDeletePost && isUserOwnPost && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleDelete();
+                      onClosePostMenu();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors text-left"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Delete Post</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onShareClick();
+                    onClosePostMenu();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono text-zinc-300 hover:bg-zinc-800/90 hover:text-white transition-colors text-left"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Copy Link</span>
+                </button>
+                {isUserOwnPost && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenBoostModal();
+                      onClosePostMenu();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300 transition-colors text-left"
+                  >
+                    <Rocket className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Boost Post</span>
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Message Content (or Edit Form) - Sits directly snug under author header */}
+      <div className="-mt-1 sm:-mt-1.5">
+        {isEditing ? (
+          <div className="space-y-3 bg-zinc-950/95 border border-amber-500/60 rounded-2xl p-3.5 sm:p-4 shadow-2xl backdrop-blur-md animate-in fade-in duration-200">
+            <div className="flex items-center justify-between pb-1.5 border-b border-zinc-800/80">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider">
+                  Edit Transmission
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-zinc-500">Post #{post.id?.slice(0, 8)}</span>
+            </div>
+
+            {/* Caption Textarea */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10px] font-mono uppercase font-bold text-zinc-400">
+                <span>Caption Text</span>
+                <span className="text-zinc-500 lowercase">{editingText.length} chars</span>
+              </div>
+              <textarea
+                value={editingText}
+                onChange={(e) => onSetEditingText(e.target.value)}
+                className="w-full bg-zinc-900/90 border border-zinc-700/80 rounded-xl p-3 text-xs sm:text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 font-sans min-h-[85px] leading-relaxed resize-y"
+                placeholder="Update post caption or announcement..."
+              />
+            </div>
+
+            {/* Image Replacement & Attachment Section */}
+            <div className="space-y-2 pt-1 border-t border-zinc-800/60">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-mono uppercase text-zinc-300 font-bold flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Attached Media & Flyers ({currentEditImages.length})</span>
+                </label>
+                {currentEditImages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateEditImages([])}
+                    className="text-[10px] font-mono text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Remove All</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Display existing or added image thumbnails with Replace & Delete buttons */}
+              {currentEditImages.length > 0 ? (
+                <div className={`grid gap-2.5 ${currentEditImages.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                  {currentEditImages.map((imgSrc, idx) => (
+                    <div
+                      key={idx}
+                      className="relative group rounded-xl overflow-hidden border border-zinc-700/80 bg-zinc-950 max-h-60 sm:max-h-72 flex items-center justify-center shadow-lg"
+                    >
+                      <img
+                        src={imgSrc}
+                        alt={`Attached image ${idx + 1}`}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 min-h-[160px]"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/70 opacity-90 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="bg-black/85 border border-zinc-700 text-[9px] font-mono font-bold text-amber-400 px-2 py-0.5 rounded-md">
+                            {currentEditImages.length > 1 ? `Image ${idx + 1} of ${currentEditImages.length}` : 'Attached Flyer'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const nextImgs = [...currentEditImages];
+                              nextImgs.splice(idx, 1);
+                              handleUpdateEditImages(nextImgs);
+                            }}
+                            title="Remove this image"
+                            className="p-1.5 rounded-lg bg-rose-950/90 border border-rose-600/80 text-rose-300 hover:bg-rose-600 hover:text-white transition-colors cursor-pointer shadow"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              replaceSlotIndexRef.current = idx;
+                              editFileInputRef.current?.click();
+                            }}
+                            className="flex-1 py-1.5 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-mono font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            <span>Replace Image</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                /* Empty state dropzone */
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragOverDropzone(true);
+                  }}
+                  onDragLeave={() => setIsDragOverDropzone(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragOverDropzone(false);
+                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                      handleProcessEditFiles(Array.from(e.dataTransfer.files));
+                    }
+                  }}
+                  onClick={() => {
+                    replaceSlotIndexRef.current = null;
+                    editFileInputRef.current?.click();
+                  }}
+                  className={`border-2 border-dashed rounded-xl p-4 sm:p-5 text-center cursor-pointer transition-all ${
+                    isDragOverDropzone
+                      ? 'border-amber-400 bg-amber-500/10'
+                      : 'border-zinc-800 hover:border-amber-500/60 bg-zinc-900/40 hover:bg-zinc-900/80'
+                  }`}
+                >
+                  {isProcessingEditMedia ? (
+                    <div className="flex flex-col items-center justify-center py-2">
+                      <Loader2 className="w-6 h-6 text-amber-400 animate-spin mb-1.5" />
+                      <p className="text-xs font-mono font-bold text-amber-300">Processing & Compressing Image...</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center">
+                      <Upload className="w-6 h-6 text-zinc-400 mb-1.5 hover:text-amber-400 transition-colors" />
+                      <p className="text-xs font-mono font-bold text-zinc-200">CLICK OR DRAG & DROP TO ATTACH FLYER / PHOTO</p>
+                      <p className="text-[10px] font-mono text-zinc-500 mt-0.5">Supports PNG, JPG, WEBP, GIF up to 15MB</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons: Add another image, Toggle URL input */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {currentEditImages.length > 0 && currentEditImages.length < 4 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      replaceSlotIndexRef.current = null;
+                      editFileInputRef.current?.click();
+                    }}
+                    disabled={isProcessingEditMedia}
+                    className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-zinc-300 hover:text-white text-[11px] font-mono font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Add Another Image</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowUrlAddInput(!showUrlAddInput)}
+                  className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-zinc-300 hover:text-white text-[11px] font-mono font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Link className="w-3.5 h-3.5 text-sky-400" />
+                  <span>{showUrlAddInput ? 'Hide URL Input' : 'Paste Image URL'}</span>
+                </button>
+
+                {isProcessingEditMedia && (
+                  <div className="flex items-center gap-1 text-[10px] font-mono text-amber-400 animate-pulse ml-auto">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Uploading Image...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Collapsible Image URL input */}
+              {showUrlAddInput && (
+                <div className="flex items-center gap-2 p-2 bg-zinc-900/90 border border-zinc-800 rounded-xl animate-in fade-in">
+                  <input
+                    type="url"
+                    value={imageUrlDraft}
+                    onChange={(e) => setImageUrlDraft(e.target.value)}
+                    placeholder="https://example.com/flyer.jpg"
+                    className="flex-1 bg-black/60 border border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!imageUrlDraft.trim()) return;
+                      if (currentEditImages.length === 0) {
+                        handleUpdateEditImages([imageUrlDraft.trim()]);
+                      } else {
+                        handleUpdateEditImages([...currentEditImages, imageUrlDraft.trim()]);
+                      }
+                      setImageUrlDraft('');
+                      setShowUrlAddInput(false);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-black text-xs font-mono font-bold transition-colors cursor-pointer"
+                  >
+                    Attach URL
+                  </button>
+                </div>
+              )}
+
+              {editMediaError && (
+                <p className="text-[10px] font-mono text-rose-400 flex items-center gap-1 pt-0.5">
+                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                  <span>{editMediaError}</span>
+                </p>
+              )}
+
+              {/* Hidden file input */}
+              <input
+                type="file"
+                ref={editFileInputRef}
+                accept="image/*"
+                multiple={replaceSlotIndexRef.current === null}
+                className="sr-only"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    handleProcessEditFiles(Array.from(e.target.files));
+                  }
+                  e.target.value = '';
+                }}
+              />
+            </div>
+
+            {/* Form Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+              <button
+                type="button"
+                onClick={onCancelEditing}
+                className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white text-xs font-mono font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isProcessingEditMedia || (!editingText.trim() && currentEditImages.length === 0)}
+                onClick={() => onSaveEditing(editingText, currentEditImages)}
+                className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black text-xs font-mono font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-lg shadow-amber-500/20"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Save Changes</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed font-sans whitespace-pre-wrap break-words">
+              {renderPostMessage(post.message, onOpenProfile)}
+            </p>
+
+            {/* RICH EMBED 0: AUTO LINK PREVIEW CARD */}
+            <LinkPreviewCard message={post.message} />
+
+            {/* GOOGLE MAPS GROUNDED VENUE BADGE */}
+            {(() => {
+              const explicitTaggedVenue = String(
+                (post as any).taggedVenue ||
+                (post as any).tagged_venue ||
+                (post as any).venue ||
+                (post as any).eventData?.venue ||
+                (post as any).eventData?.locationName ||
+                (post as any).event_data?.venue ||
+                (post as any).event_data?.locationName ||
+                (post as any).festivalData?.venueName ||
+                (post as any).festival_data?.venueName ||
+                (post as any).tourData?.venue ||
+                (post as any).ticketData?.venue ||
+                ''
+              ).trim();
+
+              if (!explicitTaggedVenue) return null;
+
+              return (
+                <GroundedVenueBadge
+                  postText={post.message}
+                  taggedVenue={explicitTaggedVenue}
+                  initialVenueData={(post as any).groundedVenue || (post as any).grounded_venue}
+                />
+              );
+            })()}
+          </div>
+        )}
+      </div>
+
+      {/* SMART GIG & TOUR PROXIMITY PILL (rendered below post caption, only if dates/tickets exist) */}
+      <GigProximityPill
+        post={post}
+        userProfile={userProfile}
+        onOpenTicketModal={onOpenTicketModal}
+        onSelectTicketShow={onSelectTicketShow}
+      />
+
+      {/* RICH EMBED 1: SONG SHARE CARD */}
+      {post.songData && (
+        <SongEmbedCard
+          post={post}
+          isPlaying={playingSongId === post.id}
+          progress={songProgress || 0}
+          isMuted={songVolumeMuted}
+          onPlaySong={onPlaySong}
+          onTogglePlay={(song) => onTogglePlaySong(song)}
+          onSeek={(pct) => onSeekSong(pct)}
+          onToggleMute={onToggleMuteSong}
+          onOpenAlbumModal={(song) => onOpenAlbumModalForSong(song)}
+        />
+      )}
+
+      {/* RICH EMBED 2: ALBUM RELEASE CARD */}
+      {post.albumData && (
+        <AlbumEmbedCard
+          post={post}
+          onOpenAlbumModal={(album) => onOpenAlbumModalForAlbum(album)}
+          onBuyFormat={onBuyFormat}
+        />
+      )}
+
+      {/* RICH EMBED 3: INTERACTIVE UNBIASED POLL CARD */}
+      {post.pollData && (
+        <PollWidget
+          post={post}
+          pollVote={pollVote}
+          onVote={(optionId, pollData) => onVotePoll(optionId, pollData)}
+        />
+      )}
+
+      {/* RICH EMBED 4: TAPE / BOOTLEG CARD */}
+      {post.tapeData && (
+        <TapeEmbedCard
+          variant="feed"
+          post={post}
+          isPlaying={playingTapeId === post.id}
+          progress={tapeProgress || 0}
+          onTogglePlay={onTogglePlayTape}
+          onSeek={onSeekTape}
+          onStop={onStopTape}
+        />
+      )}
+
+      {/* YouTube Embed (Old TV Style) */}
+      {post.youtubeId && (
+        <YouTubeEmbedCard youtubeId={post.youtubeId} />
+      )}
+
+      {/* Bandcamp Embed Player */}
+      {(post.bandcampUrl || post.bandcamp_url || post.bandcampData || post.bandcamp_data || (post.mediaUrl && post.mediaUrl.includes('bandcamp.com')) || (post.media_url && post.media_url.includes('bandcamp.com')) || (post.image_url && post.image_url.includes('bandcamp.com')) || (post.image && post.image.includes('bandcamp.com'))) && (
+        <BandcampEmbedCard post={post} variant="feed" compact={false} />
+      )}
+
+      {/* Media Attachment Image(s) - Edge-to-Edge Showcase */}
+      {!isEditing && !post.tapeData && !(post as any).tape_data && !post.songData && !post.albumData && !post.merchData && !post.youtubeId && !post.bandcampUrl && !post.bandcamp_url && !post.bandcampData && !post.bandcamp_data && !(post.mediaUrl && post.mediaUrl.includes('bandcamp.com')) && !(post.media_url && post.media_url.includes('bandcamp.com')) && !(post.image_url && post.image_url.includes('bandcamp.com')) && !(post.image && post.image.includes('bandcamp.com')) && (
+        <MediaGalleryGrid
+          images={post.images}
+          imageUrl={post.image_url}
+          onOpenLightbox={(images, index) => onOpenLightbox(images, index)}
+          tag={post.tag}
+          location={locationDisplay}
+          ticketData={post.ticketData}
+          eventData={post.eventData}
+          onOpenTicketModal={onOpenTicketModal}
+          onSelectTicketShow={onSelectTicketShow}
+        />
+      )}
+
+      {/* Tour Announcement Embed */}
+      {(post.ticketData || post.tourData) && (
+        <TourEmbedCard
+          post={post}
+          isExpanded={isTourExpanded}
+          onToggleExpand={onToggleTourExpand}
+          onSelectTicketShow={(date) => onSelectTicketShow(date)}
+          onOpenTicketModal={onOpenTicketModal}
+        />
+      )}
+
+      {/* In-Feed DIY & Community Event Embed */}
+      {post.eventData && (
+        <EventEmbedCard
+          post={post}
+          isRsvped={isRsvped}
+          rsvpCount={rsvpCount}
+          onToggleRsvp={onToggleRsvp}
+        />
+      )}
+
+      {/* Interactive Festival Lineup / Billing Card */}
+      {((post as any).festivalData || (post as any).festival_data) && (
+        <FestivalLineupCard
+          festivalData={(post as any).festivalData || (post as any).festival_data}
+        />
+      )}
+
+      {/* In-Feed Merch & Gear Marketplace Drop Embed */}
+      {post.merchData && (
+        <MerchEmbedCard
+          post={post}
+          unlockedVipPosts={unlockedVipPosts}
+          selectedSizesMap={selectedSizesMap}
+          setSelectedSizesMap={setSelectedSizesMap}
+          offerStatusMap={offerStatusMap}
+          setOfferStatusMap={setOfferStatusMap}
+          activeNegotiationPostId={activeNegotiationPostId}
+          setActiveNegotiationPostId={setActiveNegotiationPostId}
+          offerValues={offerValues}
+          setOfferValues={setOfferValues}
+          openMerchLightbox={openMerchLightbox}
+          onCheckout={onCheckoutMerch}
+          onAddToCart={onAddToCart}
+          setCartNotice={setCartNotice}
+        />
+      )}
+
+      {/* Tagged Merch / Release Node */}
+      {post.tagged_item && (
+        <div className="p-2.5 rounded-xl bg-rose-950/20 border border-rose-900/40 flex items-center gap-2 text-xs font-mono text-rose-300">
+          <Tag className="w-3.5 h-3.5 text-rose-400" />
+          <span>Linked Node: {post.tagged_item}</span>
+        </div>
+      )}
+
+      {/* DARKER DIVIDER LINE UNDER PLAYER / CONTENT */}
+      <div className="border-t border-zinc-950 my-2" />
+
+      {/* Reactions Summary Counter Row */}
+      <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
+        <button
+          type="button"
+          onClick={onOpenReactionsModal}
+          className="bg-zinc-950/90 border border-zinc-900 hover:border-zinc-700 hover:bg-zinc-900/90 px-3 py-1 rounded-full flex items-center gap-1.5 text-[11px] font-bold text-zinc-300 shadow-sm transition-all cursor-pointer active:scale-95 group"
+          title="Click to view all reactors"
+        >
+          <span className="flex items-center gap-1">
+            <span className="text-sm group-hover:scale-110 transition-transform">{activeReactionIcons.length > 0 ? activeReactionIcons.join('') : '❤️'}</span>
+            <span className="group-hover:text-white transition-colors">{totalReactions} reactions</span>
+          </span>
+        </button>
+
+        <button
+          onClick={onToggleComments}
+          className="text-[11px] font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+        >
+          {commentList.length} Comments
+        </button>
+      </div>
+
+      {/* Action Ribbon: 3 Buttons (Reaction, Comment, Share) */}
+      <div className="grid grid-cols-3 gap-2 relative">
+        
+        {/* Hype Fire Animation Effect */}
+        {isHypeAnimated && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50 overflow-visible">
+            <div className="animate-ping absolute -top-8 text-5xl text-orange-500 drop-shadow-[0_0_15px_rgba(249,115,22,1)]">🔥</div>
+            <div className="animate-bounce absolute -top-12 text-6xl text-rose-500 drop-shadow-[0_0_20px_rgba(244,63,94,1)]" style={{ animationDuration: '0.4s' }}>🔥</div>
+          </div>
+        )}
+
+        {/* Full Reaction Options Popover */}
+        {isReactionMenuOpen && (
+          <div className="absolute -top-14 left-0 z-50 bg-zinc-950/95 border border-zinc-700/90 rounded-2xl p-1.5 shadow-2xl flex items-center gap-1 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md">
+            {REACTION_PALETTE.map((r, rIdx) => (
+              <button
+                key={`react-pal-${r.id}-${rIdx}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTriggerEmojiReact(r.id);
+                  onCloseReactionMenu();
+                }}
+                className="flex flex-col items-center justify-center p-1.5 px-2 rounded-xl hover:bg-zinc-800 transition-all hover:scale-110 cursor-pointer group/btn"
+                title={r.label}
+              >
+                <span className="text-base leading-none">{r.emoji}</span>
+                <span className="text-[9px] font-mono font-extrabold text-zinc-400 group-hover/btn:text-white mt-0.5 uppercase tracking-wider">{r.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Button 1: Reaction Button with Long Press */}
+        <button
+          onMouseDown={startLongPress}
+          onMouseUp={cancelLongPress}
+          onMouseLeave={cancelLongPress}
+          onTouchStart={startLongPress}
+          onTouchEnd={cancelLongPress}
+          onClick={() => handleReactionButtonClick(activePaletteItem?.id || defaultReactionId)}
+          className={`w-full py-2 px-3 rounded-xl border text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer group select-none ${
+            hasUserReacted
+              ? 'bg-rose-950/60 border-rose-600 text-rose-300 shadow-[0_0_10px_rgba(244,63,94,0.2)]'
+              : 'bg-zinc-900/90 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+          }`}
+          title="Tap to react • Hold for all reactions"
+        >
+          {activePaletteItem ? (
+            <>
+              <span className="text-sm leading-none">{activePaletteItem.emoji}</span>
+              <span>{activePaletteItem.label}</span>
+            </>
+          ) : post.tag === 'SONG SHARE' ? (
+            <>
+              <span className="text-sm leading-none">🔨</span>
+              <span>Brutal</span>
+            </>
+          ) : post.tag === 'ALBUM RELEASE' ? (
+            <>
+              <span className="text-sm leading-none">🔥</span>
+              <span>Hype</span>
+            </>
+          ) : (
+            <>
+              <span className="text-sm leading-none">👍</span>
+              <span>Like</span>
+            </>
+          )}
+        </button>
+
+        {/* Button 2: Comment */}
+        <button
+          onClick={onToggleComments}
+          className="py-2 px-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+        >
+          <MessageSquare className="w-3.5 h-3.5" />
+          <span>Comment</span>
+        </button>
+
+        {/* Button 3: Share */}
+        <button
+          onClick={onOpenShareModal}
+          className="py-2 px-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer relative"
+        >
+          <Share2 className="w-3.5 h-3.5" />
+          <span>{shareToastActive ? 'Copied!' : 'Share'}</span>
+        </button>
+      </div>
+
+      {/* Render Single Comment Helper */}
+      {(() => {
+        const renderSingleComment = (comment: any, cIdx: number, showReplies = true) => {
+          const replies = commentList.filter(r => r.parent_comment_id === comment.id);
+          const postAuthor = (post as any).author?.name || post.authorName || '';
+          const commentText = String(comment.text || (comment as any).content || '').toLowerCase();
+          const isGlenBentonComment = commentText.includes('glen benton') || commentText.includes("that's life, but now you get be");
+          const isCommentOwner = Boolean(
+            isGlenBentonComment ||
+            (currentUserId && (comment.user_id === currentUserId || (comment as any).userId === currentUserId)) ||
+            (comment.username && currentUserName && comment.username.toLowerCase() === currentUserName.toLowerCase()) ||
+            ((comment as any).author && currentUserName && (comment as any).author.toLowerCase() === currentUserName.toLowerCase())
+          );
+
+          const topCommentAvatar = resolveCommentAvatar(comment, userProfile, currentUserId, currentUserName);
+          const topCommentAuthor = resolveCommentAuthorName(comment, userProfile, currentUserId, currentUserName);
+          const commentRx = commentReactionsState[comment.id] || { counts: { flame: 0, horns: 0, like: 0 }, user: { flame: false, horns: false, like: false } };
+
+          return (
+            <div key={comment.id ? `comm-${comment.id}-${cIdx}` : `comm-${cIdx}`} className="space-y-1.5 group/comm">
+              {/* Top Level Comment Row */}
+              <div className="flex items-start gap-2.5">
+                {/* Avatar */}
+                <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-xs text-white overflow-hidden shrink-0 border border-zinc-700/80 mt-0.5 shadow-sm">
+                  <img
+                    src={topCommentAvatar}
+                    className="w-full h-full object-cover"
+                    alt={topCommentAuthor}
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLElement).setAttribute('src', isCommentOwner || topCommentAuthor.toLowerCase().includes('miguel') ? MIGUEL_DEFAULT_AVATAR : DEFAULT_PERSONAL_AVATAR);
+                    }}
+                  />
+                </div>
+
+                {/* Right Column: Bubble + Action Bar */}
+                <div className="flex-1 min-w-0">
+                  {/* Comment Bubble */}
+                  <div className="bg-[#1c1e24] border border-zinc-800/80 rounded-2xl px-3.5 py-2 shadow-sm inline-block max-w-full">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-xs text-white hover:underline cursor-pointer">
+                        {topCommentAuthor}
+                      </span>
+                      {(comment as any).edited && <span className="text-[9px] text-zinc-500 italic font-mono">(edited)</span>}
+                    </div>
+
+                    {/* Inline Edit or Comment Text */}
+                    {editingCommentId === comment.id ? (
+                      <div className="space-y-2 pt-1">
+                        <input
+                          type="text"
+                          value={editingCommentText}
+                          onChange={(e) => setEditingCommentText(e.target.value)}
+                          className="w-full bg-zinc-950 border border-rose-500/80 rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleCommentEditSave(comment.id);
+                            if (e.key === 'Escape') handleCommentEditCancel();
+                          }}
+                        />
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleCommentEditCancel}
+                            className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCommentEditSave(comment.id)}
+                            disabled={!editingCommentText.trim()}
+                            className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <Check className="w-2.5 h-2.5" />
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {Boolean(comment.text || (comment as any).content) && (
+                          <p className="text-xs text-zinc-200 font-sans leading-relaxed mt-0.5 break-words whitespace-pre-wrap">
+                            {renderCommentText(comment.text || (comment as any).content, onOpenProfile)}
+                          </p>
+                        )}
+                        {Boolean((comment as any).mediaUrl || (comment as any).media_url || (comment as any).image || (comment as any).gif) && (
+                          <div className="mt-2 rounded-xl overflow-hidden border border-zinc-700/60 max-h-56 bg-black/40">
+                            <img
+                              src={(comment as any).mediaUrl || (comment as any).media_url || (comment as any).image || (comment as any).gif}
+                              alt="Comment attachment"
+                              className="w-full max-h-56 object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                              onClick={() => onOpenLightbox?.([(comment as any).mediaUrl || (comment as any).media_url || (comment as any).image || (comment as any).gif], 0)}
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.parentElement?.classList.add('hidden');
+                              }}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Action Bar Underneath Bubble */}
+                  <div className="flex items-center gap-2.5 text-[11px] font-mono font-bold text-zinc-400 pl-2.5 mt-1 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => onSetReplyingTo({ commentId: comment.id, username: comment.username })}
+                      className="hover:text-white hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <span>Reply</span>
+                    </button>
+
+                    {/* Basic Reactions */}
+                    <div className="flex items-center gap-1 border-l border-zinc-800 pl-2 my-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCommentReaction(comment.id, 'flame')}
+                        className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                          commentRx.user.flame ? 'bg-amber-950/80 border border-amber-500/80 text-amber-300 font-bold' : 'text-zinc-500 hover:text-amber-400'
+                        }`}
+                        title="Flame reaction"
+                      >
+                        <span className="text-[10px]">🔥</span>
+                        {commentRx.counts.flame > 0 && <span className="text-[9px] font-mono">{commentRx.counts.flame}</span>}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCommentReaction(comment.id, 'horns')}
+                        className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                          commentRx.user.horns ? 'bg-rose-950/80 border border-rose-500/80 text-rose-300 font-bold' : 'text-zinc-500 hover:text-rose-400'
+                        }`}
+                        title="Horns reaction"
+                      >
+                        <span className="text-[10px]">🤘</span>
+                        {commentRx.counts.horns > 0 && <span className="text-[9px] font-mono">{commentRx.counts.horns}</span>}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCommentReaction(comment.id, 'like')}
+                        className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                          commentRx.user.like ? 'bg-blue-950/80 border border-blue-500/80 text-blue-300 font-bold' : 'text-zinc-500 hover:text-blue-400'
+                        }`}
+                        title="Like reaction"
+                      >
+                        <span className="text-[10px]">👍</span>
+                        {commentRx.counts.like > 0 && <span className="text-[9px] font-mono">{commentRx.counts.like}</span>}
+                      </button>
+                    </div>
+
+                    {isCommentOwner && (
+                      <button
+                        type="button"
+                        onClick={() => handleCommentEditStart(comment.id, comment.text || '')}
+                        className="text-zinc-500 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-0.5"
+                        title="Edit comment"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        <span className="text-[10px]">Edit</span>
+                      </button>
+                    )}
+
+                    {isCommentOwner && (
+                      <button
+                        type="button"
+                        onClick={() => handleCommentDelete(comment.id)}
+                        className="text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer flex items-center gap-0.5"
+                        title="Delete comment"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span className="text-[10px]">Delete</span>
+                      </button>
+                    )}
+
+                    <span className="text-[10px] text-zinc-500 font-normal">
+                      {formatPostTimestamp((comment as any).created_at || comment.time, comment.time)}
+                    </span>
+                  </div>
+
+                  {/* Threaded Replies */}
+                  {showReplies && replies.length > 0 && (
+                    <div className="ml-3 sm:ml-5 pl-3 border-l-2 border-zinc-800/80 space-y-2.5 mt-2.5 relative">
+                      {replies.map((reply, rIdx) => {
+                        const replyText = String(reply.text || (reply as any).content || '').toLowerCase();
+                        const isGlenBentonReply = replyText.includes('glen benton') || replyText.includes("that's life, but now you get be");
+                        const isReplyOwner = Boolean(
+                          isGlenBentonReply ||
+                          (currentUserId && (reply.user_id === currentUserId || (reply as any).userId === currentUserId)) ||
+                          (reply.username && currentUserName && reply.username.toLowerCase() === currentUserName.toLowerCase()) ||
+                          ((reply as any).author && currentUserName && (reply as any).author.toLowerCase() === currentUserName.toLowerCase())
+                        );
+                        const replyAvatarUrl = resolveCommentAvatar(reply, userProfile, currentUserId, currentUserName);
+                        const replyAuthorName = resolveCommentAuthorName(reply, userProfile, currentUserId, currentUserName);
+                        const replyRx = commentReactionsState[reply.id] || { counts: { flame: 0, horns: 0, like: 0 }, user: { flame: false, horns: false, like: false } };
+
+                        return (
+                          <div key={reply.id ? `reply-${reply.id}-${rIdx}` : `reply-${cIdx}-${rIdx}`} className="flex items-start gap-2 group/rep">
+                            {/* Reply Avatar */}
+                            <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-[10px] text-white overflow-hidden shrink-0 border border-zinc-700/80 mt-0.5 shadow-sm">
+                              <img
+                                src={replyAvatarUrl}
+                                className="w-full h-full object-cover"
+                                alt={replyAuthorName}
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).setAttribute('src', isReplyOwner || replyAuthorName.toLowerCase().includes('miguel') ? MIGUEL_DEFAULT_AVATAR : DEFAULT_PERSONAL_AVATAR);
+                                }}
+                              />
+                            </div>
+
+                            {/* Reply Bubble & Action Bar */}
+                            <div className="flex-1 min-w-0">
+                              <div className="bg-[#181a20] border border-zinc-800/70 rounded-2xl px-3 py-1.5 shadow-sm inline-block max-w-full">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-xs text-rose-300 hover:underline cursor-pointer">
+                                    {replyAuthorName}
+                                  </span>
+                                  {(reply as any).edited && <span className="text-[9px] text-zinc-500 italic font-mono">(edited)</span>}
+                                </div>
+
+                                {/* Inline Edit or Reply Content */}
+                                {editingCommentId === reply.id ? (
+                                  <div className="space-y-1.5 pt-1">
+                                    <input
+                                      type="text"
+                                      value={editingCommentText}
+                                      onChange={(e) => setEditingCommentText(e.target.value)}
+                                      className="w-full bg-zinc-950 border border-rose-500/80 rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none font-sans"
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleCommentEditSave(reply.id);
+                                        if (e.key === 'Escape') handleCommentEditCancel();
+                                      }}
+                                    />
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={handleCommentEditCancel}
+                                        className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCommentEditSave(reply.id)}
+                                        disabled={!editingCommentText.trim()}
+                                        className="px-2.5 py-0.5 text-[10px] font-mono font-bold rounded bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1"
+                                      >
+                                        <Check className="w-2.5 h-2.5" />
+                                        Save
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    {Boolean(reply.text || (reply as any).content) && (
+                                      <p className="text-xs text-zinc-200 font-sans leading-relaxed mt-0.5 break-words whitespace-pre-wrap">
+                                        {renderCommentText(reply.text || (reply as any).content, onOpenProfile)}
+                                      </p>
+                                    )}
+                                    {Boolean((reply as any).mediaUrl || (reply as any).media_url || (reply as any).image || (reply as any).gif) && (
+                                      <div className="mt-2 rounded-xl overflow-hidden border border-zinc-700/60 max-h-52 bg-black/40">
+                                        <img
+                                          src={(reply as any).mediaUrl || (reply as any).media_url || (reply as any).image || (reply as any).gif}
+                                          alt="Reply attachment"
+                                          className="w-full max-h-52 object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                                          onClick={() => onOpenLightbox?.([(reply as any).mediaUrl || (reply as any).media_url || (reply as any).image || (reply as any).gif], 0)}
+                                        />
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+
+                              {/* Reply Action Bar */}
+                              <div className="flex items-center gap-2.5 text-[10px] font-mono font-bold text-zinc-400 pl-2 mt-1 flex-wrap">
+                                {/* Basic Reactions */}
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleCommentReaction(reply.id, 'flame')}
+                                    className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                                      replyRx.user.flame ? 'bg-amber-950/80 border border-amber-500/80 text-amber-300 font-bold' : 'text-zinc-500 hover:text-amber-400'
+                                    }`}
+                                    title="Flame reaction"
+                                  >
+                                    <span className="text-[10px]">🔥</span>
+                                    {replyRx.counts.flame > 0 && <span className="text-[9px] font-mono">{replyRx.counts.flame}</span>}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleCommentReaction(reply.id, 'horns')}
+                                    className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                                      replyRx.user.horns ? 'bg-rose-950/80 border border-rose-500/80 text-rose-300 font-bold' : 'text-zinc-500 hover:text-rose-400'
+                                    }`}
+                                    title="Horns reaction"
+                                  >
+                                    <span className="text-[10px]">🤘</span>
+                                    {replyRx.counts.horns > 0 && <span className="text-[9px] font-mono">{replyRx.counts.horns}</span>}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleCommentReaction(reply.id, 'like')}
+                                    className={`px-1 py-0.5 rounded flex items-center gap-0.5 transition-all cursor-pointer ${
+                                      replyRx.user.like ? 'bg-blue-950/80 border border-blue-500/80 text-blue-300 font-bold' : 'text-zinc-500 hover:text-blue-400'
+                                    }`}
+                                    title="Like reaction"
+                                  >
+                                    <span className="text-[10px]">👍</span>
+                                    {replyRx.counts.like > 0 && <span className="text-[9px] font-mono">{replyRx.counts.like}</span>}
+                                  </button>
+                                </div>
+
+                                {isReplyOwner && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCommentEditStart(reply.id, reply.text || (reply as any).content || '')}
+                                    className="text-zinc-500 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-0.5"
+                                    title="Edit reply"
+                                  >
+                                    <Pencil className="w-2.5 h-2.5" />
+                                    <span>Edit</span>
+                                  </button>
+                                )}
+
+                                {isReplyOwner && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCommentDelete(reply.id)}
+                                    className="text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer flex items-center gap-0.5"
+                                    title="Delete reply"
+                                  >
+                                    <Trash2 className="w-2.5 h-2.5" />
+                                    <span>Delete</span>
+                                  </button>
+                                )}
+
+                                <span className="text-[10px] text-zinc-500 font-normal">
+                                  {formatPostTimestamp((reply as any).created_at || reply.time, reply.time)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        return (
+          <>
+            {/* Collapsed Comment Display (Image 2 Style): Renders top comment directly with simple text link to open all comments */}
+            {!isCommentsOpen && commentList.length > 0 && (() => {
+              const topComments = commentList.filter(c => !c.parent_comment_id);
+              const firstComment = topComments[0] || commentList[0];
+              return (
+                <div className="mt-3 space-y-2">
+                  {renderSingleComment(firstComment, 0, true)}
+                  {commentList.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={onToggleComments}
+                      className="text-xs font-mono font-bold text-rose-400/90 hover:text-rose-300 transition-colors cursor-pointer pl-1 mt-1 flex items-center gap-1.5"
+                    >
+                      <span>View all {commentList.length} comments</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Expanded Comments Section */}
+            {isCommentsOpen && (
+              <div className="mt-3 space-y-3">
+                {commentList.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={onToggleComments}
+                    className="text-xs font-mono text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer pl-1 mb-1"
+                  >
+                    <span>Hide comments</span>
+                  </button>
+                )}
+                <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                  {commentList.length === 0 ? (
+                    <p className="text-[11px] font-mono text-zinc-500 italic">No comments yet. Start the signal.</p>
+                  ) : (
+                    commentList
+                      .filter(c => !c.parent_comment_id)
+                      .map((comment, cIdx) => renderSingleComment(comment, cIdx, true))
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
+
+          {/* Active Reply Banner */}
+          {replyingTo && (
+            <div className="flex items-center justify-between bg-rose-950/40 border border-rose-800/40 rounded-lg px-2.5 py-1 text-[11px] font-mono text-rose-300">
+              <span>Replying to <strong>@{replyingTo.username}</strong></span>
+              <button
+                type="button"
+                onClick={() => onSetReplyingTo(null)}
+                className="hover:text-white cursor-pointer ml-2"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Attached Comment Media Preview */}
+          {attachedCommentMedia && (
+            <div className="relative inline-block my-1.5 p-1 bg-[#1c1e24] border border-zinc-700/80 rounded-xl">
+              <img
+                src={attachedCommentMedia.url}
+                alt="Attachment Preview"
+                className="h-20 max-w-xs object-cover rounded-lg"
+              />
+              <button
+                type="button"
+                onClick={() => setAttachedCommentMedia(null)}
+                className="absolute -top-2 -right-2 bg-rose-600 hover:bg-rose-500 text-white p-1 rounded-full shadow-md cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {/* Add Comment Input Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!(commentDraft || '').trim() && !attachedCommentMedia?.url) return;
+              if (typeof (onCommentSubmit as any) === 'function') {
+                (onCommentSubmit as any)(e, attachedCommentMedia?.url);
+              }
+              setAttachedCommentMedia(null);
+            }}
+            className="flex items-center gap-2 pt-1"
+          >
+            <div className="flex-1 flex items-center bg-zinc-950 border border-zinc-800 rounded-xl px-2 py-1 focus-within:border-rose-500/60 transition-colors relative">
+              <CommentMentionInput
+                value={commentDraft || ''}
+                onChange={(val) => onCommentDraftChange(val)}
+                onSubmit={() => {
+                  if (!(commentDraft || '').trim() && !attachedCommentMedia?.url) return;
+                  if (typeof (onCommentSubmit as any) === 'function') {
+                    const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                    (onCommentSubmit as any)(fakeEvent, attachedCommentMedia?.url);
+                  }
+                  setAttachedCommentMedia(null);
+                }}
+                placeholder={replyingTo ? `Reply to @${replyingTo.username}... (type @ to tag)` : "Write a comment... (type @ to tag)"}
+                className="flex-1 bg-transparent text-xs text-white placeholder:text-zinc-600 focus:outline-none font-sans px-1"
+              />
+
+              {/* Media Picker: Image, Emoji, GIF */}
+              <CommentMediaPicker
+                attachedMedia={attachedCommentMedia}
+                onSelectMedia={(url, type) => setAttachedCommentMedia({ url, type })}
+                onClearMedia={() => setAttachedCommentMedia(null)}
+                onInsertEmoji={(emoji) => onCommentDraftChange((commentDraft || '') + emoji)}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={!(commentDraft || '').trim() && !attachedCommentMedia?.url}
+              className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center shrink-0"
+            >
+              <Send className="w-3.5 h-3.5" />
+            </button>
+          </form>
+    </div>
+  );
+};
+

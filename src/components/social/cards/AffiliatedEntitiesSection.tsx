@@ -1,0 +1,511 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Plus,
+  Calendar,
+  Edit3,
+  ExternalLink,
+  Link2,
+  Unlink,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  Building2,
+  MapPin,
+  Trash2,
+} from 'lucide-react';
+import {
+  NetworkEntity,
+  FestivalEdition,
+  ENTITY_CATEGORY_META,
+  getUserManagedEntities,
+  getEditionsForEntity,
+  getLineupForEdition,
+  openTaggedBandOrEntityProfile,
+  getLinkedEntityForPromoterWorkspace,
+  linkEntityToPromoterWorkspace,
+  deleteNetworkEntity,
+} from '../../../services/networkEntitiesService';
+import { CreateEntityModal } from '../modals/CreateEntityModal';
+import { FestivalLineupEditorModal } from '../modals/FestivalLineupEditorModal';
+import { FestivalLineupCard } from './FestivalLineupCard';
+
+export interface AffiliatedEntitiesSectionProps {
+  userProfile?: any;
+  setUserProfile?: (profile: any) => void;
+  targetProfile?: any;
+  isOwnProfile?: boolean;
+  showPromoterWorkspacePointer?: boolean;
+  variant?: 'manage' | 'cards';
+  triggerNotification?: (msg: string) => void;
+  onSelectPostAsEntity?: (entity: NetworkEntity) => void;
+}
+
+export const AffiliatedEntitiesSection: React.FC<AffiliatedEntitiesSectionProps> = ({
+  userProfile,
+  setUserProfile,
+  targetProfile,
+  isOwnProfile = true,
+  showPromoterWorkspacePointer = false,
+  variant = 'manage',
+  triggerNotification,
+  onSelectPostAsEntity,
+}) => {
+  const [entities, setEntities] = useState<NetworkEntity[]>([]);
+  const [linkedEntity, setLinkedEntity] = useState<NetworkEntity | null>(null);
+  const [expandedFestivalEntityId, setExpandedFestivalEntityId] = useState<string | null>(null);
+
+  // Modals state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingEntity, setEditingEntity] = useState<NetworkEntity | null>(null);
+  const [lineupModalEntity, setLineupModalEntity] = useState<NetworkEntity | null>(null);
+  const [lineupModalEditionId, setLineupModalEditionId] = useState<string | undefined>(undefined);
+
+  const effectiveProfile = targetProfile || userProfile;
+
+  const refreshEntities = () => {
+    const ownerId = isOwnProfile
+      ? (userProfile?.id || effectiveProfile?.owner_id || effectiveProfile?.user_id || effectiveProfile?.id)
+      : (effectiveProfile?.owner_id || effectiveProfile?.creator_id || effectiveProfile?.user_id || effectiveProfile?.id);
+
+    let list: NetworkEntity[] = [];
+    if (isOwnProfile || ownerId) {
+      const rawList = getUserManagedEntities(ownerId);
+      list = isOwnProfile
+        ? rawList
+        : rawList.filter((e) => e.owner_id === ownerId);
+    }
+
+    const linked = getLinkedEntityForPromoterWorkspace(effectiveProfile);
+    if (linked && !list.some((e) => e.id === linked.id)) {
+      if (
+        isOwnProfile ||
+        effectiveProfile?.linked_entity_id === linked.id ||
+        effectiveProfile?.promoter_metadata?.linked_entity_id === linked.id
+      ) {
+        list = [linked, ...list];
+      }
+    }
+
+    const selfEntityId =
+      effectiveProfile?.entityData?.id ||
+      (typeof effectiveProfile?.id === 'string' && effectiveProfile.id.startsWith('entity:')
+        ? effectiveProfile.id.replace(/^entity:/i, '')
+        : null);
+    if (variant === 'cards' && selfEntityId) {
+      list = list.filter((e) => e.id !== selfEntityId);
+    }
+
+    setEntities(list);
+    setLinkedEntity(linked);
+  };
+
+  useEffect(() => {
+    refreshEntities();
+    const onUpdated = () => refreshEntities();
+    window.addEventListener('nexus_entities_updated', onUpdated);
+    return () => window.removeEventListener('nexus_entities_updated', onUpdated);
+  }, [
+    userProfile?.id,
+    userProfile?.linked_entity_id,
+    effectiveProfile?.id,
+    effectiveProfile?.owner_id,
+    effectiveProfile?.linked_entity_id,
+    isOwnProfile,
+    variant,
+  ]);
+
+  if (variant === 'cards') {
+    if (entities.length === 0) return null;
+
+    return (
+      <div className="mt-4 text-left">
+        <div className="flex items-center justify-between mb-2 pb-1 border-b border-zinc-800/80">
+          <span className="text-[10px] font-mono font-black text-amber-300 uppercase tracking-widest flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
+            Public Pages & Entities
+          </span>
+          <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider font-semibold">
+            {entities.length} {entities.length === 1 ? 'Page' : 'Pages'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+          {entities.map((ent) => {
+            const catMeta = ENTITY_CATEGORY_META[ent.category] || ENTITY_CATEGORY_META.festival;
+            const editions = ent.category === 'festival' ? getEditionsForEntity(ent.id) : [];
+            const primaryEdition = editions[0] || null;
+            const lineupCount = primaryEdition ? getLineupForEdition(primaryEdition.id).length : 0;
+            const subtitle =
+              ent.category === 'festival' && editions.length > 0
+                ? `${editions.length} ${editions.length === 1 ? 'Edition' : 'Editions'} • ${lineupCount} Bands`
+                : ent.location || `@${ent.slug}`;
+
+            return (
+              <div
+                key={`ent-mini-${ent.id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openTaggedBandOrEntityProfile(ent, triggerNotification);
+                }}
+                className="p-1.5 sm:p-2 bg-gradient-to-r from-zinc-900/90 to-zinc-950 border border-zinc-800 hover:border-amber-400/80 rounded-lg sm:rounded-xl transition-all cursor-pointer group relative overflow-hidden flex items-center gap-1.5 sm:gap-2.5 shadow-md hover:shadow-amber-950/30 hover:scale-[1.01]"
+              >
+                <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-md sm:rounded-lg bg-zinc-950 border border-zinc-700/60 overflow-hidden shrink-0 group-hover:border-amber-400/80 transition-colors shadow-inner flex items-center justify-center">
+                  {ent.avatar_url ? (
+                    <img
+                      src={ent.avatar_url}
+                      alt={ent.display_name}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <span className="text-sm sm:text-base">{catMeta.icon}</span>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1">
+                    <span className={`text-[7px] sm:text-[8px] font-mono font-black uppercase px-1 sm:px-1.5 py-0.2 rounded border ${catMeta.badgeBg} ${catMeta.badgeText} ${catMeta.badgeBorder}`}>
+                      {catMeta.icon} {catMeta.shortLabel}
+                    </span>
+                  </div>
+                  <h5 className="text-[10px] sm:text-xs font-black text-white group-hover:text-amber-300 truncate tracking-tight mt-0.5 font-display">
+                    {ent.display_name}
+                  </h5>
+                  <p className="text-[7.5px] sm:text-[9px] font-mono text-zinc-400 truncate leading-tight">
+                    {subtitle}
+                  </p>
+                </div>
+
+                <div className="shrink-0 pr-0.5 sm:pr-1 text-zinc-500 group-hover:text-amber-300 transition-colors text-[10px] sm:text-xs font-bold hidden xs:block sm:block">
+                  →
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 bg-zinc-950/90 border border-zinc-800/90 rounded-xl p-3.5 space-y-3 text-left">
+      {/* Header Row */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-amber-400 shrink-0" />
+          <div>
+            <h4 className="text-[11px] font-mono font-black uppercase tracking-widest text-white flex items-center gap-1.5">
+              <span>Public Pages & Festival Entities</span>
+              <span className="text-amber-400 font-bold">({entities.length})</span>
+            </h4>
+            <p className="text-[9.5px] font-mono text-zinc-400">
+              Festivals, Labels/Distros, Booking Collectives & Press Pages
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Optional Promoter Workspace Pointer/Reference Model Banner */}
+      {showPromoterWorkspacePointer && (
+        <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-amber-300 uppercase">
+              <Link2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>Promoter Workspace Public Brand Pointer (linked_entity_id)</span>
+            </div>
+            {linkedEntity ? (
+              <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold">
+                LINKED: @{linkedEntity.slug}
+              </span>
+            ) : (
+              <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
+                UNLINKED
+              </span>
+            )}
+          </div>
+          <p className="text-[10px] font-mono text-zinc-400 leading-relaxed">
+            Workspaces read public branding and festival editions directly from <code className="text-amber-300">linked_entity_id</code> without duplicating or migrating posts or followers.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <select
+              value={linkedEntity?.id || ''}
+              onChange={async (e) => {
+                const nextId = e.target.value || null;
+                await linkEntityToPromoterWorkspace(nextId, userProfile, setUserProfile);
+                refreshEntities();
+                triggerNotification?.(
+                  nextId
+                    ? '🔗 Linked Promoter Workspace to public entity via linked_entity_id!'
+                    : 'Unlinked public entity from Promoter Workspace.'
+                );
+              }}
+              className="flex-1 min-w-[200px] bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white cursor-pointer"
+            >
+              <option value="">-- Select Public Entity to Link to Workspace --</option>
+              {entities.map((ent) => (
+                <option key={ent.id} value={ent.id}>
+                  {ENTITY_CATEGORY_META[ent.category]?.icon || '🎪'} {ent.display_name} (@{ent.slug})
+                </option>
+              ))}
+            </select>
+            {linkedEntity && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await linkEntityToPromoterWorkspace(null, userProfile, setUserProfile);
+                  refreshEntities();
+                  triggerNotification?.('Unlinked public entity pointer from Promoter Workspace.');
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950/60 border border-zinc-700 hover:border-rose-500/40 text-zinc-300 hover:text-rose-300 text-[10px] font-mono font-bold uppercase flex items-center gap-1 cursor-pointer"
+              >
+                <Unlink className="w-3 h-3" />
+                <span>Unlink</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Entities List or Empty CTA Card */}
+      {entities.length === 0 ? (
+        <div className="p-4 rounded-xl bg-zinc-900/50 border border-dashed border-zinc-800 text-center space-y-3">
+          <p className="text-xs font-mono font-bold text-zinc-300">
+            No Public Pages or Festival Entities Created Yet
+          </p>
+          <p className="text-[10px] font-mono text-zinc-500 max-w-md mx-auto">
+            Create a public Festival, Record Label/Distro, Booking Collective, or Media page to post updates and build interactive festival lineups.
+          </p>
+          {isOwnProfile && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingEntity(null);
+                setShowCreateModal(true);
+              }}
+              className="w-full py-3 rounded-xl bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/60 hover:border-amber-400 text-amber-300 font-mono font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-[0.99]"
+            >
+              <Plus className="w-4 h-4 text-amber-400" />
+              <span>+ CREATE PUBLIC PAGE OR ENTITY</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {entities.map((ent) => {
+            const catMeta = ENTITY_CATEGORY_META[ent.category] || ENTITY_CATEGORY_META.festival;
+            const editions = ent.category === 'festival' ? getEditionsForEntity(ent.id) : [];
+            const primaryEdition = editions[0] || null;
+            const lineupCount = primaryEdition ? getLineupForEdition(primaryEdition.id).length : 0;
+            const isExpanded = expandedFestivalEntityId === ent.id;
+
+            return (
+              <div
+                key={ent.id}
+                className="rounded-xl bg-zinc-900/60 border border-zinc-800/90 hover:border-zinc-700 p-3 transition-all space-y-2.5"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openTaggedBandOrEntityProfile(ent, triggerNotification);
+                    }}
+                    className="flex items-center gap-2.5 min-w-0 cursor-pointer group"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-zinc-950 border border-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
+                      {ent.avatar_url ? (
+                        <img
+                          src={ent.avatar_url}
+                          alt={ent.display_name}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span className="text-base">{catMeta.icon}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-black uppercase text-white group-hover:text-amber-300 transition-colors truncate">
+                          {ent.display_name}
+                        </span>
+                        <span
+                          className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase ${catMeta.badgeBg} ${catMeta.badgeText} ${catMeta.badgeBorder}`}
+                        >
+                          {catMeta.icon} {catMeta.shortLabel}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-400 truncate mt-0.5">
+                        <span className="text-amber-300/90">@{ent.slug}</span>
+                        {ent.location && (
+                          <span className="inline-flex items-center gap-0.5">
+                            <MapPin className="w-2.5 h-2.5 text-rose-400" />
+                            {ent.location}
+                          </span>
+                        )}
+                        {ent.category === 'festival' && (
+                          <span className="text-emerald-400 font-bold">
+                            • {editions.length} {editions.length === 1 ? 'Edition' : 'Editions'} ({lineupCount} Bands)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Entity Action Buttons */}
+                  <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                    {ent.category === 'festival' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedFestivalEntityId(isExpanded ? null : ent.id);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-mono font-bold text-[9.5px] uppercase flex items-center gap-1 cursor-pointer"
+                        >
+                          <Calendar className="w-3 h-3 text-amber-400" />
+                          <span>{isExpanded ? 'Hide Lineup' : 'View Billing'}</span>
+                          {isExpanded ? (
+                            <ChevronUp className="w-3 h-3" />
+                          ) : (
+                            <ChevronDown className="w-3 h-3" />
+                          )}
+                        </button>
+
+                        {isOwnProfile && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLineupModalEntity(ent);
+                              setLineupModalEditionId(primaryEdition?.id);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-mono font-bold text-[9.5px] uppercase flex items-center gap-1 cursor-pointer"
+                          >
+                            <Sparkles className="w-3 h-3 text-amber-400" />
+                            <span>Manage Lineup</span>
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {isOwnProfile && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingEntity(ent);
+                            setShowCreateModal(true);
+                          }}
+                          className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+                          title="Edit Public Entity"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Are you sure you want to delete public entity "${ent.display_name}"?`)) {
+                              await deleteNetworkEntity(ent.id);
+                              refreshEntities();
+                            }
+                          }}
+                          className="p-1.5 rounded-lg bg-zinc-950 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-500/50 text-zinc-400 hover:text-rose-300 cursor-pointer"
+                          title="Delete Public Entity"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openTaggedBandOrEntityProfile(ent, triggerNotification);
+                      }}
+                      className="p-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+                      title="Open Public Entity Page"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expandable Interactive Festival Lineup Poster Card */}
+                {ent.category === 'festival' && isExpanded && (
+                  <div className="pt-2 border-t border-zinc-800/80">
+                    <FestivalLineupCard
+                      entityId={ent.id}
+                      editionId={primaryEdition?.id}
+                      isEditable={isOwnProfile}
+                      onEditLineup={(entityObj, editionObj) => {
+                        setLineupModalEntity(entityObj);
+                        setLineupModalEditionId(editionObj.id);
+                      }}
+                      triggerNotification={triggerNotification}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {isOwnProfile && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingEntity(null);
+                setShowCreateModal(true);
+              }}
+              className="w-full py-3 rounded-xl bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/60 hover:border-amber-400 text-amber-300 font-mono font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-[0.99] mt-2"
+            >
+              <Plus className="w-4 h-4 text-amber-400" />
+              <span>+ CREATE PUBLIC PAGE OR ENTITY</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Modals */}
+      <CreateEntityModal
+        isOpen={showCreateModal}
+        onClose={() => {
+          setShowCreateModal(false);
+          setEditingEntity(null);
+        }}
+        userProfile={userProfile}
+        initialEntity={editingEntity}
+        onEntityCreated={(created, createdEditionId) => {
+          refreshEntities();
+          onSelectPostAsEntity?.(created);
+          if (created.category === 'festival' && createdEditionId) {
+            setLineupModalEntity(created);
+            setLineupModalEditionId(createdEditionId);
+          }
+        }}
+        triggerNotification={triggerNotification}
+      />
+
+      <FestivalLineupEditorModal
+        isOpen={Boolean(lineupModalEntity)}
+        onClose={() => {
+          setLineupModalEntity(null);
+          setLineupModalEditionId(undefined);
+        }}
+        entity={lineupModalEntity}
+        initialEditionId={lineupModalEditionId}
+        onSaved={() => {
+          refreshEntities();
+        }}
+        triggerNotification={triggerNotification}
+      />
+    </div>
+  );
+};
+
+export default AffiliatedEntitiesSection;

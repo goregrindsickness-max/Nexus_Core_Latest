@@ -1,0 +1,65 @@
+{
+  "comments": {
+    "5f83c8cf-d550-4d83-8f3d-936ec1e372ff": [
+      {
+        "id": "e4b2d31c-8b89-4b36-97d8-f58c7340b12a",
+        "post_id": "5f83c8cf-d550-4d83-8f3d-936ec1e372ff",
+        "user_id": "5403162d-1947-43aa-b5f6-38a1bd2a1b80",
+        "username": "Miguel Goregrinder Medina",
+        "author": "Miguel Goregrinder Medina",
+        "text": "Underground signals received loud and clear! 🤘🔥",
+        "content": "Underground signals received loud and clear! 🤘🔥",
+        "parent_comment_id": null,
+        "created_at": "2026-10-14T03:22:15.000Z",
+        "time": "Oct 14, 03:22",
+        "timeAgo": "10 days ago",
+        "timestamp": "2026-10-14T03:22:15.000Z",
+        "updated_at": "2026-10-23T20:56:28.125Z",
+        "edited": true
+      }
+    ]
+  },
+  "reactions": {
+    "5f83c8cf-d550-4d83-8f3d-936ec1e372ff": {
+      "reactions": {
+        "likes": 0,
+        "horns": 1,
+        "hype": 1,
+        "brutal": 0,
+        "respect": 0,
+        "crushed": 0
+      },
+      "likes_count": 0,
+      "user_reactions": {
+        "5403162d-1947-43aa-b5f6-38a1bd2a1b80": {
+          "hype": true
+        },
+        "24523979-7f72-422b-8fb6-85634345d81c": {
+          "horns": true
+        },
+        "band:cbddb810-259b-4230-9968-3d402dfdb872": {
+          "brutal": false
+        }
+      },
+      "users": {
+        "5403162d-1947-43aa-b5f6-38a1bd2a1b80": {
+          "userId": "5403162d-1947-43aa-b5f6-38a1bd2a1b80",
+          "userName": "Miguel \"Goregrinder\" Medina",
+          "userAvatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80",
+          "userRole": "Industry Pro",
+          "reactionType": "hype",
+          "reactedAt": "2026-10-14T03:22:15.000Z"
+        },
+        "24523979-7f72-422b-8fb6-85634345d81c": {
+          "userId": "24523979-7f72-422b-8fb6-85634345d81c",
+          "userName": "Gorespawn138",
+          "userAvatar": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80",
+          "userRole": "Band / Artist",
+          "reactionType": "horns",
+          "reactedAt": "2026-10-13T20:10:00.000Z"
+        }
+      },
+      "updatedAt": 1792790327260
+    }
+  }
+}

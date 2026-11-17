@@ -1,0 +1,3599 @@
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  X,
+  ArrowLeft,
+  MapPin,
+  Calendar,
+  Ticket,
+  Music,
+  Navigation,
+  Search,
+  SlidersHorizontal,
+  ExternalLink,
+  ShieldCheck,
+  Building,
+  Clock,
+  Sparkles,
+  Map as MapIcon,
+  List,
+  Flame,
+  Radio,
+  Share2,
+  DollarSign,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Filter,
+  Database,
+  DownloadCloud,
+  RefreshCw,
+  CheckCircle2,
+  History,
+  Archive,
+  Tag,
+  Info,
+  Layers,
+  Award,
+  Edit3,
+  Trash2
+} from 'lucide-react';
+import { getSupabase } from '../../../supabase';
+import { showsStore } from '../../../utils/indexedDB';
+import { resolveLocationCoordinates } from '../../../lib/geoResolution';
+import { isPastShowDate, formatShowDate } from '../../../utils/socialFeedUtils';
+import { isShowEmbargoedOrDraft } from '../../../utils/showDisplayUtils';
+import { tourPackageManager } from '../../../lib/tourPackageManager';
+import { authFetch } from '../../../utils/apiConfig';
+
+export interface EventsDirectoryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  selectedMapEvent: any;
+  setSelectedMapEvent: (evt: any) => void;
+  selectedCityFilter: string;
+  setSelectedCityFilter: (city: string) => void;
+  mapFilterGenre: string;
+  setMapFilterGenre: (genre: string) => void;
+  userProfile: any;
+  promoterProfile?: any;
+  initialViewMode?: 'single' | 'tours' | 'community_archives' | 'list' | 'map';
+  triggerNotification?: (msg: string) => void;
+  liveEvents?: any[];
+  setLiveEvents?: React.Dispatch<React.SetStateAction<any[]>>;
+  shows?: any[];
+  setShows?: React.Dispatch<React.SetStateAction<any[]>>;
+  onImportShowsFromTable?: () => Promise<void> | void;
+  onOpenShowCreator?: () => void;
+  onEditShow?: (showToEdit: any) => void;
+  onDeleteShow?: (showOrId: any) => Promise<void> | void;
+  onSelectEvent?: (evt: any) => void;
+  onOpenEventPage?: (evt: any) => void;
+}
+
+/**
+ * Determines whether a show was personally booked by the active promoter/user
+ * vs being a community submitted show or DIY scene gig.
+ */
+export const checkIsPersonallyBooked = (show: any, userProfile?: any, promoterProfile?: any): boolean => {
+  if (!show) return false;
+  // If explicitly flagged as a community show, it was NOT personally booked
+  if (show.is_community_submitted === true || show.is_community === true || show.source === 'community') {
+    return false;
+  }
+  const uId = userProfile?.id;
+  const pId = promoterProfile?.id;
+  if (uId && (show.creator_id === uId || show.promoter_id === uId || show.user_id === uId)) {
+    return true;
+  }
+  if (pId && (show.creator_id === pId || show.promoter_id === pId)) {
+    return true;
+  }
+  if (show.is_promoter_show === true || show.booked_personally === true) {
+    return true;
+  }
+  if (show.festival_name && String(show.festival_name).toLowerCase().includes('domination')) {
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Checks whether a show is embargoed, private draft, or currently in confirmation
+ * (e.g., Molested Divinity shows which are embargoed and unannounced).
+ */
+export const isEmbargoedShow = (show: any): boolean => {
+  if (!show) return false;
+  return isShowEmbargoedOrDraft(show, tourPackageManager.getAllTours());
+};
+
+// Color palette themes for distinct show card borders (underground / cyberpunk / scene aesthetic)
+export const SHOW_BORDER_THEMES = [
+  {
+    name: 'cyan',
+    border: 'border-cyan-500/55 hover:border-cyan-400',
+    selectedBorder: 'border-cyan-400 ring-2 ring-cyan-400/80 shadow-[0_0_24px_rgba(6,182,212,0.35)] bg-gradient-to-br from-cyan-950/30 to-[#090b10]',
+    glow: 'hover:shadow-[0_0_18px_rgba(6,182,212,0.22)]',
+    tagBg: 'bg-cyan-950/60 border-cyan-800/80 text-cyan-300',
+  },
+  {
+    name: 'fuchsia',
+    border: 'border-fuchsia-500/55 hover:border-fuchsia-400',
+    selectedBorder: 'border-fuchsia-400 ring-2 ring-fuchsia-400/80 shadow-[0_0_24px_rgba(217,70,239,0.35)] bg-gradient-to-br from-fuchsia-950/30 to-[#090b10]',
+    glow: 'hover:shadow-[0_0_18px_rgba(217,70,239,0.22)]',
+    tagBg: 'bg-fuchsia-950/60 border-fuchsia-800/80 text-fuchsia-300',
+  },
+  {
+    name: 'lime',
+    border: 'border-lime-500/55 hover:border-lime-400',
+    selectedBorder: 'border-lime-400 ring-2 ring-lime-400/80 shadow-[0_0_24px_rgba(132,204,22,0.35)] bg-gradient-to-br from-lime-950/30 to-[#090b10]',
+    glow: 'hover:shadow-[0_0_18px_rgba(132,204,22,0.22)]',
+    tagBg: 'bg-lime-950/60 border-lime-800/80 text-lime-300',
+  },
+  {
+    name: 'amber',
+    border: 'border-amber-500/55 hover:border-amber-400',
+    selectedBorder: 'border-amber-400 ring-2 ring-amber-400/80 shadow-[0_0_24px_rgba(245,158,11,0.35)] bg-gradient-to-br from-amber-950/30 to-[#090b10]',
+    glow: 'hover:shadow-[0_0_18px_rgba(245,158,11,0.22)]',
+    tagBg: 'bg-amber-950/60 border-amber-800/80 text-amber-300',
+  },
+  {
+    name: 'rose',
+    border: 'border-rose-500/55 hover:border-rose-400',
+    selectedBorder: 'border-rose-400 ring-2 ring-rose-400/80 shadow-[0_0_24px_rgba(244,63,94,0.35)] bg-gradient-to-br from-rose-950/30 to-[#090b10]',
+    glow: 'hover:shadow-[0_0_18px_rgba(244,63,94,0.22)]',
+    tagBg: 'bg-rose-950/60 border-rose-800/80 text-rose-300',
+  },
+  {
+    name: 'violet',
+    border: 'border-violet-500/55 hover:border-violet-400',
+    selectedBorder: 'border-violet-400 ring-2 ring-violet-400/80 shadow-[0_0_24px_rgba(139,92,246,0.35)] bg-gradient-to-br from-violet-950/30 to-[#090b10]',
+    glow: 'hover:shadow-[0_0_18px_rgba(139,92,246,0.22)]',
+    tagBg: 'bg-violet-950/60 border-violet-800/80 text-violet-300',
+  },
+  {
+    name: 'emerald',
+    border: 'border-emerald-500/55 hover:border-emerald-400',
+    selectedBorder: 'border-emerald-400 ring-2 ring-emerald-400/80 shadow-[0_0_24px_rgba(16,185,129,0.35)] bg-gradient-to-br from-emerald-950/30 to-[#090b10]',
+    glow: 'hover:shadow-[0_0_18px_rgba(16,185,129,0.22)]',
+    tagBg: 'bg-emerald-950/60 border-emerald-800/80 text-emerald-300',
+  },
+  {
+    name: 'orange',
+    border: 'border-orange-500/55 hover:border-orange-400',
+    selectedBorder: 'border-orange-400 ring-2 ring-orange-400/80 shadow-[0_0_24px_rgba(249,115,22,0.35)] bg-gradient-to-br from-orange-950/30 to-[#090b10]',
+    glow: 'hover:shadow-[0_0_18px_rgba(249,115,22,0.22)]',
+    tagBg: 'bg-orange-950/60 border-orange-800/80 text-orange-300',
+  },
+  {
+    name: 'teal',
+    border: 'border-teal-500/55 hover:border-teal-400',
+    selectedBorder: 'border-teal-400 ring-2 ring-teal-400/80 shadow-[0_0_24px_rgba(20,184,166,0.35)] bg-gradient-to-br from-teal-950/30 to-[#090b10]',
+    glow: 'hover:shadow-[0_0_18px_rgba(20,184,166,0.22)]',
+    tagBg: 'bg-teal-950/60 border-teal-800/80 text-teal-300',
+  },
+  {
+    name: 'indigo',
+    border: 'border-indigo-500/55 hover:border-indigo-400',
+    selectedBorder: 'border-indigo-400 ring-2 ring-indigo-400/80 shadow-[0_0_24px_rgba(99,102,241,0.35)] bg-gradient-to-br from-indigo-950/30 to-[#090b10]',
+    glow: 'hover:shadow-[0_0_18px_rgba(99,102,241,0.22)]',
+    tagBg: 'bg-indigo-950/60 border-indigo-800/80 text-indigo-300',
+  },
+];
+
+export const getShowBorderTheme = (idOrIndex: string | number) => {
+  let num = 0;
+  if (typeof idOrIndex === 'number') {
+    num = idOrIndex;
+  } else if (typeof idOrIndex === 'string') {
+    for (let i = 0; i < idOrIndex.length; i++) {
+      num = (num * 31 + idOrIndex.charCodeAt(i)) % 10000;
+    }
+  }
+  return SHOW_BORDER_THEMES[Math.abs(num) % SHOW_BORDER_THEMES.length];
+};
+
+/**
+ * Normalizes any show table row into a standardized Event Directory gig object
+ */
+export const normalizeShowToEventDirectoryItem = (show: any, idx: number = 0, userProfile?: any, promoterProfile?: any) => {
+  let extraNotes: any = {};
+  if (show.additional_notes) {
+    try {
+      extraNotes = typeof show.additional_notes === 'string' ? JSON.parse(show.additional_notes) : show.additional_notes;
+    } catch (_) {}
+  }
+
+  const isGeneric = (val?: any) => {
+    if (!val || typeof val !== 'string') return true;
+    const lower = val.trim().toLowerCase();
+    return (
+      !lower ||
+      lower === 'tour show' ||
+      lower === 'live show' ||
+      lower === 'show' ||
+      lower === 'gig' ||
+      lower === 'live act' ||
+      lower === 'underground show'
+    );
+  };
+
+  const rawHeadliner = show.headliner || extraNotes.headliner || show.band_name || extraNotes.band_name;
+  const tourName = show.tour_name || extraNotes.tour_name || show.festival_name || extraNotes.festival_name;
+
+  let headliner = 'Live Act';
+  if (!isGeneric(rawHeadliner)) {
+    headliner = rawHeadliner.trim();
+  } else if (!isGeneric(tourName)) {
+    headliner = tourName.trim();
+  } else if (!isGeneric(show.artist || show.artist_name)) {
+    headliner = (show.artist || show.artist_name).trim();
+  } else if (!isGeneric(show.name) && !show.name.toLowerCase().includes('at live venue')) {
+    headliner = show.name.trim();
+  } else if (!isGeneric(show.show_name)) {
+    headliner = show.show_name.trim();
+  } else {
+    headliner = 'Live Act';
+  }
+
+  const resolvedTourName = !isGeneric(tourName) && tourName.trim().toLowerCase() !== headliner.toLowerCase() ? tourName.trim() : undefined;
+
+  const venue = (show.venue || show.venue_name || (show.name && !show.name.includes('Live') ? show.name : 'Underground Venue')).trim();
+  const rawCity = show.city || 'Tour Stop';
+  const rawState = show.state_province || '';
+  const city = rawState ? `${rawCity}, ${rawState}` : rawCity;
+  
+  const isPersonallyBooked = checkIsPersonallyBooked(show, userProfile, promoterProfile);
+  const isCommunityShow = !isPersonallyBooked || Boolean(show.is_community_submitted || show.is_community || show.source === 'community');
+
+  // Format date display and calculate isPast accurately
+  let dateDisplay = 'Upcoming';
+  const rawDate = show.date || show.show_date;
+  let isPast = isPastShowDate(String(rawDate || ''));
+
+  if (rawDate) {
+    try {
+      const dateStr = String(rawDate).split('T')[0];
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const parsedDate = new Date(year, month, day);
+        const today = new Date();
+        const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const tomorrowNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
+        if (parsedDate.getTime() === todayNorm.getTime()) {
+          dateDisplay = 'Tonight';
+        } else if (parsedDate.getTime() === tomorrowNorm.getTime()) {
+          dateDisplay = 'Tomorrow';
+        } else if (parsedDate.getTime() < todayNorm.getTime()) {
+          isPast = true;
+          dateDisplay = parsedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+        } else {
+          dateDisplay = parsedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+        }
+      } else {
+        dateDisplay = String(rawDate);
+      }
+    } catch {
+      dateDisplay = String(rawDate);
+    }
+  }
+
+  const isArchived = isPast || Boolean(show.additional_notes && String(show.additional_notes).includes('"archived":true'));
+
+  const doorsVal = show.doors_time;
+  const timeDisplay = doorsVal
+    ? (String(doorsVal).toLowerCase().includes('door') ? doorsVal : `Doors ${doorsVal}`)
+    : (show.set_time ? `Set ${show.set_time}` : (show.time || 'Doors 7:30 PM'));
+
+  let priceDisplay = show.price;
+  if (!priceDisplay) {
+    if (show.day_of_show_price && show.presale_price) {
+      priceDisplay = `$${show.presale_price} / $${show.day_of_show_price}`;
+    } else if (show.presale_price) {
+      priceDisplay = String(show.presale_price).startsWith('$') ? show.presale_price : `$${show.presale_price}`;
+    } else if (show.ticket_price) {
+      priceDisplay = `$${show.ticket_price}`;
+    } else if (show.day_of_show_price) {
+      priceDisplay = String(show.day_of_show_price).startsWith('$') ? show.day_of_show_price : `$${show.day_of_show_price}`;
+    } else if (show.guarantee_amount && show.guarantee_amount > 0) {
+      priceDisplay = `$${Math.min(45, Math.max(15, Math.round(show.guarantee_amount / 100)))}`;
+    } else if (show.external_ticket_url) {
+      priceDisplay = 'External Tickets';
+    } else {
+      priceDisplay = '$25';
+    }
+  }
+
+  let supportList: string[] = [];
+  if (Array.isArray(show.support)) {
+    supportList = show.support;
+  } else if (Array.isArray(show.lineup)) {
+    supportList = show.lineup.map((l: any) => typeof l === 'string' ? l : (l.band || l.name)).filter(Boolean);
+  } else if (typeof show.support === 'string' && show.support.trim()) {
+    supportList = show.support.split(',').map((s: string) => s.trim());
+  } else if (Array.isArray(show.guest_list) && show.guest_list.length > 0) {
+    supportList = show.guest_list.slice(0, 3).map((g: any) => g.name || g.contact_name).filter(Boolean);
+  }
+
+  const ticketUrl = show.ticketUrl || show.ticket_url || show.external_ticket_url || '';
+  const rawFlyerCandidate =
+    show.flyerUrl ||
+    show.flyer_url ||
+    extraNotes.flyer_url ||
+    extraNotes.flyerUrl ||
+    show.image_url ||
+    show.cover_url ||
+    show.poster_url ||
+    show.image ||
+    show.thumbnail ||
+    '';
+  const isGenericStockFlyer = (url?: string) => {
+    if (!url || typeof url !== 'string') return true;
+    const trimmed = url.trim();
+    if (!trimmed) return true;
+    return (
+      trimmed.includes('photo-1514525253161-7a46d19cd819') ||
+      trimmed.includes('photo-1470225620780-dba8ba36b745') ||
+      trimmed.includes('photo-1516450360452-9312f5e86fc7')
+    );
+  };
+  const flyerUrl = isGenericStockFlyer(rawFlyerCandidate) ? '' : String(rawFlyerCandidate).trim();
+  const genre = show.genre || (show.micro_genres && show.micro_genres.length > 0 ? show.micro_genres.join(' / ') : 'Extreme Metal / Touring Route');
+
+  // Derive coordinates accurately
+  let lat = show.venue_lat || show.lat;
+  let lng = show.venue_lng || show.lng;
+  if (!lat || !lng) {
+    const geo = resolveLocationCoordinates({
+      city: rawCity || show.city,
+      state: show.state_province || show.state,
+      venueName: venue,
+      festivalName: show.festival_name,
+      venueLat: show.venue_lat || show.lat,
+      venueLng: show.venue_lng || show.lng,
+      fallbackKey: `${rawCity || ''} ${venue || ''} ${show.id || idx}`,
+      stopIndex: idx
+    });
+    lat = geo.lat;
+    lng = geo.lng;
+  }
+
+  return {
+    ...show,
+    id: show.id || `show-table-${idx}`,
+    title: show.festival_name ? `${show.festival_name} (${venue})` : (show.name?.includes('Live') ? show.name : `${headliner} at ${venue}`),
+    headliner,
+    venue,
+    venue_name: venue,
+    venue_address: show.venue_address,
+    city,
+    state_province: show.state_province,
+    country: show.country,
+    date: dateDisplay,
+    rawDate: rawDate || show.date,
+    isPast,
+    isArchived,
+    isPersonallyBooked,
+    isCommunityShow,
+    is_community_submitted: Boolean(show.is_community_submitted || isCommunityShow),
+    tour_name: show.tour_name || show.festival_name || resolvedTourName || extraNotes.tour_name || extraNotes.tour_title,
+    festival_name: show.festival_name || resolvedTourName || show.tour_name,
+    time: timeDisplay,
+    price: priceDisplay,
+    genre,
+    support: supportList,
+    ticketUrl,
+    flyerUrl,
+    verified: true,
+    isFromShowsTable: true,
+    source: 'shows_table',
+    lat,
+    lng,
+    description: show.notes || show.description || `Official booked tour date at ${venue}. All advance sales, tour merchandise, and door entries active.`,
+    ticketsAvailable: true,
+    ticketStatus: 'active'
+  };
+};
+
+const DEFAULT_CURATED_EVENTS: any[] = [];
+
+export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
+  isOpen,
+  onClose,
+  selectedMapEvent,
+  setSelectedMapEvent,
+  selectedCityFilter,
+  setSelectedCityFilter,
+  mapFilterGenre,
+  setMapFilterGenre,
+  userProfile,
+  promoterProfile,
+  initialViewMode,
+  triggerNotification,
+  liveEvents,
+  setLiveEvents,
+  shows,
+  setShows,
+  onImportShowsFromTable,
+  onOpenShowCreator,
+  onEditShow,
+  onDeleteShow,
+  onSelectEvent,
+  onOpenEventPage
+}) => {
+  // View mode toggle: Single Shows vs Upcoming Tours vs Community Archives
+  const [viewMode, setViewMode] = useState<'single' | 'tours' | 'community_archives'>(() => {
+    if (initialViewMode === 'tours' || initialViewMode === 'map') return 'tours';
+    if (initialViewMode === 'community_archives') return 'community_archives';
+    return 'single';
+  });
+  // Community Archives 2-tab split: Single Shows vs Concluded Tours
+  const [archiveSubTab, setArchiveSubTab] = useState<'single' | 'tours'>('single');
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [expandedTourIds, setExpandedTourIds] = useState<Set<string>>(new Set());
+
+  const toggleTourExpand = useCallback((tourId: string) => {
+    setExpandedTourIds(prev => {
+      const next = new Set(prev);
+      if (next.has(tourId)) next.delete(tourId);
+      else next.add(tourId);
+      return next;
+    });
+  }, []);
+
+  // Search & Filter States (Collapsed by default for maximum show list viewability)
+  const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [archiveSearchQuery, setArchiveSearchQuery] = useState('');
+  const [archiveYearFilter, setArchiveYearFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'tonight' | 'tomorrow' | 'weekend' | 'upcoming' | 'archives'>('all');
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [ticketOnly, setTicketOnly] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [localImportedShows, setLocalImportedShows] = useState<any[]>([]);
+
+  // Calculate active filter count (excluding search query)
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedCityFilter && selectedCityFilter.toLowerCase() !== 'all') count++;
+    if (mapFilterGenre && mapFilterGenre.toLowerCase() !== 'all') count++;
+    if (dateFilter && dateFilter !== 'all' && dateFilter !== 'archives') count++;
+    if (verifiedOnly) count++;
+    if (ticketOnly) count++;
+    return count;
+  }, [selectedCityFilter, mapFilterGenre, dateFilter, verifiedOnly, ticketOnly]);
+
+  // RSVP Pit List State
+  const [rsvpedShowIds, setRsvpedShowIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('nexus_show_rsvps');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const toggleShowRsvp = (showId: string, headliner?: string) => {
+    setRsvpedShowIds(prev => {
+      const next = new Set(prev);
+      const isRsvped = next.has(showId);
+      if (isRsvped) {
+        next.delete(showId);
+        triggerNotification?.(`Removed RSVP for ${headliner || 'show'}`);
+      } else {
+        next.add(showId);
+        triggerNotification?.(`🔥 In Pit List! RSVP confirmed for ${headliner || 'show'}!`);
+      }
+      try {
+        localStorage.setItem('nexus_show_rsvps', JSON.stringify(Array.from(next)));
+      } catch (_) {}
+      return next;
+    });
+  };
+
+  // Google Calendar URL Generator
+  const getGoogleCalendarUrl = (evt: any) => {
+    if (!evt) return '#';
+    const title = encodeURIComponent(evt.title || `${evt.headliner || 'Show'} Live`);
+    const location = encodeURIComponent(`${evt.venue || ''}${evt.city ? `, ${evt.city}` : ''}`);
+    const details = encodeURIComponent(evt.description || `Live show featuring ${evt.headliner}. ${evt.ticketUrl ? `Tickets: ${evt.ticketUrl}` : ''}`);
+    
+    let datePart = '';
+    const rawDate = evt.rawDate || evt.show_date || evt.date;
+    if (rawDate && /\d{4}-\d{2}-\d{2}/.test(String(rawDate))) {
+      datePart = String(rawDate).split('T')[0].replace(/-/g, '');
+    } else {
+      const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      datePart = today;
+    }
+    const dates = `${datePart}T200000Z/${datePart}T230000Z`;
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&location=${location}&details=${details}`;
+  };
+
+  // AI Flyer Parser Modal State
+  const [isAiFlyerModalOpen, setIsAiFlyerModalOpen] = useState(false);
+  const [aiFlyerText, setAiFlyerText] = useState('');
+  const [aiFlyerImage, setAiFlyerImage] = useState<string | null>(null);
+  const [isAiParsing, setIsAiParsing] = useState(false);
+
+  const handleParseFlyerWithAi = async () => {
+    if (!aiFlyerText.trim() && !aiFlyerImage) {
+      triggerNotification?.('⚠️ Please upload a flyer photo or paste show announcement text first.');
+      return;
+    }
+    setIsAiParsing(true);
+    try {
+      const res = await authFetch('/api/parse-show-flyer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: aiFlyerImage,
+          rawText: aiFlyerText
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        const parsed = data.data;
+        triggerNotification?.(`✨ AI Flyer parsed! Extracted "${parsed.headliner || 'Show'}" at ${parsed.venue_name || 'Venue'}.`);
+        setIsAiFlyerModalOpen(false);
+        setAiFlyerText('');
+        setAiFlyerImage(null);
+        if (onOpenShowCreator) {
+          onClose();
+          onOpenShowCreator();
+          window.dispatchEvent(new CustomEvent('nexus_prefill_show_creator', { detail: parsed }));
+        }
+      } else {
+        triggerNotification?.(`⚠️ AI Parsing notice: ${data.error || 'Check input text'}`);
+      }
+    } catch (err: any) {
+      triggerNotification?.(`❌ Error parsing flyer: ${err.message || err}`);
+    } finally {
+      setIsAiParsing(false);
+    }
+  };
+
+  // Open Full Event Companion Page handler
+  const handleOpenFullEventPage = (event: any) => {
+    if (!event) return;
+    if (onOpenEventPage) {
+      onOpenEventPage(event);
+    }
+    // Also dispatch custom window event for universal deep-linking across the app
+    window.dispatchEvent(new CustomEvent('open-event-companion', { detail: event }));
+    triggerNotification?.(`Opening event page: ${event.title || event.headliner || 'Show'}`);
+  };
+
+  // Handler to permanently delete a show from Community Archives
+  const handleDeleteArchiveShow = useCallback(async (evt: any, force: boolean = false) => {
+    if (!evt) return;
+    const showId = String(evt.id || '').trim();
+
+    if (!force && deleteConfirmId !== showId) {
+      setDeleteConfirmId(showId);
+      triggerNotification?.(`Click "Confirm Delete" to permanently remove "${evt.headliner || evt.title || 'show'}"`);
+      return;
+    }
+
+    setDeleteConfirmId(null);
+    const showTitle = evt.headliner || evt.title || evt.name || 'this archived show';
+    const hStr = String(evt.headliner || evt.title || evt.name || '').toLowerCase().trim();
+    const dStr = String(evt.date || evt.rawDate || '').toLowerCase().trim();
+    const sig = `${hStr}__${dStr}`;
+
+    // 1. Delete from IndexedDB store
+    try {
+      if (showId) await showsStore.removeItem(showId);
+    } catch (_) {}
+
+    // 2. Persistent localStorage blacklists
+    try {
+      const rawDel = localStorage.getItem('nexus_deleted_community_shows');
+      const delList: string[] = rawDel ? JSON.parse(rawDel) : [];
+      if (showId && !delList.includes(showId)) delList.push(showId);
+      if (sig && !delList.includes(sig)) delList.push(sig);
+      if (hStr && !delList.includes(hStr)) delList.push(hStr);
+      localStorage.setItem('nexus_deleted_community_shows', JSON.stringify(delList));
+
+      const rawPromDel = localStorage.getItem('nexus_promoter_deleted_shows');
+      const promDelList: string[] = rawPromDel ? JSON.parse(rawPromDel) : [];
+      if (showId && !promDelList.includes(showId)) promDelList.push(showId);
+      if (sig && !promDelList.includes(sig)) promDelList.push(sig);
+      localStorage.setItem('nexus_promoter_deleted_shows', JSON.stringify(promDelList));
+    } catch (_) {}
+
+    // 3. Delete from Supabase shows table
+    try {
+      const sb = getSupabase();
+      if (sb) {
+        if (showId) await sb.from('shows').delete().eq('id', showId);
+        if (hStr) await sb.from('shows').delete().eq('headliner', evt.headliner || evt.title);
+      }
+    } catch (_) {}
+
+    // 4. Remove from internal React state
+    setLocalImportedShows(prev => prev.filter(s => s.id !== showId && String(s.headliner || '').toLowerCase().trim() !== hStr));
+
+    if (setLiveEvents) {
+      setLiveEvents((prev: any[]) => prev.filter((s: any) => s.id !== showId && String(s.headliner || '').toLowerCase().trim() !== hStr));
+    }
+    if (setShows) {
+      setShows((prev: any[]) => prev.filter((s: any) => s.id !== showId && String(s.headliner || '').toLowerCase().trim() !== hStr));
+    }
+
+    // 5. Trigger prop handlers if passed
+    if (onDeleteShow) {
+      await onDeleteShow(evt);
+    }
+
+    if (selectedMapEvent?.id === showId) {
+      setSelectedMapEvent(null);
+      setMobileDetailOpen(false);
+    }
+
+    triggerNotification?.(`🗑️ Deleted "${showTitle}" from Community Archives.`);
+  }, [deleteConfirmId, onDeleteShow, setLiveEvents, setShows, selectedMapEvent, setSelectedMapEvent, triggerNotification]);
+
+  // Handler to edit a show in Community Archives
+  const handleEditArchiveShow = useCallback((evt: any) => {
+    if (!evt) return;
+    if (onEditShow) {
+      onEditShow(evt);
+    } else if (onOpenShowCreator) {
+      onOpenShowCreator();
+    }
+    triggerNotification?.(`Opening editor for "${evt.headliner || evt.title || 'Archive Show'}"`);
+  }, [onEditShow, onOpenShowCreator, triggerNotification]);
+
+  // Function to aggregate all shows directly from the database, indexedDB and props into the directory
+  const handleImportShowsFromTable = useCallback(async () => {
+    setIsImporting(true);
+    try {
+      const allExtractedShows: any[] = [];
+
+      // 1. Fetch directly from Supabase shows table
+      try {
+        const client = getSupabase();
+        if (client) {
+          const { data: dbShows, error: dbErr } = await client
+            .from('shows')
+            .select('*')
+            .order('date', { ascending: true })
+            .range(0, 4999);
+
+          if (!dbErr && dbShows && Array.isArray(dbShows) && dbShows.length > 0) {
+            allExtractedShows.push(...dbShows);
+          }
+        }
+      } catch (err) {
+        console.warn('Direct Supabase fetch for shows table had an issue:', err);
+      }
+
+      // 2. Fetch from IndexedDB showsStore if available
+      try {
+        if (showsStore) {
+          const idbList: any[] = [];
+          await showsStore.iterate((value: any) => {
+            if (Array.isArray(value)) {
+              idbList.push(...value);
+            } else if (value && typeof value === 'object') {
+              idbList.push(value);
+            }
+          });
+          if (idbList.length > 0) {
+            allExtractedShows.push(...idbList);
+          }
+        }
+      } catch (err) {
+        console.warn('IndexedDB shows store read error:', err);
+      }
+
+      // 3. If props.shows provided, include them as well
+      if (shows && Array.isArray(shows) && shows.length > 0) {
+        allExtractedShows.push(...shows);
+      }
+
+      // 3b. Also read extended show metadata from localStorage so locally attached flyers are preserved
+      try {
+        const rawExt = localStorage.getItem('nexus_core_shows_extended');
+        if (rawExt) {
+          const parsedExt = JSON.parse(rawExt);
+          if (parsedExt && typeof parsedExt === 'object') {
+            allExtractedShows.push(...Object.values(parsedExt));
+          }
+        }
+      } catch (_) {}
+
+      // 4. Deduplicate extracted shows by id or headliner + date, merging attached flyers from any duplicate copy
+      const dedupedShows: any[] = [];
+      const sigToIndexMap = new Map<string, number>();
+
+      allExtractedShows.forEach((s, idx) => {
+        if (!s || isEmbargoedShow(s)) return;
+        const normalized = normalizeShowToEventDirectoryItem(s, idx);
+        const sId = String(normalized.id || s.id || '').toLowerCase().trim();
+        const sH = String(normalized.headliner || s.headliner || s.band_name || s.name || s.show_name || '').toLowerCase().trim();
+        const sD = String(normalized.rawDate || s.date || s.show_date || '').toLowerCase().trim();
+        const idSig = sId ? `id_${sId}` : '';
+        const hdSig = sH && sD ? `h_${sH}__${sD}` : '';
+
+        const existingIdx =
+          (idSig && sigToIndexMap.has(idSig) ? sigToIndexMap.get(idSig) : undefined) ??
+          (hdSig && sigToIndexMap.has(hdSig) ? sigToIndexMap.get(hdSig) : undefined);
+
+        if (existingIdx === undefined) {
+          const newIdx = dedupedShows.length;
+          dedupedShows.push(normalized);
+          if (idSig) sigToIndexMap.set(idSig, newIdx);
+          if (hdSig) sigToIndexMap.set(hdSig, newIdx);
+        } else {
+          const existing = dedupedShows[existingIdx];
+          if (!existing.flyerUrl && normalized.flyerUrl) {
+            existing.flyerUrl = normalized.flyerUrl;
+            existing.flyer_url = normalized.flyerUrl;
+          }
+          if ((!existing.support || existing.support.length === 0) && normalized.support?.length > 0) {
+            existing.support = normalized.support;
+          }
+          if (!existing.ticketUrl && normalized.ticketUrl) {
+            existing.ticketUrl = normalized.ticketUrl;
+          }
+        }
+      });
+
+      setLocalImportedShows(dedupedShows);
+
+      // If parent onImportShowsFromTable callback is provided, invoke it
+      if (onImportShowsFromTable) {
+        await onImportShowsFromTable();
+      }
+
+      // Update parent liveEvents if setLiveEvents is available
+      if (setLiveEvents && dedupedShows.length > 0) {
+        setLiveEvents((prev: any[]) => {
+          const currentList = Array.isArray(prev) ? prev.filter(e => !isEmbargoedShow(e)) : [];
+          const existingSigs = new Set(
+            currentList.map(e => String(e.id || '').toLowerCase().trim())
+          );
+          const toAdd = dedupedShows.filter(
+            ds => !isEmbargoedShow(ds) && !existingSigs.has(String(ds.id).toLowerCase().trim())
+          );
+          return [...currentList, ...toAdd];
+        });
+      }
+    } catch (err) {
+      console.error('Error aggregating shows table:', err);
+    } finally {
+      setIsImporting(false);
+    }
+  }, [shows, setLiveEvents, onImportShowsFromTable]);
+
+  // Auto-run show table import when modal opens if we don't have shows yet
+  useEffect(() => {
+    if (isOpen) {
+      handleImportShowsFromTable();
+    }
+  }, [isOpen]);
+
+  // Normalize incoming events combining database/props events, shows table items, and curated events
+  const normalizedEvents = useMemo(() => {
+    const rawList = (liveEvents && liveEvents.length > 0) ? liveEvents.filter(e => !isEmbargoedShow(e)) : [];
+    
+    // Merge liveEvents with localImportedShows, props.shows, and extended localStorage metadata
+    const combined = [...rawList];
+    const sigToCombinedIdx = new Map<string, number>();
+
+    const registerOrMergeShow = (candidate: any) => {
+      if (!candidate || isEmbargoedShow(candidate)) return;
+      const idStr = String(candidate.id || '').toLowerCase().trim();
+      const hStr = String(candidate.headliner || candidate.title || candidate.name || '').toLowerCase().trim();
+      const dStr = String(candidate.rawDate || candidate.show_date || candidate.date || '').toLowerCase().trim();
+      const idKey = idStr ? `id_${idStr}` : '';
+      const sigKey = hStr && dStr ? `sig_${hStr}_${dStr}` : '';
+
+      const existingIdx =
+        (idKey && sigToCombinedIdx.has(idKey) ? sigToCombinedIdx.get(idKey) : undefined) ??
+        (sigKey && sigToCombinedIdx.has(sigKey) ? sigToCombinedIdx.get(sigKey) : undefined);
+
+      const candFlyer = candidate.flyerUrl || candidate.flyer_url || candidate.image_url || candidate.cover_url || candidate.image || candidate.thumbnail || '';
+      const validCandFlyer =
+        candFlyer &&
+        !String(candFlyer).includes('photo-1514525253161-7a46d19cd819') &&
+        !String(candFlyer).includes('photo-1470225620780-dba8ba36b745') &&
+        !String(candFlyer).includes('photo-1516450360452-9312f5e86fc7')
+          ? String(candFlyer).trim()
+          : '';
+
+      if (existingIdx === undefined) {
+        const nextIdx = combined.length;
+        combined.push(validCandFlyer ? { ...candidate, flyerUrl: validCandFlyer, flyer_url: validCandFlyer } : candidate);
+        if (idKey) sigToCombinedIdx.set(idKey, nextIdx);
+        if (sigKey) sigToCombinedIdx.set(sigKey, nextIdx);
+      } else {
+        const target = combined[existingIdx];
+        const targetFlyer = target.flyerUrl || target.flyer_url || '';
+        const hasValidTargetFlyer =
+          targetFlyer &&
+          !String(targetFlyer).includes('photo-1514525253161-7a46d19cd819') &&
+          !String(targetFlyer).includes('photo-1470225620780-dba8ba36b745') &&
+          !String(targetFlyer).includes('photo-1516450360452-9312f5e86fc7');
+        if (!hasValidTargetFlyer && validCandFlyer) {
+          combined[existingIdx] = {
+            ...target,
+            flyerUrl: validCandFlyer,
+            flyer_url: validCandFlyer,
+          };
+        }
+      }
+    };
+
+    // Index initial liveEvents
+    combined.forEach((evt, i) => {
+      const idStr = String(evt.id || '').toLowerCase().trim();
+      const hStr = String(evt.headliner || evt.title || evt.name || '').toLowerCase().trim();
+      const dStr = String(evt.rawDate || evt.show_date || evt.date || '').toLowerCase().trim();
+      if (idStr) sigToCombinedIdx.set(`id_${idStr}`, i);
+      if (hStr && dStr) sigToCombinedIdx.set(`sig_${hStr}_${dStr}`, i);
+    });
+
+    // Merge locally imported shows
+    localImportedShows.forEach((showItem) => {
+      registerOrMergeShow(showItem);
+    });
+
+    // Merge shows from props.shows
+    if (shows && Array.isArray(shows)) {
+      shows.forEach((s, idx) => {
+        if (isEmbargoedShow(s)) return;
+        const normalized = normalizeShowToEventDirectoryItem(s, idx, userProfile, promoterProfile);
+        registerOrMergeShow(normalized);
+      });
+    }
+
+    // Merge extended localStorage show metadata
+    try {
+      const rawExt = localStorage.getItem('nexus_core_shows_extended');
+      if (rawExt) {
+        const parsedExt = JSON.parse(rawExt);
+        if (parsedExt && typeof parsedExt === 'object') {
+          Object.values(parsedExt).forEach((extShow: any, idx: number) => {
+            if (extShow && !isEmbargoedShow(extShow)) {
+              registerOrMergeShow(normalizeShowToEventDirectoryItem(extShow, idx, userProfile, promoterProfile));
+            }
+          });
+        }
+      }
+    } catch (_) {}
+
+    // Add curated items not yet in list
+    DEFAULT_CURATED_EVENTS.forEach(curated => {
+      registerOrMergeShow(curated);
+    });
+
+    // Load deleted show blacklist
+    let deletedSet = new Set<string>();
+    try {
+      const rawDel = localStorage.getItem('nexus_deleted_community_shows');
+      if (rawDel) JSON.parse(rawDel).forEach((x: string) => deletedSet.add(String(x).toLowerCase().trim()));
+      const rawPromDel = localStorage.getItem('nexus_promoter_deleted_shows');
+      if (rawPromDel) JSON.parse(rawPromDel).forEach((x: string) => deletedSet.add(String(x).toLowerCase().trim()));
+    } catch (_) {}
+
+    const isDeleted = (evt: any) => {
+      if (!evt) return true;
+      const idStr = String(evt.id || '').toLowerCase().trim();
+      const hStr = String(evt.headliner || evt.title || evt.name || '').toLowerCase().trim();
+      const dStr = String(evt.date || evt.rawDate || '').toLowerCase().trim();
+      const sig = `${hStr}__${dStr}`;
+      const sig2 = `h_${hStr}__${dStr}`;
+
+      if (idStr && deletedSet.has(idStr)) return true;
+      if (sig && deletedSet.has(sig)) return true;
+      if (sig2 && deletedSet.has(sig2)) return true;
+      if (hStr && deletedSet.has(hStr)) return true;
+      return false;
+    };
+
+    return combined
+      .filter(evt => !isEmbargoedShow(evt) && !isDeleted(evt))
+      .map((evt: any, idx: number) => {
+      const isGeneric = (val?: any) => {
+        if (!val || typeof val !== 'string') return true;
+        const lower = val.trim().toLowerCase();
+        return (
+          !lower ||
+          lower === 'tour show' ||
+          lower === 'live show' ||
+          lower === 'show' ||
+          lower === 'gig' ||
+          lower === 'live act' ||
+          lower === 'underground show'
+        );
+      };
+
+      const rawHeadliner = evt.headliner || evt.band || evt.tour_name || evt.festival_name;
+      let headliner = 'Live Act';
+      if (!isGeneric(rawHeadliner)) {
+        headliner = String(rawHeadliner).trim();
+      } else if (!isGeneric(evt.tour_name)) {
+        headliner = String(evt.tour_name).trim();
+      } else if (!isGeneric(evt.name) && !String(evt.name).toLowerCase().includes('at live venue')) {
+        headliner = String(evt.name).trim();
+      } else if (!isGeneric(evt.title)) {
+        headliner = String(evt.title).trim();
+      } else {
+        headliner = 'Live Act';
+      }
+
+      const venue = evt.venue || evt.venue_name || 'Underground Venue';
+      const city = evt.city || (evt.state_province ? `${evt.state_province}` : 'Los Angeles, CA');
+      const date = evt.date || 'Upcoming';
+      const time = evt.time || evt.doors_time || 'Doors 8:00 PM';
+      const price = evt.price || (evt.presale_price ? `$${evt.presale_price}` : '$25');
+      const genre = evt.genre || (evt.micro_genres && evt.micro_genres.length > 0 ? evt.micro_genres.join(' / ') : 'Extreme Metal / Underground');
+      
+      let supportList: string[] = [];
+      if (Array.isArray(evt.support)) {
+        supportList = evt.support;
+      } else if (Array.isArray(evt.lineup)) {
+        supportList = evt.lineup.map((l: any) => typeof l === 'string' ? l : (l.band || l.name)).filter(Boolean);
+      } else if (typeof evt.support === 'string' && evt.support.trim()) {
+        supportList = evt.support.split(',').map((s: string) => s.trim());
+      }
+
+      const ticketUrl = evt.ticketUrl || evt.ticket_url || evt.external_ticket_url || '';
+      let extraNotesObj: any = {};
+      if (typeof evt.additional_notes === 'string') {
+        try { extraNotesObj = JSON.parse(evt.additional_notes); } catch (_) {}
+      } else if (evt.additional_notes && typeof evt.additional_notes === 'object') {
+        extraNotesObj = evt.additional_notes;
+      }
+      const rawFlyer =
+        evt.flyerUrl ||
+        evt.flyer_url ||
+        extraNotesObj.flyer_url ||
+        extraNotesObj.flyerUrl ||
+        evt.image_url ||
+        evt.cover_url ||
+        evt.poster_url ||
+        evt.image ||
+        evt.thumbnail ||
+        '';
+      const flyerUrl =
+        rawFlyer &&
+        !String(rawFlyer).includes('photo-1514525253161-7a46d19cd819') &&
+        !String(rawFlyer).includes('photo-1470225620780-dba8ba36b745') &&
+        !String(rawFlyer).includes('photo-1516450360452-9312f5e86fc7')
+          ? String(rawFlyer).trim()
+          : '';
+      const verified = Boolean(evt.verified || evt.is_community_submitted || evt.isFollowed || evt.isFromShowsTable || evt.source === 'shows_table');
+      const isFromShowsTable = Boolean(evt.isFromShowsTable || evt.source === 'shows_table');
+      const isPersonallyBooked = checkIsPersonallyBooked(evt, userProfile, promoterProfile);
+      const isCommunityShow = !isPersonallyBooked || Boolean(evt.is_community_submitted || evt.is_community || evt.source === 'community');
+
+      return {
+        ...evt,
+        id: evt.id || `event-${idx}`,
+        title: evt.title || `${headliner} at ${venue}`,
+        headliner,
+        venue,
+        city,
+        date,
+        time,
+        price,
+        genre,
+        support: supportList,
+        ticketUrl,
+        flyerUrl,
+        verified,
+        isFromShowsTable,
+        isPersonallyBooked,
+        isCommunityShow,
+        is_community_submitted: isCommunityShow,
+        lat: evt.lat || (34.0 + (idx % 8) * 0.1),
+        lng: evt.lng || (-118.2 - (idx % 8) * 0.1),
+        description: evt.description || (isFromShowsTable ? `Official booked tour date at ${venue}. Advance ticketing, tour merch and door entries active.` : `Live underground performance at ${venue}. All ages & support welcome.`),
+        ticketsAvailable: Boolean(evt.ticketsAvailable || ticketUrl || evt.ticketStatus === 'active')
+      };
+    });
+  }, [liveEvents, localImportedShows, shows, userProfile, promoterProfile]);
+
+  // Dedicated list of community archive shows (shows concluded that were not booked personally by the promoter)
+  const communityArchiveEvents = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    return normalizedEvents.filter(evt => {
+      const isBooked = checkIsPersonallyBooked(evt, userProfile, promoterProfile);
+      if (isBooked) return false;
+      const rawDate = evt.rawDate || evt.date || '';
+      const isPast = evt.isPast || evt.isArchived || (rawDate && String(rawDate).split('T')[0] < todayStr);
+      return Boolean(isPast);
+    });
+  }, [normalizedEvents, userProfile, promoterProfile]);
+
+  // Extract distinct years from community archives
+  const archiveYears = useMemo(() => {
+    const years = new Set<string>();
+    communityArchiveEvents.forEach(evt => {
+      const raw = String(evt.rawDate || evt.date || '');
+      const match = raw.match(/\b(20\d{2})\b/);
+      if (match) years.add(match[1]);
+    });
+    return Array.from(years).sort().reverse();
+  }, [communityArchiveEvents]);
+
+  // Filtered community archives based on search, city, genre, and year
+  const filteredCommunityArchives = useMemo(() => {
+    return communityArchiveEvents.filter(evt => {
+      const q = (archiveSearchQuery || searchQuery).trim().toLowerCase();
+      if (q) {
+        const inHeadliner = (evt.headliner || '').toLowerCase().includes(q);
+        const inTitle = (evt.title || '').toLowerCase().includes(q);
+        const inVenue = (evt.venue || '').toLowerCase().includes(q);
+        const inCity = (evt.city || '').toLowerCase().includes(q);
+        const inGenre = (evt.genre || '').toLowerCase().includes(q);
+        const inDesc = (evt.description || '').toLowerCase().includes(q);
+        const inSupport = Array.isArray(evt.support) && evt.support.some((act: string) => act.toLowerCase().includes(q));
+        if (!inHeadliner && !inTitle && !inVenue && !inCity && !inGenre && !inDesc && !inSupport) {
+          return false;
+        }
+      }
+      if (selectedCityFilter && selectedCityFilter.toLowerCase() !== 'all') {
+        const targetCity = selectedCityFilter.toLowerCase().trim();
+        const eventCity = (evt.city || '').toLowerCase().trim();
+        if (!eventCity.includes(targetCity)) return false;
+      }
+      if (mapFilterGenre && mapFilterGenre.toLowerCase() !== 'all') {
+        const targetGenre = mapFilterGenre.toLowerCase().trim();
+        const eventGenre = (evt.genre || '').toLowerCase().trim();
+        if (!eventGenre.includes(targetGenre)) return false;
+      }
+      if (archiveYearFilter && archiveYearFilter !== 'all') {
+        const rawDate = String(evt.rawDate || evt.date || '');
+        if (!rawDate.includes(archiveYearFilter)) return false;
+      }
+      return true;
+    }).sort((a, b) => {
+      const parseTs = (item: any): number => {
+        if (!item) return 0;
+        const raw = String(item.rawDate || item.date || item.show_date || '').trim();
+        if (!raw) return 0;
+
+        const isoMatch = raw.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
+        if (isoMatch) {
+          return new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10)).getTime();
+        }
+
+        const myMatch = raw.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})[,\s]+(20\d{2})\b/i);
+        if (myMatch) {
+          const ts = Date.parse(`${myMatch[1]} ${myMatch[2]}, ${myMatch[3]}`);
+          if (!isNaN(ts)) return ts;
+        }
+
+        const mMatch = raw.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i);
+        if (mMatch) {
+          const ts = Date.parse(`${mMatch[1]} ${mMatch[2]}, ${new Date().getFullYear()}`);
+          if (!isNaN(ts)) return ts;
+        }
+
+        const fallback = Date.parse(raw);
+        return !isNaN(fallback) ? fallback : 0;
+      };
+
+      return parseTs(b) - parseTs(a);
+    });
+  }, [communityArchiveEvents, archiveSearchQuery, searchQuery, selectedCityFilter, mapFilterGenre, archiveYearFilter]);
+
+  // Split community archives into Single Shows vs Concluded Tours
+  const { archiveToursList, archiveSingleShowsList } = useMemo(() => {
+    const isGeneric = (val?: string) => {
+      if (!val || typeof val !== 'string') return true;
+      const l = val.trim().toLowerCase();
+      return !l || l === 'tour show' || l === 'live show' || l === 'show' || l === 'gig' || l === 'single';
+    };
+
+    const parseShowTs = (item: any): number => {
+      if (!item) return 0;
+      const raw = String(item.rawDate || item.date || item.show_date || '').trim();
+      if (!raw) return 0;
+      const isoMatch = raw.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
+      if (isoMatch) {
+        return new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10)).getTime();
+      }
+      const myMatch = raw.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})[,\s]+(20\d{2})\b/i);
+      if (myMatch) {
+        const ts = Date.parse(`${myMatch[1]} ${myMatch[2]}, ${myMatch[3]}`);
+        if (!isNaN(ts)) return ts;
+      }
+      const mMatch = raw.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i);
+      if (mMatch) {
+        const ts = Date.parse(`${mMatch[1]} ${mMatch[2]}, ${new Date().getFullYear()}`);
+        if (!isNaN(ts)) return ts;
+      }
+      const fallback = Date.parse(raw);
+      return !isNaN(fallback) ? fallback : 0;
+    };
+
+    const tourMap = new Map<string, {
+      id: string;
+      tourName: string;
+      headliner: string;
+      supportBands: string[];
+      flyerUrl?: string;
+      genre: string;
+      stops: any[];
+      startDate?: string;
+      endDate?: string;
+    }>();
+
+    const standaloneSingle: any[] = [];
+
+    filteredCommunityArchives.forEach(evt => {
+      let extraNotes: any = {};
+      if (typeof evt.additional_notes === 'string') {
+        try { extraNotes = JSON.parse(evt.additional_notes); } catch (_) {}
+      } else if (evt.additional_notes && typeof evt.additional_notes === 'object') {
+        extraNotes = evt.additional_notes;
+      }
+
+      let tourName = evt.tour_name || evt.festival_name || extraNotes.tour_name || extraNotes.tour_title || extraNotes.tourTitle || evt.tourName || evt.tourTitle;
+
+      if (!tourName && evt.show_name && evt.show_name.includes(' - ')) {
+        const p = evt.show_name.split(' - ')[0].trim();
+        if (p.length > 3 && !isGeneric(p)) tourName = p;
+      }
+      if (!tourName && evt.title && evt.title.includes(' - ')) {
+        const p = evt.title.split(' - ')[0].trim();
+        if (p.length > 3 && !isGeneric(p)) tourName = p;
+      }
+
+      if (!isGeneric(tourName)) {
+        const key = tourName!.trim().toLowerCase();
+        if (!tourMap.has(key)) {
+          tourMap.set(key, {
+            id: `arch_tour_${key.replace(/[^a-z0-9]/g, '_')}`,
+            tourName: tourName!.trim(),
+            headliner: (!isGeneric(evt.headliner) ? evt.headliner : (extraNotes.headliner || tourName!.trim())),
+            supportBands: Array.isArray(evt.support) ? [...evt.support] : [],
+            flyerUrl: evt.flyerUrl || evt.flyer_url,
+            genre: evt.genre || 'Extreme Metal / Archive Tour',
+            stops: []
+          });
+        }
+        const entry = tourMap.get(key)!;
+        const stopCityLower = String(evt.city || '').toLowerCase().trim();
+        const stopDateLower = String(evt.rawDate || evt.date || evt.show_date || '').toLowerCase().trim();
+
+        const isDuplicateStop = entry.stops.some(existing => {
+          if (existing.id && evt.id && existing.id === evt.id) return true;
+          const exCity = String(existing.city || '').toLowerCase().trim();
+          const exDate = String(existing.rawDate || existing.date || existing.show_date || '').toLowerCase().trim();
+          return exCity && exDate && exCity === stopCityLower && exDate === stopDateLower;
+        });
+
+        if (!isDuplicateStop) {
+          entry.stops.push(evt);
+        }
+        if (Array.isArray(evt.support)) {
+          evt.support.forEach((b: string) => {
+            if (b && !entry.supportBands.includes(b)) entry.supportBands.push(b);
+          });
+        }
+        if (!entry.flyerUrl && (evt.flyerUrl || evt.flyer_url)) {
+          entry.flyerUrl = evt.flyerUrl || evt.flyer_url;
+        }
+      } else {
+        standaloneSingle.push(evt);
+      }
+    });
+
+    const archiveToursList = Array.from(tourMap.values()).map(tour => {
+      tour.stops.sort((a, b) => parseShowTs(a) - parseShowTs(b));
+      if (tour.stops.length > 0) {
+        tour.startDate = tour.stops[0].date || tour.stops[0].rawDate;
+        tour.endDate = tour.stops[tour.stops.length - 1].date || tour.stops[tour.stops.length - 1].rawDate;
+      }
+      return tour;
+    });
+
+    return { archiveToursList, archiveSingleShowsList: standaloneSingle };
+  }, [filteredCommunityArchives]);
+
+  // Extract unique cities & genres for quick filtering
+  const { uniqueCities, uniqueGenres } = useMemo(() => {
+    const cities = new Set<string>();
+    const genres = new Set<string>();
+    normalizedEvents.forEach(evt => {
+      if (evt.city) cities.add(evt.city.trim());
+      if (evt.genre) {
+        evt.genre.split(/[/,]/).forEach((g: string) => {
+          const trimmed = g.trim();
+          if (trimmed && trimmed.length > 2) genres.add(trimmed);
+        });
+      }
+    });
+    return {
+      uniqueCities: Array.from(cities).sort(),
+      uniqueGenres: Array.from(genres).slice(0, 10).sort()
+    };
+  }, [normalizedEvents]);
+
+  // Filter application
+  const filteredEvents = useMemo(() => {
+    return normalizedEvents.filter(evt => {
+      // 1. Search Query (Matches headliner, support bands, venue, city, or genre)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const inHeadliner = evt.headliner.toLowerCase().includes(q);
+        const inVenue = evt.venue.toLowerCase().includes(q);
+        const inCity = evt.city.toLowerCase().includes(q);
+        const inGenre = evt.genre.toLowerCase().includes(q);
+        const inSupport = evt.support.some((act: string) => act.toLowerCase().includes(q));
+        if (!inHeadliner && !inVenue && !inCity && !inGenre && !inSupport) {
+          return false;
+        }
+      }
+
+      // 2. City Filter
+      if (selectedCityFilter && selectedCityFilter.toLowerCase() !== 'all') {
+        const targetCity = selectedCityFilter.toLowerCase().trim();
+        const eventCity = (evt.city || '').toLowerCase().trim();
+        if (!eventCity.includes(targetCity)) {
+          return false;
+        }
+      }
+
+      // 3. Genre Filter
+      if (mapFilterGenre && mapFilterGenre.toLowerCase() !== 'all') {
+        const targetGenre = mapFilterGenre.toLowerCase().trim();
+        const eventGenre = (evt.genre || '').toLowerCase().trim();
+        if (!eventGenre.includes(targetGenre)) {
+          return false;
+        }
+      }
+
+      // 4. Date Presets & Past Event Filtering
+      const rawDate = evt.rawDate || evt.show_date || evt.date || '';
+      const isPastEvent = Boolean(
+        evt.isPast ||
+        evt.isArchived ||
+        isPastShowDate(rawDate) ||
+        evt.id === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee' ||
+        ((evt.headliner || '').toLowerCase().includes('vader') && String(rawDate).includes('2026-09-24'))
+      );
+
+      if (dateFilter === 'archives' || viewMode === 'community_archives') {
+        if (!isPastEvent) return false;
+      } else {
+        // Active Upcoming Directory View: Always exclude past shows!
+        if (isPastEvent) return false;
+
+        if (dateFilter && dateFilter !== 'all' && dateFilter !== 'upcoming') {
+          const d = (evt.date || '').toLowerCase();
+          if (dateFilter === 'tonight' && !d.includes('tonight')) return false;
+          if (dateFilter === 'tomorrow' && !d.includes('tomorrow')) return false;
+          if (dateFilter === 'weekend' && (!d.includes('fri') && !d.includes('sat') && !d.includes('sun'))) return false;
+        }
+      }
+
+      // 5. Checkboxes (Verified, Tickets)
+      if (verifiedOnly && !evt.verified) return false;
+      if (ticketOnly && !evt.ticketsAvailable && !evt.ticketUrl) return false;
+
+      return true;
+    });
+  }, [normalizedEvents, searchQuery, selectedCityFilter, mapFilterGenre, dateFilter, verifiedOnly, ticketOnly]);
+
+  // Group upcoming shows into Tour Packages and Single Standalone Shows (including closest tour stops for user proximity)
+  const { toursList, singleShowsList } = useMemo(() => {
+    const isGeneric = (val?: string) => {
+      if (!val || typeof val !== 'string') return true;
+      const l = val.trim().toLowerCase();
+      return !l || l === 'tour show' || l === 'live show' || l === 'show' || l === 'gig' || l === 'single';
+    };
+
+    // Determine active reference user location & coords
+    const userCityHint = (
+      (selectedCityFilter && selectedCityFilter.toLowerCase() !== 'all' ? selectedCityFilter : '') ||
+      userProfile?.location ||
+      userProfile?.city ||
+      userProfile?.hometown ||
+      promoterProfile?.location ||
+      promoterProfile?.city ||
+      promoterProfile?.default_city ||
+      (() => {
+        try {
+          return localStorage.getItem('nexus_user_city') || localStorage.getItem('nexus_user_location') || '';
+        } catch {
+          return '';
+        }
+      })()
+    ).toLowerCase().trim();
+
+    const userLat = typeof userProfile?.lat === 'number' ? userProfile.lat : 30.2672;
+    const userLng = typeof userProfile?.lng === 'number' ? userProfile.lng : -97.7431;
+
+    const parseShowTs = (item: any): number => {
+      if (!item) return 0;
+      const raw = String(item.rawDate || item.date || item.show_date || '').trim();
+      if (!raw) return 0;
+      const lower = raw.toLowerCase();
+      if (lower.includes('tonight')) return Date.now();
+      if (lower.includes('tomorrow')) return Date.now() + 86400000;
+
+      const isoMatch = raw.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
+      if (isoMatch) {
+        return new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10)).getTime();
+      }
+      const myMatch = raw.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})[,\s]+(20\d{2})\b/i);
+      if (myMatch) {
+        const ts = Date.parse(`${myMatch[1]} ${myMatch[2]}, ${myMatch[3]}`);
+        if (!isNaN(ts)) return ts;
+      }
+      const mMatch = raw.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i);
+      if (mMatch) {
+        const ts = Date.parse(`${mMatch[1]} ${mMatch[2]}, ${new Date().getFullYear()}`);
+        if (!isNaN(ts)) return ts;
+      }
+      const fallback = Date.parse(raw);
+      return !isNaN(fallback) ? fallback : 0;
+    };
+
+    const tourMap = new Map<string, {
+      id: string;
+      tourName: string;
+      headliner: string;
+      supportBands: string[];
+      flyerUrl?: string;
+      genre: string;
+      stops: any[];
+      startDate?: string;
+      endDate?: string;
+    }>();
+
+    const standaloneSingleShows: any[] = [];
+
+    filteredEvents.forEach(evt => {
+      let extraNotes: any = {};
+      if (typeof evt.additional_notes === 'string') {
+        try {
+          extraNotes = JSON.parse(evt.additional_notes);
+        } catch (_) {}
+      } else if (evt.additional_notes && typeof evt.additional_notes === 'object') {
+        extraNotes = evt.additional_notes;
+      }
+
+      let tourName = evt.tour_name || evt.festival_name || extraNotes.tour_name || extraNotes.tour_title || extraNotes.tourTitle || evt.tourName || evt.tourTitle;
+
+      if (!tourName && evt.show_name && evt.show_name.includes(' - ')) {
+        const p = evt.show_name.split(' - ')[0].trim();
+        if (p.length > 3 && !isGeneric(p)) tourName = p;
+      }
+      if (!tourName && evt.title && evt.title.includes(' - ')) {
+        const p = evt.title.split(' - ')[0].trim();
+        if (p.length > 3 && !isGeneric(p)) tourName = p;
+      }
+
+      if (!isGeneric(tourName)) {
+        const key = tourName!.trim().toLowerCase();
+        if (!tourMap.has(key)) {
+          tourMap.set(key, {
+            id: `tour_${key.replace(/[^a-z0-9]/g, '_')}`,
+            tourName: tourName!.trim(),
+            headliner: (!isGeneric(evt.headliner) ? evt.headliner : (extraNotes.headliner || tourName!.trim())),
+            supportBands: Array.isArray(evt.support) ? [...evt.support] : [],
+            flyerUrl: evt.flyerUrl || evt.flyer_url,
+            genre: evt.genre || 'Extreme Metal / Touring',
+            stops: []
+          });
+        }
+        const entry = tourMap.get(key)!;
+        const stopCityLower = String(evt.city || '').toLowerCase().trim();
+        const stopDateLower = String(evt.rawDate || evt.date || evt.show_date || '').toLowerCase().trim();
+
+        const isDuplicateStop = entry.stops.some(existing => {
+          if (existing.id && evt.id && existing.id === evt.id) return true;
+          const exCity = String(existing.city || '').toLowerCase().trim();
+          const exDate = String(existing.rawDate || existing.date || existing.show_date || '').toLowerCase().trim();
+          return exCity && exDate && exCity === stopCityLower && exDate === stopDateLower;
+        });
+
+        if (!isDuplicateStop) {
+          entry.stops.push(evt);
+        }
+        if (Array.isArray(evt.support)) {
+          evt.support.forEach((b: string) => {
+            if (b && !entry.supportBands.includes(b)) entry.supportBands.push(b);
+          });
+        }
+        if (!entry.flyerUrl && (evt.flyerUrl || evt.flyer_url)) {
+          entry.flyerUrl = evt.flyerUrl || evt.flyer_url;
+        }
+      } else {
+        standaloneSingleShows.push(evt);
+      }
+    });
+
+    const tours = Array.from(tourMap.values()).map(tour => {
+      tour.stops.sort((a, b) => {
+        return parseShowTs(a) - parseShowTs(b);
+      });
+      if (tour.stops.length > 0) {
+        tour.startDate = tour.stops[0].date || tour.stops[0].rawDate;
+        tour.endDate = tour.stops[tour.stops.length - 1].date || tour.stops[tour.stops.length - 1].rawDate;
+      }
+      if (tour.flyerUrl) {
+        tour.stops = tour.stops.map(s =>
+          s.flyerUrl || s.flyer_url ? s : { ...s, flyerUrl: tour.flyerUrl, flyer_url: tour.flyerUrl }
+        );
+      }
+      return tour;
+    });
+
+    // Build the final single shows list: Standalone shows + the closest tour stop for every tour package
+    const combinedSingleShows = [...standaloneSingleShows];
+
+    tours.forEach(tour => {
+      if (tour.stops.length === 0) return;
+
+      // Find the closest stop to user's location or next upcoming date
+      let bestStop = tour.stops[0];
+      let bestScore = Infinity;
+
+      tour.stops.forEach((stop, stopIdx) => {
+        let score = 10000;
+        const stopCity = String(stop.city || stop.state_province || '').toLowerCase();
+
+        // Exact city match with filter or user hometown is top rank
+        if (userCityHint && stopCity.includes(userCityHint)) {
+          score = 0 + stopIdx;
+        } else if (typeof stop.lat === 'number' && typeof stop.lng === 'number') {
+          // Geographic distance
+          const dist = Math.hypot(stop.lat - userLat, stop.lng - userLng);
+          score = 100 + dist;
+        } else {
+          // Chronological fallback
+          score = 500 + stopIdx;
+        }
+
+        if (score < bestScore) {
+          bestScore = score;
+          bestStop = stop;
+        }
+      });
+
+      if (bestStop) {
+        const resolvedBestFlyer = bestStop.flyerUrl || bestStop.flyer_url || tour.flyerUrl || '';
+        combinedSingleShows.push({
+          ...bestStop,
+          flyerUrl: resolvedBestFlyer,
+          flyer_url: resolvedBestFlyer,
+          isTourStop: true,
+          tourId: tour.id,
+          tourName: tour.tourName,
+          totalTourDates: tour.stops.length,
+          tourStartDate: tour.startDate,
+          tourEndDate: tour.endDate,
+          isClosestTourStop: true,
+          otherTourStopsCount: Math.max(0, tour.stops.length - 1)
+        });
+      }
+    });
+
+    // Chronologically sort all single shows & closest tour stops
+    combinedSingleShows.sort((a, b) => parseShowTs(a) - parseShowTs(b));
+
+    return { toursList: tours, singleShowsList: combinedSingleShows };
+  }, [filteredEvents, selectedCityFilter, userProfile, promoterProfile]);
+
+  const activeEvent = selectedMapEvent ||
+    (viewMode === 'community_archives' ? filteredCommunityArchives[0] : (viewMode === 'single' ? (singleShowsList[0] || filteredEvents[0]) : (toursList[0]?.stops[0] || filteredEvents[0]))) ||
+    null;
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[10050] bg-black/95 flex items-center justify-center p-1.5 sm:p-4 backdrop-blur-2xl animate-in fade-in duration-200">
+          <motion.div
+            initial={{ scale: 0.96, opacity: 0, y: 12 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.96, opacity: 0, y: 12 }}
+            className="bg-[#0b0c10] border border-cyan-900/50 rounded-2xl w-full max-w-6xl h-[94vh] sm:h-[90vh] max-h-[900px] overflow-hidden flex flex-col relative shadow-[0_0_60px_rgba(6,182,212,0.18)]"
+          >
+            {/* TOP HEADER & TITLE BAR */}
+            <div className="p-3.5 sm:p-4 border-b border-zinc-900 bg-black/80 flex flex-wrap items-center justify-between gap-3 shrink-0 relative pr-14 sm:pr-16">
+              <div className="flex items-start gap-3">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 transition-all ${
+                  viewMode === 'community_archives'
+                    ? 'bg-amber-500/10 border border-amber-500/40 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                    : viewMode === 'tours'
+                    ? 'bg-purple-500/10 border border-purple-500/40 text-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
+                    : 'bg-cyan-500/10 border border-cyan-500/40 text-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+                }`}>
+                  {viewMode === 'community_archives' ? (
+                    <History className="w-5 h-5" />
+                  ) : viewMode === 'tours' ? (
+                    <Radio className="w-5 h-5" />
+                  ) : (
+                    <Calendar className="w-5 h-5" />
+                  )}
+                </div>
+                <div className="flex flex-col gap-1">
+                  {/* Badge placed above the title */}
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1.5 w-fit ${
+                      viewMode === 'community_archives'
+                        ? 'bg-amber-950 text-amber-300 border border-amber-500/50 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
+                        : viewMode === 'tours'
+                        ? 'bg-purple-950 text-purple-300 border border-purple-500/50 shadow-[0_0_10px_rgba(168,85,247,0.2)]'
+                        : 'bg-cyan-950 text-cyan-300 border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.2)]'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        viewMode === 'community_archives'
+                          ? 'bg-amber-400 animate-pulse'
+                          : viewMode === 'tours'
+                          ? 'bg-purple-400 animate-pulse'
+                          : 'bg-cyan-400 animate-pulse'
+                      }`} />
+                      {viewMode === 'community_archives'
+                        ? `${filteredCommunityArchives.length} Concluded Shows`
+                        : viewMode === 'tours'
+                        ? `${toursList.length} Tour Packages`
+                        : `${singleShowsList.length > 0 ? singleShowsList.length : filteredEvents.length} Single Shows & Fests`}
+                    </span>
+                  </div>
+
+                  <h2 className="text-white font-black uppercase text-sm sm:text-base tracking-widest font-mono flex items-center gap-2">
+                    {viewMode === 'community_archives'
+                      ? 'Community & Scene Show Archives'
+                      : viewMode === 'tours'
+                      ? 'Upcoming Tours & Itineraries'
+                      : 'Upcoming Single Shows & Festivals'}
+                  </h2>
+
+                  <p className="text-[10px] text-zinc-400 font-mono hidden sm:block">
+                    {viewMode === 'community_archives'
+                      ? 'Archived and completed performances submitted by community bands and local scenes — kept separate from your personal promoter archives'
+                      : viewMode === 'tours'
+                      ? 'Full multi-city tour packages, routing itineraries, and supporting lineups — click any tour to open its complete schedule'
+                      : 'One-off concerts, club gigs, and standalone festivals'}
+                  </p>
+                </div>
+              </div>
+
+              {/* View Mode Toggle (Single vs Tours vs Community Archives) & Action Controls */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Single / Tours / Community Archives View Switch */}
+                <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-xl p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewMode('single');
+                      if (dateFilter === 'archives') setDateFilter('all');
+                      setMobileDetailOpen(false);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      viewMode === 'single'
+                        ? 'bg-cyan-500 text-black shadow-md'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <List className="w-3.5 h-3.5" />
+                    <span>Upcoming Single</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewMode('tours');
+                      if (dateFilter === 'archives') setDateFilter('all');
+                      setMobileDetailOpen(false);
+                      triggerNotification?.('Viewing Upcoming Tour Itineraries');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      viewMode === 'tours'
+                        ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-md shadow-purple-500/25'
+                        : 'text-purple-400/90 hover:text-purple-300 hover:bg-purple-950/30'
+                    }`}
+                  >
+                    <Radio className="w-3.5 h-3.5" />
+                    <span>Upcoming Tours {toursList.length > 0 ? `(${toursList.length})` : ''}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewMode('community_archives');
+                      setDateFilter('archives');
+                      setMobileDetailOpen(false);
+                      triggerNotification?.('Viewing Community & Scene Show Archives');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      viewMode === 'community_archives'
+                        ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-black shadow-md shadow-amber-500/20'
+                        : 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-950/30'
+                    }`}
+                    title="View archives specifically for community shows not booked personally"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    <span>Community Archives</span>
+                  </button>
+                </div>
+
+                {/* Action Buttons: AI Flyer Auto-Fill & Post Show */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAiFlyerModalOpen(true);
+                      triggerNotification?.('✨ AI Flyer & Text Auto-Fill Parser ready');
+                    }}
+                    className="hidden sm:flex text-xs font-mono font-bold text-cyan-300 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/60 px-3 py-1.5 rounded-xl items-center gap-1.5 transition-all shadow cursor-pointer active:scale-95"
+                    title="Upload flyer photo or copy text to auto-fill show details using Gemini AI"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                    <span>AI Flyer Auto-Fill</span>
+                  </button>
+
+                  {onOpenShowCreator && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileDetailOpen(false);
+                        onClose();
+                        onOpenShowCreator();
+                      }}
+                      className="hidden sm:flex text-xs font-mono uppercase font-bold text-black bg-[#00ffcc] hover:bg-[#00ffcc]/90 px-3 py-1.5 rounded-xl items-center gap-1.5 transition-all shadow cursor-pointer active:scale-95"
+                    >
+                      + Post Show
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Pinned Upper Right Corner Close Button */}
+              <button
+                onClick={() => {
+                  setMobileDetailOpen(false);
+                  onClose();
+                }}
+                className="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 w-8 h-8 rounded-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-all shadow-md cursor-pointer z-20"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* INTEGRATED COLLAPSIBLE SEARCH & FILTER BAR */}
+            <div className="bg-[#0c0d12] border-b border-zinc-900 shrink-0">
+              {/* Primary Single-Row Toolbar (Search + Filters Toggle + Year Selector for Archives) */}
+              <div className="p-2 sm:px-4 flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                {/* Search Bar (Band, Venue, City, etc.) */}
+                <div className="flex-1 min-w-[180px] relative">
+                  <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={
+                      viewMode === 'community_archives'
+                        ? 'Search archived shows, bands, venues...'
+                        : 'Search by Band (e.g. Incantation), Venue, or City...'
+                    }
+                    className="w-full bg-black/70 border border-zinc-850 rounded-xl pl-8 pr-8 py-1.5 text-xs text-white placeholder-zinc-500 font-mono focus:outline-none focus:border-cyan-500 transition-colors"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                      title="Clear search"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Inline Year Filters when in Community Archives mode (eliminates need for bulky banner) */}
+                {viewMode === 'community_archives' && archiveYears.length > 0 && (
+                  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setArchiveYearFilter('all')}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                        archiveYearFilter === 'all'
+                          ? 'bg-amber-400 text-black shadow-sm font-black'
+                          : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                      }`}
+                    >
+                      All Years
+                    </button>
+                    {archiveYears.slice(0, 4).map((yr) => (
+                      <button
+                        key={`yr-pill-${yr}`}
+                        type="button"
+                        onClick={() => setArchiveYearFilter(String(yr))}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                          archiveYearFilter === String(yr)
+                            ? 'bg-amber-400 text-black shadow-sm font-black'
+                            : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                        }`}
+                      >
+                        {yr}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Filters Expand/Collapse Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                    isFiltersExpanded || activeFilterCount > 0
+                      ? viewMode === 'community_archives'
+                        ? 'bg-amber-500/15 text-amber-300 border border-amber-500/50 shadow-sm'
+                        : 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                      : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800'
+                  }`}
+                  title={isFiltersExpanded ? 'Collapse filters' : 'Expand filters'}
+                >
+                  <SlidersHorizontal className={`w-3.5 h-3.5 ${viewMode === 'community_archives' ? 'text-amber-400' : 'text-cyan-400'}`} />
+                  <span>Filters</span>
+                  {activeFilterCount > 0 && (
+                    <span className={`w-4 h-4 rounded-full ${viewMode === 'community_archives' ? 'bg-amber-400' : 'bg-cyan-400'} text-black text-[9px] font-black flex items-center justify-center`}>
+                      {activeFilterCount}
+                    </span>
+                  )}
+                  {isFiltersExpanded ? (
+                    <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                  )}
+                </button>
+
+                {/* Quick reset button if any filters active and toolbar collapsed */}
+                {!isFiltersExpanded && (activeFilterCount > 0 || searchQuery || archiveYearFilter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setArchiveSearchQuery('');
+                      setArchiveYearFilter('all');
+                      setSelectedCityFilter('all');
+                      setMapFilterGenre('all');
+                      setDateFilter('all');
+                      setVerifiedOnly(false);
+                      setTicketOnly(false);
+                    }}
+                    className="text-[10px] font-mono text-zinc-400 hover:text-rose-400 transition-colors cursor-pointer shrink-0 underline"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+
+              {/* Active Filter Chips Summary (Visible when collapsed with active filters) */}
+              {!isFiltersExpanded && activeFilterCount > 0 && (
+                <div className="px-3 pb-2 sm:px-4 flex items-center gap-1.5 flex-wrap text-[10px] font-mono">
+                  <span className="text-zinc-500 font-bold">Active:</span>
+                  {selectedCityFilter !== 'all' && (
+                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center gap-1">
+                      <MapPin className="w-2.5 h-2.5 text-rose-400" /> {selectedCityFilter}
+                      <button onClick={() => setSelectedCityFilter('all')} className="hover:text-rose-400 ml-0.5">×</button>
+                    </span>
+                  )}
+                  {mapFilterGenre !== 'all' && (
+                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center gap-1">
+                      <Music className="w-2.5 h-2.5 text-cyan-400" /> {mapFilterGenre}
+                      <button onClick={() => setMapFilterGenre('all')} className="hover:text-rose-400 ml-0.5">×</button>
+                    </span>
+                  )}
+                  {dateFilter !== 'all' && dateFilter !== 'archives' && (
+                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center gap-1">
+                      <Clock className="w-2.5 h-2.5 text-amber-400" /> {dateFilter}
+                      <button onClick={() => setDateFilter('all')} className="hover:text-rose-400 ml-0.5">×</button>
+                    </span>
+                  )}
+                  {ticketOnly && (
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 flex items-center gap-1">
+                      <Ticket className="w-2.5 h-2.5" /> Tickets Only
+                      <button onClick={() => setTicketOnly(false)} className="hover:text-rose-400 ml-0.5">×</button>
+                    </span>
+                  )}
+                  {verifiedOnly && (
+                    <span className="px-2 py-0.5 rounded-md bg-amber-950/60 border border-amber-800/80 text-amber-300 flex items-center gap-1">
+                      <ShieldCheck className="w-2.5 h-2.5" /> Verified
+                      <button onClick={() => setVerifiedOnly(false)} className="hover:text-rose-400 ml-0.5">×</button>
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Collapsible Expanded Filters Panel */}
+              {isFiltersExpanded && (
+                <div className="p-3 sm:px-4 pt-0 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200 border-t border-zinc-900/80 mt-1">
+                  {/* Row 1: City & Genre Selectors */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center pt-2">
+                    {/* City Dropdown */}
+                    <div className="sm:col-span-6">
+                      <div className="relative">
+                        <MapPin className="w-3.5 h-3.5 text-rose-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <select
+                          value={selectedCityFilter}
+                          onChange={(e) => setSelectedCityFilter(e.target.value)}
+                          className="w-full bg-black/70 border border-zinc-800 text-xs text-zinc-300 font-mono rounded-xl pl-8 pr-3 py-2 focus:outline-none focus:border-cyan-500 transition-colors appearance-none cursor-pointer"
+                        >
+                          <option value="all">All Locations ({normalizedEvents.length})</option>
+                          {uniqueCities.map((city, cIdx) => (
+                            <option key={`city-${cIdx}`} value={city}>
+                              {city}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Genre Dropdown */}
+                    <div className="sm:col-span-6">
+                      <div className="relative">
+                        <Music className="w-3.5 h-3.5 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <select
+                          value={mapFilterGenre}
+                          onChange={(e) => setMapFilterGenre(e.target.value)}
+                          className="w-full bg-black/70 border border-zinc-800 text-xs text-zinc-300 font-mono rounded-xl pl-8 pr-3 py-2 focus:outline-none focus:border-cyan-500 transition-colors appearance-none cursor-pointer"
+                        >
+                          <option value="all">All Genres</option>
+                          {uniqueGenres.map((genre, gIdx) => (
+                            <option key={`genre-${gIdx}`} value={genre}>
+                              {genre}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Row 2: Date Presets & Quick Filter Chips */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-zinc-900/60 text-xs font-mono">
+                    {/* Date presets */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                      <span className="text-[10px] text-zinc-500 uppercase font-bold mr-1 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-cyan-400" /> When:
+                      </span>
+                      {[
+                        { id: 'all', label: 'All Dates' },
+                        { id: 'tonight', label: '🔥 Tonight' },
+                        { id: 'tomorrow', label: 'Tomorrow' },
+                        { id: 'weekend', label: 'This Weekend' },
+                        { id: 'upcoming', label: 'Later Tours' },
+                      ].map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            setDateFilter(preset.id as any);
+                            if (viewMode === 'community_archives') {
+                              setViewMode('single');
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
+                            dateFilter === preset.id
+                              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/60 shadow-sm'
+                              : 'bg-zinc-950 text-zinc-400 border border-zinc-800/80 hover:text-zinc-200 hover:border-zinc-700'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Fast toggles */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setTicketOnly(!ticketOnly)}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors flex items-center gap-1 cursor-pointer ${
+                          ticketOnly
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                            : 'bg-zinc-950 text-zinc-500 border-zinc-800 hover:text-zinc-300'
+                        }`}
+                      >
+                        <Ticket className="w-3 h-3" /> Tickets Available
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setVerifiedOnly(!verifiedOnly)}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors flex items-center gap-1 cursor-pointer ${
+                          verifiedOnly
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                            : 'bg-zinc-950 text-zinc-500 border-zinc-800 hover:text-zinc-300'
+                        }`}
+                      >
+                        <ShieldCheck className="w-3 h-3" /> Verified Gigs
+                      </button>
+
+                      {(searchQuery || selectedCityFilter !== 'all' || mapFilterGenre !== 'all' || dateFilter !== 'all' || verifiedOnly || ticketOnly || archiveYearFilter !== 'all') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('');
+                            setArchiveSearchQuery('');
+                            setArchiveYearFilter('all');
+                            setSelectedCityFilter('all');
+                            setMapFilterGenre('all');
+                            setDateFilter('all');
+                            setVerifiedOnly(false);
+                            setTicketOnly(false);
+                          }}
+                          className="text-[10px] text-zinc-500 hover:text-rose-400 underline cursor-pointer ml-1"
+                        >
+                          Reset all
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* MAIN CONTENT AREA: SINGLE SHOWS, TOURS ITINERARIES, OR COMMUNITY ARCHIVES */}
+            <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col md:flex-row relative">
+              {viewMode === 'single' ? (
+                /* ======================== 1. UPCOMING SINGLE SHOWS & FESTIVALS VIEW ======================== */
+                <div className="flex-1 min-h-0 min-w-0 flex flex-col md:flex-row overflow-hidden w-full h-full">
+                  {/* Left Column: Events Grid / List (Hidden on mobile when detailed view is open) */}
+                  <div className={`${mobileDetailOpen ? 'hidden md:block' : 'block'} flex-1 min-h-0 min-w-0 h-full overflow-y-auto overscroll-contain p-3 sm:p-5 space-y-3.5 bg-black/40 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent`}>
+                    {singleShowsList.length === 0 ? (
+                      <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-6 space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
+                          <Filter className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h4 className="text-white font-mono font-bold text-sm">No Events Match Your Filters</h4>
+                          <p className="text-xs font-mono text-zinc-500 max-w-sm mt-1">
+                            Try expanding your search query, selecting "All Locations", or clearing active date restrictions.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('');
+                            setSelectedCityFilter('all');
+                            setMapFilterGenre('all');
+                            setDateFilter('all');
+                            setVerifiedOnly(false);
+                            setTicketOnly(false);
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-xs font-mono font-bold text-cyan-400 border border-cyan-900/60 cursor-pointer"
+                        >
+                          Clear All Filters
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 pb-8 sm:pb-0">
+                        {singleShowsList.map((evt, idx) => {
+                          const isSelected = selectedMapEvent?.id === evt.id;
+                          const isTonight = evt.date.toLowerCase().includes('tonight');
+                          const isTomorrow = evt.date.toLowerCase().includes('tomorrow');
+                          const theme = getShowBorderTheme(evt.id || idx);
+
+                          const cardFlyerUrl = evt.flyerUrl || evt.flyer_url || '';
+
+                          return (
+                            <div
+                              key={`single-show-${evt.id || 'show'}-${idx}`}
+                              onClick={() => {
+                                setSelectedMapEvent(evt);
+                                onSelectEvent?.(evt);
+                                setMobileDetailOpen(true);
+                              }}
+                              className={`group bg-[#090b10] border-2 rounded-2xl p-4 transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                                isSelected
+                                  ? theme.selectedBorder
+                                  : `${theme.border} ${theme.glow} bg-[#090b10]`
+                              }`}
+                            >
+                              {cardFlyerUrl && (
+                                <div
+                                  className="absolute inset-0 pointer-events-none select-none z-0 overflow-hidden"
+                                  data-testid="show-card-flyer-bg"
+                                >
+                                  <img
+                                    src={cardFlyerUrl}
+                                    alt=""
+                                    aria-hidden="true"
+                                    referrerPolicy="no-referrer"
+                                    className="w-full h-full object-cover object-center opacity-[0.23] group-hover:opacity-[0.28] group-hover:scale-[1.03] transition-all duration-500"
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-[#090b10]/85 via-[#090b10]/35 to-[#090b10]/55" />
+                                </div>
+                              )}
+
+                              {/* Top Banner Tag & Verification Badges */}
+                              <div className="relative z-10 flex items-start justify-between gap-2 mb-2">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {isTonight ? (
+                                    <span className="bg-rose-950/80 border border-rose-500/60 text-rose-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1 animate-pulse">
+                                      <Flame className="w-3 h-3 text-rose-400 fill-rose-400" /> TONIGHT
+                                    </span>
+                                  ) : isTomorrow ? (
+                                    <span className="bg-amber-950/80 border border-amber-500/60 text-amber-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded">
+                                      TOMORROW
+                                    </span>
+                                  ) : (
+                                    <span className="bg-zinc-900 text-zinc-300 border border-zinc-800 font-mono font-bold text-[9px] px-2 py-0.5 rounded">
+                                      {evt.date}
+                                    </span>
+                                  )}
+
+                                  {/* Tour Stop Indicator */}
+                                  {evt.isTourStop || evt.tour_name ? (
+                                    <span className="bg-purple-950/80 border border-purple-500/60 text-purple-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1" title={evt.totalTourDates && evt.totalTourDates > 1 ? `Part of ${evt.totalTourDates}-city tour: "${evt.tourName || evt.tour_name}". Showing nearest date.` : 'Tour stop'}>
+                                      <Radio className="w-3 h-3 text-purple-400" /> Tour Stop
+                                    </span>
+                                  ) : null}
+
+                                  {evt.isClosestTourStop && evt.totalTourDates && evt.totalTourDates > 1 ? (
+                                    <span className="bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 font-mono text-[9px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                                      📍 Nearest Date
+                                    </span>
+                                  ) : null}
+
+                                  {/* Official Verified Promoter vs Community Submitted Badge */}
+                                  {evt.isPersonallyBooked || evt.verified ? (
+                                    <span className="bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1" title="Verified show booked by official promoter/venue">
+                                      <ShieldCheck className="w-3 h-3 text-emerald-400" /> Official
+                                    </span>
+                                  ) : (
+                                    <span className="bg-amber-950/80 border border-amber-500/60 text-amber-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1" title="Community submitted show by fan/band contributor">
+                                      <Award className="w-3 h-3 text-amber-400" /> Community
+                                    </span>
+                                  )}
+
+                                  <span className={`text-[9px] font-mono px-2 py-0.5 rounded truncate max-w-[150px] ${theme.tagBg}`}>
+                                    {evt.genre}
+                                  </span>
+                                </div>
+
+                                <span className="text-emerald-400 font-mono font-black text-xs shrink-0">
+                                  {evt.price}
+                                </span>
+                              </div>
+
+                              {/* Headliner & Title */}
+                              <div className="relative z-10 space-y-1 mb-2">
+                                <h3 className="text-sm sm:text-base font-black text-white group-hover:text-cyan-300 transition-colors font-mono tracking-tight leading-snug flex items-center flex-wrap gap-1.5">
+                                  <span>{evt.headliner}</span>
+                                  {evt.tour_name && !evt.headliner.toLowerCase().includes(evt.tour_name.toLowerCase()) && evt.tour_name.toLowerCase() !== 'tour show' && (
+                                    <span className="text-[10px] font-semibold text-cyan-400 font-mono px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/40">
+                                      Tour: {evt.tour_name}
+                                    </span>
+                                  )}
+                                </h3>
+                                <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-mono">
+                                  <Building className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                                  <span className="text-zinc-300 font-bold">{evt.venue}</span>
+                                  <span className="text-zinc-600">•</span>
+                                  <span className="text-zinc-400">{evt.city}</span>
+                                </div>
+                              </div>
+
+                              {/* Support Bands Lineup Chips */}
+                              {evt.support && evt.support.length > 0 && (
+                                <div className="relative z-10 mb-2.5">
+                                  <span className="text-[9px] font-mono text-zinc-500 uppercase font-bold block mb-1">
+                                    Lineup Support:
+                                  </span>
+                                  <div className="flex flex-wrap gap-1">
+                                    {evt.support.map((band: string, bIdx: number) => (
+                                      <button
+                                        key={`supp-${band}-${bIdx}`}
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSearchQuery(band);
+                                          triggerNotification?.(`Filtered by lineup band: "${band}"`);
+                                        }}
+                                        className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-black/60 border border-zinc-800 text-zinc-300 hover:text-cyan-300 hover:border-cyan-500/50 transition-colors"
+                                        title={`Filter shows with ${band}`}
+                                      >
+                                        +{band}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Quick Jump to Full Tour Itinerary if part of a tour package */}
+                              {evt.isTourStop && evt.totalTourDates && evt.totalTourDates > 1 && (
+                                <div className="relative z-10 mb-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setViewMode('tours');
+                                      if (evt.tourId) {
+                                        setExpandedTourIds(prev => new Set(prev).add(evt.tourId));
+                                      }
+                                      triggerNotification?.(`Opened tour itinerary for "${evt.tourName || evt.headliner}" (${evt.totalTourDates} dates)`);
+                                    }}
+                                    className="w-full py-1.5 px-2.5 rounded-lg bg-purple-950/40 hover:bg-purple-900/60 text-purple-300 border border-purple-500/40 text-[10px] font-mono font-bold flex items-center justify-between transition-all cursor-pointer shadow-[0_0_10px_rgba(168,85,247,0.15)] group/tourbtn"
+                                    title="Switch to Upcoming Tours tab and drop down the full itinerary"
+                                  >
+                                    <span className="flex items-center gap-1.5">
+                                      <Radio className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                                      <span>Tour Route ({evt.totalTourDates} Dates)</span>
+                                    </span>
+                                    <span className="text-[9.5px] text-purple-400 group-hover/tourbtn:translate-x-0.5 transition-transform">
+                                      View All Dates ➔
+                                    </span>
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Card Bottom: Doors, RSVP Pit, Google Cal & Action CTA */}
+                              <div className="relative z-10 pt-2 border-t border-zinc-900/80 flex items-center justify-between mt-auto flex-wrap gap-1.5">
+                                <span className="text-[10px] font-mono text-zinc-500 flex items-center gap-1">
+                                  <Clock className="w-3 h-3 text-zinc-600" /> {evt.time}
+                                </span>
+
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {/* RSVP Pit List Toggle */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleShowRsvp(evt.id, evt.headliner);
+                                    }}
+                                    className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                                      rsvpedShowIds.has(evt.id)
+                                        ? 'bg-rose-950/90 text-rose-300 border border-rose-500/70 shadow-[0_0_10px_rgba(244,63,94,0.3)] animate-pulse'
+                                        : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'
+                                    }`}
+                                    title={rsvpedShowIds.has(evt.id) ? 'You are in the pit list!' : 'RSVP and join pit list'}
+                                  >
+                                    <Flame className={`w-3 h-3 ${rsvpedShowIds.has(evt.id) ? 'text-rose-400 fill-rose-400' : 'text-zinc-500'}`} />
+                                    <span>{rsvpedShowIds.has(evt.id) ? 'In Pit 🔥' : 'Pit RSVP'}</span>
+                                  </button>
+
+                                  {/* Add to Google Calendar Link */}
+                                  <a
+                                    href={getGoogleCalendarUrl(evt)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-amber-300 border border-zinc-800 transition-colors"
+                                    title="Add show date to Google Calendar"
+                                  >
+                                    <Calendar className="w-3.5 h-3.5" />
+                                  </a>
+
+                                  {evt.ticketUrl ? (
+                                    <a
+                                      href={evt.ticketUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-[10px] font-mono font-bold uppercase transition-all shadow flex items-center gap-1"
+                                    >
+                                      <Ticket className="w-3 h-3" /> Tickets
+                                    </a>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedMapEvent(evt);
+                                        onSelectEvent?.(evt);
+                                        setMobileDetailOpen(true);
+                                      }}
+                                      className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 rounded-lg text-[10px] font-mono font-bold uppercase transition-colors"
+                                    >
+                                      Details
+                                    </button>
+                                  )}
+                                  
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedMapEvent(evt);
+                                      onSelectEvent?.(evt);
+                                      setMobileDetailOpen(true);
+                                    }}
+                                    className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 flex items-center gap-1 font-mono text-[10px]"
+                                    title="View Full Show Dossier"
+                                  >
+                                    <span className="hidden sm:inline">Details</span>
+                                    <ChevronRight className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Column: Selected Show Detail Panel (Rich Dossier - Hidden on mobile unless show is tapped) */}
+                  <div className={`${mobileDetailOpen ? 'flex' : 'hidden md:flex'} w-full md:w-80 lg:w-96 bg-[#08090d] border-t md:border-t-0 md:border-l border-zinc-900 p-4 sm:p-5 flex-col justify-between overflow-y-auto overscroll-contain shrink-0 min-h-0 h-full scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent`}>
+                    {/* Mobile Back Button */}
+                    <div className="flex items-center justify-between pb-3 mb-2 border-b border-zinc-900 md:hidden shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setMobileDetailOpen(false)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 font-mono text-xs font-bold cursor-pointer hover:bg-cyan-900 transition-colors"
+                      >
+                        <ArrowLeft className="w-4 h-4" /> Back to All Shows
+                      </button>
+                      <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Show Dossier</span>
+                    </div>
+
+                    {activeEvent ? (
+                      <div className="space-y-4 pb-8 sm:pb-0">
+                        {/* Event Flyer / Photo Banner */}
+                        {activeEvent.flyerUrl && (
+                          <div className="w-full h-36 rounded-xl overflow-hidden bg-black border border-zinc-800 relative group">
+                            <img
+                              src={activeEvent.flyerUrl}
+                              alt={activeEvent.title}
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                            <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] font-mono font-bold text-white">
+                              <span className="bg-black/70 px-2 py-0.5 rounded border border-zinc-800">
+                                {activeEvent.city}
+                              </span>
+                              <span className="bg-cyan-500 text-black px-2 py-0.5 rounded font-black">
+                                {activeEvent.price}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <div className="flex items-center gap-1.5 text-cyan-400 text-[10px] font-mono uppercase tracking-wider font-bold mb-1 flex-wrap">
+                            {activeEvent.verified && <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />}
+                            <span>{activeEvent.genre}</span>
+                          </div>
+                          <h3 className="text-base font-black text-white font-mono leading-tight">
+                            {activeEvent.title}
+                          </h3>
+                        </div>
+
+                        {/* Tour Date Banner if part of a multi-city tour */}
+                        {(activeEvent.isTourStop || activeEvent.tour_name || activeEvent.tourName) && (
+                          <div className="bg-gradient-to-r from-purple-950/70 to-indigo-950/60 border border-purple-500/40 p-3 rounded-xl flex items-center justify-between gap-2 shadow-[0_0_15px_rgba(168,85,247,0.15)]">
+                            <div className="space-y-0.5 min-w-0">
+                              <div className="flex items-center gap-1.5 text-purple-300 font-mono font-bold text-[10px] uppercase">
+                                <Radio className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                                <span className="truncate">Official Tour Package</span>
+                              </div>
+                              <p className="text-[11px] font-mono text-zinc-300 truncate">
+                                Part of <strong>{activeEvent.tourName || activeEvent.tour_name}</strong>
+                                {activeEvent.totalTourDates ? ` (${activeEvent.totalTourDates} Dates)` : ''}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setViewMode('tours');
+                                if (activeEvent.tourId) {
+                                  setExpandedTourIds(prev => new Set(prev).add(activeEvent.tourId));
+                                }
+                                triggerNotification?.(`Opened tour route for "${activeEvent.tourName || activeEvent.headliner}"`);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-mono font-bold text-[10px] uppercase shrink-0 cursor-pointer shadow transition-all"
+                            >
+                              Tour Route ➔
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Quick Spec Box */}
+                        <div className="space-y-2 bg-black/60 p-3 rounded-xl border border-zinc-900 text-xs font-mono">
+                          <div className="flex items-center gap-2 text-zinc-300">
+                            <Building className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                            <span>
+                              {activeEvent.venue} ({activeEvent.city})
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-zinc-300">
+                            <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span>{activeEvent.date}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-zinc-300">
+                            <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            <span>{activeEvent.time}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-zinc-300">
+                            <Ticket className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>Door Price: <strong className="text-emerald-400">{activeEvent.price}</strong></span>
+                          </div>
+                        </div>
+
+                        {/* Description */}
+                        {activeEvent.description && (
+                          <div className="bg-zinc-950/60 p-3 rounded-xl border border-zinc-900/80">
+                            <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold block mb-1">
+                              Show Details
+                            </span>
+                            <p className="text-xs text-zinc-400 font-mono leading-relaxed">
+                              {activeEvent.description}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Full Lineup */}
+                        {activeEvent.support && activeEvent.support.length > 0 && (
+                          <div>
+                            <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold block mb-1.5">
+                              Lineup & Support
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className="px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-800/80 text-cyan-300 text-xs font-mono font-bold">
+                                {activeEvent.headliner} (Headliner)
+                              </span>
+                              {activeEvent.support.map((act: string, i: number) => (
+                                <button
+                                  key={`dossier-act-${act}-${i}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setSearchQuery(act);
+                                    triggerNotification?.(`Filtered shows by "${act}"`);
+                                  }}
+                                  className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 text-xs font-mono border border-zinc-800 hover:border-cyan-500/50 hover:text-white transition-colors cursor-pointer"
+                                >
+                                  {act}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* CTAs */}
+                        <div className="pt-2 space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenFullEventPage(activeEvent)}
+                            className="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:via-orange-400 hover:to-amber-400 text-black font-mono uppercase font-black text-xs py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.35)] flex items-center justify-center gap-2 cursor-pointer border border-amber-300/80 active:scale-[0.98]"
+                          >
+                            <Sparkles className="w-4 h-4 text-black animate-pulse" /> Open Full Event Page
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              triggerNotification?.(`🎟️ Reserved pass for ${activeEvent.title}!`);
+                            }}
+                            className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-mono uppercase font-black text-xs py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <Ticket className="w-4 h-4" /> Claim Presale Pass
+                          </button>
+
+                          {activeEvent.ticketUrl && (
+                            <a
+                              href={activeEvent.ticketUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white font-mono uppercase font-bold text-[10px] py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-zinc-800"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> Official Box Office Website
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-center p-4 space-y-2">
+                        <Calendar className="w-8 h-8 text-zinc-700" />
+                        <p className="text-xs font-mono text-zinc-500">
+                          Select an event from the list to view full lineup, venue info & tickets.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : viewMode === 'community_archives' ? (
+                /* ======================== COMMUNITY ARCHIVES VIEW (2-TAB SPLIT) ======================== */
+                <div className="flex-1 min-h-0 min-w-0 flex flex-col md:flex-row overflow-hidden w-full h-full">
+                  {/* Left Column: Archive Content */}
+                  <div className={`${mobileDetailOpen ? 'hidden md:block' : 'block'} flex-1 min-h-0 min-w-0 h-full overflow-y-auto overscroll-contain p-3 sm:p-5 space-y-3.5 bg-black/50 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent`}>
+                    
+                    {/* Sub-tab Navigation Bar for Community Archives */}
+                    <div className="flex items-center justify-between pb-3 border-b border-zinc-850 gap-2 flex-wrap sticky top-0 bg-[#08090d]/95 backdrop-blur-md z-10 pt-0.5">
+                      <div className="flex items-center bg-zinc-950 border border-amber-500/30 rounded-xl p-1 shadow-inner">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setArchiveSubTab('single');
+                            setMobileDetailOpen(false);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                            archiveSubTab === 'single'
+                              ? 'bg-amber-400 text-black shadow-md font-black'
+                              : 'text-amber-400/70 hover:text-amber-300 hover:bg-amber-950/40'
+                          }`}
+                        >
+                          <List className="w-3.5 h-3.5" />
+                          <span>Single Shows {archiveSingleShowsList.length > 0 ? `(${archiveSingleShowsList.length})` : ''}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setArchiveSubTab('tours');
+                            setMobileDetailOpen(false);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                            archiveSubTab === 'tours'
+                              ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-black shadow-md font-black'
+                              : 'text-amber-400/70 hover:text-amber-300 hover:bg-amber-950/40'
+                          }`}
+                        >
+                          <Radio className="w-3.5 h-3.5" />
+                          <span>Archived Tours {archiveToursList.length > 0 ? `(${archiveToursList.length})` : ''}</span>
+                        </button>
+                      </div>
+
+                      <span className="text-[10px] font-mono text-amber-400/90 bg-amber-950/40 border border-amber-500/30 px-2.5 py-1 rounded-lg">
+                        {archiveSubTab === 'single'
+                          ? `${archiveSingleShowsList.length} Archived Single Gigs`
+                          : `${archiveToursList.length} Concluded Multi-City Tours`}
+                      </span>
+                    </div>
+
+                    {/* SUB-TAB 1: ARCHIVED SINGLE SHOWS */}
+                    {archiveSubTab === 'single' && (
+                      <>
+                        {archiveSingleShowsList.length === 0 ? (
+                          <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-6 space-y-3">
+                            <div className="w-12 h-12 rounded-full bg-amber-950/40 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                              <History className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <h4 className="text-white font-mono font-bold text-sm">No Archived Single Shows Found</h4>
+                              <p className="text-xs font-mono text-zinc-500 max-w-sm mt-1">
+                                No past standalone community gigs match your search or filters.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSearchQuery('');
+                                setArchiveSearchQuery('');
+                                setArchiveYearFilter('all');
+                                setSelectedCityFilter('all');
+                                setMapFilterGenre('all');
+                              }}
+                              className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-xs font-mono font-bold text-amber-400 border border-amber-500/40 cursor-pointer"
+                            >
+                              Reset Archive Filters
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 pb-8 sm:pb-0">
+                            {archiveSingleShowsList.map((evt, idx) => {
+                              const isSelected = selectedMapEvent?.id === evt.id;
+                              const theme = getShowBorderTheme(evt.id || `arch-${idx}`);
+                              const archFlyerUrl = evt.flyerUrl || evt.flyer_url || '';
+                              return (
+                                <div
+                                  key={`comm-arch-${evt.id || 'arch'}-${idx}`}
+                                  onClick={() => {
+                                    setSelectedMapEvent(evt);
+                                    onSelectEvent?.(evt);
+                                    setMobileDetailOpen(true);
+                                  }}
+                                  className={`group bg-[#0c0d12] border-2 rounded-2xl p-4 transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                                    isSelected
+                                      ? theme.selectedBorder
+                                      : `${theme.border} ${theme.glow} bg-[#0c0d12]`
+                                  }`}
+                                >
+                                  {archFlyerUrl && (
+                                    <div
+                                      className="absolute inset-0 pointer-events-none select-none z-0 overflow-hidden"
+                                      data-testid="archive-card-flyer-bg"
+                                    >
+                                      <img
+                                        src={archFlyerUrl}
+                                        alt=""
+                                        aria-hidden="true"
+                                        referrerPolicy="no-referrer"
+                                        className="w-full h-full object-cover object-center opacity-[0.23] group-hover:opacity-[0.28] group-hover:scale-[1.03] transition-all duration-500"
+                                      />
+                                      <div className="absolute inset-0 bg-gradient-to-t from-[#0c0d12]/85 via-[#0c0d12]/35 to-[#0c0d12]/55" />
+                                    </div>
+                                  )}
+
+                                  {/* Top Banner Tag */}
+                                  <div className="relative z-10 flex items-start justify-between gap-2 mb-2">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="bg-amber-950/80 border border-amber-500/60 text-amber-300 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1">
+                                        <CheckCircle2 className="w-3 h-3 text-amber-400" /> CONCLUDED • {evt.date}
+                                      </span>
+                                      <span className="bg-zinc-900 text-zinc-400 border border-zinc-800 font-mono font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1">
+                                        <Tag className="w-3 h-3 text-zinc-400" /> Community Gig
+                                      </span>
+                                    </div>
+                                    <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest px-1.5 py-0.5 rounded bg-black/60 border border-zinc-850">
+                                      Archived
+                                    </span>
+                                  </div>
+
+                                  {/* Headliner & Show Title */}
+                                  <div className="relative z-10 space-y-1 mb-2.5">
+                                    <h3 className="text-sm sm:text-base font-black text-white group-hover:text-amber-300 transition-colors font-mono tracking-tight leading-snug">
+                                      {evt.headliner}
+                                    </h3>
+                                    {evt.show_name && evt.show_name !== evt.headliner && (
+                                      <p className="text-xs font-mono text-amber-400/80 font-bold truncate">
+                                        {evt.show_name}
+                                      </p>
+                                    )}
+                                    <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-mono">
+                                      <Building className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                      <span className="text-zinc-300 font-bold">{evt.venue}</span>
+                                      <span className="text-zinc-600">•</span>
+                                      <span className="text-zinc-400">{evt.city}</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Description / Archive notes */}
+                                  {evt.description && (
+                                    <p className="relative z-10 text-[11px] font-mono text-zinc-400 bg-black/40 border border-zinc-900 rounded-xl p-2.5 mb-3 line-clamp-2 leading-relaxed">
+                                      {evt.description}
+                                    </p>
+                                  )}
+
+                                  {/* Support Bands Lineup Chips */}
+                                  {evt.support && evt.support.length > 0 && (
+                                    <div className="relative z-10 mb-3">
+                                      <span className="text-[9px] font-mono text-zinc-500 uppercase font-bold block mb-1">
+                                        Bands on Bill:
+                                      </span>
+                                      <div className="flex flex-wrap gap-1">
+                                        <span className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-amber-950/30 border border-amber-500/40 text-amber-300">
+                                          {evt.headliner}
+                                        </span>
+                                        {evt.support.map((band: string, bIdx: number) => (
+                                          <span
+                                            key={`comm-supp-${band}-${bIdx}`}
+                                            className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-black/60 border border-zinc-800 text-zinc-400"
+                                          >
+                                            +{band}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Card Bottom: Archive Status & Actions */}
+                                  <div className="relative z-10 pt-2 border-t border-zinc-900 flex items-center justify-between mt-auto">
+                                    <span className="text-[10px] font-mono text-zinc-500 flex items-center gap-1">
+                                      <Clock className="w-3 h-3 text-zinc-600" /> Preserved Record
+                                    </span>
+
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenFullEventPage(evt);
+                                        }}
+                                        className="px-2 py-1 bg-amber-950/80 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-500/60 rounded-lg text-[10px] font-mono font-bold uppercase transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <Sparkles className="w-3 h-3" /> Event Page
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleEditArchiveShow(evt);
+                                        }}
+                                        className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-cyan-300 border border-zinc-700/80 rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
+                                        title="Edit show details in community archive"
+                                      >
+                                        <Edit3 className="w-3 h-3 text-cyan-400" /> Edit
+                                      </button>
+
+                                      {deleteConfirmId === evt.id ? (
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleDeleteArchiveShow(evt, true);
+                                            }}
+                                            className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white font-mono text-[9.5px] font-bold uppercase rounded flex items-center gap-1 animate-pulse cursor-pointer shadow-lg"
+                                            title="Click to confirm permanent deletion"
+                                          >
+                                            <Trash2 className="w-3 h-3" /> Confirm Delete
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setDeleteConfirmId(null);
+                                            }}
+                                            className="px-1.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-[9.5px] font-bold rounded cursor-pointer"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteArchiveShow(evt);
+                                          }}
+                                          className="px-2 py-1 bg-rose-950/40 hover:bg-rose-900/80 text-rose-300 border border-rose-500/50 rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
+                                          title="Permanently delete this show from archives"
+                                        >
+                                          <Trash2 className="w-3 h-3 text-rose-400" /> Delete
+                                        </button>
+                                      )}
+
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedMapEvent(evt);
+                                          onSelectEvent?.(evt);
+                                          setMobileDetailOpen(true);
+                                        }}
+                                        className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 flex items-center gap-1 font-mono text-[10px] cursor-pointer"
+                                        title="View Archive Dossier"
+                                      >
+                                        <span>Dossier</span>
+                                        <ChevronRight className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* SUB-TAB 2: ARCHIVED TOURS */}
+                    {archiveSubTab === 'tours' && (
+                      <>
+                        {archiveToursList.length === 0 ? (
+                          <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-6 space-y-3">
+                            <div className="w-12 h-12 rounded-full bg-amber-950/40 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                              <Radio className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <h4 className="text-white font-mono font-bold text-sm">No Concluded Tours Found</h4>
+                              <p className="text-xs font-mono text-zinc-500 max-w-sm mt-1">
+                                No past multi-date tours currently match your search query or location filter.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSearchQuery('');
+                                setArchiveSearchQuery('');
+                                setArchiveYearFilter('all');
+                                setSelectedCityFilter('all');
+                                setMapFilterGenre('all');
+                              }}
+                              className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-xs font-mono font-bold text-amber-400 border border-amber-500/40 cursor-pointer"
+                            >
+                              Reset Archive Filters
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-4 pb-8 sm:pb-0">
+                            {archiveToursList.map((tour, tIdx) => {
+                              const isExpanded = expandedTourIds.has(tour.id);
+                              const uniqueCities = Array.from(new Set(tour.stops.map((s: any) => s.city).filter(Boolean)));
+                              const citiesPreview = uniqueCities.slice(0, 5).join(' • ') + (uniqueCities.length > 5 ? ` +${uniqueCities.length - 5} more` : '');
+                              const isSelected = selectedMapEvent && tour.stops.some((s: any) => s.id === selectedMapEvent.id);
+
+                              const archTourFlyer = tour.flyerUrl || tour.stops.find((s: any) => s.flyerUrl || s.flyer_url)?.flyerUrl || '';
+
+                              return (
+                                <div
+                                  key={`arch-tour-card-${tour.id || 'tour'}-${tIdx}`}
+                                  className={`group bg-[#0c0d14] border-2 rounded-2xl p-4 sm:p-5 transition-all relative overflow-hidden ${
+                                    isSelected
+                                      ? 'border-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.35)]'
+                                      : 'border-amber-900/50 hover:border-amber-500/60 shadow-lg'
+                                  }`}
+                                >
+                                  {archTourFlyer && (
+                                    <div
+                                      className="absolute inset-0 pointer-events-none select-none z-0 overflow-hidden"
+                                      data-testid="archive-tour-card-flyer-bg"
+                                    >
+                                      <img
+                                        src={archTourFlyer}
+                                        alt=""
+                                        aria-hidden="true"
+                                        referrerPolicy="no-referrer"
+                                        className="w-full h-full object-cover object-center opacity-[0.23] group-hover:opacity-[0.28] group-hover:scale-[1.03] transition-all duration-500"
+                                      />
+                                      <div className="absolute inset-0 bg-gradient-to-t from-[#0c0d14]/85 via-[#0c0d14]/35 to-[#0c0d14]/55" />
+                                    </div>
+                                  )}
+
+                                  {/* Top Banner Badges */}
+                                  <div className="relative z-10 flex items-start justify-between gap-2 mb-3">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="bg-gradient-to-r from-amber-950 to-yellow-950 border border-amber-500/60 text-amber-300 font-mono font-bold text-[9.5px] px-2.5 py-0.5 rounded flex items-center gap-1.5 shadow-sm">
+                                        <History className="w-3 h-3 text-amber-400" /> CONCLUDED TOUR
+                                      </span>
+                                      <span className="bg-amber-950/80 border border-amber-700/60 text-amber-200 font-mono font-black text-[9.5px] px-2 py-0.5 rounded flex items-center gap-1">
+                                        {tour.stops.length} {tour.stops.length === 1 ? 'DATE' : 'DATES'}
+                                      </span>
+                                      {(tour.startDate || tour.endDate) && (
+                                        <span className="bg-black/60 border border-zinc-800 text-zinc-300 font-mono text-[9px] px-2 py-0.5 rounded flex items-center gap-1">
+                                          <Calendar className="w-3 h-3 text-amber-400" />
+                                          {tour.startDate}{tour.endDate && tour.endDate !== tour.startDate ? ` — ${tour.endDate}` : ''}
+                                        </span>
+                                      )}
+                                      <span className="bg-zinc-900 text-zinc-400 border border-zinc-800 font-mono text-[9px] px-2 py-0.5 rounded">
+                                        {tour.genre}
+                                      </span>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleTourExpand(tour.id)}
+                                      className="px-2.5 py-1 bg-amber-950/60 hover:bg-amber-900 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                                    >
+                                      <span>{isExpanded ? 'Hide Schedule' : `View Schedule (${tour.stops.length})`}</span>
+                                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                    </button>
+                                  </div>
+
+                                  {/* Tour Package Title & Headliner */}
+                                  <div className="relative z-10 space-y-1 mb-2">
+                                    <h3 className="text-base sm:text-lg font-black text-white font-mono tracking-tight">
+                                      {tour.tourName}
+                                    </h3>
+                                    <div className="flex items-center gap-2 text-xs font-mono">
+                                      <span className="text-amber-400 font-bold flex items-center gap-1">
+                                        <Music className="w-3.5 h-3.5" /> Headliner: {tour.headliner}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Cities Visited Summary */}
+                                  <div className="relative z-10 flex items-center gap-1.5 text-zinc-400 text-xs font-mono mb-3">
+                                    <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                    <span className="truncate">{citiesPreview}</span>
+                                  </div>
+
+                                  {/* Lineup Chips */}
+                                  {tour.supportBands.length > 0 && (
+                                    <div className="relative z-10 mb-3">
+                                      <span className="text-[9.5px] font-mono text-zinc-500 uppercase font-bold block mb-1">
+                                        Touring Support:
+                                      </span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {tour.supportBands.map((band: string, sIdx: number) => (
+                                          <span
+                                            key={`arch-tour-supp-${tour.id}-${band}-${sIdx}`}
+                                            className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-black/60 border border-zinc-800 text-zinc-300"
+                                          >
+                                            {band}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Collapsible Full Itinerary Dropdown */}
+                                  <AnimatePresence>
+                                    {isExpanded && (
+                                      <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="relative z-10 pt-3 border-t border-zinc-800/80 space-y-2 mt-3"
+                                      >
+                                        <div className="flex items-center justify-between text-[10px] font-mono text-amber-400 uppercase font-bold px-1">
+                                          <span>Complete Concluded Itinerary ({tour.stops.length} Dates)</span>
+                                          <span className="text-zinc-500">Tap date to view archive dossier</span>
+                                        </div>
+
+                                        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                          {tour.stops.map((stop: any, sIdx: number) => {
+                                            const isStopSelected = selectedMapEvent?.id === stop.id;
+                                            return (
+                                              <div
+                                                key={`arch-tour-stop-${stop.id || sIdx}`}
+                                                onClick={() => {
+                                                  setSelectedMapEvent(stop);
+                                                  onSelectEvent?.(stop);
+                                                  setMobileDetailOpen(true);
+                                                }}
+                                                className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 cursor-pointer font-mono ${
+                                                  isStopSelected
+                                                    ? 'bg-amber-950/50 border-amber-400 text-white shadow-md'
+                                                    : 'bg-black/60 border-zinc-850 hover:border-zinc-700 text-zinc-300 hover:bg-zinc-900/60'
+                                                }`}
+                                              >
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                  <span className="text-[10px] text-amber-500/80 font-bold shrink-0 w-6">
+                                                    #{sIdx + 1}
+                                                  </span>
+                                                  <span className="text-amber-300 font-bold text-xs shrink-0">
+                                                    {formatShowDate(stop.date)}
+                                                  </span>
+                                                  <span className="text-white text-xs truncate">
+                                                    {stop.city}
+                                                  </span>
+                                                  <span className="text-zinc-500 text-xs truncate hidden sm:inline">
+                                                    @ {stop.venue}
+                                                  </span>
+                                                </div>
+
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleOpenFullEventPage(stop);
+                                                    }}
+                                                    className="px-2 py-0.5 bg-amber-950/80 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-500/50 rounded text-[9.5px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
+                                                  >
+                                                    <Sparkles className="w-2.5 h-2.5" /> Event Page
+                                                  </button>
+                                                  <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Right Column: Selected Community Archive Detail Panel */}
+                  <div className={`${mobileDetailOpen ? 'flex' : 'hidden md:flex'} w-full md:w-80 lg:w-96 bg-[#08090d] border-t md:border-t-0 md:border-l border-zinc-900 p-4 sm:p-5 flex-col justify-between overflow-y-auto overscroll-contain shrink-0 min-h-0 h-full scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent`}>
+                    {/* Mobile Back Button */}
+                    <div className="flex items-center justify-between pb-3 mb-2 border-b border-zinc-900 md:hidden shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setMobileDetailOpen(false)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-950/80 border border-amber-500/50 text-amber-300 font-mono text-xs font-bold cursor-pointer hover:bg-amber-900 transition-colors"
+                      >
+                        <ArrowLeft className="w-4 h-4" /> Back to Community Archives
+                      </button>
+                      <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Archive Dossier</span>
+                    </div>
+
+                    {activeEvent ? (
+                      <div className="space-y-4 pb-8 sm:pb-0">
+                        {/* Event Flyer / Photo Banner */}
+                        {activeEvent.flyerUrl && (
+                          <div className="w-full h-36 rounded-xl overflow-hidden bg-black border border-zinc-800 relative group">
+                            <img
+                              src={activeEvent.flyerUrl}
+                              alt={activeEvent.title}
+                              className="w-full h-full object-cover grayscale-[30%] group-hover:grayscale-0 transition-all duration-500"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                            <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] font-mono font-bold text-white">
+                              <span className="bg-black/80 px-2 py-0.5 rounded border border-zinc-800">
+                                {activeEvent.city}
+                              </span>
+                              <span className="bg-amber-500 text-black px-2 py-0.5 rounded font-black">
+                                CONCLUDED
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <div className="flex items-center gap-1.5 text-amber-400 text-[10px] font-mono uppercase tracking-wider font-bold mb-1 flex-wrap">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Community Show Archive</span>
+                            <span className="text-zinc-600">•</span>
+                            <span className="text-zinc-400">{activeEvent.genre}</span>
+                          </div>
+                          <h3 className="text-base font-black text-white font-mono leading-tight">
+                            {activeEvent.title}
+                          </h3>
+                        </div>
+
+                        {/* Quick Spec Box */}
+                        <div className="space-y-2 bg-black/60 p-3 rounded-xl border border-zinc-900 text-xs font-mono">
+                          <div className="flex items-center gap-2 text-zinc-300">
+                            <Building className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                            <span>
+                              {activeEvent.venue} ({activeEvent.city})
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-zinc-300">
+                            <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span>Concluded on {activeEvent.date}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-zinc-300">
+                            <Tag className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            <span>Community Booking (Not on promoter roster)</span>
+                          </div>
+                        </div>
+
+                        {/* Distinction note */}
+                        <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-3 text-[11px] font-mono text-amber-300/90 leading-relaxed flex items-start gap-2">
+                          <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                          <span>
+                            This show was submitted by the community and is filed here in the Scene Directory archives rather than your promoter festival archives.
+                          </span>
+                        </div>
+
+                        {/* Description */}
+                        {activeEvent.description && (
+                          <div className="bg-zinc-950/60 p-3 rounded-xl border border-zinc-900/80">
+                            <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold block mb-1">
+                              Archive Notes
+                            </span>
+                            <p className="text-xs text-zinc-400 font-mono leading-relaxed">
+                              {activeEvent.description}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Full Lineup */}
+                        {activeEvent.support && activeEvent.support.length > 0 && (
+                          <div>
+                            <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold block mb-1.5">
+                              Lineup on Bill
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className="px-2 py-0.5 rounded bg-amber-950/60 border border-amber-800/80 text-amber-300 text-xs font-mono font-bold">
+                                {activeEvent.headliner} (Headliner)
+                              </span>
+                              {activeEvent.support.map((act: string, i: number) => (
+                                <span
+                                  key={`arch-act-${act}-${i}`}
+                                  className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 text-xs font-mono border border-zinc-800"
+                                >
+                                  {act}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* CTAs */}
+                        <div className="pt-2 space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenFullEventPage(activeEvent)}
+                            className="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:via-orange-400 hover:to-amber-400 text-black font-mono uppercase font-black text-xs py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.35)] flex items-center justify-center gap-2 cursor-pointer border border-amber-300/80 active:scale-[0.98]"
+                          >
+                            <Sparkles className="w-4 h-4 text-black animate-pulse" /> Open Full Event Page
+                          </button>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEditArchiveShow(activeEvent)}
+                              className="bg-zinc-900 hover:bg-zinc-800 text-cyan-300 hover:text-cyan-200 font-mono uppercase font-bold text-xs py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-cyan-500/50 cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-cyan-400" /> Edit
+                            </button>
+
+                            {deleteConfirmId === activeEvent.id ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteArchiveShow(activeEvent, true)}
+                                className="bg-rose-600 hover:bg-rose-500 text-white font-mono uppercase font-bold text-xs py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-lg animate-pulse"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Confirm Delete
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteArchiveShow(activeEvent)}
+                                className="bg-rose-950/60 hover:bg-rose-900 text-rose-300 font-mono uppercase font-bold text-xs py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-rose-500/60 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-400" /> Delete
+                              </button>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              triggerNotification?.(`📋 Archived link ready for ${activeEvent.title}`);
+                            }}
+                            className="w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white font-mono uppercase font-bold text-xs py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-zinc-800 cursor-pointer"
+                          >
+                            <Share2 className="w-3.5 h-3.5" /> Share Scene Archive
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-center p-4 space-y-2">
+                        <History className="w-8 h-8 text-zinc-700" />
+                        <p className="text-xs font-mono text-zinc-500">
+                          Select an archived show to view venue and performance records.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* ======================== 2. UPCOMING TOURS & ITINERARIES VIEW ======================== */
+                <div className="flex-1 min-h-0 min-w-0 flex flex-col md:flex-row overflow-hidden w-full h-full">
+                  {/* Left Column: Tour Packages List (Collapsed by default with expandable dropdowns) */}
+                  <div className={`${mobileDetailOpen ? 'hidden md:block' : 'block'} flex-1 min-h-0 min-w-0 h-full overflow-y-auto overscroll-contain p-3 sm:p-5 space-y-3.5 bg-black/40 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent`}>
+                    {toursList.length === 0 ? (
+                      <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-6 space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-purple-950/40 border border-purple-500/40 flex items-center justify-center text-purple-400">
+                          <Radio className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h4 className="text-white font-mono font-bold text-sm">No Upcoming Tours Found</h4>
+                          <p className="text-xs font-mono text-zinc-500 max-w-sm mt-1">
+                            No multi-date tour packages currently match your search query or location filter.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('');
+                            setSelectedCityFilter('all');
+                            setMapFilterGenre('all');
+                            setDateFilter('all');
+                            setVerifiedOnly(false);
+                            setTicketOnly(false);
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-xs font-mono font-bold text-purple-400 border border-purple-500/40 cursor-pointer"
+                        >
+                          Clear Tour Filters
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 pb-8 sm:pb-0">
+                        {toursList.map((tour, tIdx) => {
+                          const isExpanded = expandedTourIds.has(tour.id);
+                          const uniqueCities = Array.from(new Set(tour.stops.map((s: any) => s.city).filter(Boolean)));
+                          const citiesPreview = uniqueCities.slice(0, 5).join(' • ') + (uniqueCities.length > 5 ? ` +${uniqueCities.length - 5} more` : '');
+                          const isSelected = selectedMapEvent && tour.stops.some((s: any) => s.id === selectedMapEvent.id);
+
+                          const tourCardFlyerUrl = tour.flyerUrl || tour.stops.find((s: any) => s.flyerUrl || s.flyer_url)?.flyerUrl || '';
+
+                          return (
+                            <div
+                              key={`tour-card-${tour.id || 'tour'}-${tIdx}`}
+                              className={`group bg-[#0c0d14] border-2 rounded-2xl p-4 sm:p-5 transition-all relative overflow-hidden ${
+                                isSelected
+                                  ? 'border-purple-400 shadow-[0_0_30px_rgba(168,85,247,0.35)]'
+                                  : 'border-purple-900/50 hover:border-purple-500/60 shadow-lg'
+                              }`}
+                            >
+                              {tourCardFlyerUrl && (
+                                <div
+                                  className="absolute inset-0 pointer-events-none select-none z-0 overflow-hidden"
+                                  data-testid="tour-card-flyer-bg"
+                                >
+                                  <img
+                                    src={tourCardFlyerUrl}
+                                    alt=""
+                                    aria-hidden="true"
+                                    referrerPolicy="no-referrer"
+                                    className="w-full h-full object-cover object-center opacity-[0.23] group-hover:opacity-[0.28] group-hover:scale-[1.03] transition-all duration-500"
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-[#0c0d14]/85 via-[#0c0d14]/35 to-[#0c0d14]/55" />
+                                </div>
+                              )}
+
+                              {/* Top Banner Badges */}
+                              <div className="relative z-10 flex items-start justify-between gap-2 mb-3">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="bg-gradient-to-r from-purple-950 to-indigo-950 border border-purple-500/60 text-purple-300 font-mono font-bold text-[9.5px] px-2.5 py-0.5 rounded flex items-center gap-1.5 shadow-sm">
+                                    <Radio className="w-3 h-3 text-purple-400 animate-pulse" /> MULTI-CITY TOUR
+                                  </span>
+                                  <span className="bg-purple-950/80 border border-purple-700/60 text-purple-200 font-mono font-black text-[9.5px] px-2 py-0.5 rounded flex items-center gap-1">
+                                    {tour.stops.length} {tour.stops.length === 1 ? 'DATE' : 'DATES'}
+                                  </span>
+                                  {(tour.startDate || tour.endDate) && (
+                                    <span className="bg-black/60 border border-zinc-800 text-zinc-300 font-mono text-[9px] px-2 py-0.5 rounded flex items-center gap-1">
+                                      <Calendar className="w-3 h-3 text-purple-400" />
+                                      {tour.startDate}{tour.endDate && tour.endDate !== tour.startDate ? ` — ${tour.endDate}` : ''}
+                                    </span>
+                                  )}
+                                  <span className="bg-zinc-900 text-zinc-400 border border-zinc-800 font-mono text-[9px] px-2 py-0.5 rounded">
+                                    {tour.genre}
+                                  </span>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => toggleTourExpand(tour.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-purple-950/90 hover:bg-purple-900 border border-purple-500/60 text-purple-300 hover:text-white font-mono text-[10px] font-black uppercase flex items-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+                                >
+                                  {isExpanded ? (
+                                    <>
+                                      <ChevronUp className="w-3.5 h-3.5 text-purple-300" /> Hide Schedule
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ChevronDown className="w-3.5 h-3.5 text-purple-300" /> View Schedule ({tour.stops.length})
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+
+                              {/* Tour Title & Headliner Info */}
+                              <div className="relative z-10 space-y-1.5 mb-3">
+                                <h3 className="text-base sm:text-lg font-black text-white font-mono tracking-tight leading-snug flex items-center gap-2 flex-wrap">
+                                  <span>{tour.tourName}</span>
+                                </h3>
+                                {tour.headliner && tour.headliner.toLowerCase() !== tour.tourName.toLowerCase() && (
+                                  <p className="text-xs sm:text-sm font-mono text-purple-400 font-bold flex items-center gap-1.5">
+                                    <Music className="w-3.5 h-3.5 text-purple-400" /> Headliner: {tour.headliner}
+                                  </p>
+                                )}
+                                {citiesPreview && (
+                                  <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-mono">
+                                    <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                    <span className="text-zinc-300">{citiesPreview}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Tour Package Lineup Chips */}
+                              {tour.supportBands && tour.supportBands.length > 0 && (
+                                <div className="relative z-10 mb-3">
+                                  <span className="text-[9px] font-mono text-zinc-500 uppercase font-bold block mb-1">
+                                    Tour Package Lineup:
+                                  </span>
+                                  <div className="flex flex-wrap gap-1">
+                                    <span className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-purple-950/60 border border-purple-500/50 text-purple-300 font-bold">
+                                      {tour.headliner}
+                                    </span>
+                                    {tour.supportBands.map((band: string, bIdx: number) => (
+                                      <span
+                                        key={`tour-supp-${band}-${bIdx}`}
+                                        className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300"
+                                      >
+                                        +{band}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Collapsible Dropdown Schedule Container */}
+                              <AnimatePresence>
+                                {isExpanded && (
+                                  <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="relative z-10 overflow-hidden mt-3 pt-3 border-t border-purple-900/40"
+                                  >
+                                    <div className="flex items-center justify-between mb-2.5">
+                                      <span className="text-[10px] font-mono font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                                        <Calendar className="w-3.5 h-3.5 text-purple-400" /> Complete Tour Routing Itinerary ({tour.stops.length} Shows)
+                                      </span>
+                                      <span className="text-[9px] font-mono text-zinc-500 hidden sm:inline">
+                                        Click any stop to inspect dossier & ticket links
+                                      </span>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                      {tour.stops.map((stop: any, sIdx: number) => {
+                                        const isStopSelected = selectedMapEvent?.id === stop.id;
+                                        const isTonight = (stop.date || '').toLowerCase().includes('tonight');
+                                        const isTomorrow = (stop.date || '').toLowerCase().includes('tomorrow');
+                                        const isRsvped = rsvpedShowIds.has(stop.id);
+
+                                        return (
+                                          <div
+                                            key={`tour-stop-${tour.id}-${stop.id || 'stop'}-${sIdx}`}
+                                            onClick={() => {
+                                              setSelectedMapEvent(stop);
+                                              onSelectEvent?.(stop);
+                                              setMobileDetailOpen(true);
+                                            }}
+                                            className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                                              isStopSelected
+                                                ? 'bg-purple-950/40 border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)]'
+                                                : 'bg-black/50 border-zinc-800/80 hover:border-purple-500/50 hover:bg-black/70'
+                                            }`}
+                                          >
+                                            {/* Stop Number, Date & Venue */}
+                                            <div className="flex items-start gap-2.5 min-w-0">
+                                              <span className="bg-zinc-900 border border-purple-500/40 text-purple-300 text-[10px] font-mono font-black px-2 py-1 rounded shrink-0">
+                                                #{sIdx + 1}
+                                              </span>
+                                              <div className="min-w-0">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                  {isTonight ? (
+                                                    <span className="bg-rose-950 text-rose-300 border border-rose-500/50 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded animate-pulse">
+                                                      TONIGHT
+                                                    </span>
+                                                  ) : isTomorrow ? (
+                                                    <span className="bg-amber-950 text-amber-300 border border-amber-500/50 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded">
+                                                      TOMORROW
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-zinc-200 font-mono font-bold text-xs">
+                                                      {stop.date}
+                                                    </span>
+                                                  )}
+                                                  <span className="text-zinc-600 font-mono">•</span>
+                                                  <span className="text-cyan-400 font-mono font-bold text-xs truncate">
+                                                    {stop.city}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 mt-0.5 truncate">
+                                                  <Building className="w-3 h-3 text-rose-400 shrink-0" />
+                                                  <span className="text-zinc-300 font-bold truncate">{stop.venue}</span>
+                                                  {stop.price && (
+                                                    <>
+                                                      <span className="text-zinc-600">•</span>
+                                                      <span className="text-emerald-400 font-bold">{stop.price}</span>
+                                                    </>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            {/* Stop Actions: Ticket, RSVP, Event Page, Edit, Delete */}
+                                            <div className="flex items-center gap-1.5 flex-wrap shrink-0 sm:self-center" onClick={(e) => e.stopPropagation()}>
+                                              <button
+                                                type="button"
+                                                onClick={() => toggleShowRsvp(stop.id, stop.headliner)}
+                                                className={`px-2 py-1 rounded text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                                                  isRsvped
+                                                    ? 'bg-rose-600 text-white shadow-sm'
+                                                    : 'bg-zinc-900 text-zinc-400 hover:text-rose-400 border border-zinc-800'
+                                                }`}
+                                                title="RSVP / In the Pit"
+                                              >
+                                                <Flame className={`w-3 h-3 ${isRsvped ? 'fill-white text-white' : 'text-zinc-500'}`} />
+                                                <span>{isRsvped ? 'In Pit' : 'RSVP'}</span>
+                                              </button>
+
+                                              <button
+                                                type="button"
+                                                onClick={() => handleOpenFullEventPage(stop)}
+                                                className="px-2 py-1 rounded bg-purple-950/80 hover:bg-purple-900 text-purple-300 hover:text-white border border-purple-500/50 text-[10px] font-mono font-bold uppercase flex items-center gap-1 cursor-pointer transition-all"
+                                              >
+                                                <Sparkles className="w-3 h-3 text-purple-400" /> Event Page
+                                              </button>
+
+                                              {stop.ticketUrl && (
+                                                <a
+                                                  href={stop.ticketUrl}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="px-2 py-1 rounded bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 hover:text-white border border-emerald-500/50 text-[10px] font-mono font-bold uppercase flex items-center gap-1"
+                                                >
+                                                  <Ticket className="w-3 h-3" /> Tickets
+                                                </a>
+                                              )}
+
+                                              <button
+                                                type="button"
+                                                onClick={() => handleEditArchiveShow(stop)}
+                                                className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-cyan-300 border border-zinc-800 text-[10px] font-mono cursor-pointer"
+                                                title="Edit this tour stop"
+                                              >
+                                                <Edit3 className="w-3 h-3 text-cyan-400" />
+                                              </button>
+
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteArchiveShow(stop)}
+                                                className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-rose-950/80 text-zinc-400 hover:text-rose-400 border border-zinc-800 text-[10px] font-mono cursor-pointer"
+                                                title="Delete this tour stop"
+                                              >
+                                                <Trash2 className="w-3 h-3 text-rose-400" />
+                                              </button>
+
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setSelectedMapEvent(stop);
+                                                  onSelectEvent?.(stop);
+                                                  setMobileDetailOpen(true);
+                                                }}
+                                                className="p-1 rounded text-zinc-500 hover:text-white"
+                                                title="View Stop Details"
+                                              >
+                                                <ChevronRight className="w-4 h-4" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Column: Selected Tour / Stop Detail Panel */}
+                  <div className={`${mobileDetailOpen ? 'flex' : 'hidden md:flex'} w-full md:w-80 lg:w-96 bg-[#08090d] border-t md:border-t-0 md:border-l border-zinc-900 p-4 sm:p-5 flex-col justify-between overflow-y-auto overscroll-contain shrink-0 min-h-0 h-full scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent`}>
+                    {/* Mobile Back Button */}
+                    <div className="flex items-center justify-between pb-3 mb-2 border-b border-zinc-900 md:hidden shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setMobileDetailOpen(false)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-950/80 border border-purple-500/50 text-purple-300 font-mono text-xs font-bold cursor-pointer hover:bg-purple-900 transition-colors"
+                      >
+                        <ArrowLeft className="w-4 h-4" /> Back to Tours List
+                      </button>
+                      <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Tour Dossier</span>
+                    </div>
+
+                    {activeEvent ? (
+                      <div className="space-y-4 pb-8 sm:pb-0">
+                        {/* Event Flyer / Photo Banner */}
+                        {activeEvent.flyerUrl && (
+                          <div className="w-full h-36 rounded-xl overflow-hidden bg-black border border-zinc-800 relative group">
+                            <img
+                              src={activeEvent.flyerUrl}
+                              alt={activeEvent.title}
+                              className="w-full h-full object-cover grayscale-[30%] group-hover:grayscale-0 transition-all duration-500"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                            <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] font-mono font-bold text-white">
+                              <span className="bg-black/80 px-2 py-0.5 rounded border border-zinc-800">
+                                {activeEvent.city}
+                              </span>
+                              <span className="text-purple-300 bg-purple-950/90 border border-purple-500/40 px-2 py-0.5 rounded font-bold">
+                                TOUR STOP
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <div className="flex items-center gap-1.5 text-purple-400 text-[10px] font-mono uppercase tracking-wider font-bold mb-1 flex-wrap">
+                            <Radio className="w-3.5 h-3.5 text-purple-400" />
+                            <span>Tour Itinerary Dossier</span>
+                            <span className="text-zinc-600">•</span>
+                            <span className="text-zinc-400">{activeEvent.genre}</span>
+                          </div>
+                          <h3 className="text-base font-black text-white font-mono leading-tight">
+                            {activeEvent.title}
+                          </h3>
+                        </div>
+
+                        {/* Quick Spec Box */}
+                        <div className="space-y-2 bg-black/60 p-3 rounded-xl border border-zinc-900 text-xs font-mono">
+                          <div className="flex items-center gap-2 text-zinc-300">
+                            <Building className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                            <span>
+                              {activeEvent.venue} ({activeEvent.city})
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-zinc-300">
+                            <Calendar className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                            <span>Scheduled for {activeEvent.date}</span>
+                          </div>
+                          {activeEvent.price && (
+                            <div className="flex items-center gap-2 text-zinc-300">
+                              <Ticket className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span>Admission: <strong className="text-emerald-400">{activeEvent.price}</strong></span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Description */}
+                        {activeEvent.description && (
+                          <div className="bg-zinc-950/60 p-3 rounded-xl border border-zinc-900/80">
+                            <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold block mb-1">
+                              Tour Stop Notes
+                            </span>
+                            <p className="text-xs text-zinc-400 font-mono leading-relaxed">
+                              {activeEvent.description}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Full Lineup */}
+                        {activeEvent.support && activeEvent.support.length > 0 && (
+                          <div>
+                            <span className="text-[10px] font-mono text-zinc-500 uppercase font-bold block mb-1.5">
+                              Lineup on Tour Stop
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className="px-2 py-0.5 rounded bg-purple-950/60 border border-purple-800/80 text-purple-300 text-xs font-mono font-bold">
+                                {activeEvent.headliner} (Headliner)
+                              </span>
+                              {activeEvent.support.map((act: string, i: number) => (
+                                <span
+                                  key={`tour-lineup-act-${act}-${i}`}
+                                  className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 text-xs font-mono border border-zinc-800"
+                                >
+                                  {act}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="pt-2 space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenFullEventPage(activeEvent)}
+                            className="w-full bg-gradient-to-r from-purple-500 via-indigo-500 to-purple-500 hover:from-purple-400 hover:via-indigo-400 hover:to-purple-400 text-white font-mono uppercase font-black text-xs py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(168,85,247,0.35)] flex items-center justify-center gap-2 cursor-pointer border border-purple-300/60 active:scale-[0.98]"
+                          >
+                            <Sparkles className="w-4 h-4 text-white animate-pulse" /> Open Event Page
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => toggleShowRsvp(activeEvent.id, activeEvent.headliner)}
+                            className={`w-full font-mono uppercase font-black text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer border ${
+                              rsvpedShowIds.has(activeEvent.id)
+                                ? 'bg-rose-600 text-white border-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.4)]'
+                                : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border-zinc-700'
+                            }`}
+                          >
+                            <Flame className={`w-4 h-4 ${rsvpedShowIds.has(activeEvent.id) ? 'fill-white text-white' : 'text-rose-500'}`} />
+                            <span>{rsvpedShowIds.has(activeEvent.id) ? 'In Pit (RSVP Confirmed)' : 'RSVP to Pit List'}</span>
+                          </button>
+
+                          {activeEvent.ticketUrl && (
+                            <a
+                              href={activeEvent.ticketUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 hover:text-white font-mono uppercase font-bold text-xs py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-emerald-500/50"
+                            >
+                              <Ticket className="w-3.5 h-3.5" /> Official Ticket Link
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-center p-4 space-y-2">
+                        <Radio className="w-8 h-8 text-zinc-700" />
+                        <p className="text-xs font-mono text-zinc-500">
+                          Select a tour package or stop to view lineup and venue records.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* AI Flyer & Show Announcement Parser Modal */}
+      {isAiFlyerModalOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="w-full max-w-lg bg-[#0c0d12] border-2 border-cyan-500/60 rounded-2xl p-5 sm:p-6 shadow-[0_0_40px_rgba(6,182,212,0.3)] relative overflow-hidden font-mono space-y-4"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2 text-cyan-400 font-bold text-sm">
+                <Sparkles className="w-5 h-5 text-cyan-400 animate-pulse" />
+                <span>AI Flyer & Announcement Parser</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAiFlyerModalOpen(false)}
+                className="w-7 h-7 rounded-full bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Upload a concert flyer image or paste raw show announcement copy (e.g. from an Instagram or Facebook post). Gemini AI will extract all details (headliner, support, venue, date, doors time, ticket price, ticket URL) and pre-fill the show creator automatically!
+            </p>
+
+            {/* Image Upload Input */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-zinc-400 font-bold block">Option 1: Upload Flyer Photo</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      setAiFlyerImage(reader.result as string);
+                      triggerNotification?.('Flyer image uploaded ready for AI parsing!');
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+                className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-mono file:font-bold file:bg-cyan-950 file:text-cyan-300 hover:file:bg-cyan-900 cursor-pointer"
+              />
+              {aiFlyerImage && (
+                <div className="w-full h-28 rounded-xl border border-cyan-500/40 overflow-hidden relative mt-2 bg-black">
+                  <img src={aiFlyerImage} alt="Flyer Preview" className="w-full h-full object-contain" />
+                  <button
+                    type="button"
+                    onClick={() => setAiFlyerImage(null)}
+                    className="absolute top-1.5 right-1.5 bg-black/80 text-rose-400 p-1 rounded-full text-xs hover:bg-black"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Text Paste Input */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-zinc-400 font-bold block">Option 2: Paste Show Copy / Text</label>
+              <textarea
+                value={aiFlyerText}
+                onChange={(e) => setAiFlyerText(e.target.value)}
+                placeholder="Paste Instagram/Facebook show post copy here (e.g., 'DYING FETUS live at The Bomb Factory Oct 18 w/ Incantation & Fulci. Doors 7pm, $35 presale...')"
+                rows={4}
+                className="w-full bg-black/80 border border-zinc-800 rounded-xl p-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-cyan-500 resize-none font-mono"
+              />
+            </div>
+
+            {/* Submit Action */}
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsAiFlyerModalOpen(false)}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={isAiParsing || (!aiFlyerText.trim() && !aiFlyerImage)}
+                onClick={handleParseFlyerWithAi}
+                className="px-5 py-2 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 disabled:opacity-50 text-black font-black text-xs uppercase rounded-xl transition-all shadow-lg shadow-cyan-500/20 flex items-center gap-2 cursor-pointer"
+              >
+                {isAiParsing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-black" />
+                    <span>Parsing Flyer...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-black" />
+                    <span>Auto-Fill Show Details</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+};

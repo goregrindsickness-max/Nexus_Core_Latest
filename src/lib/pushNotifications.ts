@@ -1,0 +1,1082 @@
+// Nexus Real-Time Device Push Notification Engine
+// Tailored for Industry Pro and Fan Workspaces
+
+import { getSupabase } from '../services/clientService';
+import { Capacitor } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { PushNotifications } from '@capacitor/push-notifications';
+import {
+  triggerNativeNotification,
+  initAndroidNotificationChannel,
+  handlePushDeepLink,
+  resolveVapidPublicKey,
+  urlBase64ToUint8Array as sharedUrlBase64ToUint8Array,
+  syncPushRegistrationForUser,
+} from './pushClient';
+import { authFetch, getSupabaseAccessToken } from '../utils/apiConfig';
+
+export type WorkspaceType = 'industry_pro' | 'fan_only' | 'band' | 'promoter' | 'label' | 'creative' | 'fan';
+
+export type PushPermissionStatus = 'granted' | 'denied' | 'default' | 'unsupported';
+
+export interface PushCategoryConfig {
+  id: string;
+  label: string;
+  description: string;
+  workspace: 'industry_pro' | 'fan_only' | 'global';
+  priority: 'P0' | 'P1';
+  icon: string;
+  defaultEnabled: boolean;
+}
+
+export const INDUSTRY_PRO_PUSH_CATEGORIES: PushCategoryConfig[] = [
+  {
+    id: 'ticket_velocity',
+    label: 'Ticket Velocity & Sell-Outs',
+    description: 'Real-time box office sell-out warnings and gate revenue thresholds.',
+    workspace: 'industry_pro',
+    priority: 'P0',
+    icon: '💰',
+    defaultEnabled: true,
+  },
+  {
+    id: 'routing_beacon',
+    label: 'Routing Beacon & Open Date Offers',
+    description: 'Inbound touring acts with open routing dates in your 50mi venue radius.',
+    workspace: 'industry_pro',
+    priority: 'P0',
+    icon: '📍',
+    defaultEnabled: true,
+  },
+  {
+    id: 'booking_deals',
+    label: 'Booking Offers & Signed Deals',
+    description: 'Guarantee offers, contracts submitted, and signature authorizations.',
+    workspace: 'industry_pro',
+    priority: 'P0',
+    icon: '⚡',
+    defaultEnabled: true,
+  },
+  {
+    id: 'day_of_show_logistics',
+    label: 'Day-of-Show & Curfew Alerts',
+    description: 'Bus calls, load-out checklists, runner rotations, and curfew alarms.',
+    workspace: 'industry_pro',
+    priority: 'P0',
+    icon: '⏰',
+    defaultEnabled: true,
+  },
+  {
+    id: 'priority_epk',
+    label: 'Priority EPK Submissions',
+    description: 'Tier-1 roster submissions and festival showcase press kits.',
+    workspace: 'industry_pro',
+    priority: 'P1',
+    icon: '📑',
+    defaultEnabled: true,
+  },
+  {
+    id: 'inventory_stockout',
+    label: 'Merch & Van Stock Depletion',
+    description: 'Immediate restock notices when physical inventory reaches critical lows.',
+    workspace: 'industry_pro',
+    priority: 'P1',
+    icon: '📦',
+    defaultEnabled: true,
+  },
+];
+
+export const FAN_PUSH_CATEGORIES: PushCategoryConfig[] = [
+  {
+    id: 'tour_proximity',
+    label: 'Band En Route / City Proximity',
+    description: 'Instant alert when tracked bands arrive in your city before showtime.',
+    workspace: 'fan_only',
+    priority: 'P0',
+    icon: '🤘',
+    defaultEnabled: true,
+  },
+  {
+    id: 'scarcity_merch_drop',
+    label: 'Limited Drops & Vinyl Scarcity',
+    description: 'Flash drop launches and low stock alarms (< 5 pressings left).',
+    workspace: 'fan_only',
+    priority: 'P0',
+    icon: '⚡',
+    defaultEnabled: true,
+  },
+  {
+    id: 'vip_guestlist_access',
+    label: 'VIP Access & Gate Authorization',
+    description: 'Soundcheck passes, guestlist confirmations, and door call times.',
+    workspace: 'fan_only',
+    priority: 'P0',
+    icon: '🎟️',
+    defaultEnabled: true,
+  },
+  {
+    id: 'new_follower',
+    label: 'New Fan Alliances & Followers',
+    description: 'Instant notification when a fan, artist, or label starts following your profile.',
+    workspace: 'fan_only',
+    priority: 'P1',
+    icon: '🤘',
+    defaultEnabled: true,
+  },
+  {
+    id: 'trending_post',
+    label: 'Trending Posts & Velocity Milestones',
+    description: 'When your post hits 10+ reactions, flames, or enters the Trending Feed.',
+    workspace: 'fan_only',
+    priority: 'P1',
+    icon: '🔥',
+    defaultEnabled: true,
+  },
+  {
+    id: 'repost_quote',
+    label: 'Re-posts & Band Spotlights',
+    description: 'Alert when a fan or verified band re-shares your content to their timeline.',
+    workspace: 'fan_only',
+    priority: 'P1',
+    icon: '🔁',
+    defaultEnabled: true,
+  },
+  {
+    id: 'photo_pit_tag',
+    label: 'Photo Pit & Media Tagging',
+    description: 'When you are tagged in live concert photos, pit videos, or festival galleries.',
+    workspace: 'fan_only',
+    priority: 'P1',
+    icon: '📷',
+    defaultEnabled: true,
+  },
+  {
+    id: 'forum_top_answer',
+    label: 'Forum Upvotes & Discussion Highlights',
+    description: 'When your comment is voted Top Answer or your thread receives high engagement.',
+    workspace: 'fan_only',
+    priority: 'P1',
+    icon: '🏆',
+    defaultEnabled: true,
+  },
+  {
+    id: 'exclusive_content',
+    label: 'Vault Premieres & Soundboard Tapes',
+    description: 'Exclusive live soundboard recordings and unreleased demo drops.',
+    workspace: 'fan_only',
+    priority: 'P1',
+    icon: '🔥',
+    defaultEnabled: true,
+  },
+  {
+    id: 'artist_interactions',
+    label: 'Direct Artist Replies & Mentions',
+    description: 'When verified bands comment, quote, or reply to your pit uploads.',
+    workspace: 'fan_only',
+    priority: 'P1',
+    icon: '💬',
+    defaultEnabled: true,
+  },
+];
+
+export interface PushNotificationPreferences {
+  enabled: boolean;
+  soundEnabled: boolean;
+  vibrationEnabled: boolean;
+  categories: Record<string, boolean>;
+  quietHoursEnabled: boolean;
+  quietHoursStart: string; // e.g. "23:00"
+  quietHoursEnd: string; // e.g. "08:00"
+}
+
+const STORAGE_KEY = 'nexus_device_push_preferences_v1';
+
+// Default configuration builder
+export const getDefaultPushPreferences = (): PushNotificationPreferences => {
+  const initialCategories: Record<string, boolean> = {
+    direct_messages: true,
+  };
+
+  INDUSTRY_PRO_PUSH_CATEGORIES.forEach((cat) => {
+    initialCategories[cat.id] = cat.defaultEnabled;
+  });
+
+  FAN_PUSH_CATEGORIES.forEach((cat) => {
+    initialCategories[cat.id] = cat.defaultEnabled;
+  });
+
+  return {
+    enabled: true,
+    soundEnabled: true,
+    vibrationEnabled: true,
+    categories: initialCategories,
+    quietHoursEnabled: false,
+    quietHoursStart: '23:00',
+    quietHoursEnd: '08:00',
+  };
+};
+
+// Synthesized audio alert tones using Web Audio API
+export function playPushChime(type: 'critical' | 'normal' | 'fan' = 'normal') {
+  if (typeof window === 'undefined') return;
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+
+    if (type === 'critical') {
+      // Urgent double beep for P0 logistics / sell-outs / limited drops
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(880, now);
+      osc1.frequency.exponentialRampToValueAtTime(1320, now + 0.12);
+      gain1.gain.setValueAtTime(0.15, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.15);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(1320, now + 0.18);
+      osc2.frequency.exponentialRampToValueAtTime(1760, now + 0.3);
+      gain2.gain.setValueAtTime(0.2, now + 0.18);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.18);
+      osc2.stop(now + 0.35);
+    } else if (type === 'fan') {
+      // Uplifting melodic chime for fan drops/VIP
+      const now = ctx.currentTime;
+      const notes = [587.33, 739.99, 880.0]; // D5, F#5, A5
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+        gain.gain.setValueAtTime(0.12, now + idx * 0.08);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + idx * 0.08);
+        osc.stop(now + idx * 0.08 + 0.22);
+      });
+    } else {
+      // Standard subtle ping
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(950, now);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.2);
+    }
+  } catch (e) {
+    // Audio context may be locked until user interaction
+  }
+}
+
+const urlBase64ToUint8Array = sharedUrlBase64ToUint8Array;
+
+export function isIframeEnvironment(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.self !== window.top;
+  } catch (e) {
+    return true;
+  }
+}
+
+// Push Manager Singleton
+class DevicePushManager {
+  private preferences: PushNotificationPreferences = getDefaultPushPreferences();
+  private registration: ServiceWorkerRegistration | null = null;
+  private recentNotificationHashes = new Set<string>();
+  private nativePermission: PushPermissionStatus = 'default';
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      this.loadPreferences();
+      this.initNativeEnvironment();
+      this.initServiceWorker();
+    }
+  }
+
+  private async initNativeEnvironment() {
+    if (typeof window === 'undefined') return;
+    const isNative = Capacitor.isNativePlatform();
+    if (isNative) {
+      const saved = localStorage.getItem('nexus_native_permission');
+      if (saved) {
+        this.nativePermission = saved as PushPermissionStatus;
+      }
+      await initAndroidNotificationChannel();
+      await this.refreshPermissionStatus();
+    }
+  }
+
+  private loadPreferences() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        this.preferences = { ...getDefaultPushPreferences(), ...JSON.parse(stored) };
+      }
+    } catch (e) {
+      this.preferences = getDefaultPushPreferences();
+    }
+  }
+
+  public getPreferences(): PushNotificationPreferences {
+    return { ...this.preferences };
+  }
+
+  public async updatePreferences(
+    newPrefs: Partial<PushNotificationPreferences>,
+    userId?: string
+  ): Promise<PushNotificationPreferences> {
+    this.preferences = { ...this.preferences, ...newPrefs };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.preferences));
+    } catch (e) {}
+
+    // Synchronize to Supabase profile metadata if user exists
+    if (userId) {
+      try {
+        const supabase = getSupabase();
+        if (supabase) {
+          await supabase.from('profiles').update({
+            push_preferences: this.preferences,
+            updated_at: new Date().toISOString()
+          }).eq('id', userId);
+        }
+      } catch (err) {
+        console.warn('[PushManager] Supabase preference sync error:', err);
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('nexus_push_preferences_changed', { detail: this.preferences })
+      );
+    }
+
+    return this.preferences;
+  }
+
+  public getPermissionStatus(): PushPermissionStatus {
+    const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
+    if (isNative) {
+      return this.nativePermission;
+    }
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return 'unsupported';
+    }
+    return Notification.permission as PushPermissionStatus;
+  }
+
+  public async refreshPermissionStatus(): Promise<PushPermissionStatus> {
+    if (typeof window === 'undefined') return 'unsupported';
+
+    const isNative = Capacitor.isNativePlatform();
+    if (isNative && Capacitor.isPluginAvailable('LocalNotifications')) {
+      try {
+        const localStatus = await LocalNotifications.checkPermissions();
+        if (localStatus.display === 'granted') {
+          this.nativePermission = 'granted';
+        } else if (localStatus.display === 'denied') {
+          this.nativePermission = 'denied';
+        } else {
+          this.nativePermission = 'default';
+        }
+        localStorage.setItem('nexus_native_permission', this.nativePermission);
+        return this.nativePermission;
+      } catch (err) {
+        console.warn('[PushManager] refreshPermissionStatus notice:', err);
+      }
+    }
+
+    if ('Notification' in window) {
+      return Notification.permission as PushPermissionStatus;
+    }
+    return 'unsupported';
+  }
+
+  public async registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+      return null;
+    }
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      this.registration = reg;
+      return reg;
+    } catch (err) {
+      console.warn('[PushManager] Service Worker registration failed:', err);
+      return null;
+    }
+  }
+
+  private async initServiceWorker() {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    try {
+      this.registration = await navigator.serviceWorker.getRegistration();
+      if (!this.registration) {
+        this.registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      }
+    } catch (e) {
+      console.warn('[PushManager] Service worker lookup error:', e);
+    }
+  }
+
+
+  public async subscribeToPushServer(userInfo?: { id?: string; email?: string; sendWelcome?: boolean }): Promise<PushSubscription | null> {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      return null;
+    }
+
+    try {
+      let resolvedId = userInfo?.id;
+      let resolvedEmail = userInfo?.email;
+      try {
+        if (!resolvedId) resolvedId = localStorage.getItem('nexus_auth_user_id') || undefined;
+        if (!resolvedEmail) resolvedEmail = localStorage.getItem('nexus_auth_user_email') || undefined;
+        if (!resolvedId || !resolvedEmail) {
+          const savedProf = localStorage.getItem('nexus_core_user_profile') || localStorage.getItem('nexus_user');
+          if (savedProf) {
+            const parsed = JSON.parse(savedProf);
+            if (!resolvedId && parsed?.id) resolvedId = parsed.id;
+            if (!resolvedEmail && parsed?.email) resolvedEmail = parsed.email;
+          }
+        }
+      } catch (_) {}
+
+      let reg = this.registration;
+      if (!reg) {
+        reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        this.registration = reg;
+      }
+      if (!reg) {
+        reg = await navigator.serviceWorker.ready;
+        this.registration = reg;
+      }
+
+      // 1. Obtain VAPID Public Key from VITE_VAPID_PUBLIC_KEY or backend API
+      const publicKey = await resolveVapidPublicKey();
+
+      // 2. Subscribe browser to Push Service (and refresh if server VAPID key changed)
+      const convertedKey = urlBase64ToUint8Array(publicKey);
+      let sub = await reg.pushManager.getSubscription();
+      if (sub && sub.options?.applicationServerKey) {
+        try {
+          const existingKey = new Uint8Array(sub.options.applicationServerKey);
+          const keysMatch =
+            existingKey.length === convertedKey.length &&
+            existingKey.every((byte, idx) => byte === convertedKey[idx]);
+          if (!keysMatch) {
+            console.log('[PushManager] Server VAPID key changed; refreshing browser push subscription.');
+            await sub.unsubscribe();
+            sub = null;
+          }
+        } catch (_) {}
+      }
+
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: convertedKey,
+        });
+      }
+
+      // 3. Register subscription with Nexus server
+      const subJson = sub.toJSON ? sub.toJSON() : sub;
+      const payload = {
+        platform: 'web' as const,
+        subscription: subJson,
+        web_push_subscription: subJson,
+        userId: resolvedId,
+        userEmail: resolvedEmail ? resolvedEmail.toLowerCase().trim() : undefined,
+        sendWelcome: Boolean(userInfo?.sendWelcome),
+      };
+
+      const token = await getSupabaseAccessToken();
+      if (!token) {
+        return sub;
+      }
+
+      await authFetch('/api/push/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      console.log('[PushManager] Device successfully subscribed to real-time Web Push.');
+      localStorage.setItem('nexus_push_synced', 'true');
+      return sub;
+    } catch (err) {
+      console.warn('[PushManager] subscribeToPushServer warning:', err);
+      return null;
+    }
+  }
+
+  public async ensureUserPushSubscription(userInfo: { id?: string; email?: string }): Promise<void> {
+    await syncPushRegistrationForUser(userInfo);
+  }
+
+  public async sendPushToServer(options: {
+    userId?: string;
+    userEmail?: string;
+    excludeUserId?: string;
+    excludeUserEmail?: string;
+    title: string;
+    body: string;
+    icon?: string;
+    targetTab?: string;
+    category?: string;
+    priority?: 'P0' | 'P1';
+    tag?: string;
+    data?: any;
+  }): Promise<boolean> {
+    try {
+      const accessToken = await getSupabaseAccessToken();
+      if (!accessToken) return false;
+      const res = await authFetch('/api/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(options),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[PushManager] sendPushToServer error:', err);
+      return false;
+    }
+  }
+
+  public async requestPermission(userInfo?: { id?: string; email?: string }): Promise<PushPermissionStatus> {
+    const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
+
+    // 1. Android APK / Native Capacitor environment
+    if (isNative) {
+      try {
+        await initAndroidNotificationChannel();
+
+        let granted = false;
+        if (Capacitor.isPluginAvailable('LocalNotifications')) {
+          const localPerm = await LocalNotifications.requestPermissions();
+          if (localPerm.display === 'granted') granted = true;
+        }
+
+        if (Capacitor.isPluginAvailable('PushNotifications')) {
+          try {
+            const pushPerm = await PushNotifications.requestPermissions();
+            if (pushPerm.receive === 'granted') {
+              granted = true;
+              await PushNotifications.register();
+            }
+          } catch (e) {
+            console.warn('[PushManager] PushNotifications request notice:', e);
+          }
+        }
+
+        this.nativePermission = granted ? 'granted' : 'denied';
+        localStorage.setItem('nexus_native_permission', this.nativePermission);
+
+        if (granted) {
+          await this.updatePreferences({ enabled: true }, userInfo?.id);
+        }
+
+        return this.nativePermission;
+      } catch (err: any) {
+        const errCode = String(err?.code || '');
+        const errMsg = String(err?.message || err || '');
+        if (errCode === 'UNAVAILABLE' || errCode === 'UNIMPLEMENTED' || /not supported|not implemented/i.test(errMsg)) {
+          console.warn('[PushManager] Native notifications unavailable in current environment:', errMsg);
+          return 'unsupported';
+        }
+        console.error('[PushManager] Native permission request error:', err);
+        return 'denied';
+      }
+    }
+
+    // 2. Web Browser environment
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return 'unsupported';
+    }
+
+    try {
+      const wasAlreadyGranted = Notification.permission === 'granted';
+      const result = await Notification.requestPermission();
+      if (result === 'granted') {
+        await this.registerServiceWorker();
+        await this.updatePreferences({ enabled: true }, userInfo?.id);
+        await this.subscribeToPushServer({ ...userInfo, sendWelcome: !wasAlreadyGranted });
+      }
+      return result as PushPermissionStatus;
+    } catch (e) {
+      console.warn('[PushManager] Notification permission request blocked or unsupported:', e);
+      return 'denied';
+    }
+  }
+
+  public async notify(payload: {
+    title: string;
+    body: string;
+    category?: string;
+    workspace?: 'industry_pro' | 'fan_only' | 'all';
+    targetTab?: string;
+    icon?: string;
+    data?: any;
+    priority?: 'P0' | 'P1';
+    sound?: boolean;
+    renotify?: boolean;
+  }): Promise<boolean> {
+    return this.sendPushNotification({
+      ...payload,
+      category: payload.category || 'general'
+    });
+  }
+
+  public async sendPushNotification(payload: {
+    title: string;
+    body: string;
+    category: string;
+    workspace?: 'industry_pro' | 'fan_only' | 'all';
+    targetTab?: string;
+    icon?: string;
+    data?: any;
+    priority?: 'P0' | 'P1';
+    sound?: boolean;
+    renotify?: boolean;
+  }): Promise<boolean> {
+    if (typeof window === 'undefined') return false;
+
+    // Check global enable & category enable
+    if (!this.preferences.enabled) return false;
+    if (payload.category && this.preferences.categories[payload.category] === false) {
+      return false;
+    }
+
+    // Check Quiet Hours
+    if (this.preferences.quietHoursEnabled) {
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      if (
+        this.preferences.quietHoursStart > this.preferences.quietHoursEnd
+          ? currentTime >= this.preferences.quietHoursStart || currentTime <= this.preferences.quietHoursEnd
+          : currentTime >= this.preferences.quietHoursStart && currentTime <= this.preferences.quietHoursEnd
+      ) {
+        // Suppress during quiet hours unless P0
+        if (payload.priority !== 'P0') return false;
+      }
+    }
+
+    // Deduplication across title+body, normalized body, and messageId/notificationId within 15s window
+    const normTitle = String(payload.title || '').trim().toLowerCase();
+    const normBody = String(payload.body || '').trim().toLowerCase();
+    const entityKey = String(
+      payload.data?.messageId || payload.data?.notificationId || payload.data?.id || ''
+    ).trim();
+    const hash = `${normTitle}_${normBody}`;
+    const bodyHash = normBody.length > 8 ? `body_${normBody}` : '';
+    const idHash = entityKey ? `id_${entityKey}` : '';
+
+    if (
+      this.recentNotificationHashes.has(hash) ||
+      (bodyHash && this.recentNotificationHashes.has(bodyHash)) ||
+      (idHash && this.recentNotificationHashes.has(idHash))
+    ) {
+      return false; // Skip duplicate within cooldown window
+    }
+    this.recentNotificationHashes.add(hash);
+    if (bodyHash) this.recentNotificationHashes.add(bodyHash);
+    if (idHash) this.recentNotificationHashes.add(idHash);
+    setTimeout(() => {
+      this.recentNotificationHashes.delete(hash);
+      if (bodyHash) this.recentNotificationHashes.delete(bodyHash);
+      if (idHash) this.recentNotificationHashes.delete(idHash);
+    }, 15000);
+
+    // Audio chime & vibration
+    if (this.preferences.soundEnabled && payload.sound !== false) {
+      const chimeType = payload.priority === 'P0' ? 'critical' : payload.workspace === 'fan_only' ? 'fan' : 'normal';
+      playPushChime(chimeType);
+    }
+    if (this.preferences.vibrationEnabled && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(payload.priority === 'P0' ? [300, 100, 300, 100, 400] : [200, 100, 200]);
+      } catch (e) {}
+    }
+
+    // Also dispatch to in-app notification drawer event
+    window.dispatchEvent(
+      new CustomEvent('nexus_in_app_notice', {
+        detail: {
+          id: 'push-' + Date.now(),
+          title: payload.title,
+          message: payload.body,
+          time: 'Just now',
+          type: payload.workspace === 'industry_pro' ? 'security' : payload.workspace === 'fan_only' ? 'gig' : 'system',
+          targetTab: payload.targetTab || 'social',
+          read: false,
+          avatar: payload.icon || '/icon-192.png',
+        },
+      })
+    );
+
+    // 1. Android APK / Native Device Notification (via Capacitor LocalNotifications)
+    const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
+    if (isNative) {
+      try {
+        const scheduled = await triggerNativeNotification({
+          title: payload.title,
+          body: payload.body,
+          targetTab: payload.targetTab,
+          category: payload.category,
+          data: {
+            workspace: payload.workspace,
+            priority: payload.priority,
+            ...payload.data,
+          },
+        });
+        if (scheduled) return true;
+      } catch (nativeErr) {
+        console.warn('[PushManager] Native notification trigger error:', nativeErr);
+      }
+    }
+
+    // 2. Web Browser Notification via Service Worker or Web Notification
+    const permission = this.getPermissionStatus();
+    if (permission === 'granted') {
+      try {
+        if (this.registration && 'showNotification' in this.registration) {
+          await (this.registration as any).showNotification(payload.title, {
+            body: payload.body,
+            icon: payload.icon || '/icon-192.png',
+            badge: '/icon-192.png',
+            tag: 'nexus-' + payload.category + '-' + Date.now(),
+            renotify: payload.renotify ?? true,
+            data: {
+              targetTab: payload.targetTab,
+              category: payload.category,
+              workspace: payload.workspace,
+              ...payload.data,
+            },
+          });
+          return true;
+        } else if ('Notification' in window) {
+          const notif = new (window as any).Notification(payload.title, {
+            body: payload.body,
+            icon: payload.icon || '/icon-192.png',
+            badge: '/icon-192.png',
+            tag: 'nexus-' + payload.category + '-' + Date.now(),
+            data: {
+              targetTab: payload.targetTab,
+              ...payload.data,
+            },
+          });
+          notif.onclick = () => {
+            window.focus();
+            handlePushDeepLink({
+              targetTab: payload.targetTab,
+              type: payload.category,
+              senderId: payload.data?.senderId,
+              senderName: payload.title,
+              showId: payload.data?.showId,
+              targetId: payload.data?.targetId,
+              route: payload.data?.route,
+              ...payload.data,
+            });
+            notif.close();
+          };
+          return true;
+        }
+      } catch (err) {
+        console.warn('[PushManager] Notification display error:', err);
+      }
+    }
+
+    return false;
+  }
+
+  // Pre-configured test simulators for both workspaces
+  public async simulatePush(
+    type:
+      | 'ticket_velocity'
+      | 'routing_beacon'
+      | 'booking_deals'
+      | 'day_of_show_logistics'
+      | 'priority_epk'
+      | 'inventory_stockout'
+      | 'tour_proximity'
+      | 'scarcity_merch_drop'
+      | 'vip_guestlist_access'
+      | 'exclusive_content'
+      | 'artist_interactions'
+  ): Promise<boolean> {
+    const simulators: Record<
+      string,
+      {
+        title: string;
+        body: string;
+        category: string;
+        workspace: 'industry_pro' | 'fan_only';
+        targetTab: string;
+        priority: 'P0' | 'P1';
+      }
+    > = {
+      ticket_velocity: {
+        title: '💰 Box Office Velocity Spike: 92% Sold Out!',
+        body: 'Friday at Starland Ballroom crossed 92% capacity (644/700). Estimated door gross: $17,400.',
+        category: 'ticket_velocity',
+        workspace: 'industry_pro',
+        targetTab: 'promoter',
+        priority: 'P0',
+      },
+      routing_beacon: {
+        title: '📍 Inbound Tour Beacon Match: Fit For An Autopsy',
+        body: 'Fit For An Autopsy posted an open off-date in your 50mi venue radius for Oct 14. 1-tap hold available.',
+        category: 'routing_beacon',
+        workspace: 'industry_pro',
+        targetTab: 'promoter',
+        priority: 'P0',
+      },
+      booking_deals: {
+        title: '⚡ New Booking Guarantee Offer: $4,500 + 80% Split',
+        body: 'Live Nation / House of Blues submitted an offer for Saturday headline slot. Action required.',
+        category: 'booking_deals',
+        workspace: 'industry_pro',
+        targetTab: 'promoter',
+        priority: 'P0',
+      },
+      day_of_show_logistics: {
+        title: '⏰ Day-of-Show Alert: Bus Call in 45 Min',
+        body: 'Load-out inspection checklist due before 1:00 AM venue sound curfew.',
+        category: 'day_of_show_logistics',
+        workspace: 'industry_pro',
+        targetTab: 'promoter',
+        priority: 'P0',
+      },
+      priority_epk: {
+        title: '📑 Priority EPK Submission: Roadburn 2026 Showcase',
+        body: 'New high-tier EPK submission received from Sanguisugabogg for label & promoter review.',
+        category: 'priority_epk',
+        workspace: 'industry_pro',
+        targetTab: 'label',
+        priority: 'P1',
+      },
+      inventory_stockout: {
+        title: '📦 Merch Depletion Warning: Tour Tees at Critical Low',
+        body: 'Size XL tour shirts reached 0 remaining in van stock. Prompt restock suggested.',
+        category: 'inventory_stockout',
+        workspace: 'industry_pro',
+        targetTab: 'label',
+        priority: 'P1',
+      },
+      tour_proximity: {
+        title: '🤘 Band Inbound: Necrophagist arrived in your city!',
+        body: 'Doors open at 7:00 PM tonight at The Underworld. Pit check-in is live.',
+        category: 'tour_proximity',
+        workspace: 'fan_only',
+        targetTab: 'social',
+        priority: 'P0',
+      },
+      scarcity_merch_drop: {
+        title: '⚡ Limited Vinyl Flash Drop: Only 5 Pressings Left!',
+        body: 'Exclusive 180g blood-splatter edition of "Terrasite" is live in the storefront.',
+        category: 'scarcity_merch_drop',
+        workspace: 'fan_only',
+        targetTab: 'social',
+        priority: 'P0',
+      },
+      vip_guestlist_access: {
+        title: '🎟️ VIP Soundcheck Gate Pass Authorized',
+        body: 'Your VIP Soundcheck credentials are ready. Present your digital badge at Stage Door B by 5:30 PM.',
+        category: 'vip_guestlist_access',
+        workspace: 'fan_only',
+        targetTab: 'social',
+        priority: 'P0',
+      },
+      exclusive_content: {
+        title: '🔥 Live Soundboard Tape Drop: The Black Dahlia Murder',
+        body: 'Exclusive soundboard master recording from last night’s pit is now streamable in the Vault.',
+        category: 'exclusive_content',
+        workspace: 'fan_only',
+        targetTab: 'social',
+        priority: 'P1',
+      },
+      artist_interactions: {
+        title: '💬 Direct Artist Reply from Sanguisugabogg',
+        body: '"Killer photo in the pit, see you in the front row tomorrow!"',
+        category: 'artist_interactions',
+        workspace: 'fan_only',
+        targetTab: 'social',
+        priority: 'P1',
+      },
+    };
+
+    const sim = simulators[type];
+    if (!sim) return false;
+
+    return this.sendPushNotification({
+      title: sim.title,
+      body: sim.body,
+      category: sim.category,
+      workspace: sim.workspace,
+      targetTab: sim.targetTab,
+      priority: sim.priority,
+    });
+  }
+
+  public async sendTestAlert(category: string = 'routing_beacon'): Promise<boolean> {
+    const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
+    if (isNative) {
+      if (this.nativePermission !== 'granted') {
+        await this.requestPermission();
+      }
+      try {
+        const scheduled = await triggerNativeNotification({
+          title: '🚨 Nexus Device Test Alert',
+          body: 'Native Android notification channel operational. In-pit beacons and routing alerts active.',
+          targetTab: 'social',
+          category: category,
+          data: { test: true, timestamp: Date.now() },
+        });
+        if (scheduled) {
+          playPushChime('critical');
+          window.dispatchEvent(
+            new CustomEvent('nexus_in_app_notice', {
+              detail: {
+                id: 'test-' + Date.now(),
+                title: '🚨 Nexus Device Test Alert',
+                message: 'Native Android notification channel operational. In-pit beacons and routing alerts active.',
+                time: 'Just now',
+                type: 'system',
+                targetTab: 'social',
+                read: false,
+                avatar: '/icon-192.png',
+              },
+            })
+          );
+          return true;
+        }
+      } catch (err) {
+        console.warn('[PushManager] Native test alert exception:', err);
+      }
+    } else {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted') {
+        try {
+          await this.requestPermission();
+        } catch (e) {}
+      }
+    }
+
+    // Ensure preferences are enabled for the test so it is never suppressed
+    this.preferences.enabled = true;
+    if (this.preferences.categories) {
+      this.preferences.categories[category] = true;
+    }
+
+    return this.simulatePush(category as any);
+  }
+}
+
+export const pushManager = new DevicePushManager();
+
+/**
+ * Synchronizes a show RSVP with the server's show_rsvps database table and registers VAPID push subscription
+ */
+export async function syncShowRsvpWithServer(rsvpData: {
+  show_id: string;
+  show_title: string;
+  show_date: string;
+  venue_name?: string;
+  city?: string;
+  user_id?: string;
+  user_email?: string;
+  action?: 'rsvp' | 'cancel';
+}): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const userId = rsvpData.user_id || localStorage.getItem('nexus_auth_user_id') || undefined;
+    const userEmail = rsvpData.user_email || localStorage.getItem('nexus_auth_user_email') || undefined;
+
+    const accessToken = await getSupabaseAccessToken();
+    if (!accessToken) {
+      return false;
+    }
+
+    if (rsvpData.action === 'cancel') {
+      const res = await authFetch(`/api/shows/rsvp/${rsvpData.show_id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, userEmail })
+      });
+      return res.ok;
+    }
+
+    // Auto-request push permission & obtain VAPID subscription
+    let pushSub: any = null;
+    try {
+      if ('Notification' in window && Notification.permission !== 'granted') {
+        await pushManager.requestPermission({ id: userId, email: userEmail });
+      }
+      const sub = await pushManager.subscribeToPushServer({ id: userId, email: userEmail });
+      if (sub) {
+        pushSub = sub.toJSON ? sub.toJSON() : sub;
+      }
+    } catch (e) {
+      console.warn('[PushManager] Push subscription notice during RSVP:', e);
+    }
+
+    const nativeToken = typeof localStorage !== 'undefined' ? localStorage.getItem('nexus_native_push_token') : null;
+    const nativePlatform = nativeToken ? (Capacitor.getPlatform() === 'ios' ? 'ios' : 'android') : 'web';
+
+    const res = await authFetch('/api/shows/rsvp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        show_id: String(rsvpData.show_id),
+        show_title: rsvpData.show_title,
+        show_date: rsvpData.show_date,
+        venue_name: rsvpData.venue_name,
+        city: rsvpData.city,
+        user_id: userId,
+        user_email: userEmail,
+        pushSubscription: pushSub,
+        ...(nativeToken ? { fcmToken: nativeToken, platform: nativePlatform } : {}),
+      })
+    });
+
+    return res.ok;
+  } catch (err) {
+    console.warn('[PushManager] syncShowRsvpWithServer error:', err);
+    return false;
+  }
+}
+
+/**
+ * Manually invokes the 24-hour VAPID show push notification service on the server
+ */
+export async function trigger24hShowRemindersOnServer(): Promise<{ success: boolean; checked?: number; remindersSent?: number }> {
+  if (typeof window === 'undefined') return { success: false };
+  try {
+    const res = await authFetch('/api/push/trigger-show-reminders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('[PushManager] trigger24hShowRemindersOnServer error:', err);
+  }
+  return { success: false };
+}
+

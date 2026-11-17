@@ -1,0 +1,874 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { FeedItem } from '../../../data/socialFeedMockData';
+import { loadFeedCache, saveFeedCache, getDeletedPostIdsLocal, resolveWorkspaceEntityId, isBrokenOrDeletedPost, cleanBrokenPostsFromAllStores } from '../utils/feedCacheUtils';
+import { getSupabase, subscribeToTable } from '../../../supabase';
+import { extractYouTubeId } from '../utils/postSyncUtils';
+import { mergePostWithReactions } from '../utils/reactionStore';
+import { isMiguelNameOrProfile } from '../utils/profileUtils';
+import { fetchGlobalInteractions } from '../../../services/postInteractionsService';
+import { MIGUEL_DEFAULT_AVATAR, DEFAULT_PERSONAL_AVATAR } from '../../../utils/bandProfileUtils';
+
+interface UseFeedLocalCacheOptions {
+  portalRole: string;
+  userProfile?: any;
+  defaultFeed?: FeedItem[];
+  activeBand?: any;
+  activeBandId?: string;
+  workspaceEntityId?: string;
+}
+
+export function useFeedLocalCache({
+  portalRole,
+  userProfile,
+  defaultFeed = [],
+  activeBand,
+  activeBandId,
+  workspaceEntityId
+}: UseFeedLocalCacheOptions) {
+  const [feed, _setFeed] = useState<FeedItem[]>([]);
+
+  const resolvedEntityId = useMemo(() => {
+    return workspaceEntityId || resolveWorkspaceEntityId(portalRole, activeBand, activeBandId, userProfile);
+  }, [workspaceEntityId, portalRole, activeBand, activeBandId, userProfile]);
+
+  const setFeed = useCallback((action: React.SetStateAction<FeedItem[]>) => {
+    _setFeed(prev => {
+      return typeof action === 'function' ? (action as Function)(prev) : action;
+    });
+  }, []);
+
+  // Load feed posts from IndexedDB on mount / user change, then sync with Supabase
+  useEffect(() => {
+    let active = true;
+    const loadFeed = async () => {
+      try {
+        // Asynchronously sweep and clean any stale broken posts across IndexedDB
+        cleanBrokenPostsFromAllStores().catch(() => {});
+
+        const storedFeed = await loadFeedCache(portalRole, userProfile?.id, resolvedEntityId);
+        if (!active) return;
+        const currentLiveAvatar = userProfile?.avatar || userProfile?.avatar_url || userProfile?.profile_avatar;
+        // Sanitize stored feed in case any of the current user's personal posts had their avatar corrupted by a band event
+        let finalFeed = (storedFeed || []).map(post => {
+          const rawPost = post as any;
+          const isPostSelf = Boolean(
+            (userProfile?.id && (post.author?.id === userProfile.id || rawPost.profile_id === userProfile.id || rawPost.user_id === userProfile.id || rawPost.author_id === userProfile.id)) ||
+            (userProfile?.console_handle && userProfile.console_handle !== '@user' && userProfile.console_handle !== 'user' && post.author?.name && (
+              post.author.name.toLowerCase() === userProfile.console_handle.toLowerCase().replace(/^@/, '') ||
+              post.author.name.toLowerCase() === userProfile.console_handle.toLowerCase()
+            )) ||
+            (userProfile?.name && userProfile.name !== 'User' && userProfile.name !== 'New User' && userProfile.name !== 'Nexus Member' && post.author?.name && post.author.name.toLowerCase() === userProfile.name.toLowerCase())
+          );
+          const postWorkspace = (rawPost.workspace_type || rawPost.workspaceType || post.author?.workspace_type || post.author?.workspaceType || '').toLowerCase();
+          const isEntityPost = postWorkspace === 'band' || postWorkspace === 'creative' || postWorkspace === 'promoter' || postWorkspace === 'label' ||
+            post.author?.role === 'Band / Artist' || post.author?.role === 'Creative Pro' || post.author?.role === 'Promoter / Venue' || post.author?.role === 'Record Label' ||
+            Boolean((post.author as any)?.isBand);
+          if (isPostSelf && !isEntityPost && currentLiveAvatar) {
+            return {
+              ...post,
+              author: {
+                ...post.author,
+                avatar: currentLiveAvatar
+              }
+            };
+          }
+          return post;
+        });
+
+        // Fetch from Supabase
+        const supabaseClient = getSupabase();
+        if (supabaseClient) {
+          try {
+            const { data, error } = await supabaseClient
+              .from('nexus_posts')
+              .select('*, profiles:profile_id(*)')
+              .order('created_at', { ascending: false })
+              .limit(100);
+
+            if (!error && data) {
+              const deletedPosts = getDeletedPostIdsLocal();
+              const filteredData = data.filter((item: any) => {
+                if (deletedPosts.includes(item.id)) return false;
+                if (isBrokenOrDeletedPost(item)) return false;
+                try {
+                  const postObj = typeof item.data === 'string' ? JSON.parse(item.data) : (item.data || {});
+                  if (isBrokenOrDeletedPost(postObj)) return false;
+                } catch (e) {}
+                return true;
+              });
+
+              if (filteredData.length > 0) {
+                const remoteFeed = filteredData.map((item: any) => {
+                  try {
+                    const postObj = typeof item.data === 'string' ? JSON.parse(item.data) : (item.data || {});
+
+                    const authorNameVal = (postObj.authorName || postObj.author?.name || item.profiles?.full_name || item.profiles?.name || '').toLowerCase();
+                    const authorHandleVal = (postObj.authorHandle || postObj.author?.console_handle || item.profiles?.console_handle || '').toLowerCase();
+
+                    const isViewerMiguel = isMiguelNameOrProfile(userProfile);
+                    const isSelf = Boolean(
+                      (userProfile?.id && (userProfile.id === item.profiles?.id || userProfile.id === item.profile_id || userProfile.id === postObj.author?.id || userProfile.id === postObj.authorId)) ||
+                      (userProfile?.email && (userProfile.email.toLowerCase() === (item.profiles?.email || '').toLowerCase() || userProfile.email.toLowerCase() === (postObj.author?.email || '').toLowerCase())) ||
+                      (userProfile?.console_handle && (
+                        userProfile.console_handle.toLowerCase() === authorHandleVal ||
+                        userProfile.console_handle.replace(/^@/, '').toLowerCase() === authorHandleVal.replace(/^@/, '') ||
+                        userProfile.console_handle.toLowerCase() === authorNameVal
+                      )) ||
+                      (userProfile?.name && authorNameVal === userProfile.name.toLowerCase()) ||
+                      (userProfile?.full_name && authorNameVal === userProfile.full_name.toLowerCase()) ||
+                      (isViewerMiguel && (
+                        authorNameVal.includes('goregrinder') ||
+                        authorNameVal.includes('bdmceo') ||
+                        authorNameVal === 'miguel medina'
+                      ))
+                    );
+
+                    const localStoredAvatar = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null;
+                    const liveSelfAvatar = isSelf ? (userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || localStoredAvatar) : null;
+
+                    const isCreativePost = postObj.workspace_type === 'creative' ||
+                      postObj.workspaceType === 'creative' ||
+                      postObj.authorRole === 'Creative Pro' ||
+                      postObj.author?.role === 'Creative Pro' ||
+                      postObj.persona_id?.includes('creative') ||
+                      (item.profiles?.account_type === 'creative');
+
+                    const isBandPost = !isCreativePost && (
+                      postObj.workspace_type === 'band' ||
+                      postObj.workspaceType === 'band' ||
+                      postObj.authorRole === 'Band / Artist' ||
+                      postObj.author?.isBand ||
+                      postObj.persona_id?.includes('band') ||
+                      (item.profiles?.account_type === 'band')
+                    );
+
+                    const isLabelPost = !isCreativePost && !isBandPost && (
+                      postObj.workspace_type === 'label' ||
+                      postObj.workspaceType === 'label' ||
+                      postObj.authorRole === 'Record Label' ||
+                      postObj.persona_id?.includes('label') ||
+                      (item.profiles?.account_type === 'label')
+                    );
+
+                    const isPromoterPost = !isCreativePost && !isBandPost && !isLabelPost && (
+                      postObj.workspace_type === 'promoter' ||
+                      postObj.workspaceType === 'promoter' ||
+                      postObj.authorRole === 'Promoter / Venue' ||
+                      postObj.authorRole === 'Promoter' ||
+                      postObj.persona_id?.includes('promoter') ||
+                      (item.profiles?.account_type === 'promoter')
+                    );
+
+                    const resolvedWorkspaceType = isCreativePost ? 'creative' :
+                      isBandPost ? 'band' :
+                      isLabelPost ? 'label' :
+                      isPromoterPost ? 'promoter' :
+                      (postObj.workspace_type || (item.profiles?.account_type === 'fan' ? 'fan_only' : 'industry_pro'));
+
+                    const resolvedRole = isCreativePost ? 'Creative Pro' :
+                      isBandPost ? 'Band / Artist' :
+                      isLabelPost ? 'Record Label' :
+                      isPromoterPost ? 'Promoter / Venue' :
+                      (postObj.authorRole || postObj.author?.role || (item.profiles?.account_type === 'fan' ? 'FAN' : 'Industry Pro'));
+
+                    const resolvedName = (isBandPost && (postObj.author?.name || postObj.authorName))
+                      ? (postObj.author?.name || postObj.authorName)
+                      : (isLabelPost && (postObj.author?.name || postObj.authorName))
+                      ? (postObj.author?.name || postObj.authorName)
+                      : (isCreativePost && (postObj.author?.name || postObj.authorName))
+                      ? (postObj.author?.name || postObj.authorName)
+                      : (postObj.authorName || postObj.author?.name || item.profiles?.console_handle || item.profiles?.full_name || 'Anonymous');
+
+                    const isNonPersonalEntityPost = isBandPost || isCreativePost || isLabelPost || isPromoterPost;
+                    const dedicatedAvatar = postObj.authorAvatar || postObj.author?.avatar;
+                    const resolvedAvatar = (!isNonPersonalEntityPost && isSelf && (liveSelfAvatar || item.profiles?.avatar_url || item.profiles?.avatar || item.profiles?.profile_avatar))
+                      ? (liveSelfAvatar || item.profiles?.avatar_url || item.profiles?.avatar || item.profiles?.profile_avatar)
+                      : ((dedicatedAvatar && !dedicatedAvatar.includes('ui-avatars.com'))
+                        ? dedicatedAvatar
+                        : (isSelf
+                          ? (liveSelfAvatar || item.profiles?.avatar_url || item.profiles?.avatar || item.profiles?.profile_avatar || item.profiles?.profile_image || dedicatedAvatar || undefined)
+                          : (item.profiles?.avatar_url || item.profiles?.avatar || item.profiles?.profile_avatar || item.profiles?.profile_image || dedicatedAvatar || undefined)));
+
+                    // Auto-heal Supabase post record ONLY if a purely personal post avatar was corrupted
+                    if (isSelf && !isNonPersonalEntityPost && liveSelfAvatar && supabaseClient && item.id) {
+                      if (postObj.author?.avatar && postObj.author.avatar !== liveSelfAvatar && !postObj.author.avatar.includes('ui-avatars.com')) {
+                        const healedData = {
+                          ...postObj,
+                          author: {
+                            ...(postObj.author || {}),
+                            avatar: liveSelfAvatar
+                          },
+                          authorAvatar: liveSelfAvatar
+                        };
+                        supabaseClient.from('nexus_posts').update({ data: healedData }).eq('id', item.id).then();
+                      }
+                    }
+
+                    const author = {
+                      id: postObj.author?.id || item.profiles?.id || item.profile_id,
+                      name: resolvedName,
+                      avatar: resolvedAvatar,
+                      role: resolvedRole,
+                      workspace_type: resolvedWorkspaceType,
+                      workspaceType: resolvedWorkspaceType,
+                      isYou: isSelf
+                    };
+
+                    const rxObj = typeof item.reactions === 'object' && item.reactions !== null && !Array.isArray(item.reactions)
+                      ? item.reactions
+                      : typeof postObj.reactions === 'object' && postObj.reactions !== null && !Array.isArray(postObj.reactions)
+                        ? postObj.reactions
+                        : { likes: 0, horns: 0, hype: 0, brutal: 0, respect: 0, crushed: 0 };
+
+                    const normalizedReactions = {
+                      likes: Number(rxObj.likes || rxObj.thumbs || rxObj.heart || 0),
+                      horns: Number(rxObj.horns || 0),
+                      hype: Number(rxObj.hype || rxObj.flame || 0),
+                      brutal: Number(rxObj.brutal || rxObj.heavy || 0),
+                      respect: Number(rxObj.respect || 0),
+                      crushed: Number(rxObj.crushed || 0)
+                    };
+
+                    const contentText = item.content || postObj.content || postObj.text || '';
+                    const rawMediaUrl = (item.media_url !== undefined && item.media_url !== null)
+                      ? item.media_url
+                      : (postObj.media_url || postObj.mediaUrl || postObj.image || (postObj.images && postObj.images[0]) || null);
+
+                    const ytId = postObj.youtubeId || postObj.youtube_id || extractYouTubeId(postObj.youtubeUrl || postObj.youtube_url || rawMediaUrl || contentText);
+                    const ytUrl = postObj.youtubeUrl || postObj.youtube_url || (ytId ? `https://www.youtube.com/watch?v=${ytId}` : null);
+
+                    const resolvedMediaUrl = rawMediaUrl || ytUrl || postObj.tapeData?.audioUrl || postObj.songData?.audioUrl || null;
+                    
+                    let imagesArr: string[] = [];
+                    if (Array.isArray(postObj.images)) {
+                      imagesArr = postObj.images;
+                    } else if (resolvedMediaUrl) {
+                      imagesArr = [resolvedMediaUrl];
+                    }
+                    if (rawMediaUrl && !imagesArr.includes(rawMediaUrl)) {
+                      imagesArr = [rawMediaUrl, ...imagesArr];
+                    }
+
+                    const resolvedBandcampData = postObj.bandcampData || postObj.bandcamp_data || null;
+                    const resolvedBandcampUrl = postObj.bandcampUrl || postObj.bandcamp_url || (rawMediaUrl && rawMediaUrl.includes('bandcamp.com') ? rawMediaUrl : null);
+
+                    const parsedPostItem = {
+                      ...postObj,
+                      id: item.id || postObj.id,
+                      timestamp: item.created_at || postObj.timestamp || postObj.created_at || new Date().toISOString(),
+                      created_at: item.created_at || postObj.created_at || postObj.timestamp || new Date().toISOString(),
+                      content: contentText,
+                      image: resolvedMediaUrl,
+                      mediaUrl: resolvedMediaUrl,
+                      media_url: resolvedMediaUrl,
+                      images: imagesArr,
+                      youtubeId: ytId || postObj.youtubeId,
+                      youtube_id: ytId || postObj.youtube_id,
+                      youtubeUrl: ytUrl || postObj.youtubeUrl,
+                      youtube_url: ytUrl || postObj.youtube_url,
+                      bandcampData: resolvedBandcampData,
+                      bandcamp_data: resolvedBandcampData,
+                      bandcampUrl: resolvedBandcampUrl,
+                      bandcamp_url: resolvedBandcampUrl,
+                      tapeData: postObj.tapeData,
+                      songData: postObj.songData,
+                      pollData: postObj.pollData,
+                      merchData: postObj.merchData,
+                      reactions: normalizedReactions,
+                      likes_count: normalizedReactions.likes,
+                      author: author,
+                      type: postObj.type || (postObj.tapeData ? 'tape_share' : postObj.songData ? 'song' : postObj.pollData ? 'poll' : postObj.merchData ? 'merch_drop' : 'post')
+                    };
+                    return mergePostWithReactions(parsedPostItem, userProfile?.id);
+                  } catch (err) {
+                    console.warn("Failed to parse remote post JSON:", err);
+                    return null;
+                  }
+                }).filter(Boolean) as FeedItem[];
+
+                if (storedFeed && storedFeed.length > 0) {
+                  const remoteMap = new Map(remoteFeed.map(p => [p.id, p]));
+                  const merged: FeedItem[] = [];
+
+                  remoteFeed.forEach(rp => {
+                    const sp = storedFeed.find(s => s.id === rp.id);
+                    if (sp) {
+                      const combined = {
+                        ...rp,
+                        reactions: {
+                          likes: Math.max(rp.reactions?.likes || 0, sp.reactions?.likes || 0),
+                          horns: Math.max(rp.reactions?.horns || 0, sp.reactions?.horns || 0),
+                          hype: Math.max(rp.reactions?.hype || 0, sp.reactions?.hype || 0),
+                          brutal: Math.max(rp.reactions?.brutal || 0, sp.reactions?.brutal || 0),
+                          respect: Math.max(rp.reactions?.respect || 0, sp.reactions?.respect || 0),
+                          crushed: Math.max(rp.reactions?.crushed || 0, sp.reactions?.crushed || 0),
+                        },
+                        user_reactions: sp.user_reactions || rp.user_reactions,
+                        user_liked: sp.user_liked ?? rp.user_liked,
+                      };
+                      combined.likes_count = combined.reactions.likes;
+                      merged.push(mergePostWithReactions(combined, userProfile?.id));
+                    } else {
+                      merged.push(mergePostWithReactions(rp, userProfile?.id));
+                    }
+                  });
+
+                  storedFeed.forEach(sp => {
+                    const isDraftOrOptimistic = sp.id.startsWith('draft_') || sp.id.startsWith('local_') || (sp as any).isOptimistic;
+                    if (isDraftOrOptimistic && !remoteMap.has(sp.id) && !deletedPosts.includes(sp.id) && !isBrokenOrDeletedPost(sp)) {
+                      merged.push(mergePostWithReactions(sp, userProfile?.id));
+                    }
+                  });
+
+                  finalFeed = merged.filter(p => !isBrokenOrDeletedPost(p));
+                } else {
+                  finalFeed = remoteFeed.filter(p => !isBrokenOrDeletedPost(p)).map(p => mergePostWithReactions(p, userProfile?.id));
+                }
+
+                // Query global comments and reactions from persistent backend
+                try {
+                  const globalInteractions = await fetchGlobalInteractions();
+                  if (globalInteractions) {
+                    const activeUserId = userProfile?.id || (typeof window !== 'undefined' ? localStorage.getItem('nexus_active_profile_id') || localStorage.getItem('nexus_user_profile_id') : null);
+
+                    finalFeed = finalFeed.map(p => {
+                      const serverComments = globalInteractions.comments?.[p.id] || [];
+                      const existingComments = Array.isArray(p.comments) ? p.comments : [];
+                      const cMap = new Map();
+                      existingComments.forEach((c: any) => { if (c?.id) cMap.set(c.id, c); });
+                      serverComments.forEach((c: any) => {
+                        if (c?.id) {
+                          const prev = cMap.get(c.id);
+                          if (!prev) {
+                            cMap.set(c.id, c);
+                          } else {
+                            if (prev.edited && !c.edited) {
+                              cMap.set(c.id, { ...c, ...prev, edited: true });
+                            } else if (!prev.edited && c.edited) {
+                              cMap.set(c.id, { ...prev, ...c });
+                            } else {
+                              cMap.set(c.id, { ...prev, ...c });
+                            }
+                          }
+                        }
+                      });
+                      const mergedComments = Array.from(cMap.values());
+
+                      const serverRx = globalInteractions.reactions?.[p.id];
+                      const userReacts = (serverRx?.user_reactions && activeUserId ? serverRx.user_reactions[activeUserId] : null) || p.user_reactions || {};
+
+                      return {
+                        ...p,
+                        comments: mergedComments.length > 0 ? mergedComments : p.comments || [],
+                        reactions: serverRx?.reactions || p.reactions,
+                        likes_count: serverRx?.likes_count ?? p.likes_count,
+                        user_reactions: userReacts,
+                        user_liked: Boolean(userReacts?.likes)
+                      };
+                    });
+                  }
+                } catch (gErr) {
+                  console.warn("Notice querying global interactions in feed cache:", gErr);
+                }
+
+                // Best-effort query Supabase comments
+                try {
+                  const { data: commentsRows } = await supabaseClient
+                    .from('nexus_post_comments')
+                    .select('*')
+                    .order('created_at', { ascending: true });
+
+                  if (commentsRows && commentsRows.length > 0) {
+                    const commentsByPost: Record<string, any[]> = {};
+                    commentsRows.forEach((c: any) => {
+                      if (!c.post_id) return;
+                      if (!commentsByPost[c.post_id]) commentsByPost[c.post_id] = [];
+                      const isMiguel = c.user_id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+                      const isCurrentViewer = Boolean(userProfile?.id && c.user_id === userProfile.id);
+                      const commAuthor = isMiguel ? 'Miguel Goregrinder Medina' : (isCurrentViewer ? (userProfile?.full_name || userProfile?.name || 'You') : 'Scene Member');
+                      const commAvatar = isMiguel ? MIGUEL_DEFAULT_AVATAR : (isCurrentViewer ? (userProfile?.avatar_url || userProfile?.avatar || DEFAULT_PERSONAL_AVATAR) : DEFAULT_PERSONAL_AVATAR);
+                      commentsByPost[c.post_id].push({
+                        id: c.id,
+                        post_id: c.post_id,
+                        user_id: c.user_id,
+                        parent_comment_id: c.parent_comment_id || null,
+                        username: commAuthor,
+                        author: commAuthor,
+                        avatar: commAvatar,
+                        userAvatar: commAvatar,
+                        text: c.content,
+                        content: c.content,
+                        time: c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+                        created_at: c.created_at
+                      });
+                    });
+
+                    finalFeed = finalFeed.map(p => {
+                      const sbComms = commentsByPost[p.id] || [];
+                      if (sbComms.length === 0) return p;
+                      const currentComms = Array.isArray(p.comments) ? p.comments : [];
+                      const cMap = new Map();
+                      currentComms.forEach((c: any) => { if (c?.id) cMap.set(c.id, c); });
+                      sbComms.forEach((sbC: any) => {
+                        if (sbC?.id) {
+                          const existing = cMap.get(sbC.id);
+                          if (!existing) {
+                            cMap.set(sbC.id, sbC);
+                          } else {
+                            if (existing.edited) {
+                              cMap.set(sbC.id, { ...sbC, ...existing, text: existing.text || existing.content, content: existing.text || existing.content });
+                            } else {
+                              cMap.set(sbC.id, { ...existing, ...sbC, text: sbC.text || existing.text, content: sbC.content || existing.content });
+                            }
+                          }
+                        }
+                      });
+                      return { ...p, comments: Array.from(cMap.values()) };
+                    });
+                  }
+                } catch (_) {}
+
+                // Query polls
+                try {
+                  const { data: pollsRows } = await supabaseClient.from('nexus_polls').select('*');
+                  const { data: votesRows } = await supabaseClient.from('nexus_poll_votes').select('*');
+
+                  if (pollsRows && pollsRows.length > 0) {
+                    const pollsByPost = pollsRows.reduce((acc, p) => { acc[p.post_id] = p; return acc; }, {} as Record<string, any>);
+                    const votesByPoll = votesRows ? votesRows.reduce((acc, v) => {
+                      if (!acc[v.poll_id]) acc[v.poll_id] = [];
+                      acc[v.poll_id].push(v);
+                      return acc;
+                    }, {} as Record<string, any[]>) : {};
+
+                    finalFeed = finalFeed.map(post => {
+                      if (pollsByPost[post.id]) {
+                        const p = pollsByPost[post.id];
+                        const pollVotes = votesByPoll[p.id] || [];
+                        const optionsWithVotes = p.options.map((opt: any, idx: number) => {
+                          const optionVotes = pollVotes.filter((v: any) => v.selected_option_index === idx).length;
+                          return { ...opt, votes: optionVotes };
+                        });
+
+                        return {
+                          ...post,
+                          type: 'poll',
+                          pollData: {
+                            pollId: p.id,
+                            question: p.question,
+                            variant: p.category,
+                            isTimed: !p.is_unbiased,
+                            expiresAt: p.expires_at,
+                            options: optionsWithVotes,
+                            totalVotes: pollVotes.length
+                          }
+                        };
+                      }
+                      return post;
+                    });
+                  }
+                } catch (pollErr) {
+                  console.warn("Notice querying nexus_polls:", pollErr);
+                }
+
+                // Sort posts by descending timestamp
+                finalFeed.sort((a: any, b: any) => {
+                  const timeA = new Date(a.timestamp || 0).getTime();
+                  const timeB = new Date(b.timestamp || 0).getTime();
+                  return timeB - timeA;
+                });
+              } else {
+                finalFeed = defaultFeed;
+              }
+            } else if (!error && !data) {
+              finalFeed = defaultFeed;
+            }
+          } catch (e) {
+            console.warn("Failed to sync feed from Supabase", e);
+          }
+        }
+
+        if (finalFeed.length < 10 && defaultFeed.length > 0) {
+          const existingIds = new Set(finalFeed.map((item: any) => item.id));
+          const toAppend = defaultFeed
+            .filter(item => !existingIds.has(item.id))
+            .map(item => mergePostWithReactions(item, userProfile?.id));
+          finalFeed = [...finalFeed, ...toAppend];
+        }
+
+        finalFeed = finalFeed.map(p => mergePostWithReactions(p, userProfile?.id));
+
+        if (active) {
+          _setFeed(finalFeed);
+        }
+      } catch (e) {
+        console.warn("Failed to load feed from IndexedDB:", e);
+      }
+    };
+
+    loadFeed();
+    return () => {
+      active = false;
+    };
+  }, [portalRole, resolvedEntityId, userProfile?.id, defaultFeed]);
+
+  // Real-time syncing for posts and comments
+  useEffect(() => {
+    let active = true;
+    const unsub1 = subscribeToTable('nexus_posts', async (payload) => {
+      if (!active) return;
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        try {
+          const newItem = payload.new;
+          let parsedPost = typeof newItem.data === 'string' ? JSON.parse(newItem.data) : (newItem.data || {});
+
+          let profile = newItem.profiles;
+          if (!profile && newItem.profile_id) {
+            const supabaseClient = getSupabase();
+            if (supabaseClient) {
+              const { data: profData } = await supabaseClient.from('profiles').select('*').eq('id', newItem.profile_id).single();
+              profile = profData;
+            }
+          }
+
+          const authorNameVal = (parsedPost.authorName || parsedPost.author?.name || profile?.full_name || profile?.name || '').toLowerCase();
+          const authorHandleVal = (parsedPost.authorHandle || parsedPost.author?.console_handle || profile?.console_handle || '').toLowerCase();
+
+          const isViewerMiguel = isMiguelNameOrProfile(userProfile);
+          const isSelf = Boolean(
+            (userProfile?.id && (userProfile.id === profile?.id || userProfile.id === newItem.profile_id || userProfile.id === parsedPost.author?.id || userProfile.id === parsedPost.authorId)) ||
+            (userProfile?.email && (userProfile.email.toLowerCase() === (profile?.email || '').toLowerCase() || userProfile.email.toLowerCase() === (parsedPost.author?.email || '').toLowerCase())) ||
+            (userProfile?.console_handle && (
+              userProfile.console_handle.toLowerCase() === authorHandleVal ||
+              userProfile.console_handle.replace(/^@/, '').toLowerCase() === authorHandleVal.replace(/^@/, '') ||
+              userProfile.console_handle.toLowerCase() === authorNameVal
+            )) ||
+            (userProfile?.name && authorNameVal === userProfile.name.toLowerCase()) ||
+            (userProfile?.full_name && authorNameVal === userProfile.full_name.toLowerCase()) ||
+            (isViewerMiguel && (
+              authorNameVal.includes('goregrinder') ||
+              authorNameVal.includes('bdmceo') ||
+              authorNameVal === 'miguel medina'
+            ))
+          );
+
+          const localStoredAvatar = typeof window !== 'undefined' ? (localStorage.getItem('nexus_user_avatar') || localStorage.getItem('nexus_avatar')) : null;
+          const liveSelfAvatar = isSelf ? (userProfile?.avatar_url || userProfile?.avatar || userProfile?.profile_avatar || localStoredAvatar) : null;
+
+          const isCreativePost = parsedPost.workspace_type === 'creative' ||
+            parsedPost.workspaceType === 'creative' ||
+            parsedPost.authorRole === 'Creative Pro' ||
+            parsedPost.author?.role === 'Creative Pro' ||
+            parsedPost.persona_id?.includes('creative') ||
+            (profile?.account_type === 'creative');
+
+          const isBandPost = !isCreativePost && (
+            parsedPost.workspace_type === 'band' ||
+            parsedPost.workspaceType === 'band' ||
+            parsedPost.authorRole === 'Band / Artist' ||
+            parsedPost.author?.isBand ||
+            parsedPost.persona_id?.includes('band') ||
+            (profile?.account_type === 'band')
+          );
+
+          const isLabelPost = !isCreativePost && !isBandPost && (
+            parsedPost.workspace_type === 'label' ||
+            parsedPost.workspaceType === 'label' ||
+            parsedPost.authorRole === 'Record Label' ||
+            parsedPost.persona_id?.includes('label') ||
+            (profile?.account_type === 'label')
+          );
+
+          const isPromoterPost = !isCreativePost && !isBandPost && !isLabelPost && (
+            parsedPost.workspace_type === 'promoter' ||
+            parsedPost.workspaceType === 'promoter' ||
+            parsedPost.authorRole === 'Promoter / Venue' ||
+            parsedPost.authorRole === 'Promoter' ||
+            parsedPost.persona_id?.includes('promoter') ||
+            (profile?.account_type === 'promoter')
+          );
+
+          const resolvedWorkspaceType = isCreativePost ? 'creative' :
+            isBandPost ? 'band' :
+            isLabelPost ? 'label' :
+            isPromoterPost ? 'promoter' :
+            (parsedPost.workspace_type || (profile?.account_type === 'fan' ? 'fan_only' : 'industry_pro'));
+
+          const resolvedRole = isCreativePost ? 'Creative Pro' :
+            isBandPost ? 'Band / Artist' :
+            isLabelPost ? 'Record Label' :
+            isPromoterPost ? 'Promoter / Venue' :
+            (parsedPost.authorRole || parsedPost.author?.role || (profile?.account_type === 'fan' ? 'FAN' : 'Industry Pro'));
+
+          const resolvedName = (isBandPost && (parsedPost.author?.name || parsedPost.authorName))
+            ? (parsedPost.author?.name || parsedPost.authorName)
+            : (isLabelPost && (parsedPost.author?.name || parsedPost.authorName))
+            ? (parsedPost.author?.name || parsedPost.authorName)
+            : (isCreativePost && (parsedPost.author?.name || parsedPost.authorName))
+            ? (parsedPost.author?.name || parsedPost.authorName)
+            : (parsedPost.authorName || parsedPost.author?.name || profile?.console_handle || profile?.full_name || 'Anonymous');
+
+          const dedicatedAvatar = parsedPost.authorAvatar || parsedPost.author?.avatar;
+          const resolvedAvatar = (dedicatedAvatar && !dedicatedAvatar.includes('ui-avatars.com'))
+            ? dedicatedAvatar
+            : (isSelf
+              ? (liveSelfAvatar || profile?.avatar_url || profile?.avatar || profile?.profile_avatar || profile?.profile_image || dedicatedAvatar || undefined)
+              : (profile?.avatar_url || profile?.avatar || profile?.profile_avatar || profile?.profile_image || dedicatedAvatar || undefined));
+
+          const author = {
+            id: parsedPost.author?.id || profile?.id || newItem.profile_id,
+            name: resolvedName,
+            avatar: resolvedAvatar,
+            role: resolvedRole,
+            workspace_type: resolvedWorkspaceType,
+            workspaceType: resolvedWorkspaceType,
+            isYou: isSelf
+          };
+
+          const contentText = newItem.content || parsedPost.content || parsedPost.text || '';
+          const rawMediaUrl = (newItem.media_url !== undefined && newItem.media_url !== null)
+            ? newItem.media_url
+            : (parsedPost.media_url || parsedPost.mediaUrl || parsedPost.image || (parsedPost.images && parsedPost.images[0]) || null);
+
+          const ytId = parsedPost.youtubeId || parsedPost.youtube_id || extractYouTubeId(parsedPost.youtubeUrl || parsedPost.youtube_url || rawMediaUrl || contentText);
+          const ytUrl = parsedPost.youtubeUrl || parsedPost.youtube_url || (ytId ? `https://www.youtube.com/watch?v=${ytId}` : null);
+
+          const resolvedMediaUrl = rawMediaUrl || ytUrl || parsedPost.tapeData?.audioUrl || parsedPost.songData?.audioUrl || null;
+          
+          let imagesArr: string[] = [];
+          if (Array.isArray(parsedPost.images)) {
+            imagesArr = parsedPost.images;
+          } else if (resolvedMediaUrl) {
+            imagesArr = [resolvedMediaUrl];
+          }
+
+          // If rawMediaUrl is present but not in imagesArr, ensure it is included
+          if (rawMediaUrl && !imagesArr.includes(rawMediaUrl)) {
+            imagesArr = [rawMediaUrl, ...imagesArr];
+          }
+
+          parsedPost = {
+            ...parsedPost,
+            id: newItem.id || parsedPost.id,
+            timestamp: newItem.created_at || parsedPost.timestamp || parsedPost.created_at || new Date().toISOString(),
+            created_at: newItem.created_at || parsedPost.created_at || parsedPost.timestamp || new Date().toISOString(),
+            content: contentText,
+            message: contentText,
+            text: contentText,
+            image: resolvedMediaUrl,
+            image_url: resolvedMediaUrl || undefined,
+            mediaUrl: resolvedMediaUrl || undefined,
+            media_url: resolvedMediaUrl || undefined,
+            images: imagesArr,
+            youtubeId: ytId || parsedPost.youtubeId,
+            youtube_id: ytId || parsedPost.youtube_id,
+            youtubeUrl: ytUrl || parsedPost.youtubeUrl,
+            youtube_url: ytUrl || parsedPost.youtube_url,
+            tapeData: parsedPost.tapeData,
+            songData: parsedPost.songData,
+            pollData: parsedPost.pollData,
+            merchData: parsedPost.merchData,
+            author: author,
+            type: parsedPost.type || (parsedPost.tapeData ? 'tape_share' : parsedPost.songData ? 'song' : parsedPost.pollData ? 'poll' : parsedPost.merchData ? 'merch_drop' : 'post')
+          };
+
+          const deletedPosts = getDeletedPostIdsLocal();
+          if (deletedPosts.includes(parsedPost.id) || isBrokenOrDeletedPost(parsedPost)) return;
+
+          _setFeed(prev => {
+            let nextPrev = prev;
+            if (nextPrev.some(p => p.id.startsWith('mock_'))) {
+              nextPrev = nextPrev.filter(p => !p.id.startsWith('mock_'));
+            }
+
+            // Check exact ID match
+            let matchIdx = nextPrev.findIndex(p => p.id === parsedPost.id || p.id === `nexus_post_${parsedPost.id}`);
+
+            // If no exact ID match, check for optimistic duplicate created recently
+            if (matchIdx === -1) {
+              matchIdx = nextPrev.findIndex(p => {
+                const sameAuthor = p.author?.name === parsedPost.author?.name || p.author?.isYou;
+                const sameContent = (p.content || '').trim() === (parsedPost.content || '').trim();
+                const pImg = p.image || p.images?.[0];
+                const newImg = parsedPost.image || parsedPost.images?.[0];
+                const sameImage = pImg === newImg || !pImg || !newImg;
+                const isRecent = p.timestamp === 'Just now' || Math.abs(new Date(p.timestamp || 0).getTime() - new Date(parsedPost.timestamp || 0).getTime()) < 30000;
+                return sameAuthor && sameContent && sameImage && isRecent;
+              });
+            }
+
+            if (matchIdx !== -1) {
+              const updated = [...nextPrev];
+              const mergedPost = mergePostWithReactions({
+                ...updated[matchIdx],
+                ...parsedPost,
+                id: parsedPost.id,
+                content: contentText,
+                message: contentText,
+                text: contentText,
+                image: resolvedMediaUrl,
+                image_url: resolvedMediaUrl || undefined,
+                mediaUrl: resolvedMediaUrl || undefined,
+                media_url: resolvedMediaUrl || undefined,
+                images: imagesArr,
+                user_reactions: updated[matchIdx].user_reactions || parsedPost.user_reactions,
+                user_liked: updated[matchIdx].user_liked ?? parsedPost.user_liked,
+              }, userProfile?.id);
+              updated[matchIdx] = mergedPost;
+              return updated;
+            } else {
+              const freshPost = mergePostWithReactions(parsedPost, userProfile?.id);
+              return [freshPost, ...nextPrev].sort((a: any, b: any) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
+            }
+          });
+        } catch (e) { }
+      } else if (payload.eventType === 'DELETE') {
+        const { id } = payload.old;
+        if (id) {
+          const postId = id.startsWith('nexus_post_') ? id.replace('nexus_post_', '') : id;
+          _setFeed(prev => prev.filter(p => p.id !== postId && p.id !== id));
+        }
+      }
+    });
+
+    const unsubComments = subscribeToTable('nexus_post_comments', (payload) => {
+      if (!active) return;
+      if (payload.eventType === 'INSERT') {
+        const c = payload.new;
+        if (!c.post_id) return;
+        setFeed(prev => prev.map(post => {
+          if (post.id === c.post_id || post.id === `nexus_post_${c.post_id}`) {
+            const isMiguel = c.user_id === '5403162d-1947-43aa-b5f6-38a1bd2a1b80';
+            const isCurrentViewer = Boolean(userProfile?.id && c.user_id === userProfile.id);
+            const commAuthor = isMiguel ? 'Miguel Goregrinder Medina' : (isCurrentViewer ? (userProfile?.full_name || userProfile?.name || 'You') : 'Scene Member');
+            const commAvatar = isMiguel ? MIGUEL_DEFAULT_AVATAR : (isCurrentViewer ? (userProfile?.avatar_url || userProfile?.avatar || DEFAULT_PERSONAL_AVATAR) : DEFAULT_PERSONAL_AVATAR);
+            const newComm = {
+              id: c.id,
+              post_id: c.post_id,
+              user_id: c.user_id,
+              parent_comment_id: c.parent_comment_id || null,
+              username: commAuthor,
+              author: commAuthor,
+              avatar: commAvatar,
+              userAvatar: commAvatar,
+              text: c.content,
+              content: c.content,
+              time: c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+              timeAgo: c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+              created_at: c.created_at
+            };
+            const existing = post.comments || [];
+            if (existing.some((x: any) => x.id === c.id)) return post;
+            return {
+              ...post,
+              comments: [...existing, newComm]
+            };
+          }
+          return post;
+        }));
+      }
+    });
+
+    const handlePostDeletedSync = (e: any) => {
+      if (!active) return;
+      const deletedId = e.detail?.id || e.detail;
+      if (deletedId) {
+        _setFeed(prev => prev.filter(p => p.id !== deletedId && p.id !== `nexus_post_${deletedId}`));
+      }
+    };
+    window.addEventListener('nexus_post_deleted', handlePostDeletedSync as EventListener);
+
+    const handleReactionSync = (e: any) => {
+      if (!active) return;
+      const detail = e.detail;
+      if (!detail || !detail.postId) return;
+      _setFeed(prev => {
+        let matched = false;
+        const next = prev.map(p => {
+          if (p.id === detail.postId) {
+            matched = true;
+            return {
+              ...p,
+              reactions: detail.reactions,
+              likes_count: detail.likes_count,
+              user_liked: detail.user_liked,
+              user_reactions: detail.user_reactions,
+            };
+          }
+          return p;
+        });
+        return matched ? next : prev;
+      });
+    };
+
+    const handleAvatarUpdateSync = (e: any) => {
+      const detail = e.detail;
+      const newUrl = detail?.avatarUrl || detail?.avatar_url || detail?.logo_url || detail?.avatar;
+      if (!newUrl) return;
+
+      const targetId = detail?.id || userProfile?.id;
+      const targetName = (detail?.authorName || detail?.name || userProfile?.name || '').toLowerCase().trim();
+
+      setFeed((prev: FeedItem[]) => prev.map(post => {
+        const rawPost = post as any;
+        const postAuthorId = rawPost.author_id || rawPost.authorId || rawPost.profile_id || rawPost.user_id || post.author?.id;
+        const postAuthorName = (post.author?.name || rawPost.authorName || '').toLowerCase().trim();
+        const postWorkspace = (rawPost.workspace_type || rawPost.workspaceType || post.author?.workspace_type || post.author?.workspaceType || '').toLowerCase();
+        const isBandPost = postWorkspace === 'band' || post.author?.role === 'Band / Artist' || Boolean((post.author as any)?.isBand);
+
+        const isMatch = Boolean(
+          (targetId && postAuthorId === targetId) ||
+          (targetName && targetName !== 'user' && targetName !== 'anonymous' && (
+            postAuthorName === targetName ||
+            (targetName.includes('miguel') && postAuthorName.includes('bdmceo')) ||
+            (targetName.includes('bdmceo') && postAuthorName.includes('miguel'))
+          ))
+        );
+
+        // Update post avatar for all matching author posts (skip purely band posts only if this update is not for a band)
+        const isBandUpdate = detail?.authorRole?.toLowerCase().includes('band');
+        if (isMatch && (!isBandPost || isBandUpdate)) {
+          return {
+            ...post,
+            authorAvatar: newUrl,
+            avatar: newUrl,
+            avatar_url: newUrl,
+            author_avatar: newUrl,
+            author: {
+              ...(post.author || {}),
+              name: post.author?.name || 'User',
+              avatar: newUrl,
+              avatar_url: newUrl
+            }
+          } as FeedItem;
+        }
+        return post;
+      }));
+    };
+
+    window.addEventListener('nexus_reaction_updated', handleReactionSync as EventListener);
+    window.addEventListener('nexus_avatar_updated', handleAvatarUpdateSync as EventListener);
+
+    return () => {
+      active = false;
+      if (unsub1) unsub1();
+      if (unsubComments) unsubComments();
+      window.removeEventListener('nexus_post_deleted', handlePostDeletedSync as EventListener);
+      window.removeEventListener('nexus_reaction_updated', handleReactionSync as EventListener);
+      window.removeEventListener('nexus_avatar_updated', handleAvatarUpdateSync as EventListener);
+    };
+  }, [userProfile?.id, setFeed]);
+
+  // Save feed posts to IndexedDB whenever feed state updates
+  useEffect(() => {
+    if (feed && feed.length > 0) {
+      saveFeedCache(portalRole, feed, userProfile?.id, resolvedEntityId);
+    }
+  }, [feed, portalRole, resolvedEntityId, userProfile?.id]);
+
+  return {
+    feed,
+    setFeed,
+    _setFeed
+  };
+}
