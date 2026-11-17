@@ -22,6 +22,7 @@ import {
   scrapeLimiter,
   apiMutationLimiter,
 } from '../middleware/security';
+import { searchYouTubeVideos } from '../lib/youtubeSearch';
 
 export const bandsRouter = express.Router();
 
@@ -632,6 +633,30 @@ bandsRouter.get('/api/oembed', async (req, res) => {
   } catch (error) {
     console.error('Error fetching YouTube oEmbed:', error);
     res.status(500).json({ error: 'Internal server error while fetching oEmbed' });
+  }
+});
+
+bandsRouter.get('/api/youtube/search', scrapeLimiter, async (req, res) => {
+  try {
+    const rawQuery = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const rawLimit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 12;
+
+    if (rawQuery.length < 2) {
+      return res.status(400).json({ error: 'Search query must be at least 2 characters.' });
+    }
+
+    const { results, source } = await searchYouTubeVideos(rawQuery, rawLimit);
+    return res.json({
+      query: rawQuery,
+      source,
+      results,
+    });
+  } catch (error: any) {
+    console.error('[YOUTUBE SEARCH ERROR]:', error?.message || error);
+    return res.status(502).json({
+      error: 'Unable to search YouTube right now. Try again or paste a direct YouTube link.',
+      results: [],
+    });
   }
 });
 

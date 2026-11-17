@@ -5,6 +5,7 @@ import SettingsView from './SettingsView';
 import HelpDeskView from './HelpDeskView';
 import TermsOfServiceView from './TermsOfServiceView';
 import { fetchReleasesFromDatabase, upsertReleaseToDatabase, deleteReleaseFromDatabase } from '../services/releasesService';
+import { RELEASE_LIST_COLUMNS, cachedSupabaseQuery } from '../lib/supabaseQueryCache';
 const concertBg = "https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/High%20energy%20concert%202.png";
 import { profileStore } from '../utils/indexedDB';
 import { getSupabase, executeWithSchemaResilience, uploadBase64ToStorage, uploadCommunityBandMedia, sanitizeBandPayload, sanitizeMicroGenres, parseLocationFields, upsertBandToDatabase, ensureUUID } from '../supabase';
@@ -92,10 +93,17 @@ export default function SettingsWorkspace(props: any) {
       const rawBandId = String(props.activeBand.id).trim();
       const bandUUID = ensureUUID(rawBandId);
       let dataList: any[] = [];
-      const { data, error } = await supabase
-        .from('releases')
-        .select('*')
-        .or(`band_id.eq.${rawBandId},band_id.eq.${bandUUID}`);
+      const { data, error } = await cachedSupabaseQuery(
+        `releases:band:${bandUUID || rawBandId}`,
+        async () =>
+          await supabase
+            .from('releases')
+            .select(RELEASE_LIST_COLUMNS)
+            .or(`band_id.eq.${rawBandId},band_id.eq.${bandUUID}`)
+            .limit(100),
+        60_000,
+        (res: any) => !res?.error
+      );
       if (data && !error && data.length > 0) {
         dataList = data;
       } else {

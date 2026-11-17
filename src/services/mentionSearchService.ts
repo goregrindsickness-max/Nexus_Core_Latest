@@ -12,7 +12,7 @@ export interface MentionSuggestionItem {
 }
 
 const MENTION_PROFILE_COLUMNS =
-  'id, full_name, display_name, name, console_handle, handle, username, email, account_type, role, city, state, avatar_url, promoter_metadata';
+  'id, full_name, console_handle, email, account_type, role, city, state_province, avatar_url, promoter_metadata';
 
 export async function searchMentionSuggestions(
   query: string,

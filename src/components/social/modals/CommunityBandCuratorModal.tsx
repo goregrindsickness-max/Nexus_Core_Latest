@@ -62,6 +62,7 @@ import {
 import { deleteReleaseFromDatabase } from '../../../services/releasesService';
 import { parseDiscographyFromImageOrText } from '../../../services/metalArchivesScraper';
 import { uploadBase64ToStorage, generateUUID, ensureUUID } from '../../../supabase';
+import { BAND_DETAIL_COLUMNS, RELEASE_LIST_COLUMNS } from '../../../lib/supabaseQueryCache';
 import { MASTER_GENRES } from '../../../constants/genres';
 import { MetalArchivesImportModal } from './MetalArchivesImportModal';
 
@@ -621,15 +622,15 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
       const validUUID = band.id ? ensureUUID(band.id) : null;
       
       if (client && (validUUID || bandName)) {
-        let bQuery = client.from('bands').select('*');
+        let bQuery = client.from('bands').select(BAND_DETAIL_COLUMNS);
         if (validUUID) {
           bQuery = bQuery.eq('id', validUUID);
         } else if (bandName) {
-          bQuery = bQuery.ilike('band_name', `%${bandName}%`);
+          bQuery = bQuery.ilike('band_name', `%${bandName}%`).limit(1);
         }
 
         const bIdForRel = validUUID || band.id;
-        let rQuery = client.from('releases').select('*');
+        let rQuery = client.from('releases').select(RELEASE_LIST_COLUMNS).limit(100);
         if (validUUID && band.id && validUUID !== band.id) {
           rQuery = rQuery.or(`band_id.eq.${validUUID},band_id.eq.${band.id}`);
         } else if (bIdForRel) {

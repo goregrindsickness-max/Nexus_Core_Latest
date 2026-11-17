@@ -1073,13 +1073,12 @@ export async function runBase64StorageMigration(): Promise<{ processed: number; 
       }
     }
 
-    // 4. Profiles (avatar_url, avatar, banner_url)
-    const { data: profData } = await supabase.from('profiles').select('id, avatar_url, avatar, banner_url').or('avatar_url.ilike.data:image%,avatar.ilike.data:image%,banner_url.ilike.data:image%');
+    // 4. Profiles (avatar_url, banner_url)
+    const { data: profData } = await supabase.from('profiles').select('id, avatar_url, banner_url').or('avatar_url.ilike.data:image%,banner_url.ilike.data:image%');
     if (profData && profData.length > 0) {
       for (const prof of profData) {
         const payload: any = { id: prof.id };
         if (prof.avatar_url?.startsWith('data:image/')) payload.avatar_url = prof.avatar_url;
-        if (prof.avatar?.startsWith('data:image/')) payload.avatar = prof.avatar;
         if (prof.banner_url?.startsWith('data:image/')) payload.banner_url = prof.banner_url;
         if (Object.keys(payload).length > 1) {
           try {

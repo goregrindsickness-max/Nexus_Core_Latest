@@ -298,17 +298,22 @@ export const TimelineFeed: React.FC<TimelineFeedProps> = ({
       (song.band && song.band.toLowerCase().includes('analepsy')) ||
       (song.album && song.album.toLowerCase().includes('quiescence'));
 
+    const resolvedTracks =
+      Array.isArray(song.tracks) && song.tracks.length > 0
+        ? song.tracks.map((tr) => ({
+            title: tr.title,
+            duration: tr.duration || '3:30',
+          }))
+        : isAnalepsyQuiescence
+          ? ANALEPSY_QUIESCENCE_TRACKS
+          : [{ title: song.title, duration: song.duration || '3:45' }];
+
     setActiveAlbumModal({
-      band: song.band || 'ANALEPSY',
-      albumName: song.album || 'Quiescence',
-      releaseYear: '2026',
+      band: song.band || 'Independent Artist',
+      albumName: song.album || 'Release',
+      releaseYear: song.releaseYear || '2026',
       coverUrl: song.coverArt || 'https://cyjnpuneruonskfzpmqo.supabase.co/storage/v1/object/public/public-assets/Analepsy%20-%20Quinscence.jpg',
-      tracks: isAnalepsyQuiescence ? ANALEPSY_QUIESCENCE_TRACKS : [
-        { title: song.title, duration: song.duration || '3:45' },
-        { title: 'Intro / Slam Arrival', duration: '1:15' },
-        { title: 'Tectonic Riffs', duration: '4:02' },
-        { title: 'Outro', duration: '2:30' }
-      ],
+      tracks: resolvedTracks,
       purchaseLinks: [
         { format: 'Digital', price: '$9.99' },
         { format: 'CD', price: '$14.99' },

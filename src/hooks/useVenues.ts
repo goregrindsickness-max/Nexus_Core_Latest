@@ -3,8 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import { VENUE_CARD_COLUMNS, VenueResult, getAllBlackBookVenues } from '../services/venueSearchService';
 import { createMonogramPlaceholderSvg } from '../utils/imageFallbacks';
 
-export const VENUE_CARD_SELECT_COLUMNS =
-  'id, name, category, avatar_url, city, state, state_province, country, street_address, address, capacity, payout_rating, load_in_rating, genre_fit, email, phone, buyers, website';
+export const VENUE_CARD_SELECT_COLUMNS = VENUE_CARD_COLUMNS;
 
 export interface VenueCardRecord extends VenueResult {
   category: string;
@@ -75,7 +74,7 @@ export async function queryPaginatedVenues(params: {
 
   if (cleanSearch.length > 0) {
     qb = qb.or(
-      `name.ilike.%${cleanSearch}%,city.ilike.%${cleanSearch}%,state.ilike.%${cleanSearch}%`
+      `name.ilike.%${cleanSearch}%,city.ilike.%${cleanSearch}%,state_province.ilike.%${cleanSearch}%`
     );
   }
 

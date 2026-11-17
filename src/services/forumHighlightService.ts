@@ -1,5 +1,10 @@
 import { initialForumThreads } from '../data/forumMockData';
 import { getSupabase } from './clientService';
+import {
+  FORUM_COMMENT_COLUMNS,
+  FORUM_THREAD_COLUMNS,
+  cachedSupabaseQuery,
+} from '../lib/supabaseQueryCache';
 
 export interface ForumComment {
   id: string;
@@ -277,13 +282,28 @@ export async function syncForumHighlightsFromSupabase(): Promise<ForumHighlightT
     const supabase = getSupabase();
     if (!supabase) return loadCachedForumThreads();
 
-    const [threadsRes, commentsRes] = await Promise.all([
-      supabase.from('forum_threads').select('*').order('created_at', { ascending: false }).limit(30),
-      supabase.from('forum_comments').select('*').order('created_at', { ascending: true }),
-    ]);
-
-    const threadsData = threadsRes.data;
-    const commentsData = commentsRes.data;
+    const { threadsData, commentsData } = await cachedSupabaseQuery(
+      'forum:sync:default',
+      async () => {
+        const [threadsRes, commentsRes] = await Promise.all([
+          supabase
+            .from('forum_threads')
+            .select(FORUM_THREAD_COLUMNS)
+            .order('created_at', { ascending: false })
+            .limit(30),
+          supabase
+            .from('forum_comments')
+            .select(FORUM_COMMENT_COLUMNS)
+            .order('created_at', { ascending: true })
+            .limit(100),
+        ]);
+        return {
+          threadsData: threadsRes.data || [],
+          commentsData: commentsRes.data || [],
+        };
+      },
+      60_000
+    );
 
     if (threadsData && threadsData.length > 0) {
       const commentsByThread: Record<string, ForumComment[]> = {};

@@ -8,6 +8,7 @@ import {
   loadProfileLocalStorageCache
 } from '../utils/feedCacheUtils';
 import { profileStore, socialFeedStore } from '../../../utils/indexedDB';
+import { hasAuthenticatedSupabaseSession } from '../../../lib/supabaseQueryCache';
 
 export interface UseSocialFeedSyncParams {
   userProfile?: any;
@@ -48,7 +49,7 @@ export function useSocialFeedSync({
 
       let remoteNotifs: any[] = [];
       const supabase = (await import('../../../supabase')).getSupabase();
-      if (supabase) {
+      if (supabase && (await hasAuthenticatedSupabaseSession(supabase))) {
         try {
           const { data, error } = await supabase
             .from('nexus_notifications')

@@ -19,11 +19,8 @@ import {
   getLineupForEdition,
 } from '../../../services/networkEntitiesService';
 
-export function getYouTubeId(url: string): string {
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  return (match && match[2].length === 11) ? match[2] : url;
-}
+import { getYouTubeId } from '../../../utils/youtubeUtils';
+export { getYouTubeId };
 
 export interface UseSocialFeedStateParams {
   feed: FeedItem[];
@@ -1152,6 +1149,15 @@ export function useSocialFeedState({
               duration: attachedSong.duration,
               audioUrl: (attachedSong as any).audioUrl || (attachedSong as any).url || (attachedSong as any).audio_url,
               coverArt: (attachedSong as any).coverArt || (attachedSong as any).image,
+              audioSourceType: (attachedSong as any).audioSourceType || undefined,
+              isPreview: Boolean((attachedSong as any).isPreview),
+              releaseYear: (attachedSong as any).releaseYear || undefined,
+              tracks: Array.isArray((attachedSong as any).tracks) && (attachedSong as any).tracks.length > 0
+                ? (attachedSong as any).tracks.map((tr: any) => ({
+                    title: tr?.title || 'Untitled Track',
+                    duration: tr?.duration || '3:30',
+                  }))
+                : undefined,
             }
           : undefined,
         pollData: pollDataValue,

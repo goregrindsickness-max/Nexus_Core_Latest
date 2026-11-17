@@ -2,6 +2,7 @@
 import { supabase } from './supabaseClient';
 import { authFetch, getSupabaseAccessToken } from '../utils/apiConfig';
 import { isShowEmbargoedOrDraft } from '../utils/showDisplayUtils';
+import { fetchCachedShowsList } from './supabaseQueryCache';
 
 export interface TourVehicle {
   id: string;
@@ -702,14 +703,11 @@ class TourPackageManagerService {
       }
     } catch (_) {}
 
-    // 3. Query Supabase shows table directly to extract live tour stops and sync with package records
+    // 3. Query Supabase shows table directly (via shared 60s cache + 200-row cap)
     try {
-      const { data: showsData, error: showsError } = await supabase
-        .from('shows')
-        .select('id, show_name, headliner, show_date, date, doors_time, venue_name, city, price, support_lineup, guarantee_amount, revenue, currency, settlement_currency, venue_capacity, expected_attendance, created_at')
-        .order('date', { ascending: true });
+      const showsData = await fetchCachedShowsList(supabase, { limit: 200, ascending: true });
 
-      if (!showsError && showsData && Array.isArray(showsData) && showsData.length > 0) {
+      if (showsData && Array.isArray(showsData) && showsData.length > 0) {
         this.incorporateShowsFromDb(showsData, cloudTours.length > 0 ? cloudTours : this.memoryTours);
       }
     } catch (_) {}

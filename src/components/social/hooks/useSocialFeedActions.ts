@@ -4,12 +4,10 @@ import { getSupabase } from '../../../supabase';
 import { syncPostToSupabase } from '../utils/postSyncUtils';
 import { submitGlobalComment, generateValidUUID } from '../../../services/postInteractionsService';
 import { pushManager } from '../../../lib/pushNotifications';
+import { hasAuthenticatedSupabaseSession } from '../../../lib/supabaseQueryCache';
 
-export function getYouTubeId(url: string): string {
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  return (match && match[2].length === 11) ? match[2] : url;
-}
+import { getYouTubeId } from '../../../utils/youtubeUtils';
+export { getYouTubeId };
 
 export interface UseSocialFeedActionsParams {
   feed: FeedItem[];
@@ -173,6 +171,7 @@ export function useSocialFeedActions({
     if (optionIndex === -1) return;
 
     try {
+      if (!(await hasAuthenticatedSupabaseSession(supabase))) return;
       await supabase.from('nexus_poll_votes').insert({
         poll_id: pollId,
         user_id: userId,

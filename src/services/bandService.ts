@@ -1,6 +1,7 @@
 import { getSupabase } from './clientService';
 import { ensureUUID, generateUUID, executeWithSchemaResilience, registerSchemaSanitizers } from './schemaResilienceService';
 import { isCommunityBandRecord } from '../lib/communityBands';
+import { invalidateSupabaseQueryCache } from '../lib/supabaseQueryCache';
 
 export const PRIMARY_GENRE_KEYWORDS = new Set([
   'extreme metal',
@@ -639,6 +640,8 @@ export async function upsertBandToDatabase(
         } catch (_) {}
       }
     }
+    invalidateSupabaseQueryCache('bands:');
+    invalidateSupabaseQueryCache('communityBands:');
   } catch (storageErr) {
     console.warn('[bandService] Local cache sync notice:', storageErr);
   }

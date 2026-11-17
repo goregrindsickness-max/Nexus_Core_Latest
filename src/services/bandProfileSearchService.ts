@@ -1,6 +1,7 @@
 import { getSupabase } from './clientService';
 import { isDeletedOrZombieBand, pickBestBandImage, isValidBandImageUrl } from '../lib/communityBands';
 import { createMonogramPlaceholderSvg } from '../utils/imageFallbacks';
+import { BAND_CARD_COLUMNS, PROFILE_CARD_COLUMNS } from '../lib/supabaseQueryCache';
 
 export interface BandProfileOption {
   id: string;
@@ -19,10 +20,9 @@ export interface BandProfileOption {
   displayText: string;
 }
 
-export const BAND_SEARCH_SELECT_COLUMNS = '*';
+export const BAND_SEARCH_SELECT_COLUMNS = BAND_CARD_COLUMNS;
 
-const PROFILE_BAND_SELECT_COLUMNS =
-  'id, full_name, band_name, account_type, avatar_url, band_logo, city, state, country, bio';
+const PROFILE_BAND_SELECT_COLUMNS = PROFILE_CARD_COLUMNS;
 
 // Purge legacy bulk band catalog key from localStorage
 if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
@@ -33,7 +33,7 @@ if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
 
 let cachedBands: BandProfileOption[] = [];
 let lastFetchTime = 0;
-const CACHE_TTL_MS = 10000;
+const CACHE_TTL_MS = 60000;
 
 export async function getAllRealBandProfiles(
   extraBands: any[] = [],
@@ -190,13 +190,13 @@ export async function getAllRealBandProfiles(
       const { data: pBands, error: pErr } = await pQb;
       if (pBands && !pErr && Array.isArray(pBands)) {
         pBands.forEach((p: any) => {
-          const bName = p.band_name || p.bandName;
+          const bName = p.band_name;
           if (bName && !bandMap.has(bName.toLowerCase())) {
             addBandToMap(
               {
                 ...p,
                 band_name: bName,
-                avatar_url: p.band_logo || p.avatar_url || p.avatar || p.logo_url,
+                avatar_url: p.band_metadata?.logo_url || p.avatar_url || p.logo_url,
               },
               'profile'
             );

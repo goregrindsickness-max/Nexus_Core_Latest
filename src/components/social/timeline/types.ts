@@ -25,6 +25,10 @@ export interface SongEmbedData {
   audioUrl?: string;
   previewUrl?: string;
   streamUrl?: string;
+  audioSourceType?: 'vault' | 'itunes_preview' | 'external' | string;
+  isPreview?: boolean;
+  releaseYear?: string;
+  tracks?: AlbumEmbedTrack[];
 }
 
 export interface AlbumEmbedTrack {

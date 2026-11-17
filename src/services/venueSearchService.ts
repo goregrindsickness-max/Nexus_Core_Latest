@@ -41,7 +41,7 @@ export interface VenueQueryOptions {
 export const BUILT_IN_BLACK_BOOK_VENUES: VenueResult[] = [];
 
 export const VENUE_CARD_COLUMNS =
-  'id, name, category, avatar_url, city, state, state_province, country, street_address, address, capacity, payout_rating, load_in_rating, genre_fit, email, phone, buyers, website';
+  'id, name, city, state_province, country, address, capacity, payout_rating, load_in_rating, genre_fit, email, buyers, website, place_type';
 
 // Purge legacy large venue catalogs from localStorage on module initialization
 if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
@@ -506,14 +506,14 @@ export function saveVenueToBlackBook(venueData: {
             id: venueId,
             name: newVenueRecord.name,
             city: newVenueRecord.city,
-            state: newVenueRecord.state,
+            state_province: newVenueRecord.state_province,
             country: newVenueRecord.country,
             address: newVenueRecord.address,
             capacity: newVenueRecord.capacity,
             email: newVenueRecord.email,
-            phone: newVenueRecord.phone,
             buyers: newVenueRecord.buyers,
             website: newVenueRecord.website,
+            place_type: 'venue',
           },
           { onConflict: 'id' }
         )

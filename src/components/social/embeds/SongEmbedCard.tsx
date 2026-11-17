@@ -132,8 +132,20 @@ export const SongEmbedCard: React.FC<SongEmbedCardProps> = ({
   if (!post.songData) return null;
   const songData = post.songData;
 
+  const rawPlaybackUrl = songData.audioUrl || songData.previewUrl || songData.streamUrl || '';
+  const isItunesPreview = Boolean(
+    songData.isPreview ||
+    songData.audioSourceType === 'itunes_preview' ||
+    /itunes\.apple\.com|audio-ssl\.itunes\.apple\.com|apple\.com/i.test(rawPlaybackUrl)
+  );
+  const isVaultAudio = Boolean(
+    !isItunesPreview &&
+    (songData.audioSourceType === 'vault' || /audio-vault|supabase\.co\/storage/i.test(rawPlaybackUrl))
+  );
+
   // Helper to format track seconds
   const parseDurationSec = (durStr?: string) => {
+    if (isItunesPreview) return 30;
     if (!durStr) return 225;
     const parts = durStr.split(':');
     if (parts.length === 2) return parseInt(parts[0]) * 60 + parseInt(parts[1]);
@@ -190,6 +202,20 @@ export const SongEmbedCard: React.FC<SongEmbedCardProps> = ({
                 maxLength={26}
               />
             </div>
+
+            {isItunesPreview ? (
+              <div className="pt-0.5">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-950/70 border border-amber-500/40 text-[9px] font-mono font-bold uppercase tracking-wider text-amber-300">
+                  30s iTunes Catalog Preview
+                </span>
+              </div>
+            ) : isVaultAudio ? (
+              <div className="pt-0.5">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/40 text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300">
+                  Full Track • Band Audio Vault
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -203,7 +229,13 @@ export const SongEmbedCard: React.FC<SongEmbedCardProps> = ({
               onTogglePlay(songData);
             }}
             className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-red-600 to-red-900 border-2 border-red-400 text-white flex items-center justify-center transition-all cursor-pointer shadow-[0_0_18px_rgba(239,68,68,0.5)] hover:scale-105 active:scale-95"
-            title={isPlaying ? 'Pause Audio Preview' : 'Play Song Audio Preview'}
+            title={
+              isPlaying
+                ? 'Pause Playback'
+                : isItunesPreview
+                  ? 'Play 30s iTunes Preview Clip'
+                  : 'Play Track'
+            }
           >
             {isPlaying ? (
               <Pause className="w-6 h-6 fill-current" />
@@ -219,12 +251,16 @@ export const SongEmbedCard: React.FC<SongEmbedCardProps> = ({
         <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
           <span className="font-bold flex items-center gap-1.5">
             <Activity className={`w-3.5 h-3.5 text-red-500 ${isPlaying ? 'animate-pulse' : 'opacity-60'}`} />
-            WAVEFORM AUDIO PREVIEW
+            {isItunesPreview
+              ? '30S AUDIO PREVIEW (APPLE iTUNES)'
+              : isVaultAudio
+                ? 'FULL MASTER STREAM (AUDIO VAULT)'
+                : 'WAVEFORM AUDIO PREVIEW'}
           </span>
           <div className="flex items-center gap-2">
             <span className="text-red-400 font-bold">{formatTime(currSec)}</span>
             <span className="text-zinc-600">/</span>
-            <span>{songData.duration || '3:45'}</span>
+            <span>{isItunesPreview ? '0:30' : (songData.duration || '3:45')}</span>
           </div>
         </div>
 

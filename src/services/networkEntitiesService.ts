@@ -425,10 +425,16 @@ export async function syncNetworkEntitiesFromSupabase(): Promise<{
   }
 
   try {
+    const { hasAuthenticatedSupabaseSession } = await import('../lib/supabaseQueryCache');
+    const isAuthenticated = await hasAuthenticatedSupabaseSession(supabase);
+    if (!isAuthenticated) {
+      return { entities, editions, lineupItems };
+    }
+
     const [entitiesRes, editionsRes, lineupRes] = await Promise.all([
-      supabase.from('network_entities').select('*').order('created_at', { ascending: false }),
-      supabase.from('festival_editions').select('*').order('start_date', { ascending: false }),
-      supabase.from('festival_lineup_items').select('*').order('sort_order', { ascending: true }),
+      supabase.from('network_entities').select('*').order('created_at', { ascending: false }).limit(100),
+      supabase.from('festival_editions').select('*').order('start_date', { ascending: false }).limit(100),
+      supabase.from('festival_lineup_items').select('*').order('sort_order', { ascending: true }).limit(200),
     ]);
 
     if (!entitiesRes.error && Array.isArray(entitiesRes.data) && entitiesRes.data.length > 0) {

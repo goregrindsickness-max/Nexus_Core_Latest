@@ -337,7 +337,6 @@ export function useUserEntities(options: UseUserEntitiesOptions) {
                   .update({
                     band_id: userProfile.band_id,
                     band_name: userProfile.band_name,
-                    bandName: userProfile.bandName,
                   })
                   .eq('id', userProfile.id)
                   .then();
@@ -397,7 +396,6 @@ export function useUserEntities(options: UseUserEntitiesOptions) {
                   .update({
                     band_id: updatedProfile.band_id,
                     band_name: updatedProfile.band_name,
-                    bandName: updatedProfile.bandName,
                     active_workspace: updatedProfile.active_workspace,
                     account_type: updatedProfile.account_type,
                   })

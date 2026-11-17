@@ -35,6 +35,13 @@ import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME, 
 import { communityBandManager, purgeDeletedAndZombieBands, isDeletedOrZombieBand } from '../../../lib/communityBands';
 import { resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
 import { createMonogramPlaceholderSvg } from '../../../utils/imageFallbacks';
+import {
+  fetchCachedBandsDirectory,
+  fetchCachedCreativesDirectory,
+  fetchCachedProfilesDirectory,
+  fetchCachedLabelsDirectory,
+  fetchCachedPromotersDirectory,
+} from '../../../lib/supabaseQueryCache';
 
 export interface DiscoveryProfile {
   id: string;
@@ -409,35 +416,37 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
 
     try {
       const DISCOVERY_PAGE_SIZE = 20;
-      const BAND_CARD_COLUMNS =
-        'id, name, band_name, category, avatar_url, logo_url, cover_url, banner_url, city, state, state_province, country, micro_genres, custom_slug, verification_status, is_verified, status, is_split_up, founded_year, followers_count, creator_id, user_id, owner_id, bio';
-      const CREATIVE_CARD_COLUMNS =
-        'id, business_name, creative_handle, creative_name, name, avatar_url, banner_url, city, state, state_province, country, genres, primary_category, primary_skill, bio, user_id, creator_id';
-      const PROFILE_CARD_COLUMNS =
-        'id, full_name, display_name, name, console_handle, email, role, account_type, isBandProfile, bandName, creative_name, creative_avatar, creative_metadata, label_company_name, label_avatar, label_metadata, promoter_name, promoter_logo, promoter_metadata, avatar_url, banner_url, city, state, state_province, country, bio';
 
-      // 1. Primary: Fetch real bands directly from 'bands' table in Supabase with explicit columns, .order(), and .range()
-      const { data: bData, error: bError } = await client
-        .from('bands')
-        .select(BAND_CARD_COLUMNS)
-        .order('created_at', { ascending: false })
-        .range(0, DISCOVERY_PAGE_SIZE - 1);
+      const [allBands, allCreatives, allProfiles, allLabels, allPromoters] = await Promise.all([
+        fetchCachedBandsDirectory(client),
+        fetchCachedCreativesDirectory(client).catch(() => []),
+        fetchCachedProfilesDirectory(client),
+        fetchCachedLabelsDirectory(client).catch(() => []),
+        fetchCachedPromotersDirectory(client).catch(() => []),
+      ]);
 
-      if (bData && !bError && Array.isArray(bData)) {
+      const bData = allBands.slice(0, DISCOVERY_PAGE_SIZE);
+      const cData = allCreatives.slice(0, DISCOVERY_PAGE_SIZE);
+      const pData = allProfiles.slice(0, DISCOVERY_PAGE_SIZE);
+      const lData = allLabels.slice(0, DISCOVERY_PAGE_SIZE);
+      const prData = allPromoters.slice(0, DISCOVERY_PAGE_SIZE);
+
+      // 1. Primary: Process bands from cached 'bands' directory
+      if (Array.isArray(bData)) {
         bData.forEach((b: any) => {
-          const bName = b.band_name || b.name;
+          const bName = b.band_name;
           if (!bName || !bName.trim()) return;
           if (isDeletedOrZombieBand(b.id) || isDeletedOrZombieBand(bName) || isDeletedOrZombieBand(b.custom_slug)) return;
 
-          const locationParts = [b.city, b.state_province || b.state, b.country].filter(Boolean);
+          const locationParts = [b.city, b.state_province, b.country].filter(Boolean);
           const locationStr = locationParts.length > 0 ? locationParts.join(', ') : undefined;
-          const genreStr = Array.isArray(b.micro_genres) 
-            ? b.micro_genres.join(' / ') 
-            : (b.micro_genres || b.genre || (Array.isArray(b.subgenres) ? b.subgenres.join(' / ') : b.sub_genres) || 'Death Metal');
+          const genreStr = Array.isArray(b.micro_genres)
+            ? b.micro_genres.join(' / ')
+            : (b.micro_genres || 'Death Metal');
           const avatarUrl = b.logo_url || b.cover_url || b.avatar_url || resolveHeroImage(b);
           const isArchive = b.verification_status === 'community_archive';
 
-          const existingIdx = fetchedBands.findIndex(fb => 
+          const existingIdx = fetchedBands.findIndex(fb =>
             fb.name.toLowerCase().trim() === bName.toLowerCase().trim() ||
             fb.raw_id === b.id ||
             fb.band_id === b.id
@@ -447,14 +456,14 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
             id: `db-band-${b.id}`,
             raw_id: b.id,
             band_id: b.id,
-            user_id: b.creator_id || b.user_id || b.owner_id || b.profile_id,
+            user_id: b.creator_id,
             name: bName.trim(),
             role: isArchive ? 'Archive Band' : 'Band',
             portalRole: 'band',
             category: 'bands',
             genre: genreStr,
             location: locationStr,
-            desc: b.bio || b.description || `${genreStr}${locationStr ? ` • ${locationStr}` : ''}`,
+            desc: b.bio || `${genreStr}${locationStr ? ` • ${locationStr}` : ''}`,
             avatar: avatarUrl,
             image: avatarUrl,
             logo_url: b.logo_url || avatarUrl,
@@ -468,8 +477,8 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
             is_verified: b.is_verified === true || b.verification_status === 'verified_official',
             status: b.status,
             is_split_up: b.is_split_up || b.status === 'split-up',
-            founded_year: b.founded_year || b.year_formed || b.yearFormed,
-            followers_count: b.followers_count || 150,
+            founded_year: b.founded_year,
+            followers_count: 150,
             followed: false
           };
 
@@ -486,81 +495,64 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
         });
       }
 
-      // 2. Fetch from dedicated 'creatives' table in Supabase with explicit columns, .order(), and .range()
-      try {
-        const { data: cData, error: cError } = await client
-          .from('creatives')
-          .select(CREATIVE_CARD_COLUMNS)
-          .order('created_at', { ascending: false })
-          .range(0, DISCOVERY_PAGE_SIZE - 1);
-          
-        if (cData && !cError && Array.isArray(cData)) {
-          cData.forEach((c: any) => {
-            const cName = c.business_name || c.creative_handle || c.creative_name || c.name;
-            if (!cName || !cName.trim()) return;
+      // 2. Process creatives from cached 'creatives' directory
+      if (Array.isArray(cData)) {
+        cData.forEach((c: any) => {
+          const cName = c.business_name || c.creative_handle;
+          if (!cName || !cName.trim()) return;
 
-            const cAvatar = c.avatar_url || c.banner_url || c.image || c.creative_avatar || '';
-            const locParts = [c.city, c.state_province || c.state, c.country].filter(Boolean);
-            const locStr = locParts.length > 0 ? locParts.join(', ') : undefined;
-            const genreStr = Array.isArray(c.genres) ? c.genres.slice(0, 3).join(' • ') : (c.genres || '');
-            const cRole = c.primary_category || c.primary_skill || 'Creative Pro';
+          const cAvatar = c.avatar_url || c.banner_url || '';
+          const locParts = [c.city, c.state_province, c.country].filter(Boolean);
+          const locStr = locParts.length > 0 ? locParts.join(', ') : undefined;
+          const genreStr = Array.isArray(c.genres) ? c.genres.slice(0, 3).join(' • ') : (c.genres || '');
+          const cRole = c.primary_category || 'Creative Pro';
 
-            const existingIdx = fetchedOthers.findIndex(o => 
-              o.name.toLowerCase().trim() === cName.toLowerCase().trim() ||
-              o.raw_id === c.id
-            );
+          const existingIdx = fetchedOthers.findIndex(o =>
+            o.name.toLowerCase().trim() === cName.toLowerCase().trim() ||
+            o.raw_id === c.id
+          );
 
-            const creativeProfile: DiscoveryProfile = {
-              id: `db-c-${c.id}`,
-              raw_id: c.id,
-              user_id: c.user_id || c.creator_id,
-              name: cName.trim(),
-              role: cRole,
-              portalRole: 'creative',
-              category: 'creatives',
-              genre: genreStr,
-              location: locStr,
-              desc: c.bio || c.broadcast_bulletin || c.pricing_notes || `${cRole} on Nexus Network`,
-              avatar: cAvatar,
-              image: cAvatar,
-              banner: c.banner_url || '',
-              banner_url: c.banner_url || '',
-              followed: false
+          const creativeProfile: DiscoveryProfile = {
+            id: `db-c-${c.id}`,
+            raw_id: c.id,
+            user_id: c.user_id || c.creator_id,
+            name: cName.trim(),
+            role: cRole,
+            portalRole: 'creative',
+            category: 'creatives',
+            genre: genreStr,
+            location: locStr,
+            desc: c.bio || c.pricing_notes || `${cRole} on Nexus Network`,
+            avatar: cAvatar,
+            image: cAvatar,
+            banner: c.banner_url || '',
+            banner_url: c.banner_url || '',
+            followed: false
+          };
+
+          if (existingIdx >= 0) {
+            fetchedOthers[existingIdx] = {
+              ...fetchedOthers[existingIdx],
+              ...creativeProfile
             };
-
-            if (existingIdx >= 0) {
-              fetchedOthers[existingIdx] = {
-                ...fetchedOthers[existingIdx],
-                ...creativeProfile
-              };
-            } else {
-              fetchedOthers.push(creativeProfile);
-            }
-          });
-        }
-      } catch (err) {
-        // Table might be empty or optional
+          } else {
+            fetchedOthers.push(creativeProfile);
+          }
+        });
       }
 
-      // 3. Fetch real users & workspace accounts from 'profiles' table with explicit columns, .order(), and .range()
-      const { data: pData, error: pError } = await client
-        .from('profiles')
-        .select(PROFILE_CARD_COLUMNS)
-        .order('created_at', { ascending: false })
-        .range(0, DISCOVERY_PAGE_SIZE - 1);
-
-      if (pData && !pError && Array.isArray(pData)) {
-        // Extract real individual human members from profiles for real social proof
+      // 3. Process users & workspace accounts from cached 'profiles' directory
+      if (Array.isArray(pData)) {
         const extractedRealUsers: RealPersonFollower[] = [];
         pData.forEach((p: any) => {
-          const rawName = p.full_name || p.display_name || p.name || '';
+          const rawName = p.full_name || p.console_handle || '';
           if (!rawName.trim()) return;
           const cleanName = rawName.trim();
-          if (p.account_type === 'band' || p.isBandProfile) return;
+          if (p.account_type === 'band') return;
           const lower = cleanName.toLowerCase();
           if (lower.includes('productions') || lower.includes('records') || lower.includes('booking')) return;
 
-          const av = p.avatar_url || p.avatar || '';
+          const av = p.avatar_url || '';
           const cleanAv = !isBadImageUrl(av) ? av.trim() : '';
 
           if (!extractedRealUsers.some(u => u.name.toLowerCase() === lower)) {
@@ -576,7 +568,7 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
         }
 
         pData.forEach((p: any) => {
-          const pName = p.full_name || p.display_name || p.name || p.console_handle || p.email?.split('@')[0];
+          const pName = p.full_name || p.console_handle || p.email?.split('@')[0];
           if (!pName || !pName.trim()) return;
 
           const isMiguel = (p.email?.toLowerCase().trim() === 'goregrindsickness@gmail.com') ||
@@ -585,47 +577,50 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
           let role = p.role || p.account_type || 'Fan / Listener';
           let cat = 'fans';
           let displayName = pName.trim();
-          let displayAvatar = p.avatar_url || p.avatar || '';
+          let displayAvatar = p.avatar_url || '';
           let displayBio = p.bio || '';
 
-          if ((p.account_type === 'band' || p.isBandProfile === true) && p.account_type !== 'fan' && p.account_type !== 'fan_only') {
-            displayName = p.bandName || displayName;
+          const bandMeta = p.band_metadata || {};
+          const creativeMeta = p.creative_metadata || {};
+          const labelMeta = p.label_metadata || {};
+          const promoterMeta = p.promoter_metadata || {};
+
+          if ((p.account_type === 'band' || Boolean(p.band_name)) && p.account_type !== 'fan' && p.account_type !== 'fan_only') {
+            displayName = p.band_name || bandMeta.band_name || displayName;
+            displayAvatar = bandMeta.logo_url || displayAvatar;
             role = 'Band';
             cat = 'bands';
-          } else if (p.account_type === 'creative' || p.creative_name) {
-            displayName = p.creative_name || p.creative_metadata?.business_name || displayName;
-            displayAvatar = p.creative_avatar || displayAvatar;
-            displayBio = p.creative_metadata?.bio || displayBio;
+          } else if (p.account_type === 'creative' || p.creative_name || creativeMeta.business_name) {
+            displayName = p.creative_name || creativeMeta.business_name || displayName;
+            displayAvatar = creativeMeta.avatar_url || displayAvatar;
+            displayBio = creativeMeta.bio || displayBio;
             role = 'Creative Pro';
             cat = 'creatives';
-          } else if (p.account_type === 'label' || p.label_company_name) {
-            displayName = p.label_company_name || displayName;
-            displayAvatar = p.label_avatar || displayAvatar;
-            displayBio = p.label_metadata?.description || displayBio;
+          } else if (p.account_type === 'label' || labelMeta.company_name || labelMeta.name) {
+            displayName = labelMeta.company_name || labelMeta.name || displayName;
+            displayAvatar = labelMeta.logo_url || labelMeta.avatar_url || displayAvatar;
+            displayBio = labelMeta.description || labelMeta.bio || displayBio;
             role = 'Record Label';
             cat = 'labels';
-          } else if (!isMiguel && (p.account_type === 'promoter' || p.promoter_name)) {
-            // Guard: Other users must NEVER take the brand name "Nexus Live Productions"
-            let brandName = p.promoter_name || p.promoter_metadata?.brand_name;
+          } else if (!isMiguel && (p.account_type === 'promoter' || promoterMeta.brand_name || promoterMeta.agency_name || promoterMeta.name)) {
+            let brandName = promoterMeta.brand_name || promoterMeta.agency_name || promoterMeta.name;
             if (brandName && brandName.toLowerCase().includes('nexus live')) {
               brandName = `${pName} Productions`;
             }
             displayName = brandName || `${pName} Productions`;
-            displayAvatar = p.promoter_logo || displayAvatar;
-            displayBio = p.promoter_metadata?.description || displayBio;
+            displayAvatar = promoterMeta.logo_url || promoterMeta.avatar_url || displayAvatar;
+            displayBio = promoterMeta.description || promoterMeta.bio || displayBio;
             role = 'Promoter / Venue';
             cat = 'venues';
           }
 
-          // Suppress any promoter/venue page with Miguel's personal name
           if (cat === 'venues' && (isMiguel || isDisallowedPersonalVenue(displayName, cat))) {
             return;
           }
 
-          const locParts = [p.city, p.state_province || p.state, p.country].filter(Boolean);
+          const locParts = [p.city, p.state_province, p.country].filter(Boolean);
           const locStr = locParts.length > 0 ? locParts.join(', ') : undefined;
 
-          // If this profile represents a band and isn't in fetchedBands yet
           if (cat === 'bands') {
             if (!fetchedBands.some(fb => fb.name.toLowerCase() === displayName.toLowerCase() || fb.raw_id === p.id)) {
               fetchedBands.push({
@@ -652,7 +647,6 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
             return;
           }
 
-          // If this profile represents a creative and isn't in fetchedOthers yet
           if (cat === 'creatives') {
             if (!fetchedOthers.some(fo => fo.name.toLowerCase() === displayName.toLowerCase() || fo.raw_id === p.id)) {
               fetchedOthers.push({
@@ -699,75 +693,50 @@ export const DiscoveryZone: React.FC<DiscoveryZoneProps> = ({
         });
       }
 
-      // 4. Fetch from dedicated 'labels' table
-      try {
-        const { data: lData } = await client
-          .from('labels')
-          .select('id, user_id, creator_id, label_company_name, label_name, name, label_avatar, avatar_url, logo_url, city, headquarters, country, description, created_at')
-          .order('created_at', { ascending: false })
-          .range(0, 19);
-        if (lData && Array.isArray(lData)) {
-          lData.forEach((l: any) => {
-            const lName = l.label_company_name || l.label_name || l.name;
-            if (!lName || !lName.trim()) return;
-            if (fetchedOthers.some(o => o.name.toLowerCase() === lName.toLowerCase())) return;
+      // 4. Process cached 'labels' directory
+      if (Array.isArray(lData)) {
+        lData.forEach((l: any) => {
+          const lName = l.name;
+          if (!lName || !lName.trim()) return;
+          if (fetchedOthers.some(o => o.name.toLowerCase() === lName.toLowerCase())) return;
 
-            const lAvatar = l.label_avatar || l.avatar_url || l.logo_url || '';
-            const locParts = [l.city || l.headquarters, l.country].filter(Boolean);
-
-            fetchedOthers.push({
-              id: `db-l-${l.id}`,
-              raw_id: l.id,
-              user_id: l.user_id || l.creator_id,
-              name: lName.trim(),
-              role: 'Record Label',
-              category: 'labels',
-              location: locParts.length > 0 ? locParts.join(', ') : undefined,
-              desc: l.description || 'Independent Extreme Record Label',
-              avatar: lAvatar,
-              image: lAvatar,
-              followed: false
-            });
+          fetchedOthers.push({
+            id: `db-l-${l.id}`,
+            raw_id: l.id,
+            name: lName.trim(),
+            role: 'Record Label',
+            category: 'labels',
+            desc: 'Independent Extreme Record Label',
+            avatar: '',
+            image: '',
+            followed: false
           });
-        }
-      } catch (err) {
-        // Table might not exist or be empty
+        });
       }
 
-      // 5. Fetch from dedicated 'promoters' or 'venues' table
-      try {
-        const { data: prData } = await client
-          .from('promoters')
-          .select('id, user_id, creator_id, brand_name, agency_name, promoter_name, name, promoter_logo, logo_url, avatar_url, region, city, country, description, created_at')
-          .order('created_at', { ascending: false })
-          .range(0, 19);
-        if (prData && Array.isArray(prData)) {
-          prData.forEach((pr: any) => {
-            const prName = pr.brand_name || pr.agency_name || pr.promoter_name || pr.name;
-            if (!prName || !prName.trim()) return;
-            if (isDisallowedPersonalVenue(prName, 'venues')) return;
-            if (fetchedOthers.some(o => o.name.toLowerCase() === prName.toLowerCase())) return;
+      // 5. Process cached 'promoters' directory (auth-guarded)
+      if (Array.isArray(prData)) {
+        prData.forEach((pr: any) => {
+          const prName = pr.entity_name || pr.name;
+          if (!prName || !prName.trim()) return;
+          if (isDisallowedPersonalVenue(prName, 'venues')) return;
+          if (fetchedOthers.some(o => o.name.toLowerCase() === prName.toLowerCase())) return;
 
-            const prAvatar = pr.promoter_logo || pr.logo_url || pr.avatar_url || '';
-            const locParts = [pr.region || pr.city, pr.country].filter(Boolean);
-
-            fetchedOthers.push({
-              id: `db-pr-${pr.id}`,
-              raw_id: pr.id,
-              user_id: pr.user_id || pr.creator_id,
-              name: prName.trim(),
-              role: 'Promoter / Venue',
-              category: 'venues',
-              location: locParts.length > 0 ? locParts.join(', ') : undefined,
-              desc: pr.description || pr.region || 'Live Venue & Tour Booking',
-              avatar: prAvatar,
-              image: prAvatar,
-              followed: false
-            });
+          const prAvatar = pr.promoter_logo || '';
+          fetchedOthers.push({
+            id: `db-pr-${pr.id}`,
+            raw_id: pr.id,
+            user_id: pr.user_id,
+            name: prName.trim(),
+            role: 'Promoter / Venue',
+            category: 'venues',
+            location: pr.location || undefined,
+            desc: pr.bio || pr.location || 'Live Venue & Tour Booking',
+            avatar: prAvatar,
+            image: prAvatar,
+            followed: false
           });
-        }
-      } catch (err) {
-        // Table might not exist or be empty
+        });
       }
 
       // Ensure authoritative Nexus Live Productions promoter/venue profile exists with official logo & banner

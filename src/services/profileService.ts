@@ -843,7 +843,7 @@ export async function autoArchiveProfileAssets(
       try {
         const { data } = await supabaseClient
           .from('profiles')
-          .select('id, name, full_name, avatar_url, banner_url, cover_url, photo_folders')
+          .select('id, full_name, avatar_url, banner_url, photo_folders')
           .eq('id', userId)
           .maybeSingle();
         if (data) existingProfile = data;

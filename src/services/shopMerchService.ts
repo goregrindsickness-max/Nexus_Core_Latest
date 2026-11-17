@@ -1,5 +1,6 @@
 import { getSupabase } from './clientService';
 import { uploadBase64ToStorage } from './storageService';
+import { hasAuthenticatedSupabaseSession } from '../lib/supabaseQueryCache';
 
 export interface ShopMerchItem {
   id: string;
@@ -56,12 +57,18 @@ export async function fetchShopMerchItems(): Promise<ShopMerchItem[]> {
   const supabase = getSupabase();
   if (!supabase) return [];
 
+  const isAuthenticated = await hasAuthenticatedSupabaseSession(supabase);
+  if (!isAuthenticated) {
+    return [];
+  }
+
   try {
     // Attempt primary table fetch from shop_merch
     const { data, error } = await supabase
       .from(TABLE_NAME)
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(100);
 
     if (!error && data && data.length > 0) {
       return data.map((item: any) => ({
@@ -88,12 +95,13 @@ export async function fetchShopMerchItems(): Promise<ShopMerchItem[]> {
     }
 
     // Try fallback table names if shop_merch is empty or table doesn't exist yet
-    const fallbackTables = ['merch_items', 'nexus_shop_items', 'user_marketplace_items'];
+    const fallbackTables = ['nexus_shop_items', 'user_marketplace_items'];
     for (const fbTable of fallbackTables) {
       const { data: fbData } = await supabase
         .from(fbTable)
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100);
 
       if (fbData && fbData.length > 0) {
         return fbData.map((item: any) => ({

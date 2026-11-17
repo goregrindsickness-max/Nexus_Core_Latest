@@ -154,13 +154,26 @@
             '</div>';
         }
       }
+      var __isCapacitorNative = (function() {
+        try {
+          if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+            return true;
+          }
+          var proto = window.location && window.location.protocol;
+          var origin = window.location && window.location.origin;
+          var port = window.location && window.location.port;
+          return proto === 'capacitor:' || proto === 'ionic:' || proto === 'file:' || (origin === 'https://localhost' && !port);
+        } catch (_) {
+          return false;
+        }
+      })();
       setTimeout(function() {
         var loader = document.getElementById('nexus-boot-loader');
         if (loader && document.getElementById('root')) {
           console.warn('Nexus Core boot watchdog: loading took longer than expected.');
           showBootError('Initialization took longer than expected. Please reload or clear local cache.');
         }
-      }, 8000);
+      }, __isCapacitorNative ? 25000 : 8000);
     </script>
   </head>
   <body>
@@ -174,10 +187,30 @@
     <!-- Core App Initialization Script -->
     <script type="module" src="/src/main.tsx"></script>
 
-    <!-- PWA Service Worker Registration -->
+    <!-- PWA Service Worker Registration (skipped in native Capacitor APK shells) -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
+          var isNative = false;
+          try {
+            isNative = Boolean(
+              (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) ||
+              window.location.protocol === 'capacitor:' ||
+              window.location.protocol === 'ionic:' ||
+              window.location.protocol === 'file:' ||
+              (window.location.origin === 'https://localhost' && !window.location.port)
+            );
+          } catch (_) {}
+
+          if (isNative) {
+            if (typeof navigator.serviceWorker.getRegistrations === 'function') {
+              navigator.serviceWorker.getRegistrations()
+                .then(regs => regs.forEach(reg => reg.unregister().catch(() => {})))
+                .catch(() => {});
+            }
+            return;
+          }
+
           navigator.serviceWorker.register('/sw.js')
             .then(reg => {
               if (reg && typeof reg.update === 'function') {

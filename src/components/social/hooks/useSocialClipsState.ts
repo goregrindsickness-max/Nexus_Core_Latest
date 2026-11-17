@@ -167,8 +167,9 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
           try {
             const { data: cData, error: cErr } = await supabaseClient
               .from('clips')
-              .select('*')
-              .order('created_at', { ascending: false });
+              .select('id, user_id, video_url, caption, song_title, band_name, created_at')
+              .order('created_at', { ascending: false })
+              .limit(50);
             if (!cErr && cData && cData.length > 0) {
               dbClips = cData;
             }
@@ -197,7 +198,7 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
             if (cleanUserIds.length > 0) {
               const { data: profiles } = await supabaseClient
                 .from('profiles')
-                .select('id, full_name, console_handle, avatar_url, account_type, role_badge')
+                .select('id, full_name, console_handle, avatar_url, account_type, role')
                 .in('id', cleanUserIds);
 
               if (profiles) {
@@ -217,11 +218,11 @@ export function useSocialClipsState({ triggerNotification }: UseSocialClipsState
               : 'Anonymous Creator');
 
             const creatorAvatar = clip.avatar || clip.avatar_url || (creatorProfile 
-              ? (creatorProfile.avatar_url || creatorProfile.label_avatar || creatorProfile.creative_avatar || creatorProfile.promoter_logo || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&h=80&q=80') 
+              ? (creatorProfile.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&h=80&q=80') 
               : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&h=80&q=80');
 
             const role = creatorProfile 
-              ? (creatorProfile.role_badge || creatorProfile.account_type || 'Operator') 
+              ? (creatorProfile.role || creatorProfile.account_type || 'Operator') 
               : (clip.band_name ? '💀 Band' : 'Operator');
 
             const rawVideoUrl = clip.video_url || clip.videoUrl || clip.url || '';

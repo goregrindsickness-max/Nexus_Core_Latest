@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { hasAuthenticatedSupabaseSession } from '../lib/supabaseQueryCache';
 import { InventoryItem, Sale, Flight, Show, UserReview, AssetRevenueSplit } from '../types';
 import {
   inventoryStore,
@@ -52,6 +53,9 @@ export function useGlobalDataSync({
   addLog,
   triggerNotification,
 }: UseGlobalDataSyncParams) {
+  const hasPendingSyncRef = useRef<boolean>(true);
+  const isSyncRunningRef = useRef<boolean>(false);
+
   const syncOfflineQueue = async () => {
     const supabase = getSupabase();
     if (!supabase || !navigator.onLine) return;
@@ -141,6 +145,7 @@ export function useGlobalDataSync({
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
+      hasPendingSyncRef.current = true;
       addLog('📶 Local browser has detected an active internet connection.');
       syncOfflineQueue();
     };
@@ -157,6 +162,7 @@ export function useGlobalDataSync({
   }, []);
 
   const commitInventoryMutation = (itemsData: InventoryItem | InventoryItem[]) => {
+    hasPendingSyncRef.current = true;
     const mutations = Array.isArray(itemsData) ? itemsData : [itemsData];
     
     setInventory(prev => {
@@ -194,6 +200,8 @@ export function useGlobalDataSync({
       triggerNotification("Transaction canceled: Total amount must be positive.");
       return;
     }
+
+    hasPendingSyncRef.current = true;
 
     setSales(prev => {
       let updated = [...prev];
@@ -249,6 +257,7 @@ export function useGlobalDataSync({
   };
 
   const commitFlightMutation = (itemsData: Flight | Flight[]) => {
+    hasPendingSyncRef.current = true;
     const mutations = Array.isArray(itemsData) ? itemsData : [itemsData];
     setFlights(prev => {
       let updated = [...prev];
@@ -268,6 +277,7 @@ export function useGlobalDataSync({
   };
 
   const commitShowMutation = (itemsData: Show | Show[]) => {
+    hasPendingSyncRef.current = true;
     const mutations = Array.isArray(itemsData) ? itemsData : [itemsData];
     setShows(prev => {
       let updated = [...prev];
@@ -320,6 +330,7 @@ export function useGlobalDataSync({
   };
 
   const commitReviewMutation = (itemsData: UserReview | UserReview[]) => {
+    hasPendingSyncRef.current = true;
     const mutations = Array.isArray(itemsData) ? itemsData : [itemsData];
     setUserReviews(prev => {
       let updated = [...prev];
@@ -338,9 +349,16 @@ export function useGlobalDataSync({
     });
   };
 
-  const processingGlobalSyncQueue = async () => {
+  const processingGlobalSyncQueue = async (force = false) => {
+    if (!force && !hasPendingSyncRef.current) return;
+    if (isSyncRunningRef.current) return;
     const supabase = getSupabase();
     if (!supabase || !isOnline) return;
+    if (!(await hasAuthenticatedSupabaseSession(supabase))) return;
+
+    isSyncRunningRef.current = true;
+    let remainingUnsyncedCount = 0;
+    try {
 
     const processQueueForModule = async (store: any, storageKey: string, tableName: string, idPrefix: string, stateUpdateFn?: Function) => {
       const masterCache = await store.getItem(storageKey);
@@ -351,6 +369,7 @@ export function useGlobalDataSync({
       for (let i = 0; i < items.length; i++) {
         let item = items[i];
         if (item.is_synced === false) {
+          remainingUnsyncedCount++;
           try {
             const payload = { ...item };
             delete payload.client_id;
@@ -504,6 +523,7 @@ export function useGlobalDataSync({
             }
             if (data) {
                items[i] = { ...item, ...data, client_id: undefined, is_synced: true };
+               remainingUnsyncedCount = Math.max(0, remainingUnsyncedCount - 1);
                needsUpdate = true;
             }
           } catch (e) {
@@ -540,17 +560,24 @@ export function useGlobalDataSync({
        }
        if (slsNeedsUpdate) localStorage.setItem('nexus_master_setlists', JSON.stringify(sls));
     }
+
+    hasPendingSyncRef.current = remainingUnsyncedCount > 0;
+    } finally {
+      isSyncRunningRef.current = false;
+    }
   };
 
-  // Automated sync polling
+  // Automated sync polling (idle no-op when queue is clean; 30s retry interval when items are pending)
   useEffect(() => {
     let interval: any;
     if (isOnline) {
-      // Intial trigger
+      hasPendingSyncRef.current = true;
       processingGlobalSyncQueue();
       interval = setInterval(() => {
-         processingGlobalSyncQueue();
-      }, 5000);
+         if (hasPendingSyncRef.current) {
+           processingGlobalSyncQueue();
+         }
+      }, 30000);
     }
     return () => { if (interval) clearInterval(interval); };
   }, [isOnline]);

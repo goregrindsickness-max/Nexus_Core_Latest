@@ -282,7 +282,7 @@ socialRouter.post(
           const isVideo =
             resolvedMime.startsWith('video/') ||
             ['mp4', 'webm', 'mov', 'm4v'].includes(ext);
-          const bucketName = isVideo ? 'nexus_clips' : 'nexus_media';
+          const bucketName = isVideo ? 'clips' : 'nexus_media';
           const storagePath = `uploads/${uniqueName}`;
 
           const { data: buckets } = await supabase.storage.listBuckets();
@@ -725,18 +725,20 @@ socialRouter.get('/api/clips', async (_req: express.Request, res: express.Respon
 
     if (supabase) {
       const { data: clipsData, error: clipsErr } = await supabase
-        .from('nexus_clips')
-        .select('*')
+        .from('clips')
+        .select('id, user_id, video_url, caption, song_title, band_name, created_at')
         .order('created_at', { ascending: false })
         .limit(100);
 
       if (!clipsErr && clipsData && clipsData.length > 0) {
         dbClips = clipsData.map((row: any) => ({
-          ...(typeof row.data === 'object' && row.data !== null ? row.data : {}),
           id: row.id,
-          user_id: row.user_id || row.data?.user_id,
-          video_url: row.video_url || row.data?.video_url,
-          created_at: row.created_at || row.data?.created_at,
+          user_id: row.user_id,
+          video_url: row.video_url,
+          caption: row.caption || '',
+          song_title: row.song_title || 'Original Sound',
+          band_name: row.band_name,
+          created_at: row.created_at,
         }));
       }
 
@@ -852,23 +854,15 @@ socialRouter.post(
 
       let persistedToSupabase = false;
       if (sb) {
-        const { error: cErr } = await sb.from('nexus_clips').upsert(
+        const { error: cErr } = await sb.from('clips').upsert(
           {
             id: clip.id,
             user_id: clip.user_id,
-            band_name: clip.band_name,
-            handle: clip.handle,
-            avatar_url: clip.avatar_url,
+            band_name: clip.band_name || null,
             video_url: clip.video_url,
             caption: clip.caption || '',
             song_title: clip.song_title || 'Original Sound',
-            likes: clip.likes || 0,
-            comments: clip.comments || 0,
-            shares: clip.shares || 0,
-            location: clip.location || 'THE PIT',
-            verified: clip.verified ?? true,
             created_at: clip.created_at,
-            data: clip,
           },
           { onConflict: 'id' }
         );
@@ -926,18 +920,16 @@ socialRouter.post(
       const supabase = getSupabaseService();
       if (supabase) {
         await supabase
-          .from('nexus_clips')
+          .from('clips')
           .upsert(
             {
               id: clipId,
-              user_id: mergedClip.user_id || 'anonymous',
-              band_name: mergedClip.band_name,
+              user_id: mergedClip.user_id || null,
+              band_name: mergedClip.band_name || null,
               video_url: mergedClip.video_url,
-              likes: mergedClip.likes || 0,
-              comments: mergedClip.comments || 0,
-              shares: mergedClip.shares || 0,
+              caption: mergedClip.caption || '',
+              song_title: mergedClip.song_title || 'Original Sound',
               created_at: mergedClip.created_at || new Date().toISOString(),
-              data: mergedClip,
             },
             { onConflict: 'id' }
           )
@@ -1002,7 +994,7 @@ socialRouter.delete(
       } else if (sb && !authUser.isAdmin) {
         const cleanId = clipId.replace(/^clip_/, '');
         const { data: row } = await sb
-          .from('nexus_clips')
+          .from('clips')
           .select('user_id')
           .eq('id', cleanId)
           .maybeSingle();
@@ -1024,7 +1016,7 @@ socialRouter.delete(
       if (sb) {
         const cleanId = clipId.replace(/^clip_/, '');
         const prefixedId = clipId.startsWith('clip_') ? clipId : `clip_${clipId}`;
-        await sb.from('nexus_clips').delete().in('id', [clipId, cleanId, prefixedId]);
+        await sb.from('clips').delete().in('id', [clipId, cleanId, prefixedId]);
         await sb.from('nexus_posts').delete().in('id', [clipId, cleanId, prefixedId]);
       }
 

@@ -43,8 +43,11 @@ import {
   Calendar,
   Ticket,
   ExternalLink,
-  Loader2
+  Loader2,
+  Search
 } from 'lucide-react';
+import { authFetch } from '../../utils/apiConfig';
+import { extractYouTubeVideoId } from '../../utils/youtubeUtils';
 import { checkDuplicateCommunityEvent, EVENT_CATEGORIES } from '../../utils/communityEventUtils';
 import { getExistingPhotoPitAlbums, persistPhotoPitFolders } from './utils/photoPitAlbums';
 import { resolveBandcampMetadata, isBandcampUrl, normalizeBandcampUrl, BandcampResolvedData } from '../../utils/socialFeedUtils';
@@ -701,6 +704,191 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     };
   }, [newPostImageUrl]);
 
+  // Active YouTube video search & preview state
+  interface YouTubeSearchResultItem {
+    videoId: string;
+    title: string;
+    channelName: string;
+    duration?: string;
+    viewCountText?: string;
+    publishedTime?: string;
+    thumbnailUrl: string;
+    url: string;
+  }
+
+  const [videoSearchInput, setVideoSearchInput] = useState<string>('');
+  const [videoSearchResults, setVideoSearchResults] = useState<YouTubeSearchResultItem[]>([]);
+  const [isSearchingVideos, setIsSearchingVideos] = useState<boolean>(false);
+  const [videoSearchError, setVideoSearchError] = useState<string | null>(null);
+  const [hasSearchedVideos, setHasSearchedVideos] = useState<boolean>(false);
+  const [showVideoResults, setShowVideoResults] = useState<boolean>(false);
+  const [selectedYoutubeMeta, setSelectedYoutubeMeta] = useState<YouTubeSearchResultItem | null>(null);
+  const [previewAttachedVideo, setPreviewAttachedVideo] = useState<boolean>(false);
+  const videoSearchCacheRef = useRef<Map<string, YouTubeSearchResultItem[]>>(new Map());
+  const videoSearchAbortRef = useRef<AbortController | null>(null);
+  const videoSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!youtubeUrl) {
+      setSelectedYoutubeMeta(null);
+      setPreviewAttachedVideo(false);
+    }
+  }, [youtubeUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (videoSearchDebounceRef.current) clearTimeout(videoSearchDebounceRef.current);
+      if (videoSearchAbortRef.current) videoSearchAbortRef.current.abort();
+    };
+  }, []);
+
+  const enrichYouTubeMetaById = async (videoId: string) => {
+    try {
+      const res = await authFetch(`/api/oembed?videoId=${encodeURIComponent(videoId)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.title) {
+        setSelectedYoutubeMeta((prev) => {
+          if (prev && prev.videoId === videoId) {
+            return {
+              ...prev,
+              title: data.title || prev.title,
+              channelName: data.author || prev.channelName,
+              thumbnailUrl: data.thumbnailUrl || prev.thumbnailUrl,
+            };
+          }
+          return {
+            videoId,
+            title: data.title,
+            channelName: data.author || 'YouTube Channel',
+            thumbnailUrl: data.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+          };
+        });
+      }
+    } catch {
+      // Optional oEmbed enrichment failure should not block link attachment
+    }
+  };
+
+  const runYouTubeSearch = async (rawQuery: string) => {
+    const trimmed = rawQuery.trim();
+    if (!trimmed) {
+      setVideoSearchResults([]);
+      setHasSearchedVideos(false);
+      setShowVideoResults(false);
+      setVideoSearchError(null);
+      return;
+    }
+
+    const directId = getYouTubeVideoId(trimmed);
+    if (directId) {
+      const canonicalUrl = `https://www.youtube.com/watch?v=${directId}`;
+      if (setYoutubeUrl) setYoutubeUrl(canonicalUrl);
+      setVideoSearchError(null);
+      setShowVideoResults(false);
+      setPreviewAttachedVideo(false);
+      enrichYouTubeMetaById(directId);
+      return;
+    }
+
+    if (trimmed.length < 2) {
+      setVideoSearchError('Enter at least 2 characters to search YouTube.');
+      return;
+    }
+
+    const cacheKey = trimmed.toLowerCase();
+    const cached = videoSearchCacheRef.current.get(cacheKey);
+    if (cached) {
+      setVideoSearchResults(cached);
+      setHasSearchedVideos(true);
+      setShowVideoResults(true);
+      setVideoSearchError(null);
+      return;
+    }
+
+    if (videoSearchAbortRef.current) {
+      videoSearchAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    videoSearchAbortRef.current = controller;
+
+    setIsSearchingVideos(true);
+    setVideoSearchError(null);
+    setHasSearchedVideos(true);
+    setShowVideoResults(true);
+
+    try {
+      const res = await authFetch(
+        `/api/youtube/search?q=${encodeURIComponent(trimmed)}&limit=12`,
+        { signal: controller.signal }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || `Search failed (HTTP ${res.status})`);
+      }
+
+      const items: YouTubeSearchResultItem[] = Array.isArray(data?.results)
+        ? data.results
+        : [];
+      videoSearchCacheRef.current.set(cacheKey, items);
+      setVideoSearchResults(items);
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      setVideoSearchError(
+        err?.message || 'Unable to search YouTube right now. Try again or paste a direct link.'
+      );
+      setVideoSearchResults([]);
+    } finally {
+      if (videoSearchAbortRef.current === controller) {
+        setIsSearchingVideos(false);
+      }
+    }
+  };
+
+  const handleVideoSearchInputChange = (val: string) => {
+    setVideoSearchInput(val);
+    setVideoSearchError(null);
+
+    if (videoSearchDebounceRef.current) {
+      clearTimeout(videoSearchDebounceRef.current);
+    }
+
+    const trimmed = val.trim();
+    if (!trimmed) {
+      setVideoSearchResults([]);
+      setHasSearchedVideos(false);
+      setShowVideoResults(false);
+      return;
+    }
+
+    const directId = getYouTubeVideoId(trimmed);
+    if (directId) {
+      const canonicalUrl = `https://www.youtube.com/watch?v=${directId}`;
+      if (setYoutubeUrl) setYoutubeUrl(canonicalUrl);
+      setShowVideoResults(false);
+      setPreviewAttachedVideo(false);
+      enrichYouTubeMetaById(directId);
+      return;
+    }
+
+    if (trimmed.length >= 3) {
+      videoSearchDebounceRef.current = setTimeout(() => {
+        runYouTubeSearch(trimmed);
+      }, 500);
+    }
+  };
+
+  const handleSelectYouTubeVideo = (video: YouTubeSearchResultItem) => {
+    if (setYoutubeUrl) {
+      setYoutubeUrl(video.url || `https://www.youtube.com/watch?v=${video.videoId}`);
+    }
+    setSelectedYoutubeMeta(video);
+    setPreviewAttachedVideo(false);
+    setShowVideoResults(false);
+    setVideoSearchError(null);
+  };
+
   const [scrapedLocation, setScrapedLocation] = useState<string | null>(null);
   const [isScrapingLocation, setIsScrapingLocation] = useState<boolean>(false);
   const [includeAutoLocation, setIncludeAutoLocation] = useState<boolean>(true);
@@ -1076,11 +1264,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     }
   }, []);
 
-  const getYouTubeVideoId = (url: string) => {
-    if (!url) return null;
-    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-    return match ? match[1] : null;
-  };
+  const getYouTubeVideoId = (url: string) => extractYouTubeVideoId(url);
 
   const isBandcampUrl = (url: string) => {
     if (!url) return false;
@@ -2155,64 +2339,288 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           </div>
         )}
 
-        {/* Video Panel - Strictly YouTube Links & Preview Resolver */}
+        {/* Video Panel - Active YouTube Search & Link Resolver */}
         {activePanel === 'video' && (
           <div className={`${theme.panelBg} p-3.5 rounded-xl border ${theme.panelBorder} space-y-3 animate-in fade-in duration-150`}>
             <div className={`flex items-center justify-between text-[10px] font-mono ${theme.badgeText} font-bold uppercase`}>
               <div className="flex items-center gap-1.5">
-                <Video className={`w-3.5 h-3.5 ${theme.accentText}`} />
-                <span>STRICTLY YOUTUBE VIDEO LINK & PREVIEW RESOLVER</span>
+                <Youtube className={`w-3.5 h-3.5 ${theme.accentText}`} />
+                <span>SEARCH YOUTUBE OR PASTE VIDEO LINK</span>
               </div>
-              <button type="button" onClick={() => setActivePanel(null)} className="text-zinc-500 hover:text-zinc-300"><X className="w-3.5 h-3.5" /></button>
+              <button type="button" onClick={() => setActivePanel(null)} className="text-zinc-500 hover:text-zinc-300 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
             </div>
 
-            <input
-              type="text"
-              placeholder="Paste YouTube Link (e.g. https://www.youtube.com/watch?v=... or https://youtu.be/...)"
-              value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl && setYoutubeUrl(e.target.value)}
-              className={`w-full ${theme.innerPanelBg} text-xs text-white placeholder:text-zinc-600 border ${theme.inputBorder} rounded-lg p-2.5 font-mono ${theme.inputFocus}`}
-            />
+            {/* Active Search & URL Input */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search bands, live sets, music videos, or paste YouTube URL..."
+                  value={videoSearchInput}
+                  onChange={(e) => handleVideoSearchInputChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (videoSearchDebounceRef.current) clearTimeout(videoSearchDebounceRef.current);
+                      runYouTubeSearch(videoSearchInput);
+                    }
+                  }}
+                  className={`w-full ${theme.innerPanelBg} text-xs text-white placeholder:text-zinc-600 border ${theme.inputBorder} rounded-lg pl-8 pr-8 py-2.5 font-mono ${theme.inputFocus}`}
+                />
+                {videoSearchInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (videoSearchDebounceRef.current) clearTimeout(videoSearchDebounceRef.current);
+                      if (videoSearchAbortRef.current) videoSearchAbortRef.current.abort();
+                      setVideoSearchInput('');
+                      setVideoSearchResults([]);
+                      setHasSearchedVideos(false);
+                      setShowVideoResults(false);
+                      setVideoSearchError(null);
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (videoSearchDebounceRef.current) clearTimeout(videoSearchDebounceRef.current);
+                  runYouTubeSearch(videoSearchInput);
+                }}
+                disabled={isSearchingVideos || !videoSearchInput.trim()}
+                className="px-3 py-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-[10px] font-mono font-bold uppercase tracking-wider transition-all shrink-0 cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                {isSearchingVideos ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Search className="w-3.5 h-3.5" />
+                )}
+                <span>{isSearchingVideos ? 'SEARCHING' : 'SEARCH'}</span>
+              </button>
+            </div>
 
-            {/* YouTube Live Thumbnail Preview Resolver */}
+            {!youtubeUrl && !hasSearchedVideos && !isSearchingVideos && (
+              <p className="text-[10px] font-mono text-zinc-500">
+                Type 3+ characters to search YouTube directly inside the app, or paste any youtube.com / youtu.be / shorts link.
+              </p>
+            )}
+
+            {/* Attached YouTube Video Preview Card */}
             {youtubeUrl && (
               <div>
-                {getYouTubeVideoId(youtubeUrl) ? (
-                  <div className={`p-3 rounded-xl bg-zinc-950 border ${theme.inputBorder} flex flex-col sm:flex-row items-center gap-3`}>
-                    <div className="relative w-full sm:w-36 h-20 rounded-lg overflow-hidden shrink-0 border border-zinc-800 bg-black group">
-                      <img
-                        src={`https://img.youtube.com/vi/${getYouTubeVideoId(youtubeUrl)}/hqdefault.jpg`}
-                        alt="YouTube Preview"
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                        <PlayCircle className="w-8 h-8 text-rose-500 drop-shadow-md" />
+                {getYouTubeVideoId(youtubeUrl) ? (() => {
+                  const attachedId = getYouTubeVideoId(youtubeUrl)!;
+                  const metaMatches = selectedYoutubeMeta?.videoId === attachedId ? selectedYoutubeMeta : null;
+                  return (
+                    <div className={`p-3 rounded-xl bg-zinc-950 border ${theme.inputBorder} space-y-2.5`}>
+                      <div className="flex flex-col sm:flex-row items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewAttachedVideo((prev) => !prev)}
+                          className="relative w-full sm:w-36 h-20 rounded-lg overflow-hidden shrink-0 border border-zinc-800 bg-black group cursor-pointer"
+                          title={previewAttachedVideo ? 'Hide playable preview' : 'Play video preview'}
+                        >
+                          <img
+                            src={metaMatches?.thumbnailUrl || `https://img.youtube.com/vi/${attachedId}/hqdefault.jpg`}
+                            alt={metaMatches?.title || 'YouTube Preview'}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                          />
+                          <div className="absolute inset-0 bg-black/40 group-hover:bg-black/25 flex items-center justify-center transition-colors">
+                            <PlayCircle className="w-8 h-8 text-rose-500 drop-shadow-md" />
+                          </div>
+                          {metaMatches?.duration && (
+                            <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/85 text-[9px] font-mono font-bold text-white border border-white/10">
+                              {metaMatches.duration}
+                            </span>
+                          )}
+                        </button>
+                        <div className="flex-1 min-w-0 w-full space-y-1 text-left">
+                          <div className="flex items-center gap-1.5 text-emerald-400 text-[10px] font-mono font-bold uppercase">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                            <span>YOUTUBE VIDEO ATTACHED</span>
+                          </div>
+                          <p className="text-xs font-bold text-white line-clamp-2 font-mono">
+                            {metaMatches?.title || `YouTube Video (${attachedId})`}
+                          </p>
+                          <p className="text-[10px] text-zinc-400 font-mono truncate">
+                            {metaMatches?.channelName
+                              ? `${metaMatches.channelName}${metaMatches.duration ? ` • ${metaMatches.duration}` : ''}`
+                              : `Video ID: ${attachedId} • Ready for inline feed playback`}
+                          </p>
+                        </div>
+                        <div className="flex sm:flex-col items-center sm:items-end gap-1.5 shrink-0 w-full sm:w-auto justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewAttachedVideo((prev) => !prev)}
+                            className="text-[10px] font-mono font-bold text-zinc-200 hover:text-white bg-zinc-900 hover:bg-zinc-800 px-2.5 py-1 rounded-lg border border-zinc-700 cursor-pointer"
+                          >
+                            {previewAttachedVideo ? 'HIDE PLAYER' : 'PREVIEW'}
+                          </button>
+                          {videoSearchResults.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowVideoResults((prev) => !prev)}
+                              className="text-[10px] font-mono font-bold text-amber-300 hover:text-amber-200 bg-amber-950/50 px-2.5 py-1 rounded-lg border border-amber-800/70 cursor-pointer"
+                            >
+                              {showVideoResults ? 'HIDE RESULTS' : `RESULTS (${videoSearchResults.length})`}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (setYoutubeUrl) setYoutubeUrl('');
+                              setSelectedYoutubeMeta(null);
+                              setPreviewAttachedVideo(false);
+                            }}
+                            className="text-[10px] font-mono font-bold text-rose-400 hover:text-rose-300 bg-rose-950/60 px-2.5 py-1 rounded-lg border border-rose-900 cursor-pointer"
+                          >
+                            REMOVE
+                          </button>
+                        </div>
                       </div>
+
+                      {previewAttachedVideo && (
+                        <div className="relative aspect-video w-full rounded-lg overflow-hidden border border-zinc-800 bg-black">
+                          <iframe
+                            src={`https://www.youtube.com/embed/${attachedId}?rel=0&modestbranding=1`}
+                            title={metaMatches?.title || 'YouTube Video Preview'}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            className="w-full h-full border-0"
+                          />
+                        </div>
+                      )}
                     </div>
-                    <div className="flex-1 min-w-0 space-y-1 text-left">
-                      <div className="flex items-center gap-1.5 text-rose-400 text-[10px] font-mono font-bold uppercase">
-                        <Youtube className="w-3.5 h-3.5" />
-                        <span>YOUTUBE LINK RESOLVED</span>
-                      </div>
-                      <p className="text-xs font-bold text-white truncate font-mono">
-                        Video ID: {getYouTubeVideoId(youtubeUrl)}
-                      </p>
-                      <p className="text-[10px] text-zinc-400 font-mono">Ready for inline embed & video playback in feed</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setYoutubeUrl && setYoutubeUrl('')}
-                      className="text-[10px] font-mono font-bold text-rose-400 hover:text-rose-300 bg-rose-950/60 px-2.5 py-1 rounded-lg border border-rose-900 shrink-0 cursor-pointer"
-                    >
-                      REMOVE
-                    </button>
-                  </div>
-                ) : (
+                  );
+                })() : (
                   <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-900/60 text-[10px] font-mono text-amber-300 flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
-                    <span>Enter a valid YouTube URL (e.g., https://youtube.com/watch?v=... or https://youtu.be/...)</span>
+                    <span>Enter a valid YouTube URL (e.g. youtube.com/watch?v=..., youtu.be/..., or /shorts/...) or search by keyword above.</span>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Search Error Banner */}
+            {videoSearchError && (
+              <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-900/60 text-[10px] font-mono text-rose-300 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span className="truncate">{videoSearchError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => runYouTubeSearch(videoSearchInput)}
+                  className="px-2 py-1 rounded bg-rose-900/60 hover:bg-rose-800 text-white font-bold uppercase shrink-0 cursor-pointer"
+                >
+                  RETRY
+                </button>
+              </div>
+            )}
+
+            {/* Live YouTube Search Results List */}
+            {isSearchingVideos && (
+              <div className="space-y-2 py-1">
+                {[0, 1, 2].map((idx) => (
+                  <div
+                    key={`yt-skel-${idx}`}
+                    className="p-2 rounded-xl bg-zinc-950/80 border border-zinc-800/80 flex items-center gap-3 animate-pulse"
+                  >
+                    <div className="w-28 sm:w-32 aspect-video rounded-lg bg-zinc-800 shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 w-3/4 rounded bg-zinc-800" />
+                      <div className="h-2.5 w-1/2 rounded bg-zinc-800/70" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!isSearchingVideos && showVideoResults && videoSearchResults.length > 0 && (
+              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                <div className="flex items-center justify-between text-[9px] font-mono text-zinc-400 uppercase tracking-wider px-1">
+                  <span>Tap a video to attach to your post ({videoSearchResults.length} results)</span>
+                </div>
+                {videoSearchResults.map((video) => {
+                  const isAttached = getYouTubeVideoId(youtubeUrl) === video.videoId;
+                  return (
+                    <button
+                      key={`yt-res-${video.videoId}`}
+                      type="button"
+                      onClick={() => handleSelectYouTubeVideo(video)}
+                      className={`w-full text-left p-2 rounded-xl border transition-all flex items-center gap-3 cursor-pointer group ${
+                        isAttached
+                          ? 'bg-rose-950/50 border-rose-500/80 shadow-[0_0_12px_rgba(244,63,94,0.2)]'
+                          : 'bg-zinc-950/90 hover:bg-zinc-900 border-zinc-800/90 hover:border-rose-500/40'
+                      }`}
+                    >
+                      <div className="relative w-28 sm:w-32 aspect-video rounded-lg overflow-hidden bg-black border border-zinc-800 shrink-0">
+                        <img
+                          src={video.thumbnailUrl || `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`}
+                          alt={video.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/25 group-hover:bg-black/10 flex items-center justify-center transition-colors">
+                          <PlayCircle className="w-6 h-6 text-white/85 drop-shadow" />
+                        </div>
+                        {video.duration && (
+                          <span
+                            className={`absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border border-white/10 ${
+                              video.duration === 'LIVE'
+                                ? 'bg-rose-600 text-white'
+                                : 'bg-black/85 text-white'
+                            }`}
+                          >
+                            {video.duration}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <p className="text-xs font-bold text-white line-clamp-2 font-mono leading-snug">
+                          {video.title}
+                        </p>
+                        <p className="text-[10px] text-rose-300/90 font-mono truncate">
+                          {video.channelName}
+                        </p>
+                        {(video.viewCountText || video.publishedTime) && (
+                          <p className="text-[9px] text-zinc-500 font-mono truncate">
+                            {[video.viewCountText, video.publishedTime].filter(Boolean).join(' • ')}
+                          </p>
+                        )}
+                      </div>
+
+                      <span
+                        className={`px-2.5 py-1.5 rounded-lg text-[9px] font-mono font-bold uppercase tracking-wider shrink-0 border transition-all ${
+                          isAttached
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                            : 'bg-rose-500/15 group-hover:bg-rose-500/30 text-rose-300 border-rose-500/40'
+                        }`}
+                      >
+                        {isAttached ? 'ATTACHED' : 'ATTACH'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {!isSearchingVideos && hasSearchedVideos && showVideoResults && videoSearchResults.length === 0 && !videoSearchError && (
+              <div className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800 text-center space-y-1">
+                <p className="text-[10px] font-mono text-zinc-400">
+                  No YouTube videos found for "{videoSearchInput.trim()}".
+                </p>
+                <p className="text-[9px] font-mono text-zinc-500">
+                  Try broader keywords (band name, song title) or paste a direct YouTube share link above.
+                </p>
               </div>
             )}
           </div>
@@ -3075,10 +3483,24 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
             )}
 
             {youtubeUrl && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded ${theme.attachedTagBg} text-[10px] font-mono ${theme.badgeText}`}>
-                <Video className={`w-3 h-3 ${theme.attachedTagIcon}`} />
-                <span>Video Embed</span>
-                <button type="button" onClick={() => setYoutubeUrl && setYoutubeUrl('')} className="hover:text-rose-400 ml-0.5"><X className="w-3 h-3" /></button>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded ${theme.attachedTagBg} text-[10px] font-mono ${theme.badgeText} max-w-[240px]`}>
+                <Video className={`w-3 h-3 shrink-0 ${theme.attachedTagIcon}`} />
+                <span className="truncate">
+                  {selectedYoutubeMeta?.videoId && selectedYoutubeMeta.videoId === getYouTubeVideoId(youtubeUrl)
+                    ? `Video: ${selectedYoutubeMeta.title}`
+                    : 'Video Embed'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (setYoutubeUrl) setYoutubeUrl('');
+                    setSelectedYoutubeMeta(null);
+                    setPreviewAttachedVideo(false);
+                  }}
+                  className="hover:text-rose-400 ml-0.5 shrink-0"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </span>
             )}
 

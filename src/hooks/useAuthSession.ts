@@ -13,6 +13,11 @@ import {
   resolveCreativeBio,
   resolveCreativeLocation,
 } from '../utils/bandProfileUtils';
+import {
+  PROFILE_CARD_COLUMNS,
+  PROMOTER_CARD_COLUMNS,
+  hasAuthenticatedSupabaseSession,
+} from '../lib/supabaseQueryCache';
 
 const MIGUEL_DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80';
 
@@ -221,14 +226,14 @@ export function useAuthSession(options: UseAuthSessionOptions) {
 
         if (!profileId && !profileEmail && !profileHandle) return;
 
-        let query = supabase.from('profiles').select('*');
+        let query = supabase.from('profiles').select(PROFILE_CARD_COLUMNS);
         if (profileId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId)) {
           query = query.eq('id', profileId);
         } else if (profileEmail) {
           query = query.ilike('email', profileEmail);
         } else if (profileHandle) {
           const cleanH = String(profileHandle).replace(/^@/, '');
-          query = query.or(`console_handle.ilike.%${cleanH}%,username.ilike.%${cleanH}%`);
+          query = query.ilike('console_handle', `%${cleanH}%`);
         } else {
           return;
         }
@@ -237,12 +242,14 @@ export function useAuthSession(options: UseAuthSessionOptions) {
         if (data && !error && isSubscribed) {
           let promoterRecord: any = null;
           try {
-            const { data: pData } = await supabase
-              .from('promoters')
-              .select('*')
-              .or(`id.eq.${data.id},user_id.eq.${data.id}`)
-              .maybeSingle();
-            if (pData) promoterRecord = pData;
+            if (await hasAuthenticatedSupabaseSession(supabase)) {
+              const { data: pData } = await supabase
+                .from('promoters')
+                .select(PROMOTER_CARD_COLUMNS)
+                .or(`id.eq.${data.id},user_id.eq.${data.id}`)
+                .maybeSingle();
+              if (pData) promoterRecord = pData;
+            }
           } catch (_) {}
 
           const normalized = normalizeLoadedProfile(data);
@@ -284,9 +291,9 @@ export function useAuthSession(options: UseAuthSessionOptions) {
               birthday_month: normalized.birthday_month ?? prev.birthday_month ?? null,
               birthday_day: normalized.birthday_day ?? prev.birthday_day ?? null,
               show_birthday_shoutout:
-                data.show_birthday_shoutout !== undefined
-                  ? Boolean(data.show_birthday_shoutout)
-                  : (prev.show_birthday_shoutout ?? normalized.show_birthday_shoutout ?? true),
+                typeof normalized?.show_birthday_shoutout === 'boolean'
+                  ? normalized.show_birthday_shoutout
+                  : (prev.show_birthday_shoutout ?? true),
               active_workspace: normalized.active_workspace || prev.active_workspace || 'industry_pro',
               account_type: normalized.account_type || prev.account_type || 'industry pro',
               promoter_id: normalized.promoter_id ?? prev.promoter_id,

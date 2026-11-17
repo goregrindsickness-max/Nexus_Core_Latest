@@ -1,6 +1,12 @@
 import { getSupabase, ensureValidSupabaseAuthSession } from './clientService';
 import { executeWithSchemaResilience } from './schemaResilienceService';
 import { isMiguelNameOrProfile } from '../components/social/utils/profileUtils';
+import {
+  PROFILE_CARD_COLUMNS,
+  PROMOTER_CARD_COLUMNS,
+  hasAuthenticatedSupabaseSession,
+  invalidateSupabaseQueryCache,
+} from '../lib/supabaseQueryCache';
 
 export interface PromoterRecord {
   id?: string;
@@ -75,6 +81,7 @@ export async function syncPromoterProfileToSupabase(userProfile: any): Promise<{
     return { data: null, error: new Error('Supabase client unavailable') };
   }
 
+  invalidateSupabaseQueryCache('promoters:');
   await ensureValidSupabaseAuthSession(supabase).catch(() => {});
   const payload = buildNexusLivePromoterPayload(userProfile);
 
@@ -122,7 +129,7 @@ export async function autoSyncPromoterProfile(userProfile: any): Promise<any> {
     // 1. Fetch fresh record from Supabase profiles table
     let profData: any = null;
     try {
-      let query = supabase.from('profiles').select('*');
+      let query = supabase.from('profiles').select(PROFILE_CARD_COLUMNS);
       if (userId && userEmail) {
         query = query.or(`id.eq.${userId},email.ilike.${userEmail}`);
       } else if (userId) {
@@ -136,18 +143,20 @@ export async function autoSyncPromoterProfile(userProfile: any): Promise<any> {
       console.warn('[promoterService] profiles query error:', e);
     }
 
-    // 2. Fetch from promoters table if accessible
+    // 2. Fetch from promoters table only when authenticated session exists
     let promoterRecord: any = null;
     try {
-      const promoterIdToQuery = userProfile.promoter_id || profData?.promoter_id;
-      let query = supabase.from('promoters').select('*');
-      if (promoterIdToQuery) {
-        query = query.or(`id.eq.${promoterIdToQuery},user_id.eq.${userId}`);
-      } else {
-        query = query.eq('user_id', userId);
+      if (await hasAuthenticatedSupabaseSession(supabase)) {
+        const promoterIdToQuery = userProfile.promoter_id || profData?.promoter_id;
+        let query = supabase.from('promoters').select(PROMOTER_CARD_COLUMNS);
+        if (promoterIdToQuery) {
+          query = query.or(`id.eq.${promoterIdToQuery},user_id.eq.${userId}`);
+        } else {
+          query = query.eq('user_id', userId);
+        }
+        const { data, error } = await query.maybeSingle();
+        if (data && !error) promoterRecord = data;
       }
-      const { data, error } = await query.maybeSingle();
-      if (data && !error) promoterRecord = data;
     } catch (_) {
       // Ignore permission denied or missing table
     }

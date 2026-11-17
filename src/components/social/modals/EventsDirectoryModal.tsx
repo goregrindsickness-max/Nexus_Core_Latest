@@ -41,6 +41,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { getSupabase } from '../../../supabase';
+import { fetchCachedShowsList } from '../../../lib/supabaseQueryCache';
 import { showsStore } from '../../../utils/indexedDB';
 import { resolveLocationCoordinates } from '../../../lib/geoResolution';
 import {
@@ -678,17 +679,12 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
     try {
       const allExtractedShows: any[] = [];
 
-      // 1. Fetch directly from Supabase shows table
+      // 1. Fetch directly from Supabase shows table via shared 60s cached query
       try {
         const client = getSupabase();
         if (client) {
-          const { data: dbShows, error: dbErr } = await client
-            .from('shows')
-            .select('*')
-            .order('date', { ascending: true })
-            .range(0, 4999);
-
-          if (!dbErr && dbShows && Array.isArray(dbShows) && dbShows.length > 0) {
+          const dbShows = await fetchCachedShowsList(client, { limit: 200, ascending: true });
+          if (Array.isArray(dbShows) && dbShows.length > 0) {
             allExtractedShows.push(...dbShows);
           }
         }

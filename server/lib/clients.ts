@@ -511,10 +511,25 @@ export async function checkAndSend24hShowReminders() {
   console.log('[SHOW REMINDERS SERVICE] Executing 24h VAPID push reminder check for show RSVPs...');
   let rsvps = readShowRsvps();
 
+  const now = new Date();
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const dayAfterTomorrow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  const todayStr = now.toISOString().split('T')[0];
+  const minWindowStr = yesterday.toISOString().split('T')[0];
+  const maxWindowStr = dayAfterTomorrow.toISOString().split('T')[0];
+
   const supabase = getSupabaseService();
   if (supabase) {
     try {
-      const { data: dbRsvps, error: dbErr } = await supabase.from('show_rsvps').select('*');
+      const { data: dbRsvps, error: dbErr } = await supabase
+        .from('show_rsvps')
+        .select('id, show_id, user_id, user_email, show_title, show_date, venue_name, city, reminder_sent_24h, created_at')
+        .eq('reminder_sent_24h', false)
+        .gte('show_date', minWindowStr)
+        .lte('show_date', maxWindowStr)
+        .limit(500);
       if (!dbErr && Array.isArray(dbRsvps)) {
         const map = new Map(rsvps.map((r) => [r.id, r]));
         dbRsvps.forEach((item: any) => {
@@ -525,7 +540,7 @@ export async function checkAndSend24hShowReminders() {
             user_id: item.user_id,
             user_email: item.user_email,
             show_title: item.show_title || item.title || 'Live Concert',
-            show_date: item.show_date || item.date || new Date().toISOString().split('T')[0],
+            show_date: item.show_date || item.date || todayStr,
             venue_name: item.venue_name || item.venue,
             city: item.city,
             reminder_sent_24h: Boolean(item.reminder_sent_24h),
@@ -539,11 +554,6 @@ export async function checkAndSend24hShowReminders() {
       console.warn('[SHOW REMINDERS SERVICE] Supabase query notice:', err?.message || err);
     }
   }
-
-  const now = new Date();
-  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
-  const todayStr = now.toISOString().split('T')[0];
 
   let sentCount = 0;
   const { dispatchPushToUsers } = await import('./pushDispatcher');

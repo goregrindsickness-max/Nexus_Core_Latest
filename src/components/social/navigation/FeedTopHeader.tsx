@@ -62,6 +62,11 @@ import { CreateEntityModal } from '../modals/CreateEntityModal';
 import { FestivalLineupEditorModal } from '../modals/FestivalLineupEditorModal';
 import { getSupabase } from '../../../lib/supabaseClient';
 import {
+  BAND_CARD_COLUMNS,
+  VENUE_CARD_COLUMNS,
+  cachedSupabaseQuery,
+} from '../../../lib/supabaseQueryCache';
+import {
   SwipableWorkspaceEntityCard,
   buildWorkspaceEntityItems,
 } from './SwipableWorkspaceEntityCard';
@@ -262,46 +267,57 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
   }, [discoverCategoryFilter]);
 
   React.useEffect(() => {
+    const q = (globalSearchQuery || '').trim();
+    if (!isSearchFocused && !q) {
+      return;
+    }
+
     let isCancelled = false;
     const timer = setTimeout(async () => {
       const client = getSupabase();
       if (!client) return;
       const from = discoverPage * DISCOVER_PAGE_SIZE;
       const to = from + DISCOVER_PAGE_SIZE - 1;
-      const q = (globalSearchQuery || '').trim();
 
-      try {
+      const runSearch = async () => {
         let bQuery = client
           .from('bands')
-          .select('id, name, band_name, category, avatar_url, logo_url, city, state, state_province, genre, homebase')
-          .order('name', { ascending: true })
+          .select(BAND_CARD_COLUMNS)
+          .order('band_name', { ascending: true })
           .range(from, to);
         if (q) {
-          bQuery = bQuery.or(`name.ilike.%${q}%,band_name.ilike.%${q}%,city.ilike.%${q}%`);
+          bQuery = bQuery.or(`band_name.ilike.%${q}%,city.ilike.%${q}%,state_province.ilike.%${q}%`);
         }
 
         let vQuery = client
           .from('venues')
-          .select('id, name, category, avatar_url, logo_url, city, state')
+          .select(VENUE_CARD_COLUMNS)
           .order('name', { ascending: true })
           .range(from, to);
         if (q) {
-          vQuery = vQuery.or(`name.ilike.%${q}%,city.ilike.%${q}%,state.ilike.%${q}%`);
+          vQuery = vQuery.or(`name.ilike.%${q}%,city.ilike.%${q}%,state_province.ilike.%${q}%`);
         }
 
-        const [bRes, vRes] = await Promise.all([bQuery, vQuery]);
+        return Promise.all([bQuery, vQuery]);
+      };
+
+      try {
+        const [bRes, vRes] = q
+          ? await runSearch()
+          : await cachedSupabaseQuery(`header:discover:p${discoverPage}`, runSearch);
         if (isCancelled) return;
 
         const bandsBatch = ((bRes?.data as any[]) || []).map((b) => ({
           ...b,
-          name: b.name || b.band_name,
-          category: b.category || 'band',
+          name: b.band_name,
+          category: 'band',
           type: 'band',
           isBandProfile: true,
         }));
         const venuesBatch = ((vRes?.data as any[]) || []).map((v) => ({
           ...v,
-          category: v.category || 'venue',
+          state: v.state_province,
+          category: v.place_type || 'venue',
           type: 'venue',
         }));
 
@@ -321,7 +337,7 @@ export const FeedTopHeader: React.FC<FeedTopHeaderProps> = ({
       isCancelled = true;
       clearTimeout(timer);
     };
-  }, [discoverPage, globalSearchQuery]);
+  }, [discoverPage, globalSearchQuery, isSearchFocused]);
 
   React.useEffect(() => {
     const handleGlobalFollowUpdate = (e: Event) => {

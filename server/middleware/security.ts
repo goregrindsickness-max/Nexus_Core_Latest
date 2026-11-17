@@ -9,6 +9,8 @@ const STATIC_ALLOWED_ORIGINS = new Set([
   'capacitor://localhost',
   'ionic://localhost',
   'http://localhost',
+  'https://localhost',
+  'https://127.0.0.1',
 ]);
 
 export function isOriginAllowed(origin: string | undefined): boolean {

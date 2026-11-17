@@ -8,6 +8,12 @@ import { sanitizeBandPayload, sanitizeMicroGenres, upsertBandToDatabase } from '
 import { upsertReleasesBatchToDatabase, fetchReleasesFromDatabase } from '../services/releasesService';
 import { processOfflineQueue } from '../services/offlineSyncService';
 import { syncBandDiscographyToPhysicalAndDigital } from '../services/discographySyncService';
+import {
+  BAND_DETAIL_COLUMNS,
+  RELEASE_LIST_COLUMNS,
+  cachedSupabaseQuery,
+  invalidateSupabaseQueryCache,
+} from './supabaseQueryCache';
 
 export type BandVerificationStatus = 'community_archive' | 'claim_pending' | 'verified_official';
 
@@ -1278,6 +1284,8 @@ export class CommunityBandManager {
 
   public resetAuthoritativeSync(): void {
     this.hasAuthoritativeCloudSync = false;
+    invalidateSupabaseQueryCache('communityBands:');
+    invalidateSupabaseQueryCache('bands:');
   }
 
   private constructor() {
@@ -2696,13 +2704,13 @@ export class CommunityBandManager {
 
       if (hasExplicitPagination) {
         const page = options?.page ?? 0;
-        const pageSize = options?.pageSize ?? 50;
+        const pageSize = Math.min(200, options?.pageSize ?? 50);
         const from = page * pageSize;
         const to = from + pageSize - 1;
 
         let bandsQuery = client
           .from('bands')
-          .select('*')
+          .select(BAND_DETAIL_COLUMNS)
           .order('band_name', { ascending: true })
           .range(from, to);
 
@@ -2717,48 +2725,38 @@ export class CommunityBandManager {
         bandsErr = res.error;
         if (Array.isArray(res.data)) bandsData = res.data;
       } else {
-        const BATCH_SIZE = 500;
-        const MAX_BATCHES = 20;
-        const seenRowKeys = new Set<string>();
-
-        for (let batchIdx = 0; batchIdx < MAX_BATCHES; batchIdx++) {
-          const from = batchIdx * BATCH_SIZE;
-          const to = from + BATCH_SIZE - 1;
-
-          let bandsQuery = client
-            .from('bands')
-            .select('*')
-            .order('band_name', { ascending: true })
-            .range(from, to);
-
-          if (cleanSearch.length > 0) {
-            const safeQ = cleanSearch.replace(/[,%()]/g, ' ').trim();
-            if (safeQ) {
-              bandsQuery = bandsQuery.or(`band_name.ilike.%${safeQ}%,city.ilike.%${safeQ}%,state_province.ilike.%${safeQ}%`);
-            }
-          }
-
-          const { data: batchData, error: batchErr } = await bandsQuery;
-          if (batchErr) {
-            bandsErr = batchErr;
-            break;
-          }
-          if (!Array.isArray(batchData) || batchData.length === 0) {
-            break;
-          }
-
-          for (const row of batchData) {
-            const rowKey = row?.id ? String(row.id) : `${row?.band_name || row?.name || ''}::${bandsData.length}`;
-            if (!seenRowKeys.has(rowKey)) {
-              seenRowKeys.add(rowKey);
-              bandsData.push(row);
-            }
-          }
-
-          if (batchData.length < BATCH_SIZE) {
-            break;
-          }
+        const cacheKey = `communityBands:bands:${cleanSearch.toLowerCase()}`;
+        if (options?.authoritative) {
+          invalidateSupabaseQueryCache('communityBands:');
         }
+        const cachedRows = await cachedSupabaseQuery(
+          cacheKey,
+          async () => {
+            let bandsQuery = client
+              .from('bands')
+              .select(BAND_DETAIL_COLUMNS)
+              .order('band_name', { ascending: true })
+              .limit(200);
+
+            if (cleanSearch.length > 0) {
+              const safeQ = cleanSearch.replace(/[,%()]/g, ' ').trim();
+              if (safeQ) {
+                bandsQuery = bandsQuery.or(`band_name.ilike.%${safeQ}%,city.ilike.%${safeQ}%,state_province.ilike.%${safeQ}%`);
+              }
+            }
+
+            const { data: batchData, error: batchErr } = await bandsQuery;
+            if (batchErr || !Array.isArray(batchData)) {
+              return { rows: [], error: batchErr };
+            }
+            return { rows: batchData, error: null };
+          },
+          60_000,
+          (res) => !res.error && res.rows.length > 0
+        );
+
+        bandsErr = cachedRows.error;
+        bandsData = cachedRows.rows;
       }
 
       if (bandsErr || !Array.isArray(bandsData)) {
@@ -2767,39 +2765,35 @@ export class CommunityBandManager {
 
       let releasesData: any[] = [];
       try {
-        const REL_BATCH_SIZE = 500;
-        for (let rBatch = 0; rBatch < 5; rBatch++) {
-          const rFrom = rBatch * REL_BATCH_SIZE;
-          const rTo = rFrom + REL_BATCH_SIZE - 1;
-          const { data: relData, error: relErr } = await client
-            .from('releases')
-            .select('*')
-            .range(rFrom, rTo);
-
-          if (relErr || !Array.isArray(relData) || relData.length === 0) break;
-          releasesData.push(...relData);
-          if (relData.length < REL_BATCH_SIZE) break;
-        }
-
-        if (releasesData.length === 0) {
-          // Fall back to releasesService which checks server /api/releases and IndexedDB
-          const fallbackReleases = await fetchReleasesFromDatabase();
-          if (Array.isArray(fallbackReleases) && fallbackReleases.length > 0) {
-            releasesData = fallbackReleases.map(r => ({
-              id: r.id,
-              band_id: r.band_id,
-              band_name: r.band || r.band_name || r.artist || (r as any).artist_name || '',
-              artist: r.artist || r.band || r.band_name || (r as any).artist_name || '',
-              title: r.title,
-              release_date: r.releaseDate || r.release_date,
-              type: r.type,
-              cover_image: r.coverImage || r.cover_image || r.coverUrl || r.cover_url,
-              cover_url: r.coverUrl || r.cover_url || r.coverImage || r.cover_image,
-              label: r.label,
-              catalog_id: r.catalogId || r.catalog_id,
-              tracks: r.tracks
-            }));
-          }
+        const fallbackReleases = await fetchReleasesFromDatabase();
+        if (Array.isArray(fallbackReleases) && fallbackReleases.length > 0) {
+          releasesData = fallbackReleases.map(r => ({
+            id: r.id,
+            band_id: r.band_id,
+            band_name: r.band || r.band_name || r.artist || (r as any).artist_name || '',
+            artist: r.artist || r.band || r.band_name || (r as any).artist_name || '',
+            title: r.title,
+            release_date: r.releaseDate || r.release_date,
+            type: r.type,
+            cover_image: r.coverImage || r.cover_image || r.coverUrl || r.cover_url,
+            cover_url: r.coverUrl || r.cover_url || r.coverImage || r.cover_image,
+            label: r.label,
+            catalog_id: r.catalogId || r.catalog_id,
+            tracks: r.tracks
+          }));
+        } else {
+          releasesData = await cachedSupabaseQuery(
+            'communityBands:releases:200',
+            async () => {
+              const { data: relData, error: relErr } = await client
+                .from('releases')
+                .select(RELEASE_LIST_COLUMNS)
+                .order('created_at', { ascending: false })
+                .limit(200);
+              return !relErr && Array.isArray(relData) ? relData : [];
+            },
+            60_000
+          );
         }
       } catch (_) {
         const fallbackReleases = await fetchReleasesFromDatabase();

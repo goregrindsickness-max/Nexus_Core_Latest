@@ -61,6 +61,14 @@ import { FeedTopHeader } from './navigation/FeedTopHeader';
 import { formatTimeAgo, isPastShowDate, getShowTicketTiers } from '../../utils/socialFeedUtils';
 import { isShowEmbargoedOrDraft, parseShowExtraNotes } from '../../utils/showDisplayUtils';
 import { isValidStorageOrImageUrl } from '../../services/storageService';
+import {
+  isAudioAssetFilename,
+  isImageAssetUrl,
+  detectAudioSourceType,
+  matchVaultFileToTrack,
+  normalizeCatalogTitleKey,
+  parseVaultFilenameMetadata,
+} from '../../utils/audioVaultCatalog';
 import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapPin, Calendar, Clock, ArrowRight, ArrowLeft, Share2, Flame, Zap, Check,
@@ -71,6 +79,18 @@ import { PLATFORM_TRANSACTION_FEES } from '../../constants/fees';
 import { profileStore, socialFeedStore } from '../../utils/indexedDB';
 import { supabase } from '../../lib/supabaseClient';
 import { getSupabase, subscribeToTable, executeWithSchemaResilience, uploadBase64ToStorage, normalizeLoadedProfile, createShopMerchItem, fetchShopMerchItems, sanitizeMicroGenres, formatBandLocation, sanitizeShowForDb, ensureUUID, syncCommunityShowToCloud, reconcilePendingCommunityShows } from '../../supabase';
+import {
+  BAND_CARD_COLUMNS,
+  BAND_DETAIL_COLUMNS,
+  CREATIVE_CARD_COLUMNS,
+  PROFILE_CARD_COLUMNS,
+  VENUE_CARD_COLUMNS,
+  fetchCachedShowsList,
+  fetchCachedBandsDirectory,
+  hasAuthenticatedSupabaseSession,
+  batchResolveBandsAndProfilesByName,
+} from '../../lib/supabaseQueryCache';
+import { fetchReleasesFromDatabase } from '../../services/releasesService';
 import { uploadFeedMedia } from '../../lib/storage';
 import { communityBandManager, pickBestBandImage, isGorgasmBand, GORGASM_OFFICIAL_LOGO } from '../../lib/communityBands';
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME, getScopedFollowsMap, isEntityTargetObject } from '../../utils/followSyncService';
@@ -1026,7 +1046,10 @@ export function UniversalSocialFeed({
           return matched?.publicationStatus === 'embargoed_private';
         };
 
-        const { data: eventsData, error: eventsError } = await supabaseClient.from('nexus_events').select('*').order('created_at', { ascending: false });
+        const hasAuthSession = await hasAuthenticatedSupabaseSession(supabaseClient);
+        const { data: eventsData, error: eventsError } = hasAuthSession
+          ? await supabaseClient.from('nexus_events').select('*').order('created_at', { ascending: false }).limit(100)
+          : { data: [], error: null };
         
         let compiledGigs: any[] = [];
 
@@ -1075,12 +1098,8 @@ export function UniversalSocialFeed({
         try {
           const allRawShows: any[] = [];
 
-          // 1. Fetch from Supabase shows table (beyond default 1000-row cap)
-          const { data: showsData } = await supabaseClient
-            .from('shows')
-            .select('*')
-            .order('date', { ascending: true })
-            .range(0, 4999);
+          // 1. Fetch from Supabase shows table via shared 60s cached query
+          const showsData = await fetchCachedShowsList(supabaseClient, { limit: 200, ascending: true });
 
           if (showsData && Array.isArray(showsData) && showsData.length > 0) {
             allRawShows.push(...showsData);
@@ -1447,13 +1466,18 @@ export function UniversalSocialFeed({
           setLiveEvents(updatedMock);
         }
 
-        const { data: setlistsData, error: setlistsError } = await supabaseClient.from('nexus_setlists').select('*');
-        if (!setlistsError && setlistsData && setlistsData.length > 0) {
-           const nextSetlists = { ...bandSetlists };
-           setlistsData.forEach(row => {
-             nextSetlists[row.band_name.toUpperCase()] = row.tracks;
-           });
-           setLiveSetlists(nextSetlists);
+        if (hasAuthSession) {
+          const { data: setlistsData, error: setlistsError } = await supabaseClient
+            .from('nexus_setlists')
+            .select('*')
+            .limit(100);
+          if (!setlistsError && setlistsData && setlistsData.length > 0) {
+            const nextSetlists = { ...bandSetlists };
+            setlistsData.forEach(row => {
+              nextSetlists[row.band_name.toUpperCase()] = row.tracks;
+            });
+            setLiveSetlists(nextSetlists);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch events and setlists:", err);
@@ -1462,6 +1486,15 @@ export function UniversalSocialFeed({
 
   useEffect(() => {
     fetchEventsAndSetlists();
+    const client = getSupabase();
+    const sub = client?.auth?.onAuthStateChange?.((event) => {
+      if (event === 'SIGNED_IN') {
+        fetchEventsAndSetlists();
+      }
+    });
+    return () => {
+      sub?.data?.subscription?.unsubscribe?.();
+    };
   }, [fetchEventsAndSetlists]);
 
   useEffect(() => {
@@ -2825,22 +2858,13 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
 
         if (!targetId && targetName) {
           try {
-            const { data: bMatch } = await supabase
-              .from('bands')
-              .select('id')
-              .or(`band_name.ilike.${targetName}`)
-              .limit(1);
-            if (bMatch?.[0]?.id && isValidUUID(bMatch[0].id)) {
-              targetId = bMatch[0].id;
-            } else {
-              const { data: pMatch } = await supabase
-                .from('profiles')
-                .select('id')
-                .or(`full_name.ilike.${targetName},console_handle.ilike.${targetName}`)
-                .limit(1);
-              if (pMatch?.[0]?.id && isValidUUID(pMatch[0].id)) {
-                targetId = pMatch[0].id;
-              }
+            const { bandsByName, profilesByName } = await batchResolveBandsAndProfilesByName(supabase, [targetName]);
+            const resolvedBand = bandsByName.get(targetName.toLowerCase());
+            const resolvedProfile = profilesByName.get(targetName.toLowerCase());
+            if (resolvedBand?.id && isValidUUID(resolvedBand.id)) {
+              targetId = resolvedBand.id;
+            } else if (resolvedProfile?.id && isValidUUID(resolvedProfile.id)) {
+              targetId = resolvedProfile.id;
             }
           } catch (e) {}
         }
@@ -2848,7 +2872,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
         if (targetId && isValidUUID(targetId)) {
           const { data } = await supabase
             .from('profiles')
-            .select('*')
+            .select(PROFILE_CARD_COLUMNS)
             .eq('id', targetId)
             .maybeSingle();
           if (data) {
@@ -2856,15 +2880,15 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
           } else {
             const { data: bData } = await supabase
               .from('bands')
-              .select('*')
+              .select(BAND_DETAIL_COLUMNS)
               .eq('id', targetId)
               .maybeSingle();
             if (bData) {
               profileData = {
                 ...bData,
                 id: bData.id,
-                name: bData.band_name || bData.name || 'Band',
-                band_name: bData.band_name || bData.name || 'Band',
+                name: bData.band_name || 'Band',
+                band_name: bData.band_name || 'Band',
                 role: 'Band',
                 category: 'bands',
                 isBandProfile: true
@@ -3200,7 +3224,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
               const { data: pMatch } = await supabase
                 .from('profiles')
                 .select('id, promoter_id')
-                .or(`agency_name.ilike.%${promoterSearchName}%,promoter_name.ilike.%${promoterSearchName}%,full_name.ilike.%${promoterSearchName}%`)
+                .or(`full_name.ilike.%${promoterSearchName}%,console_handle.ilike.%${promoterSearchName}%`)
                 .limit(1);
               if (pMatch?.[0]?.promoter_id && isValidUUID(pMatch[0].promoter_id)) {
                 activeId = pMatch[0].promoter_id;
@@ -3229,13 +3253,10 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
           const bandSearchName = (activeTarget.band_name || activeTarget.bandName || activeTarget.name || '').trim();
           if ((!activeId || !isValidUUID(activeId)) && bandSearchName) {
             try {
-              const { data: bMatch } = await supabase
-                .from('bands')
-                .select('id')
-                .or(`band_name.ilike.${bandSearchName}`)
-                .limit(1);
-              if (bMatch?.[0]?.id && isValidUUID(bMatch[0].id)) {
-                activeId = bMatch[0].id;
+              const { bandsByName } = await batchResolveBandsAndProfilesByName(supabase, [bandSearchName]);
+              const resolvedBand = bandsByName.get(bandSearchName.toLowerCase());
+              if (resolvedBand?.id && isValidUUID(resolvedBand.id)) {
+                activeId = resolvedBand.id;
               }
             } catch (e) {}
           }
@@ -3271,30 +3292,24 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
         if (!activeId && targetName) {
           try {
             if (isBandTarget) {
-              const { data: bMatch } = await supabase
-                .from('bands')
-                .select('id')
-                .or(`band_name.ilike.${targetName}`)
-                .limit(1);
-              if (bMatch?.[0]?.id && isValidUUID(bMatch[0].id)) {
-                activeId = bMatch[0].id;
+              const { bandsByName } = await batchResolveBandsAndProfilesByName(supabase, [targetName]);
+              const resolvedBand = bandsByName.get(targetName.toLowerCase());
+              if (resolvedBand?.id && isValidUUID(resolvedBand.id)) {
+                activeId = resolvedBand.id;
               }
             } else {
               const { data: cMatch } = await supabase
                 .from('creatives')
                 .select('id, creator_id, user_id')
-                .or(`business_name.ilike.%${targetName}%,name.ilike.%${targetName}%`)
+                .or(`business_name.ilike.%${targetName}%,creative_handle.ilike.%${targetName}%`)
                 .limit(1);
               if (cMatch?.[0]?.id && isValidUUID(cMatch[0].id)) {
                 activeId = cMatch[0].id;
               } else {
-                const { data: pMatch } = await supabase
-                  .from('profiles')
-                  .select('id')
-                  .or(`full_name.ilike.${targetName},console_handle.ilike.${targetName}`)
-                  .limit(1);
-                if (pMatch?.[0]?.id && isValidUUID(pMatch[0].id)) {
-                  activeId = pMatch[0].id;
+                const { profilesByName } = await batchResolveBandsAndProfilesByName(supabase, [targetName]);
+                const resolvedProfile = profilesByName.get(targetName.toLowerCase());
+                if (resolvedProfile?.id && isValidUUID(resolvedProfile.id)) {
+                  activeId = resolvedProfile.id;
                 }
               }
             }
@@ -3339,24 +3354,24 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
           if (followerIds.length > 0) {
             const { data: profilesData } = await supabase
               .from('profiles')
-              .select('*')
+              .select(PROFILE_CARD_COLUMNS)
               .in('id', followerIds);
 
             const { data: bandsData } = await supabase
               .from('bands')
-              .select('*')
+              .select(BAND_CARD_COLUMNS)
               .in('id', followerIds);
 
             const { data: creativesData } = await supabase
               .from('creatives')
-              .select('*')
+              .select(CREATIVE_CARD_COLUMNS)
               .in('id', followerIds);
 
             const foundIds = new Set<string>();
 
             (profilesData || []).forEach(p => {
               const norm = normalizeLoadedProfile(p);
-              const pName = p.full_name || p.display_name || p.name || p.console_handle || 'User';
+              const pName = p.full_name || p.console_handle || 'User';
               combinedMap.set(String(p.id), {
                 ...norm,
                 id: p.id,
@@ -3364,7 +3379,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
                 full_name: pName,
                 display_name: pName,
                 console_handle: p.console_handle || `@${pName.toLowerCase().replace(/\s+/g, '')}`,
-                avatar_url: p.avatar_url || p.avatar,
+                avatar_url: norm?.avatar_url || p.avatar_url || '',
                 role: p.role || p.account_type || 'Member',
                 category: 'people',
                 isYou: (userProfile?.id && p.id === userProfile.id) || (userProfile?.email && p.email?.toLowerCase() === userProfile.email.toLowerCase())
@@ -3373,7 +3388,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
             });
 
             (bandsData || []).forEach(b => {
-              const bName = b.band_name || b.name || 'Band';
+              const bName = b.band_name || 'Band';
               combinedMap.set(String(b.id), {
                 id: b.id,
                 name: bName,
@@ -3381,26 +3396,26 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
                 display_name: bName,
                 role: 'Band',
                 category: 'band',
-                avatar_url: b.logo_url || b.cover_url || '',
-                banner_url: b.cover_url || '',
-                console_handle: b.console_handle || `@${bName.toLowerCase().replace(/\s+/g, '')}`,
+                avatar_url: b.logo_url || b.avatar_url || b.cover_url || '',
+                banner_url: b.cover_url || b.banner_url || '',
+                console_handle: b.custom_slug ? `@${b.custom_slug}` : `@${bName.toLowerCase().replace(/\s+/g, '')}`,
                 isBandProfile: true
               });
               foundIds.add(String(b.id));
             });
 
             (creativesData || []).forEach(c => {
-              const cName = c.business_name || c.creative_name || c.name || 'Creative Pro';
+              const cName = c.business_name || c.creative_handle || 'Creative Pro';
               combinedMap.set(String(c.id), {
                 id: c.id,
                 name: cName,
                 business_name: cName,
                 display_name: cName,
-                role: c.specialty || 'Creative Pro',
+                role: c.primary_category || 'Creative Pro',
                 category: 'creative',
-                avatar_url: c.creative_avatar || c.avatar_url || '',
-                banner_url: c.creative_banner || c.banner_url || '',
-                console_handle: c.creative_handle || c.handle || `@${cName.toLowerCase().replace(/\s+/g, '')}`,
+                avatar_url: c.avatar_url || '',
+                banner_url: c.banner_url || '',
+                console_handle: c.creative_handle || `@${cName.toLowerCase().replace(/\s+/g, '')}`,
                 isCreativeProfile: true
               });
               foundIds.add(String(c.id));
@@ -3475,24 +3490,24 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
           if (followedIds.length > 0) {
             const { data: profilesData } = await supabase
               .from('profiles')
-              .select('*')
+              .select(PROFILE_CARD_COLUMNS)
               .in('id', followedIds);
 
             const { data: bandsData } = await supabase
               .from('bands')
-              .select('*')
+              .select(BAND_CARD_COLUMNS)
               .in('id', followedIds);
 
             const { data: creativesData } = await supabase
               .from('creatives')
-              .select('*')
+              .select(CREATIVE_CARD_COLUMNS)
               .in('id', followedIds);
 
             const foundIds = new Set<string>();
 
             (profilesData || []).forEach(p => {
               const norm = normalizeLoadedProfile(p);
-              const pName = p.full_name || p.display_name || p.name || p.console_handle || 'User';
+              const pName = p.full_name || p.console_handle || 'User';
               combinedMap.set(String(p.id), {
                 ...norm,
                 id: p.id,
@@ -3500,7 +3515,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
                 full_name: pName,
                 display_name: pName,
                 console_handle: p.console_handle || `@${pName.toLowerCase().replace(/\s+/g, '')}`,
-                avatar_url: p.avatar_url || p.avatar,
+                avatar_url: norm?.avatar_url || p.avatar_url || '',
                 role: p.role || p.account_type || 'Member',
                 category: 'people',
                 isYou: (userProfile?.id && p.id === userProfile.id) || (userProfile?.email && p.email?.toLowerCase() === userProfile.email.toLowerCase())
@@ -3509,7 +3524,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
             });
 
             (bandsData || []).forEach(b => {
-              const bName = b.band_name || b.name || 'Band';
+              const bName = b.band_name || 'Band';
               combinedMap.set(String(b.id), {
                 id: b.id,
                 name: bName,
@@ -3517,26 +3532,26 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
                 display_name: bName,
                 role: 'Band',
                 category: 'band',
-                avatar_url: b.logo_url || b.cover_url || '',
-                banner_url: b.cover_url || '',
-                console_handle: b.console_handle || `@${bName.toLowerCase().replace(/\s+/g, '')}`,
+                avatar_url: b.logo_url || b.avatar_url || b.cover_url || '',
+                banner_url: b.cover_url || b.banner_url || '',
+                console_handle: b.custom_slug ? `@${b.custom_slug}` : `@${bName.toLowerCase().replace(/\s+/g, '')}`,
                 isBandProfile: true
               });
               foundIds.add(String(b.id));
             });
 
             (creativesData || []).forEach(c => {
-              const cName = c.business_name || c.creative_name || c.name || 'Creative Pro';
+              const cName = c.business_name || c.creative_handle || 'Creative Pro';
               combinedMap.set(String(c.id), {
                 id: c.id,
                 name: cName,
                 business_name: cName,
                 display_name: cName,
-                role: c.specialty || 'Creative Pro',
+                role: c.primary_category || 'Creative Pro',
                 category: 'creative',
-                avatar_url: c.creative_avatar || c.avatar_url || '',
-                banner_url: c.creative_banner || c.banner_url || '',
-                console_handle: c.creative_handle || c.handle || `@${cName.toLowerCase().replace(/\s+/g, '')}`,
+                avatar_url: c.avatar_url || '',
+                banner_url: c.banner_url || '',
+                console_handle: c.creative_handle || `@${cName.toLowerCase().replace(/\s+/g, '')}`,
                 isCreativeProfile: true
               });
               foundIds.add(String(c.id));
@@ -4774,12 +4789,13 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
   useEffect(() => {
     const fetchShopItemsAndTracks = async () => {
       const supabaseClient = getSupabase();
+      const hasAuth = await hasAuthenticatedSupabaseSession(supabaseClient);
       try {
         const [{ data: shopData, error: shopError }, merchDrops] = await Promise.all([
-          supabaseClient
-            ? supabaseClient.from('nexus_shop_items').select('*').order('created_at', { ascending: false })
+          supabaseClient && hasAuth
+            ? supabaseClient.from('nexus_shop_items').select('*').order('created_at', { ascending: false }).limit(100)
             : Promise.resolve({ data: [], error: null } as any),
-          fetchShopMerchItems().catch(() => [])
+          hasAuth ? fetchShopMerchItems().catch(() => []) : Promise.resolve([])
         ]);
 
         const fromNexusShop = (!shopError && Array.isArray(shopData))
@@ -4847,28 +4863,456 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         setShopItemsList(merged);
         setShopItems(merged);
 
-        if (supabaseClient) {
-          const { data: trackData, error: trackError } = await supabaseClient.from('nexus_tracks').select('*').order('created_at', { ascending: false });
-          if (!trackError && trackData && trackData.length > 0) {
-            setInAppSongsList(() => {
-              const dbTracks = trackData.map((t: any) => ({
-                id: t.id,
-                title: t.title,
-                band: t.band,
-                album: t.album,
-                duration: t.duration,
-                coverArt: t.cover_art,
-                audioUrl: ''
-              }));
-              return [...dbTracks, ...mockInAppSongs];
+        const [releasesResult, bandsDirResult, tracksResult, vaultMastersList] = await Promise.all([
+          fetchReleasesFromDatabase().catch(() => []),
+          supabaseClient
+            ? fetchCachedBandsDirectory(supabaseClient, { limit: 200 }).catch(() => [])
+            : Promise.resolve([]),
+          supabaseClient && hasAuth
+            ? supabaseClient
+                .from('nexus_tracks')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(100)
+            : Promise.resolve({ data: [], error: null } as any),
+          supabaseClient
+            ? supabaseClient.storage
+                .from('audio-vault')
+                .list('masters', { limit: 100 })
+                .catch(() => ({ data: [], error: null }))
+            : Promise.resolve({ data: [], error: null }),
+        ]);
+
+        const bandNameById = new Map<string, string>();
+        (Array.isArray(bandsDirResult) ? bandsDirResult : []).forEach((b: any) => {
+          const name = String(b?.band_name || b?.name || '').trim();
+          if (b?.id && name) {
+            bandNameById.set(String(b.id), name);
+            bandNameById.set(ensureUUID(String(b.id)), name);
+          }
+        });
+        try {
+          communityBandManager.getAll().forEach((b: any) => {
+            const name = String(b?.name || b?.band_name || '').trim();
+            if (b?.id && name) {
+              if (!bandNameById.has(String(b.id))) bandNameById.set(String(b.id), name);
+              const uuidKey = ensureUUID(String(b.id));
+              if (!bandNameById.has(uuidKey)) bandNameById.set(uuidKey, name);
+            }
+          });
+        } catch {}
+
+        const resolveVaultAudioUrl = (raw?: string | null): string => {
+          if (!raw || typeof raw !== 'string') return '';
+          const trimmed = raw.trim();
+          if (!trimmed || trimmed.startsWith('blob:') || trimmed.startsWith('data:image') || isImageAssetUrl(trimmed)) {
+            return '';
+          }
+          if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+            return trimmed;
+          }
+          if (supabaseClient) {
+            const cleaned = trimmed.replace(/^\/+/, '').replace(/^audio-vault\//i, '');
+            if (cleaned) {
+              const { data } = supabaseClient.storage.from('audio-vault').getPublicUrl(cleaned);
+              if (data?.publicUrl) return data.publicUrl;
+            }
+          }
+          return trimmed.includes('audio-vault') ? trimmed : '';
+        };
+
+        // Scan `audio-vault/masters` release subfolders so uploaded masters link directly to releases
+        // (Skip top-level files directly under `masters/` since those include demo/reel attachments)
+        const vaultFolderFiles = new Map<
+          string,
+          { folderName: string; files: Array<{ name: string; publicUrl: string }> }
+        >();
+
+        if (supabaseClient && Array.isArray(vaultMastersList?.data)) {
+          const subFolders: string[] = [];
+          for (const entry of vaultMastersList.data) {
+            const entryName = String(entry?.name || '').trim();
+            if (!entryName || entryName === '.emptyFolderPlaceholder') continue;
+            if (!isAudioAssetFilename(entryName) && (!entry?.id || !entryName.includes('.'))) {
+              subFolders.push(entryName);
+            }
+          }
+
+          if (subFolders.length > 0) {
+            const folderListings = await Promise.all(
+              subFolders.slice(0, 25).map(async (folderName) => {
+                try {
+                  const { data: files } = await supabaseClient.storage
+                    .from('audio-vault')
+                    .list(`masters/${folderName}`, { limit: 100 });
+                  return { folderName, files: Array.isArray(files) ? files : [] };
+                } catch {
+                  return { folderName, files: [] };
+                }
+              })
+            );
+
+            folderListings.forEach(({ folderName, files }) => {
+              const audioItems: Array<{ name: string; publicUrl: string }> = [];
+              files.forEach((f: any) => {
+                const fname = String(f?.name || '').trim();
+                if (!fname || !isAudioAssetFilename(fname)) return;
+                const { data } = supabaseClient.storage
+                  .from('audio-vault')
+                  .getPublicUrl(`masters/${folderName}/${fname}`);
+                if (data?.publicUrl) {
+                  audioItems.push({ name: fname, publicUrl: data.publicUrl });
+                }
+              });
+              if (audioItems.length > 0) {
+                vaultFolderFiles.set(normalizeCatalogTitleKey(folderName), {
+                  folderName,
+                  files: audioItems,
+                });
+              }
             });
           }
         }
+
+        // Prefer authentic audio-vault / uploaded cover art over fallback coverartarchive covers when releases share a title
+        const bestCoverByTitleKey = new Map<string, string>();
+        const allCandidateReleases: any[] = [
+          ...(Array.isArray(releasesResult) ? releasesResult : []),
+        ];
+        try {
+          communityBandManager.getAll().forEach((b: any) => {
+            if (Array.isArray(b?.discography)) {
+              b.discography.forEach((rel: any) =>
+                allCandidateReleases.push({
+                  ...rel,
+                  band_id: rel.band_id || b.id,
+                  band: rel.band || b.name || b.band_name,
+                })
+              );
+            }
+          });
+        } catch {}
+
+        allCandidateReleases.forEach((rel: any) => {
+          if (!rel?.title) return;
+          const titleKey = normalizeCatalogTitleKey(rel.title);
+          const candidateCover = String(
+            rel.coverUrl || rel.coverImage || rel.cover_url || rel.cover_image || ''
+          ).trim();
+          if (!titleKey || !candidateCover) return;
+          const existing = bestCoverByTitleKey.get(titleKey) || '';
+          const candidateIsVault = /audio-vault|supabase\.co\/storage/i.test(candidateCover);
+          const existingIsVault = /audio-vault|supabase\.co\/storage/i.test(existing);
+          if (!existing || (candidateIsVault && !existingIsVault)) {
+            bestCoverByTitleKey.set(titleKey, candidateCover);
+          }
+        });
+
+        const consumedVaultFolderKeys = new Set<string>();
+        const releaseTracksCatalog: any[] = [];
+
+        const addReleaseEntry = (rel: any, fallbackBandName?: string) => {
+          if (!rel) return;
+          const relBandId = String(rel.band_id || rel.bandId || '').trim();
+          const resolvedBandName =
+            String(rel.band || rel.band_name || rel.artist || rel.artist_name || fallbackBandName || '').trim() ||
+            (relBandId ? bandNameById.get(relBandId) || bandNameById.get(ensureUUID(relBandId)) : '') ||
+            String(rel.label || '').trim() ||
+            'Independent Band';
+          const albumTitle = String(rel.title || '').trim() || 'Untitled Release';
+          const titleKey = normalizeCatalogTitleKey(albumTitle);
+          const rawCover = String(
+            rel.coverUrl || rel.coverImage || rel.cover_url || rel.cover_image || ''
+          ).trim();
+          const bestCover = bestCoverByTitleKey.get(titleKey) || '';
+          const coverArt =
+            (/audio-vault|supabase\.co\/storage/i.test(bestCover) ? bestCover : rawCover || bestCover);
+          const releaseYear = String(rel.releaseDate || rel.release_date || rel.year || '').trim();
+          const rawTracks = Array.isArray(rel.tracks) ? rel.tracks : [];
+          const digitalTracks = Array.isArray(rel.digital) ? rel.digital : [];
+          const vaultFolderMatch = titleKey ? vaultFolderFiles.get(titleKey) : undefined;
+          if (vaultFolderMatch) {
+            consumedVaultFolderKeys.add(titleKey);
+          }
+
+          // Map uploaded audio-vault folder files onto tracks in this release
+          const matchedVaultUrlByTrackIdx = new Map<number, string>();
+          const unmatchedVaultFiles: Array<{ name: string; publicUrl: string }> = [];
+          if (vaultFolderMatch && vaultFolderMatch.files.length > 0) {
+            vaultFolderMatch.files.forEach((vf) => {
+              const matchedIdx = matchVaultFileToTrack(vf.name, rawTracks);
+              if (matchedIdx >= 0 && !matchedVaultUrlByTrackIdx.has(matchedIdx)) {
+                matchedVaultUrlByTrackIdx.set(matchedIdx, vf.publicUrl);
+              } else if (matchedIdx < 0) {
+                unmatchedVaultFiles.push(vf);
+              }
+            });
+          }
+
+          const combinedSourceTracks = rawTracks.length > 0 ? rawTracks : digitalTracks;
+          const normalizedAlbumTracks = combinedSourceTracks
+            .filter((t: any) => t && (t.title || t.audioUrl || t.url || t.previewUrl || t.streamUrl || t.audio_url || t.audio_vault_path))
+            .map((t: any, idx: number) => ({
+              title: String(t.title || `${albumTitle} — Track ${idx + 1}`).trim(),
+              duration: String(t.duration || '3:30').trim(),
+            }));
+
+          const releaseAudioFallback = resolveVaultAudioUrl(rel.audio_vault_path);
+          let addedTrackForRelease = false;
+
+          rawTracks.forEach((t: any, idx: number) => {
+            if (!t) return;
+            const matchingDigital =
+              digitalTracks.find(
+                (d: any) =>
+                  d &&
+                  ((t.id && d.id === t.id) ||
+                    (t.title && d.title && String(d.title).toLowerCase().trim() === String(t.title).toLowerCase().trim()))
+              ) || digitalTracks[idx];
+            const folderVaultUrl = matchedVaultUrlByTrackIdx.get(idx) || '';
+            const explicitFullUrl =
+              folderVaultUrl ||
+              t.audioUrl ||
+              t.url ||
+              t.streamUrl ||
+              t.audio_url ||
+              t.fileUrl ||
+              t.file_url ||
+              t.vaultUrl ||
+              t.vault_url ||
+              t.audio_vault_path ||
+              matchingDigital?.audioUrl ||
+              matchingDigital?.url ||
+              matchingDigital?.audio_url ||
+              '';
+            const previewOnlyUrl = t.previewUrl || t.preview_url || matchingDigital?.previewUrl || '';
+            const audioUrl = resolveVaultAudioUrl(
+              explicitFullUrl ||
+              previewOnlyUrl ||
+              (rawTracks.length === 1 ? releaseAudioFallback : '')
+            );
+            if (!audioUrl) return;
+
+            const audioSourceType = detectAudioSourceType(audioUrl, !explicitFullUrl && Boolean(previewOnlyUrl));
+            const trackTitle = String(t.title || `${albumTitle} — Track ${idx + 1}`).trim();
+            addedTrackForRelease = true;
+            releaseTracksCatalog.push({
+              id: t.id ? `${rel.id || albumTitle}::${t.id}` : `${rel.id || albumTitle}::track-${idx}`,
+              releaseId: rel.id,
+              bandId: relBandId || undefined,
+              title: trackTitle,
+              band: resolvedBandName,
+              album: albumTitle,
+              duration: String(t.duration || matchingDigital?.duration || '3:30').trim(),
+              coverArt: t.coverArt || t.cover_art || coverArt,
+              audioUrl,
+              audioSourceType,
+              isPreview: audioSourceType === 'itunes_preview',
+              releaseYear,
+              tracks: normalizedAlbumTracks.length > 0 ? normalizedAlbumTracks : [{ title: trackTitle, duration: String(t.duration || '3:30').trim() }],
+              source: folderVaultUrl ? 'audio_vault' : 'releases',
+            });
+          });
+
+          // Index standalone digital tracks if any were uploaded without matching rawTracks entries
+          digitalTracks.forEach((d: any, idx: number) => {
+            if (!d) return;
+            const explicitFullUrl = d.audioUrl || d.url || d.streamUrl || d.audio_url || d.fileUrl || d.file_url || '';
+            const previewOnlyUrl = d.previewUrl || d.preview_url || '';
+            const audioUrl = resolveVaultAudioUrl(explicitFullUrl || previewOnlyUrl);
+            if (!audioUrl) return;
+            const audioSourceType = detectAudioSourceType(audioUrl, !explicitFullUrl && Boolean(previewOnlyUrl));
+            const trackTitle = String(d.title || `${albumTitle} — Track ${idx + 1}`).trim();
+            addedTrackForRelease = true;
+            releaseTracksCatalog.push({
+              id: d.id ? `${rel.id || albumTitle}::digital-${d.id}` : `${rel.id || albumTitle}::digital-${idx}`,
+              releaseId: rel.id,
+              bandId: relBandId || undefined,
+              title: trackTitle,
+              band: resolvedBandName,
+              album: albumTitle,
+              duration: String(d.duration || '3:30').trim(),
+              coverArt: d.coverArt || coverArt,
+              audioUrl,
+              audioSourceType,
+              isPreview: audioSourceType === 'itunes_preview',
+              releaseYear,
+              tracks: normalizedAlbumTracks.length > 0 ? normalizedAlbumTracks : [{ title: trackTitle, duration: String(d.duration || '3:30').trim() }],
+              source: 'releases_digital',
+            });
+          });
+
+          // Index any remaining audio files inside the matched audio-vault folder
+          unmatchedVaultFiles.forEach((vf, vIdx) => {
+            const parsed = parseVaultFilenameMetadata(vf.name, resolvedBandName);
+            addedTrackForRelease = true;
+            releaseTracksCatalog.push({
+              id: `${rel.id || albumTitle}::vault-${vIdx}-${vf.name}`,
+              releaseId: rel.id,
+              bandId: relBandId || undefined,
+              title: parsed.title,
+              band: resolvedBandName,
+              album: albumTitle,
+              duration: '3:30',
+              coverArt,
+              audioUrl: vf.publicUrl,
+              audioSourceType: 'vault',
+              isPreview: false,
+              releaseYear,
+              tracks: normalizedAlbumTracks.length > 0 ? normalizedAlbumTracks : [{ title: parsed.title, duration: '3:30' }],
+              source: 'audio_vault',
+            });
+          });
+
+          if (!addedTrackForRelease && releaseAudioFallback) {
+            const audioSourceType = detectAudioSourceType(releaseAudioFallback, false);
+            releaseTracksCatalog.push({
+              id: `${rel.id || albumTitle}::main`,
+              releaseId: rel.id,
+              bandId: relBandId || undefined,
+              title: albumTitle,
+              band: resolvedBandName,
+              album: albumTitle,
+              duration: '3:30',
+              coverArt,
+              audioUrl: releaseAudioFallback,
+              audioSourceType,
+              isPreview: audioSourceType === 'itunes_preview',
+              releaseYear,
+              tracks: normalizedAlbumTracks.length > 0 ? normalizedAlbumTracks : [{ title: albumTitle, duration: '3:30' }],
+              source: 'releases',
+            });
+          }
+        };
+
+        allCandidateReleases.forEach((rel: any) => addReleaseEntry(rel));
+
+        // Surface any audio-vault master folders that don't yet have a matching `releases` row
+        vaultFolderFiles.forEach(({ folderName, files }, titleKey) => {
+          if (consumedVaultFolderKeys.has(titleKey)) return;
+          const coverArt = bestCoverByTitleKey.get(titleKey) || '';
+          const parsedTracks = files.map((f) => parseVaultFilenameMetadata(f.name));
+          files.forEach((f, idx) => {
+            const parsed = parsedTracks[idx];
+            releaseTracksCatalog.push({
+              id: `vault-folder-${titleKey}::${idx}`,
+              title: parsed.title,
+              band: parsed.band,
+              album: folderName,
+              duration: '3:30',
+              coverArt,
+              audioUrl: f.publicUrl,
+              audioSourceType: 'vault',
+              isPreview: false,
+              tracks: parsedTracks.map((pt) => ({ title: pt.title, duration: '3:30' })),
+              source: 'audio_vault',
+            });
+          });
+        });
+
+        try {
+          const rawDistroTracks = localStorage.getItem('distro_db_music_tracks');
+          if (rawDistroTracks) {
+            const parsedDistro = JSON.parse(rawDistroTracks);
+            if (Array.isArray(parsedDistro)) {
+              parsedDistro.forEach((t: any, idx: number) => {
+                const explicitFullUrl = t?.url || t?.audioUrl || t?.streamUrl || '';
+                const previewOnlyUrl = t?.previewUrl || '';
+                const audioUrl = resolveVaultAudioUrl(explicitFullUrl || previewOnlyUrl);
+                if (!audioUrl || !t?.title) return;
+                const audioSourceType = detectAudioSourceType(audioUrl, !explicitFullUrl && Boolean(previewOnlyUrl));
+                const bandName =
+                  String(t.band_name || t.band || t.artist || '').trim() ||
+                  (t.band_id ? bandNameById.get(String(t.band_id)) || bandNameById.get(ensureUUID(String(t.band_id))) : '') ||
+                  'Independent Band';
+                releaseTracksCatalog.push({
+                  id: t.id || `distro-track-${idx}`,
+                  bandId: t.band_id,
+                  title: String(t.title).trim(),
+                  band: bandName,
+                  album: String(t.albumTitle || t.album || 'Release').trim(),
+                  duration: String(t.duration || '3:30').trim(),
+                  coverArt: t.cover_url || t.coverArt || '',
+                  audioUrl,
+                  audioSourceType,
+                  isPreview: audioSourceType === 'itunes_preview',
+                  releaseYear: String(t.release_year || '').trim(),
+                  source: 'distro_cache',
+                });
+              });
+            }
+          }
+        } catch {}
+
+        const dbTracks =
+          !tracksResult?.error && Array.isArray(tracksResult?.data)
+            ? tracksResult.data
+                .map((t: any) => {
+                  const audioUrl = resolveVaultAudioUrl(t.audio_url || t.audioUrl || t.url);
+                  if (!audioUrl) return null;
+                  const audioSourceType = detectAudioSourceType(audioUrl, false);
+                  return {
+                    id: t.id,
+                    title: t.title,
+                    band: t.band,
+                    album: t.album,
+                    duration: t.duration || '3:30',
+                    coverArt: t.cover_art || t.coverArt || '',
+                    audioUrl,
+                    audioSourceType,
+                    isPreview: audioSourceType === 'itunes_preview',
+                    source: 'nexus_tracks',
+                  };
+                })
+                .filter(Boolean)
+            : [];
+
+        const dedupedSongsMap = new Map<string, any>();
+        [...releaseTracksCatalog, ...dbTracks, ...mockInAppSongs].forEach((song: any) => {
+          if (!song?.title || !song?.audioUrl) return;
+          const key = `${String(song.title).toLowerCase().trim()}::${String(song.band || '').toLowerCase().trim()}::${String(song.album || '').toLowerCase().trim()}`;
+          const existing = dedupedSongsMap.get(key);
+          if (!existing) {
+            dedupedSongsMap.set(key, song);
+            return;
+          }
+          const incomingIsVault = song.audioSourceType === 'vault' || (!song.isPreview && /audio-vault/i.test(song.audioUrl || ''));
+          const existingIsVault = existing.audioSourceType === 'vault' || (!existing.isPreview && /audio-vault/i.test(existing.audioUrl || ''));
+          const incomingHasVaultCover = /audio-vault|supabase\.co\/storage/i.test(song.coverArt || '');
+          const existingHasVaultCover = /audio-vault|supabase\.co\/storage/i.test(existing.coverArt || '');
+          if (incomingIsVault && !existingIsVault) {
+            dedupedSongsMap.set(key, {
+              ...song,
+              coverArt: song.coverArt || existing.coverArt,
+            });
+          } else if (incomingHasVaultCover && !existingHasVaultCover) {
+            dedupedSongsMap.set(key, {
+              ...existing,
+              coverArt: song.coverArt,
+            });
+          }
+        });
+
+        setInAppSongsList(Array.from(dedupedSongsMap.values()));
       } catch (e) {
         console.error('Error fetching shop items / tracks:', e);
       }
     };
     fetchShopItemsAndTracks();
+    const client = getSupabase();
+    const sub = client?.auth?.onAuthStateChange?.((event) => {
+      if (event === 'SIGNED_IN') {
+        fetchShopItemsAndTracks();
+      }
+    });
+    const handleTracksUpdated = () => {
+      fetchShopItemsAndTracks();
+    };
+    window.addEventListener('nexus_band_tracks_updated', handleTracksUpdated);
+    return () => {
+      sub?.data?.subscription?.unsubscribe?.();
+      window.removeEventListener('nexus_band_tracks_updated', handleTracksUpdated);
+    };
   }, []);
 
   const [isPostListingOpen, setIsPostListingOpen] = useState(false);
@@ -5259,49 +5703,53 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
       try {
         const queryTerm = `%${q}%`;
 
-        // 1. Query profiles table using explicit card column selection, .order(), and .range()
-        const { data: profData } = await supabaseClient
-          .from('profiles')
-          .select(
-            'id, full_name, username, console_handle, email, account_type, role, band_name, business_name, agency_name, label_name, avatar_url, band_logo, creative_avatar, promoter_logo, label_avatar, genre, city, state, location, bio'
-          )
-          .or(`full_name.ilike.${queryTerm},console_handle.ilike.${queryTerm},email.ilike.${queryTerm}`)
-          .order('created_at', { ascending: false })
-          .range(0, 19);
+        // 1. Query profiles table using schema-verified column projection
+        const [{ data: profData }, { data: bandsData }, { data: venuesData }] = await Promise.all([
+          supabaseClient
+            .from('profiles')
+            .select(PROFILE_CARD_COLUMNS)
+            .or(`full_name.ilike.${queryTerm},console_handle.ilike.${queryTerm},email.ilike.${queryTerm}`)
+            .order('created_at', { ascending: false })
+            .range(0, 19),
+          supabaseClient
+            .from('bands')
+            .select(BAND_CARD_COLUMNS)
+            .or(`band_name.ilike.${queryTerm},city.ilike.${queryTerm},state_province.ilike.${queryTerm},country.ilike.${queryTerm}`)
+            .order('created_at', { ascending: false })
+            .range(0, 19),
+          supabaseClient
+            .from('venues')
+            .select(VENUE_CARD_COLUMNS)
+            .or(`name.ilike.${queryTerm},city.ilike.${queryTerm},state_province.ilike.${queryTerm}`)
+            .order('name', { ascending: true })
+            .range(0, 19),
+        ]);
 
-        // 2. Query registered bands table using explicit card column selection, .order(), and .range()
-        const { data: bandsData } = await supabaseClient
-          .from('bands')
-          .select(
-            'id, name, band_name, category, avatar_url, logo_url, city, state, state_province, country, micro_genres, custom_slug, bio'
-          )
-          .or(`band_name.ilike.${queryTerm},city.ilike.${queryTerm},state_province.ilike.${queryTerm},country.ilike.${queryTerm}`)
-          .order('created_at', { ascending: false })
-          .range(0, 19);
+        const mappedProfiles = (profData || []).map((p: any) => {
+          const creativeMeta = p.creative_metadata || {};
+          const promoterMeta = p.promoter_metadata || {};
+          const labelMeta = p.label_metadata || {};
+          const bandMeta = p.band_metadata || {};
+          const labelCompany = labelMeta.company_name || labelMeta.name;
+          const agencyName = promoterMeta.brand_name || promoterMeta.agency_name;
+          const creativeName = p.creative_name || creativeMeta.business_name;
 
-        // 3. Query venues table using explicit card column selection, .order(), and .range()
-        const { data: venuesData } = await supabaseClient
-          .from('venues')
-          .select('id, name, category, avatar_url, city, state')
-          .or(`name.ilike.${queryTerm},city.ilike.${queryTerm},state.ilike.${queryTerm}`)
-          .order('name', { ascending: true })
-          .range(0, 19);
-
-        const mappedProfiles = (profData || []).map(p => ({
-          ...p,
-          name: p.full_name || p.username || p.band_name || p.business_name || p.agency_name || p.label_name || 'Unknown',
-          avatar: p.avatar_url || p.band_logo || p.creative_avatar || p.promoter_logo || p.label_avatar || null,
-          category: (p.account_type === 'industry_pro' || p.account_type === 'industry pro') ? 'people' :
-                    (p.role?.includes('band') || p.role?.includes('artist') || p.band_name) ? 'bands' : 
-                    (p.role?.includes('label') || p.label_name) ? 'labels' : 
-                    (p.role?.includes('venue') || p.role?.includes('promoter') || p.agency_name) ? 'venues' : 
-                    (p.role?.includes('creative') || p.business_name) ? 'creatives' : 'people'
-        }));
+          return {
+            ...p,
+            name: p.full_name || p.console_handle || p.band_name || creativeName || agencyName || labelCompany || 'Unknown',
+            avatar: p.avatar_url || bandMeta.logo_url || creativeMeta.avatar_url || promoterMeta.logo_url || labelMeta.logo_url || null,
+            category: (p.account_type === 'industry_pro' || p.account_type === 'industry pro') ? 'people' :
+                      (p.role?.includes('band') || p.role?.includes('artist') || p.band_name) ? 'bands' : 
+                      (p.role?.includes('label') || labelCompany) ? 'labels' : 
+                      (p.role?.includes('venue') || p.role?.includes('promoter') || agencyName) ? 'venues' : 
+                      (p.role?.includes('creative') || creativeName) ? 'creatives' : 'people'
+          };
+        });
 
         const mappedBands = (bandsData || []).map((b: any) => {
           const loc = formatBandLocation(b);
-          const cleanMicros = sanitizeMicroGenres(b.micro_genres || b.sub_genres || b.genre_tags || b.genres || b.genre);
-          const bTitle = b.band_name || b.name || 'Registered Band';
+          const cleanMicros = sanitizeMicroGenres(b.micro_genres);
+          const bTitle = b.band_name || 'Registered Band';
           const commMatch = communityBandManager.findByName(bTitle) || communityBandManager.findMatch(bTitle);
           const bestBandAvatar = pickBestBandImage(
             b.logo_url,
@@ -5313,7 +5761,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
 
           return {
             ...b,
-            id: b.id || `band_${b.band_name || b.name}`,
+            id: b.id || `band_${b.band_name}`,
             band_id: b.id,
             name: bTitle,
             band_name: bTitle,
@@ -5334,7 +5782,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
             country: b.country,
             homebase: loc,
             location: loc,
-            bio: b.bio || `Official registered band entity for ${b.band_name || b.name}.`
+            bio: b.bio || `Official registered band entity for ${b.band_name}.`
           };
         });
 
@@ -5342,14 +5790,14 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
           ...v,
           id: v.id || `venue_${v.name}`,
           name: v.name || 'Venue',
-          avatar: v.avatar_url || null,
-          avatar_url: v.avatar_url || null,
+          avatar: null,
+          avatar_url: null,
           role: 'venue',
           portalRole: 'Promoter / Venue',
           type: 'venue',
           category: 'venues',
-          location: [v.city, v.state].filter(Boolean).join(', '),
-          homebase: [v.city, v.state].filter(Boolean).join(', '),
+          location: [v.city, v.state_province].filter(Boolean).join(', '),
+          homebase: [v.city, v.state_province].filter(Boolean).join(', '),
         }));
 
         const combined = [...mappedProfiles, ...mappedBands, ...mappedVenues];

@@ -40,6 +40,12 @@ import {
   reconcileSeededMockThread,
 } from '../../services/forumHighlightService';
 import { initialForumThreads } from '../../data/forumMockData';
+import {
+  FORUM_THREAD_COLUMNS,
+  FORUM_COMMENT_COLUMNS,
+  cachedSupabaseQuery,
+  invalidateSupabaseQueryCache,
+} from '../../lib/supabaseQueryCache';
 import { FirstTimeTooltip } from '../common/FirstTimeTooltip';
 import { BirthdayShoutoutBadge } from './BirthdayShoutoutBadge';
 import { buildBirthdayHornsMessage, isMutualConnection } from '../../utils/birthdayUtils';
@@ -846,10 +852,24 @@ export const ForumView: React.FC<ForumViewProps> = ({
       }
 
       try {
-        const [threadsRes, commentsRes] = await Promise.all([
-          supabase.from('forum_threads').select('*').order('created_at', { ascending: false }),
-          supabase.from('forum_comments').select('*').order('created_at', { ascending: true }),
-        ]);
+        const [threadsRes, commentsRes] = await cachedSupabaseQuery(
+          'forum:sync:default',
+          () =>
+            Promise.all([
+              supabase
+                .from('forum_threads')
+                .select(FORUM_THREAD_COLUMNS)
+                .order('created_at', { ascending: false })
+                .limit(50),
+              supabase
+                .from('forum_comments')
+                .select(FORUM_COMMENT_COLUMNS)
+                .order('created_at', { ascending: true })
+                .limit(100),
+            ]),
+          60_000,
+          ([tRes]) => !tRes?.error
+        );
 
         const threadsData = threadsRes.data;
         const commentsData = commentsRes.data;
@@ -1042,6 +1062,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
       try {
         await supabase.from('forum_comments').delete().eq('thread_id', threadId);
         await supabase.from('forum_threads').delete().eq('id', threadId);
+        invalidateSupabaseQueryCache('forum:');
       } catch (e) {
         console.warn('Error deleting thread in Supabase:', e);
       }
@@ -1076,6 +1097,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
     if (supabase) {
       try {
         await supabase.from('forum_comments').update({ text: editingCommentText }).eq('id', commentId);
+        invalidateSupabaseQueryCache('forum:');
       } catch (e) {
         console.warn('Error updating comment in Supabase:', e);
       }
@@ -1101,6 +1123,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
       try {
         await supabase.from('forum_comments').delete().eq('parent_comment_id', commentId);
         await supabase.from('forum_comments').delete().eq('id', commentId);
+        invalidateSupabaseQueryCache('forum:');
       } catch (e) {
         console.warn('Error deleting comment in Supabase:', e);
       }
@@ -1143,6 +1166,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
     if (supabase) {
       try {
         await supabase.from('forum_comments').update({ text: editingReplyText }).eq('id', replyId);
+        invalidateSupabaseQueryCache('forum:');
       } catch (e) {
         console.warn('Error updating reply in Supabase:', e);
       }
@@ -1175,6 +1199,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
     if (supabase) {
       try {
         await supabase.from('forum_comments').delete().eq('id', replyId);
+        invalidateSupabaseQueryCache('forum:');
       } catch (e) {
         console.warn('Error deleting reply in Supabase:', e);
       }
@@ -1356,6 +1381,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
             }
           }
         }
+        invalidateSupabaseQueryCache('forum:');
       } catch (e) {
         console.warn('Failed to insert into Supabase forum_threads:', e);
       }
@@ -1419,6 +1445,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
     if (supabase) {
       try {
         await supabase.from('forum_threads').update({ votes: updatedVotes }).eq('id', threadId);
+        invalidateSupabaseQueryCache('forum:');
       } catch (e) {
         console.warn('Error updating votes in Supabase:', e);
       }
@@ -1488,6 +1515,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
           delete commentPayload.user_id;
           await supabase.from('forum_comments').insert([commentPayload]);
         }
+        invalidateSupabaseQueryCache('forum:');
       } catch (e) {
         console.warn('Error inserting comment to Supabase forum_comments:', e);
       }
@@ -1566,6 +1594,7 @@ export const ForumView: React.FC<ForumViewProps> = ({
           delete replyPayload.user_id;
           await supabase.from('forum_comments').insert([replyPayload]);
         }
+        invalidateSupabaseQueryCache('forum:');
       } catch (e) {
         console.warn('Error inserting reply to Supabase forum_comments:', e);
       }

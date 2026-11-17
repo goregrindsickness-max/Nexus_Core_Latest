@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { createMonogramPlaceholderSvg } from '../utils/imageFallbacks';
 import { resolveCanonicalBandLogo } from '../lib/communityBands';
+import { BAND_CARD_COLUMNS, cachedSupabaseQuery } from '../lib/supabaseQueryCache';
 
-export const BAND_CARD_SELECT_COLUMNS = '*';
+export const BAND_CARD_SELECT_COLUMNS = BAND_CARD_COLUMNS;
 
 export interface BandCardRecord {
   id: string;
@@ -65,28 +66,35 @@ export async function queryPaginatedBands(params: {
   const to = from + pageSize - 1;
   const cleanSearch = search.trim().replace(/[,()%_]/g, '');
 
-  let query = supabase
-    .from('bands')
-    .select(BAND_CARD_SELECT_COLUMNS)
-    .order('band_name', { ascending: true })
-    .range(from, to);
+  return cachedSupabaseQuery(
+    `bands:paginated:${cleanSearch.toLowerCase()}:${page}:${pageSize}`,
+    async () => {
+      let query = supabase
+        .from('bands')
+        .select(BAND_CARD_SELECT_COLUMNS)
+        .order('band_name', { ascending: true })
+        .range(from, to);
 
-  if (cleanSearch.length > 0) {
-    query = query.or(
-      `band_name.ilike.%${cleanSearch}%,city.ilike.%${cleanSearch}%,state_province.ilike.%${cleanSearch}%`
-    );
-  }
+      if (cleanSearch.length > 0) {
+        query = query.or(
+          `band_name.ilike.%${cleanSearch}%,city.ilike.%${cleanSearch}%,state_province.ilike.%${cleanSearch}%`
+        );
+      }
 
-  const { data, error } = await query;
-  if (error || !Array.isArray(data)) {
-    return { bands: [], hasMore: false };
-  }
+      const { data, error } = await query;
+      if (error || !Array.isArray(data)) {
+        return { bands: [], hasMore: false };
+      }
 
-  const bands = data.map(mapBandRowToCard);
-  return {
-    bands,
-    hasMore: data.length >= pageSize,
-  };
+      const bands = data.map(mapBandRowToCard);
+      return {
+        bands,
+        hasMore: data.length >= pageSize,
+      };
+    },
+    60_000,
+    (res) => res.bands.length > 0
+  );
 }
 
 export function useBands(options: UseBandsOptions = {}) {

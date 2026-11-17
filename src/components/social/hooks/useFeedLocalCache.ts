@@ -7,6 +7,7 @@ import { mergePostWithReactions } from '../utils/reactionStore';
 import { isMiguelNameOrProfile } from '../utils/profileUtils';
 import { fetchGlobalInteractions } from '../../../services/postInteractionsService';
 import { MIGUEL_DEFAULT_AVATAR, DEFAULT_PERSONAL_AVATAR } from '../../../utils/bandProfileUtils';
+import { hasAuthenticatedSupabaseSession, PROFILE_CARD_COLUMNS } from '../../../lib/supabaseQueryCache';
 
 interface UseFeedLocalCacheOptions {
   portalRole: string;
@@ -81,7 +82,7 @@ export function useFeedLocalCache({
           try {
             const { data, error } = await supabaseClient
               .from('nexus_posts')
-              .select('*, profiles:profile_id(*)')
+              .select(`*, profiles:profile_id(${PROFILE_CARD_COLUMNS})`)
               .order('created_at', { ascending: false })
               .limit(100);
 
@@ -428,10 +429,13 @@ export function useFeedLocalCache({
                   }
                 } catch (_) {}
 
-                // Query polls
+                // Query polls (guarded behind authenticated session to prevent 401 on boot)
                 try {
-                  const { data: pollsRows } = await supabaseClient.from('nexus_polls').select('*');
-                  const { data: votesRows } = await supabaseClient.from('nexus_poll_votes').select('*');
+                  if (await hasAuthenticatedSupabaseSession(supabaseClient)) {
+                    const [{ data: pollsRows }, { data: votesRows }] = await Promise.all([
+                      supabaseClient.from('nexus_polls').select('id, post_id, question, category, is_unbiased, expires_at, options').limit(100),
+                      supabaseClient.from('nexus_poll_votes').select('poll_id, selected_option_index').limit(500),
+                    ]);
 
                   if (pollsRows && pollsRows.length > 0) {
                     const pollsByPost = pollsRows.reduce((acc, p) => { acc[p.post_id] = p; return acc; }, {} as Record<string, any>);
@@ -466,6 +470,7 @@ export function useFeedLocalCache({
                       }
                       return post;
                     });
+                  }
                   }
                 } catch (pollErr) {
                   console.warn("Notice querying nexus_polls:", pollErr);
@@ -525,8 +530,12 @@ export function useFeedLocalCache({
           let profile = newItem.profiles;
           if (!profile && newItem.profile_id) {
             const supabaseClient = getSupabase();
-            if (supabaseClient) {
-              const { data: profData } = await supabaseClient.from('profiles').select('*').eq('id', newItem.profile_id).single();
+            if (supabaseClient && (await hasAuthenticatedSupabaseSession(supabaseClient))) {
+              const { data: profData } = await supabaseClient
+                .from('profiles')
+                .select(PROFILE_CARD_COLUMNS)
+                .eq('id', newItem.profile_id)
+                .single();
               profile = profData;
             }
           }

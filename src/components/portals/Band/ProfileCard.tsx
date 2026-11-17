@@ -7,6 +7,7 @@ import { formatLocationDisplay } from '../../../constants/location';
 import { useUserPresence } from '../../../lib/presence';
 import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert, upsertBandToDatabase, generateUUID } from '../../../supabase';
+import { BAND_DETAIL_COLUMNS, PROFILE_CARD_COLUMNS, cachedSupabaseQuery, fetchCachedShowsList } from '../../../lib/supabaseQueryCache';
 import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER, resolvePromoterLogo, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER, isBandSplitUp, resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
 import { communityBandManager, CommunityBandRecord, isCommunityBandRecord, loadBandDiscographyFromCache, resolveAuthenticReleaseYear, deduplicateDiscography, extractReleaseCover, findMasterReleaseCover, isValidBandImageUrl, pickBestBandImage, isGorgasmBand, isStaleGorgasmLineup, parseBandLineup, GORGASM_OFFICIAL_LINEUP, GORGASM_OFFICIAL_LOGO } from '../../../lib/communityBands';
@@ -505,11 +506,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           let showsList: any[] = [];
           const validUUID = targetId && extractUUID(targetId);
           if (validUUID || targetName) {
-            const { data } = await supabase
-              .from('shows')
-              .select('*')
-              .order('created_at', { ascending: false })
-              .limit(50);
+            const data = await fetchCachedShowsList(supabase, { limit: 200, ascending: false });
             if (data && data.length > 0) {
               showsList = data.filter((s: any) => 
                 (validUUID && (s.band_id === validUUID || s.user_id === validUUID || s.creator_id === validUUID)) ||
@@ -541,7 +538,6 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       // B) Fetch/Sync Band Data from Supabase 'bands' table (only for band profiles or current user viewing their band)
       if (supabase && (isBand || base?.isYou || selectedUserProfile?.isYou)) {
         try {
-          let record: any = null;
           const validUUID = targetId && extractUUID(targetId);
           const targetBandId = base?.band_id || selectedUserProfile?.band_id || (base?.isYou ? userProfile?.band_id : null);
           const targetBandName = base?.band_name || base?.bandName || selectedUserProfile?.band_name || selectedUserProfile?.bandName || (base?.isYou ? (userProfile?.band_name || userProfile?.bandName) : null);
@@ -553,41 +549,50 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
             targetId === 'my_band_id'
           );
 
+          const validBandUUID = targetBandId ? extractUUID(targetBandId) : null;
+          const bandLookupKey = validBandUUID || validUUID || (targetBandName || targetName)?.trim()?.toLowerCase() || '';
+
           // Fetch band from Supabase 'bands' table as primary source of truth
-          if (targetBandId && extractUUID(targetBandId)) {
-            try {
-              const { data } = await supabase.from('bands').select('*').eq('id', extractUUID(targetBandId)).maybeSingle();
-              if (data) record = data;
-            } catch (_) {}
-          } else if (validUUID) {
-            try {
-              const { data } = await supabase.from('bands').select('*').eq('id', validUUID).maybeSingle();
-              if (data) record = data;
-            } catch (_) {}
-          }
+          let record: any = bandLookupKey
+            ? await cachedSupabaseQuery(`band:detail:${bandLookupKey}`, async () => {
+                let found: any = null;
+                if (validBandUUID) {
+                  try {
+                    const { data } = await supabase.from('bands').select(BAND_DETAIL_COLUMNS).eq('id', validBandUUID).maybeSingle();
+                    if (data) found = data;
+                  } catch (_) {}
+                } else if (validUUID) {
+                  try {
+                    const { data } = await supabase.from('bands').select(BAND_DETAIL_COLUMNS).eq('id', validUUID).maybeSingle();
+                    if (data) found = data;
+                  } catch (_) {}
+                }
 
-          if (!record && validUUID) {
-            try {
-              const { data } = await supabase.from('bands').select('*').eq('creator_id', validUUID).order('created_at', { ascending: false });
-              if (Array.isArray(data) && data.length > 0) {
-                record = data[0];
-              }
-            } catch (_) {}
-          }
+                if (!found && validUUID) {
+                  try {
+                    const { data } = await supabase.from('bands').select(BAND_DETAIL_COLUMNS).eq('creator_id', validUUID).order('created_at', { ascending: false }).limit(1);
+                    if (Array.isArray(data) && data.length > 0) {
+                      found = data[0];
+                    }
+                  } catch (_) {}
+                }
 
-          if (!record && (targetBandName || targetName)) {
-            const queryName = (targetBandName || targetName).trim();
-            try {
-              const { data } = await supabase.from('bands').select('*').ilike('band_name', `%${queryName}%`).maybeSingle();
-              if (data) {
-                record = data;
-              } else {
-                const slugCandidate = queryName.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
-                const { data: slugData } = await supabase.from('bands').select('*').ilike('custom_slug', `%${slugCandidate}%`).maybeSingle();
-                if (slugData) record = slugData;
-              }
-            } catch (_) {}
-          }
+                if (!found && (targetBandName || targetName)) {
+                  const queryName = (targetBandName || targetName).trim();
+                  try {
+                    const { data } = await supabase.from('bands').select(BAND_DETAIL_COLUMNS).ilike('band_name', `%${queryName}%`).limit(1).maybeSingle();
+                    if (data) {
+                      found = data;
+                    } else {
+                      const slugCandidate = queryName.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+                      const { data: slugData } = await supabase.from('bands').select(BAND_DETAIL_COLUMNS).ilike('custom_slug', `%${slugCandidate}%`).limit(1).maybeSingle();
+                      if (slugData) found = slugData;
+                    }
+                  } catch (_) {}
+                }
+                return found;
+              })
+            : null;
 
           if (!record && isViewingSelf) {
             try {
@@ -602,8 +607,11 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           const recName = record ? String(record.name || record.band_name || '').toLowerCase() : '';
           if (!record && isViewingSelf && isOwnerMiguel && !isPersonal) {
             try {
-              const { data } = await supabase.from('bands').select('*').eq('id', 'cbddb810-259b-4230-9968-3d402dfdb872').maybeSingle();
-              if (data) record = data;
+              const veBand = await cachedSupabaseQuery('band:detail:cbddb810-259b-4230-9968-3d402dfdb872', async () => {
+                const { data } = await supabase.from('bands').select(BAND_DETAIL_COLUMNS).eq('id', 'cbddb810-259b-4230-9968-3d402dfdb872').maybeSingle();
+                return data || null;
+              });
+              if (veBand) record = veBand;
             } catch (_) {}
 
             if (!record) {
@@ -686,30 +694,36 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       // C) Fetch Profile from 'profiles' table for full name, console handle, location, bio
       if (supabase) {
         try {
-          let profRecord: any = null;
           const targetId = base?.id || selectedUserProfile?.id || targetProfile?.id;
           const targetEmail = base?.email || selectedUserProfile?.email;
           const targetHandle = base?.console_handle || base?.handle || base?.username || selectedUserProfile?.console_handle;
           const targetName = base?.full_name || base?.name || selectedUserProfile?.name;
           const validUUID = targetId && extractUUID(targetId);
+          const profileCacheKey = validUUID || targetEmail?.trim()?.toLowerCase() || targetHandle?.trim()?.toLowerCase() || targetName?.trim()?.toLowerCase() || '';
 
-          if (validUUID) {
-            const { data } = await supabase.from('profiles').select('*').eq('id', validUUID).maybeSingle();
-            if (data) profRecord = data;
-          }
-          if (!profRecord && targetEmail) {
-            const { data } = await supabase.from('profiles').select('*').ilike('email', targetEmail.trim()).maybeSingle();
-            if (data) profRecord = data;
-          }
-          if (!profRecord && targetHandle) {
-            const cleanHandle = targetHandle.replace('@', '').trim();
-            const { data } = await supabase.from('profiles').select('*').ilike('console_handle', cleanHandle).maybeSingle();
-            if (data) profRecord = data;
-          }
-          if (!profRecord && targetName) {
-            const { data } = await supabase.from('profiles').select('*').or(`full_name.ilike.%${targetName.trim()}%,console_handle.ilike.%${targetName.trim()}%`).maybeSingle();
-            if (data) profRecord = data;
-          }
+          const profRecord: any = profileCacheKey
+            ? await cachedSupabaseQuery(`profile:detail:${profileCacheKey}`, async () => {
+                let found: any = null;
+                if (validUUID) {
+                  const { data } = await supabase.from('profiles').select(PROFILE_CARD_COLUMNS).eq('id', validUUID).maybeSingle();
+                  if (data) found = data;
+                }
+                if (!found && targetEmail) {
+                  const { data } = await supabase.from('profiles').select(PROFILE_CARD_COLUMNS).ilike('email', targetEmail.trim()).limit(1).maybeSingle();
+                  if (data) found = data;
+                }
+                if (!found && targetHandle) {
+                  const cleanHandle = targetHandle.replace('@', '').trim();
+                  const { data } = await supabase.from('profiles').select(PROFILE_CARD_COLUMNS).ilike('console_handle', cleanHandle).limit(1).maybeSingle();
+                  if (data) found = data;
+                }
+                if (!found && targetName) {
+                  const { data } = await supabase.from('profiles').select(PROFILE_CARD_COLUMNS).or(`full_name.ilike.%${targetName.trim()}%,console_handle.ilike.%${targetName.trim()}%`).limit(1).maybeSingle();
+                  if (data) found = data;
+                }
+                return found;
+              })
+            : null;
 
           if (isMounted && profRecord) {
             const normProf = normalizeLoadedProfile(profRecord);

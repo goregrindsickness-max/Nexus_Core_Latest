@@ -7,6 +7,7 @@ import { formatLocationDisplay } from '../../../constants/location';
 import { useUserPresence } from '../../../lib/presence';
 import { ROSTER_CATALOGS } from '../../../data/socialFeedMockData';
 import { normalizeLoadedProfile, getSupabase, executeWithSchemaResilience, executeSanitizedProfileUpsert } from '../../../supabase';
+import { BAND_DETAIL_COLUMNS, CREATIVE_DETAIL_COLUMNS, PROFILE_CARD_COLUMNS, cachedSupabaseQuery, fetchCachedShowsList } from '../../../lib/supabaseQueryCache';
 import { formatCleanLocation, isPromoterAvatarUrl, isPromoterCoverUrl, resolveCreativeLogo, VORTEX_GRAPHICS_DEFAULT_COVER, DEFAULT_PERSONAL_AVATAR, DEFAULT_PERSONAL_COVER } from '../../../utils/bandProfileUtils';
 import { getEmbedUrl, getCollectionsTrackDuration, extractUUID } from '../../../utils/socialFeedUtils';
 import { communityBandManager, isCommunityBandRecord } from '../../../lib/communityBands';
@@ -384,11 +385,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           let showsList: any[] = [];
           const validUUID = targetId && extractUUID(targetId);
           if (validUUID || targetName) {
-            const { data } = await supabase
-              .from('shows')
-              .select('*')
-              .order('created_at', { ascending: false })
-              .limit(50);
+            const data = await fetchCachedShowsList(supabase, { limit: 200, ascending: false });
             if (data && data.length > 0) {
               showsList = data.filter((s: any) => 
                 (validUUID && (s.band_id === validUUID || s.user_id === validUUID || s.creator_id === validUUID)) ||
@@ -420,47 +417,42 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       // B) Fetch/Sync Band Data from Supabase 'bands' table
       if (supabase) {
         try {
-          let record: any = null;
           const validUUID = targetId && extractUUID(targetId);
-          if (validUUID) {
-            const { data } = await supabase
-              .from('bands')
-              .select('*')
-              .eq('id', validUUID)
-              .maybeSingle();
-            if (data) record = data;
+          const lookupKey = validUUID || targetName?.trim()?.toLowerCase() || '';
+          const record: any = lookupKey
+            ? await cachedSupabaseQuery(`band:detail:${lookupKey}`, async () => {
+                let found: any = null;
+                if (validUUID) {
+                  const { data } = await supabase
+                    .from('bands')
+                    .select(BAND_DETAIL_COLUMNS)
+                    .eq('id', validUUID)
+                    .maybeSingle();
+                  if (data) found = data;
 
-            if (!record) {
-              const { data: creatorBand } = await supabase
-                .from('bands')
-                .select('*')
-                .eq('creator_id', validUUID)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-              if (creatorBand) record = creatorBand;
-            }
-          }
-          if (!record && targetName) {
-            const { data } = await supabase
-              .from('bands')
-              .select('*')
-              .ilike('band_name', `%${targetName}%`)
-              .maybeSingle();
-            if (data) record = data;
-          }
-          if (!record) {
-            const { data: allBands } = await supabase
-              .from('bands')
-              .select('*')
-              .limit(5);
-            if (allBands && allBands.length > 0) {
-              const userBand = allBands.find((b: any) => b.user_id === targetId || b.owner_id === targetId);
-              if (userBand) {
-                record = userBand;
-              }
-            }
-          }
+                  if (!found) {
+                    const { data: creatorBand } = await supabase
+                      .from('bands')
+                      .select(BAND_DETAIL_COLUMNS)
+                      .eq('creator_id', validUUID)
+                      .order('created_at', { ascending: false })
+                      .limit(1)
+                      .maybeSingle();
+                    if (creatorBand) found = creatorBand;
+                  }
+                }
+                if (!found && targetName) {
+                  const { data } = await supabase
+                    .from('bands')
+                    .select(BAND_DETAIL_COLUMNS)
+                    .ilike('band_name', `%${targetName}%`)
+                    .limit(1)
+                    .maybeSingle();
+                  if (data) found = data;
+                }
+                return found;
+              })
+            : null;
 
           if (isMounted && record) {
             setFetchedBandData(record);
@@ -479,27 +471,33 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         const targetBandName = base?.band_name || base?.bandName || selectedUserProfile?.band_name || selectedUserProfile?.bandName || (base?.isYou ? (userProfile?.band_name || userProfile?.bandName) : null);
 
         if (supabase) {
-          if (targetBandId && extractUUID(targetBandId)) {
-            try {
-              const { data } = await supabase.from('bands').select('*').eq('id', extractUUID(targetBandId)).maybeSingle();
-              if (data) linkedBandRecord = data;
-            } catch (_) {}
-          }
+          const validBandUUID = targetBandId ? extractUUID(targetBandId) : null;
+          const linkedKey = validBandUUID || validUUID || targetBandName?.trim()?.toLowerCase() || '';
+          if (linkedKey) {
+            linkedBandRecord = await cachedSupabaseQuery(`band:linked:${linkedKey}`, async () => {
+              let found: any = null;
+              if (validBandUUID) {
+                try {
+                  const { data } = await supabase.from('bands').select(BAND_DETAIL_COLUMNS).eq('id', validBandUUID).maybeSingle();
+                  if (data) found = data;
+                } catch (_) {}
+              }
 
-          if (!linkedBandRecord && validUUID) {
-            try {
-              const { data } = await supabase.from('bands').select('*').eq('creator_id', validUUID).neq('verification_status', 'community_archive').order('created_at', { ascending: false }).limit(1).maybeSingle();
-              if (data) linkedBandRecord = data;
-            } catch (_) {}
-          }
+              if (!found && validUUID) {
+                try {
+                  const { data } = await supabase.from('bands').select(BAND_DETAIL_COLUMNS).eq('creator_id', validUUID).neq('verification_status', 'community_archive').order('created_at', { ascending: false }).limit(1).maybeSingle();
+                  if (data) found = data;
+                } catch (_) {}
+              }
 
-
-
-          if (!linkedBandRecord && targetBandName) {
-            try {
-              const { data } = await supabase.from('bands').select('*').ilike('band_name', `%${targetBandName.trim()}%`).maybeSingle();
-              if (data) linkedBandRecord = data;
-            } catch (_) {}
+              if (!found && targetBandName) {
+                try {
+                  const { data } = await supabase.from('bands').select(BAND_DETAIL_COLUMNS).ilike('band_name', `%${targetBandName.trim()}%`).limit(1).maybeSingle();
+                  if (data) found = data;
+                } catch (_) {}
+              }
+              return found;
+            });
           }
         }
 
@@ -554,30 +552,36 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       // C) Fetch Profile from 'profiles' table for full name, console handle, location, bio
       if (supabase) {
         try {
-          let profRecord: any = null;
           const targetId = base?.id || selectedUserProfile?.id || targetProfile?.id;
           const targetEmail = base?.email || selectedUserProfile?.email;
           const targetHandle = base?.console_handle || base?.handle || base?.username || selectedUserProfile?.console_handle;
           const targetName = base?.full_name || base?.name || selectedUserProfile?.name;
           const validUUID = targetId && extractUUID(targetId);
+          const profileCacheKey = validUUID || targetEmail?.trim()?.toLowerCase() || targetHandle?.trim()?.toLowerCase() || targetName?.trim()?.toLowerCase() || '';
 
-          if (validUUID) {
-            const { data } = await supabase.from('profiles').select('*').eq('id', validUUID).maybeSingle();
-            if (data) profRecord = data;
-          }
-          if (!profRecord && targetEmail) {
-            const { data } = await supabase.from('profiles').select('*').ilike('email', targetEmail.trim()).maybeSingle();
-            if (data) profRecord = data;
-          }
-          if (!profRecord && targetHandle) {
-            const cleanHandle = targetHandle.replace('@', '').trim();
-            const { data } = await supabase.from('profiles').select('*').ilike('console_handle', cleanHandle).maybeSingle();
-            if (data) profRecord = data;
-          }
-          if (!profRecord && targetName) {
-            const { data } = await supabase.from('profiles').select('*').or(`full_name.ilike.%${targetName.trim()}%,console_handle.ilike.%${targetName.trim()}%`).maybeSingle();
-            if (data) profRecord = data;
-          }
+          const profRecord: any = profileCacheKey
+            ? await cachedSupabaseQuery(`profile:detail:${profileCacheKey}`, async () => {
+                let found: any = null;
+                if (validUUID) {
+                  const { data } = await supabase.from('profiles').select(PROFILE_CARD_COLUMNS).eq('id', validUUID).maybeSingle();
+                  if (data) found = data;
+                }
+                if (!found && targetEmail) {
+                  const { data } = await supabase.from('profiles').select(PROFILE_CARD_COLUMNS).ilike('email', targetEmail.trim()).limit(1).maybeSingle();
+                  if (data) found = data;
+                }
+                if (!found && targetHandle) {
+                  const cleanHandle = targetHandle.replace('@', '').trim();
+                  const { data } = await supabase.from('profiles').select(PROFILE_CARD_COLUMNS).ilike('console_handle', cleanHandle).limit(1).maybeSingle();
+                  if (data) found = data;
+                }
+                if (!found && targetName) {
+                  const { data } = await supabase.from('profiles').select(PROFILE_CARD_COLUMNS).or(`full_name.ilike.%${targetName.trim()}%,console_handle.ilike.%${targetName.trim()}%`).limit(1).maybeSingle();
+                  if (data) found = data;
+                }
+                return found;
+              })
+            : null;
 
           if (isMounted && profRecord) {
             const normProf = normalizeLoadedProfile(profRecord);
@@ -595,35 +599,41 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
           // Fallback silently
         }
 
-        // D) Fetch Creative Record from 'creatives' table for creative bio, initial_broadcast_bulletin, micro_genres, highlight track
+        // D) Fetch Creative Record from 'creatives' table for creative bio, live_update_ticker, micro_genres, highlight track
         try {
-          let creativeRecord: any = null;
           const targetId = base?.id || selectedUserProfile?.id || targetProfile?.id;
           const targetCreativeId = (base as any)?.creative_id || (selectedUserProfile as any)?.creative_id || (base?.isYou ? (userProfile as any)?.creative_id : null);
           const validUUID = targetId && extractUUID(targetId);
           const validCreativeUUID = targetCreativeId && extractUUID(targetCreativeId);
           const targetName = (base as any)?.business_name || (base as any)?.creative_name || base?.name || selectedUserProfile?.name;
+          const creativeLookupKey = validCreativeUUID || validUUID || targetName?.trim()?.toLowerCase() || '';
 
-          if (validCreativeUUID) {
-            const { data } = await supabase.from('creatives').select('*').eq('id', validCreativeUUID).maybeSingle();
-            if (data) creativeRecord = data;
-          }
-          if (!creativeRecord && validUUID) {
-            const { data } = await supabase.from('creatives').select('*').eq('id', validUUID).maybeSingle();
-            if (data) creativeRecord = data;
-          }
-          if (!creativeRecord && validUUID) {
-            const { data } = await supabase.from('creatives').select('*').eq('creator_id', validUUID).maybeSingle();
-            if (data) creativeRecord = data;
-          }
-          if (!creativeRecord && validUUID) {
-            const { data } = await supabase.from('creatives').select('*').eq('user_id', validUUID).maybeSingle();
-            if (data) creativeRecord = data;
-          }
-          if (!creativeRecord && targetName) {
-            const { data } = await supabase.from('creatives').select('*').or(`business_name.ilike.%${targetName.trim()}%,name.ilike.%${targetName.trim()}%`).maybeSingle();
-            if (data) creativeRecord = data;
-          }
+          const creativeRecord: any = creativeLookupKey
+            ? await cachedSupabaseQuery(`creatives:detail:${creativeLookupKey}`, async () => {
+                let found: any = null;
+                if (validCreativeUUID) {
+                  const { data } = await supabase.from('creatives').select(CREATIVE_DETAIL_COLUMNS).eq('id', validCreativeUUID).maybeSingle();
+                  if (data) found = data;
+                }
+                if (!found && validUUID) {
+                  const { data } = await supabase.from('creatives').select(CREATIVE_DETAIL_COLUMNS).eq('id', validUUID).maybeSingle();
+                  if (data) found = data;
+                }
+                if (!found && validUUID) {
+                  const { data } = await supabase.from('creatives').select(CREATIVE_DETAIL_COLUMNS).eq('creator_id', validUUID).limit(1).maybeSingle();
+                  if (data) found = data;
+                }
+                if (!found && validUUID) {
+                  const { data } = await supabase.from('creatives').select(CREATIVE_DETAIL_COLUMNS).eq('user_id', validUUID).limit(1).maybeSingle();
+                  if (data) found = data;
+                }
+                if (!found && targetName) {
+                  const { data } = await supabase.from('creatives').select(CREATIVE_DETAIL_COLUMNS).or(`business_name.ilike.%${targetName.trim()}%,creative_handle.ilike.%${targetName.trim()}%`).limit(1).maybeSingle();
+                  if (data) found = data;
+                }
+                return found;
+              })
+            : null;
 
           if (isMounted && creativeRecord) {
             setFetchedCreativeData(creativeRecord);

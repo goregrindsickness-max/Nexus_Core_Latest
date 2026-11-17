@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { isProfileFollowedGlobally, saveFollowStateGlobally, FOLLOW_EVENT_NAME } from '../../../utils/followSyncService';
 import { getSupabase } from '../../../supabase';
+import { batchResolveBandsAndProfilesByName } from '../../../lib/supabaseQueryCache';
 import { RADIO_PLAYLISTS, FRONTEND_FALLBACK_PLAYLISTS } from '../../../data/socialFeedMockData';
 import { FirstTimeTooltip } from '../../common/FirstTimeTooltip';
 import { authFetch, getSupabaseAccessToken } from '../../../utils/apiConfig';
@@ -360,25 +361,27 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
       const cleanQuery = searchArtistName.trim().toLowerCase();
 
       try {
-        // 1. Query bands table first
-        const { data: bandData } = await client
-          .from('bands')
-          .select('*')
-          .ilike('band_name', `%${cleanQuery}%`)
-          .limit(1);
+        // Warm cache in one batched .in() query across all artists in the active playlist
+        const playlistArtistNames = playlistVideos
+          .map((t: any) => extractBandNameFromTrack(t))
+          .filter((n: string) => Boolean(n && n.trim().length >= 2));
+        const lookupNames = Array.from(new Set([searchArtistName.trim(), ...playlistArtistNames]));
 
-        if (active && bandData && bandData.length > 0) {
-          const b = bandData[0];
+        const { bandsByName, profilesByName } = await batchResolveBandsAndProfilesByName(client, lookupNames);
+
+        const matchedBand = bandsByName.get(cleanQuery);
+        if (active && matchedBand) {
+          const b = matchedBand;
           const prof = {
             id: `db-band-${b.id}`,
             raw_id: b.id,
             band_id: b.id,
-            user_id: b.creator_id || b.user_id,
-            name: b.band_name || b.name,
+            user_id: b.creator_id,
+            name: b.band_name,
             role: 'Band',
             category: 'bands',
             genre: Array.isArray(b.micro_genres) ? b.micro_genres.join(' / ') : (b.micro_genres || 'Death Metal'),
-            location: [b.city, b.state_province || b.state, b.country].filter(Boolean).join(', '),
+            location: [b.city, b.state_province, b.country].filter(Boolean).join(', '),
             desc: b.bio || `${b.band_name} on Nexus Network`,
             avatar: b.logo_url || b.cover_url || b.avatar_url || '',
             image: b.logo_url || b.cover_url || b.avatar_url || '',
@@ -387,21 +390,14 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
             isRealBand: true
           };
           setMatchedBandProfile(prof);
-
-            setIsFollowingMatched(isProfileFollowedGlobally(prof));
+          setIsFollowingMatched(isProfileFollowedGlobally(prof));
           return;
         }
 
-        // 2. Query profiles table
-        const { data: profData } = await client
-          .from('profiles')
-          .select('*')
-          .or(`full_name.ilike.%${cleanQuery}%,band_name.ilike.%${cleanQuery}%`)
-          .limit(1);
-
-        if (active && profData && profData.length > 0) {
-          const p = profData[0];
-          const profName = p.bandName || p.full_name || p.display_name || p.name;
+        const matchedProfile = profilesByName.get(cleanQuery);
+        if (active && matchedProfile) {
+          const p = matchedProfile;
+          const profName = p.band_name || p.full_name || p.console_handle || 'Artist';
           const prof = {
             id: `db-p-${p.id}`,
             raw_id: p.id,
@@ -410,13 +406,12 @@ export const SceneRadioPlayer: React.FC<SceneRadioPlayerProps> = ({
             role: p.role || 'Band',
             category: 'bands',
             desc: p.bio || 'Artist Profile on Nexus',
-            avatar: p.avatar_url || p.avatar || '',
-            image: p.avatar_url || p.avatar || '',
+            avatar: p.avatar_url || p.band_metadata?.logo_url || '',
+            image: p.avatar_url || p.band_metadata?.logo_url || '',
             banner: p.banner_url || ''
           };
           setMatchedBandProfile(prof);
-
-            setIsFollowingMatched(isProfileFollowedGlobally(prof));
+          setIsFollowingMatched(isProfileFollowedGlobally(prof));
           return;
         }
 

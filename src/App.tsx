@@ -17,6 +17,12 @@ import { useUserEntities } from "./hooks/useUserEntities";
 import { IndustryProPortal } from "./components/portals/IndustryProPortal";
 import { FanPortal } from "./components/portals/FanPortal";
 import { tourPackageManager } from './lib/tourPackageManager';
+import {
+  PROFILE_CARD_COLUMNS,
+  PROMOTER_CARD_COLUMNS,
+  fetchCachedShowsList,
+  hasAuthenticatedSupabaseSession,
+} from './lib/supabaseQueryCache';
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, Suspense } from 'react';
 import { inventoryStore, posSalesStore, itinerariesStore, socialFeedStore, reviewsStore, showsStore, registrationStagingStore, venuesStore, offersStore, routingBeaconsStore, creativeNodesStore, expensesStore, profileStore } from './utils/indexedDB';
 import { safeSetLocalStorageItem } from './utils/safeStorage';
@@ -1661,7 +1667,7 @@ export default function App() {
 
         if (!targetId && !targetEmail) return;
 
-        let query = supabase.from('profiles').select('*');
+        let query = supabase.from('profiles').select(PROFILE_CARD_COLUMNS);
         if (targetId && targetEmail) {
           query = query.or(`id.eq.${targetId},email.ilike.${targetEmail}`);
         } else if (targetId) {
@@ -1672,15 +1678,17 @@ export default function App() {
 
         const { data, error } = await query.maybeSingle();
         if (data && !error && isSubscribed && !isLegacyAdminOrDummyProfile(data)) {
-          // Also fetch live record from promoters table if accessible
+          // Also fetch live record from promoters table if authenticated
           let promoterRecord: any = null;
           try {
-            const { data: pData } = await supabase
-              .from('promoters')
-              .select('*')
-              .or(`id.eq.${data.id},user_id.eq.${data.id}`)
-              .maybeSingle();
-            if (pData) promoterRecord = pData;
+            if (await hasAuthenticatedSupabaseSession(supabase)) {
+              const { data: pData } = await supabase
+                .from('promoters')
+                .select(PROMOTER_CARD_COLUMNS)
+                .or(`id.eq.${data.id},user_id.eq.${data.id}`)
+                .maybeSingle();
+              if (pData) promoterRecord = pData;
+            }
           } catch (_) {}
 
           const normalized = normalizeLoadedProfile(data);
@@ -1711,9 +1719,9 @@ export default function App() {
               birthday_month: normalized.birthday_month ?? prev.birthday_month ?? null,
               birthday_day: normalized.birthday_day ?? prev.birthday_day ?? null,
               show_birthday_shoutout:
-                data.show_birthday_shoutout !== undefined
-                  ? Boolean(data.show_birthday_shoutout)
-                  : (prev.show_birthday_shoutout ?? normalized.show_birthday_shoutout ?? true),
+                typeof normalized?.show_birthday_shoutout === 'boolean'
+                  ? normalized.show_birthday_shoutout
+                  : (prev.show_birthday_shoutout ?? true),
               active_workspace: normalized.active_workspace || prev.active_workspace || 'industry_pro',
               account_type: normalized.account_type || prev.account_type || 'industry pro',
               promoter_id: normalized.promoter_id ?? prev.promoter_id,
@@ -1926,7 +1934,6 @@ export default function App() {
               supabase.from('profiles').update({
                 band_id: userProfile.band_id,
                 band_name: userProfile.band_name,
-                bandName: userProfile.bandName
               }).eq('id', userProfile.id).then();
             }
           }
@@ -1955,7 +1962,6 @@ export default function App() {
               supabase.from('profiles').update({
                 band_id: updatedProfile.band_id,
                 band_name: updatedProfile.band_name,
-                bandName: updatedProfile.bandName,
                 active_workspace: updatedProfile.active_workspace,
                 account_type: updatedProfile.account_type
               }).eq('id', userProfile.id).then();
@@ -3246,12 +3252,10 @@ export default function App() {
           // Silently catch egress block, preserving UI state!
         }
 
-        // Try load shows
+        // Try load shows (shared 60s cached query)
         try {
-          const { data: showsDb, error: showsErr } = await supabase
-            .from('shows')
-            .select('id, show_name, headliner, show_date, date, doors_time, venue_name, city, price, support_lineup, flyer_url, created_at')
-            .order('date', { ascending: true });
+          const showsDb = await fetchCachedShowsList(supabase, { limit: 200, ascending: true });
+          const showsErr = null;
           if (!showsErr && showsDb) {
             if (showsDb.length > 0) {
               const mockShowIds = new Set([].map(s => s.id));

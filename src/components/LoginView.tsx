@@ -664,16 +664,21 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
       let userPromoter: any = null;
       try {
-        const { data: promoterData } = await supabase
-          .from('promoters')
-          .select('*')
-          .or(`id.eq.${data.id},user_id.eq.${data.id}`)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        const { PROMOTER_CARD_COLUMNS, hasAuthenticatedSupabaseSession } = await import('../lib/supabaseQueryCache');
+        if (await hasAuthenticatedSupabaseSession(supabase)) {
+          const { data: promoterData } = await supabase
+            .from('promoters')
+            .select(PROMOTER_CARD_COLUMNS)
+            .or(`id.eq.${data.id},user_id.eq.${data.id}`)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-        if (promoterData && (isOwnerMiguel || !String(promoterData.entity_name || promoterData.brand_name || '').toLowerCase().includes('nexus live'))) {
-          userPromoter = promoterData;
+          if (promoterData && (isOwnerMiguel || !String(promoterData.entity_name || promoterData.name || '').toLowerCase().includes('nexus live'))) {
+            userPromoter = promoterData;
+          } else if (hasConfirmedPromoter) {
+            userPromoter = await autoSyncPromoterProfile({ ...data, ...normalizedProfile });
+          }
         } else if (hasConfirmedPromoter) {
           userPromoter = await autoSyncPromoterProfile({ ...data, ...normalizedProfile });
         }

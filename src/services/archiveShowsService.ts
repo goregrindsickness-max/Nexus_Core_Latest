@@ -1,6 +1,7 @@
 import { getSupabase } from './clientService';
 import { executeWithSchemaResilience } from './schemaResilienceService';
 import { uploadArchiveFlyer } from './storageService';
+import { fetchCachedShowsList } from '../lib/supabaseQueryCache';
 
 export interface ArchiveShowItem {
   id: string;
@@ -244,9 +245,7 @@ export async function fetchArchiveShowsFromDatabase(userId = '5403162d-1947-43aa
     // Automatically import past shows from the public.shows table (dates prior to today)
     try {
       const todayStr = new Date().toISOString().split('T')[0];
-      const { data: pastShowsData } = await supabase
-        .from('shows')
-        .select('*');
+      const pastShowsData = await fetchCachedShowsList(supabase, { limit: 200, ascending: false });
 
       if (pastShowsData && Array.isArray(pastShowsData)) {
         const pastFromShowsTable: ArchiveShowItem[] = pastShowsData

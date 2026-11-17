@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
+import { hasAuthenticatedSupabaseSession } from '../../lib/supabaseQueryCache';
 import { 
   Activity, 
   MessageSquare, 
@@ -1229,14 +1230,16 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     });
 
     try {
-      const activeUserId = localStorage.getItem('nexus_active_profile_id') || localStorage.getItem('nexus_user_profile_id') || userId || 'anonymous';
-      const pollId = currentPoll.pollId || postId;
-      const optionIndex = currentPoll.options.findIndex((opt: any) => opt.id === optionId);
-      await supabase.from('nexus_poll_votes').insert({
-        poll_id: pollId,
-        user_id: activeUserId,
-        selected_option_index: optionIndex >= 0 ? optionIndex : 0
-      });
+      if (await hasAuthenticatedSupabaseSession(supabase)) {
+        const activeUserId = localStorage.getItem('nexus_active_profile_id') || localStorage.getItem('nexus_user_profile_id') || userId || 'anonymous';
+        const pollId = currentPoll.pollId || postId;
+        const optionIndex = currentPoll.options.findIndex((opt: any) => opt.id === optionId);
+        await supabase.from('nexus_poll_votes').insert({
+          poll_id: pollId,
+          user_id: activeUserId,
+          selected_option_index: optionIndex >= 0 ? optionIndex : 0
+        });
+      }
     } catch (err) {
       console.warn('Notice: Poll vote logging note:', err);
     }

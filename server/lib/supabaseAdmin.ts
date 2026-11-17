@@ -88,25 +88,6 @@ export async function getVaultSecret(secretName: keyof typeof VAULT_LOCAL_FALLBA
   }
 
   const fallbackVal = VAULT_LOCAL_FALLBACKS[secretName] || process.env[secretName.toUpperCase()] || '';
-
-  // Only attempt Supabase Vault lookup if we have a real service_role key
-  const hasServiceRoleKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
-  if (hasServiceRoleKey) {
-    try {
-      const sb = getSupabaseService();
-      if (sb) {
-        const { data: rpcData, error: rpcErr } = await sb.rpc('get_vault_secret', { secret_name: secretName });
-        if (!rpcErr && typeof rpcData === 'string' && rpcData.trim().length > 0) {
-          const val = rpcData.trim();
-          vaultSecretCache[secretName] = { value: val, expiresAt: now + VAULT_CACHE_TTL_MS };
-          return val;
-        }
-      }
-    } catch (_) {
-      // Silently fall back to local environment variable if RPC is not yet provisioned
-    }
-  }
-
   if (fallbackVal) {
     vaultSecretCache[secretName] = { value: fallbackVal, expiresAt: now + VAULT_CACHE_TTL_MS };
   }

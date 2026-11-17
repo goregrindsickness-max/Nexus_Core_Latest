@@ -4,6 +4,11 @@ import { labelCatalogStore } from '../utils/indexedDB';
 import { uploadBase64ToStorage } from './storageService';
 import { ensureUUID, executeWithSchemaResilience, registerSchemaSanitizers } from './schemaResilienceService';
 import { authFetch, getSupabaseAccessToken } from '../utils/apiConfig';
+import {
+  RELEASE_LIST_COLUMNS,
+  cachedSupabaseQuery,
+  invalidateSupabaseQueryCache,
+} from '../lib/supabaseQueryCache';
 
 
 
@@ -147,6 +152,7 @@ registerSchemaSanitizers({ sanitizeReleaseForDb });
  */
 export async function persistReleasesLocallyAndServer(releases: any[]): Promise<void> {
   if (!Array.isArray(releases) || releases.length === 0) return;
+  invalidateSupabaseQueryCache('releases:');
 
   // 1. IndexedDB persistence (labelCatalogStore)
   try {
@@ -265,26 +271,30 @@ function mapDbRowToRelease(row: any): CatalogRelease {
  * to server /api/releases and IndexedDB when remote permissions are restricted (42501).
  */
 export async function fetchReleasesFromDatabase(portalType?: 'band' | 'promoter' | 'creative'): Promise<CatalogRelease[]> {
-  try {
-    const client = getActiveSupabase(portalType);
-    const { data, error } = await client
-      .from('releases')
-      .select('*')
-      .order('created_at', { ascending: false });
+  return cachedSupabaseQuery(
+    `releases:list:${portalType || 'default'}`,
+    async () => {
+      try {
+        const client = getActiveSupabase(portalType);
+        const { data, error } = await client
+          .from('releases')
+          .select(RELEASE_LIST_COLUMNS)
+          .order('created_at', { ascending: false })
+          .limit(1000);
 
-    if (!error && data && Array.isArray(data) && data.length > 0) {
-      const mapped = data.map(mapDbRowToRelease);
-      // Synchronously cache into IndexedDB/localStorage for offline resilience
-      persistReleasesLocallyAndServer(mapped).catch(() => {});
-      return mapped;
-    }
+        if (!error && data && Array.isArray(data) && data.length > 0) {
+          const mapped = data.map(mapDbRowToRelease);
+          // Synchronously cache into IndexedDB/localStorage for offline resilience
+          persistReleasesLocallyAndServer(mapped).catch(() => {});
+          return mapped;
+        }
 
-    if (error) {
-      console.warn('[releasesService] Supabase fetchReleases notice (checking server & local store):', error.message);
-    }
-  } catch (err) {
-    console.warn('[releasesService] Exception querying Supabase releases, checking local store:', err);
-  }
+        if (error) {
+          console.warn('[releasesService] Supabase fetchReleases notice (checking server & local store):', error.message);
+        }
+      } catch (err) {
+        console.warn('[releasesService] Exception querying Supabase releases, checking local store:', err);
+      }
 
   // Fallback 1: Server-side cache (/api/releases)
   if (typeof fetch !== 'undefined') {
@@ -323,7 +333,11 @@ export async function fetchReleasesFromDatabase(portalType?: 'band' | 'promoter'
     }
   } catch (_) {}
 
-  return [];
+      return [];
+    },
+    60_000,
+    (rows) => Array.isArray(rows)
+  );
 }
 
 /**
@@ -335,6 +349,7 @@ export async function upsertReleaseToDatabase(
   bandId: string,
   portalType?: 'band' | 'promoter' | 'creative'
 ): Promise<{ success: boolean; error?: string; data?: any; preservedLocally?: boolean }> {
+  invalidateSupabaseQueryCache('releases:');
   try {
     const client = getActiveSupabase(portalType);
     const targetBandId = ensureUUID(String(bandId || release.band_id || 'b1').trim());
@@ -492,6 +507,7 @@ export async function upsertReleasesBatchToDatabase(
   bandId: string,
   portalType?: 'band' | 'promoter' | 'creative'
 ): Promise<{ success: boolean; error?: string; data?: any; count?: number; preservedLocally?: boolean }> {
+  invalidateSupabaseQueryCache('releases:');
   try {
     const client = getActiveSupabase(portalType);
 
@@ -748,6 +764,7 @@ export async function deleteReleaseFromDatabase(
   bandIdOrName?: string,
   releaseTitle?: string
 ): Promise<boolean> {
+  invalidateSupabaseQueryCache('releases:');
   try {
     const cleanId = String(releaseId || '').trim();
     const cleanTitle = (releaseTitle || '').toLowerCase().trim();
