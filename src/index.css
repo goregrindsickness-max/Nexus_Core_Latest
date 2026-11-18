@@ -91,7 +91,7 @@
 .animate-marquee {
   display: inline-flex;
   white-space: nowrap;
-  animation: text-marquee 12s linear infinite;
+  animation: text-marquee 16s linear infinite;
 }
 
 .animate-marquee:hover {
@@ -144,7 +144,7 @@
 .animate-marquee-smooth {
   display: inline-flex;
   white-space: nowrap;
-  animation: continuous-marquee 8s linear infinite;
+  animation: continuous-marquee 10.7s linear infinite;
 }
 
 @keyframes scene-follow-ticker {
@@ -1306,10 +1306,10 @@ div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-t
   100% { transform: translateX(-100%); }
 }
 .animate-marquee {
-  animation: marquee 10s linear infinite;
+  animation: text-marquee 16s linear infinite;
 }
 .animate-marquee-slow {
-  animation: marquee 15s linear infinite;
+  animation: marquee 20s linear infinite;
 }
 /* Ensure the marquee text doesn't overflow oddly when animation stops */
 .truncate-marquee {

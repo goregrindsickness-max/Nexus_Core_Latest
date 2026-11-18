@@ -47,6 +47,167 @@ export function normalizeBandKey(name?: string): string {
   return String(name || 'Nexus Merchant').trim().toLowerCase() || 'nexus merchant';
 }
 
+function normalizeStoreToken(val?: any): string {
+  return String(val || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function resolveCategoryGroup(item: any): string {
+  const cat = normalizeStoreToken(item?.category);
+  const sub = normalizeStoreToken(item?.subcategory || item?.rawCategory || item?.item_type);
+  if (cat === 'gear' || sub === 'gear') return 'gear';
+  if (cat === 'classifieds' || sub === 'classifieds') return 'classifieds';
+  if (
+    cat === 'media' ||
+    cat === 'vinyl' ||
+    sub.includes('vinyl') ||
+    sub.includes('cd') ||
+    sub.includes('cassette') ||
+    sub.includes('tape')
+  ) {
+    return 'media';
+  }
+  if (cat === 'label') return 'label';
+  return 'apparel';
+}
+
+function isPlaceholderImage(url?: string): boolean {
+  if (!url || typeof url !== 'string') return true;
+  const trimmed = url.trim();
+  return trimmed.length === 0;
+}
+
+/**
+ * Deduplicates storefront items across Supabase `shop_merch`, `nexus_shop_items`,
+ * Band Inventory (`nexus_master_inventory`), feed `merch_drop` posts, and props/mock items.
+ * Collapses duplicate entries sharing an ID, linked `dropId`/`inventoryId`, or identical
+ * `(name, seller/artist, price, categoryGroup)` signature while merging richer metadata.
+ */
+export function deduplicateStorefrontItems<T extends Record<string, any>>(items: T[]): T[] {
+  if (!Array.isArray(items) || items.length === 0) return [];
+
+  const result: T[] = [];
+  const seenKeys = new Map<string, number>();
+
+  const registerKey = (key: string, idx: number) => {
+    if (key) seenKeys.set(key, idx);
+  };
+
+  const getCandidateKeys = (item: any): string[] => {
+    const keys: string[] = [];
+    const id = String(item?.id || '').trim();
+    const dropId = String(item?.dropId || item?.merchData?.dropId || '').trim();
+    const invId = String(item?.inventoryId || item?.inventory_id || '').trim();
+    const listingId = String(item?.listingId || '').trim();
+
+    if (id) keys.push(`id:${id}`);
+    if (dropId) keys.push(`id:${dropId}`);
+    if (invId) {
+      keys.push(`id:${invId}`);
+      keys.push(`inv:${invId}`);
+    }
+    if (listingId) keys.push(`id:${listingId}`);
+
+    const normName = normalizeStoreToken(item?.name || item?.title);
+    const normSeller = normalizeStoreToken(
+      item?.seller || item?.artist || item?.bandName || item?.band || item?.brand || item?.poster
+    );
+    const priceNum = Number(item?.price);
+    const priceKey = Number.isFinite(priceNum) ? priceNum.toFixed(2) : '0.00';
+    const catGroup = resolveCategoryGroup(item);
+
+    if (normName && normSeller) {
+      keys.push(`sig:${normName}::${normSeller}::${priceKey}::${catGroup}`);
+    } else if (normName) {
+      keys.push(`sig:${normName}::::${priceKey}::${catGroup}`);
+    }
+
+    // If item carries an explicit band attribution in addition to seller (e.g. posted by pro for a band),
+    // also match against band-owned catalog rows of the same name + price + category.
+    const normBand = normalizeStoreToken(item?.bandName || item?.band_name || item?.band);
+    if (normName && normBand && normBand !== normSeller) {
+      keys.push(`sig:${normName}::${normBand}::${priceKey}::${catGroup}`);
+    }
+
+    return keys;
+  };
+
+  for (const rawItem of items) {
+    if (!rawItem || typeof rawItem !== 'object') continue;
+    const keys = getCandidateKeys(rawItem);
+    let existingIdx: number | undefined;
+    for (const k of keys) {
+      if (seenKeys.has(k)) {
+        existingIdx = seenKeys.get(k);
+        break;
+      }
+    }
+
+    if (existingIdx !== undefined) {
+      const target: any = result[existingIdx];
+      // Merge richer fields into the first-seen primary record without creating a duplicate card
+      if (isPlaceholderImage(target.thumbnail) && !isPlaceholderImage(rawItem.thumbnail)) {
+        target.thumbnail = rawItem.thumbnail;
+      }
+      if ((!Array.isArray(target.images) || target.images.length === 0) && Array.isArray(rawItem.images) && rawItem.images.length > 0) {
+        target.images = rawItem.images;
+      }
+      if ((!Array.isArray(target.sizes) || target.sizes.length === 0) && Array.isArray(rawItem.sizes) && rawItem.sizes.length > 0) {
+        target.sizes = rawItem.sizes;
+      }
+      if (!target.variantStocks && rawItem.variantStocks) {
+        target.variantStocks = rawItem.variantStocks;
+      }
+      if ((!Array.isArray(target.variants) || target.variants.length === 0) && Array.isArray(rawItem.variants) && rawItem.variants.length > 0) {
+        target.variants = rawItem.variants;
+      }
+      if ((target.stock === undefined || target.stock === null) && rawItem.stock !== undefined && rawItem.stock !== null) {
+        target.stock = rawItem.stock;
+      }
+      if (!target.description && rawItem.description) {
+        target.description = rawItem.description;
+      }
+      if (!target.band_id && (rawItem.band_id || rawItem.bandId)) {
+        target.band_id = rawItem.band_id || rawItem.bandId;
+      }
+      if (!target.bandName && (rawItem.bandName || rawItem.band_name)) {
+        target.bandName = rawItem.bandName || rawItem.band_name;
+      }
+      if (!target.inventory_id && (rawItem.inventory_id || rawItem.inventoryId)) {
+        target.inventory_id = rawItem.inventory_id || rawItem.inventoryId;
+      }
+      if (!target.dropId && rawItem.dropId) {
+        target.dropId = rawItem.dropId;
+      }
+      if (!target.seller_id && rawItem.seller_id) {
+        target.seller_id = rawItem.seller_id;
+      }
+      if (!target.is_timed && rawItem.is_timed) {
+        target.is_timed = rawItem.is_timed;
+        target.expires_at = target.expires_at || rawItem.expires_at;
+        target.duration_hours = target.duration_hours || rawItem.duration_hours;
+      }
+      if ((!Array.isArray(target.tracks) || target.tracks.length === 0) && Array.isArray(rawItem.tracks) && rawItem.tracks.length > 0) {
+        target.tracks = rawItem.tracks;
+      }
+      if (!target.is_real_account && rawItem.is_real_account) {
+        target.is_real_account = true;
+      }
+      keys.forEach((k) => registerKey(k, existingIdx!));
+      continue;
+    }
+
+    const cloned = { ...rawItem };
+    const newIdx = result.length;
+    result.push(cloned);
+    keys.forEach((k) => registerKey(k, newIdx));
+  }
+
+  return result;
+}
+
 export function readStoredCart(): any[] {
   try {
     const raw = localStorage.getItem(CART_STORAGE_KEY);
@@ -202,6 +363,10 @@ export async function decrementPurchasedInventory(
   purchasedItems: Array<{
     productId?: string;
     id?: string;
+    inventoryId?: string;
+    inventory_id?: string;
+    bandId?: string;
+    band_id?: string;
     name?: string;
     size?: string;
     quantity?: number;
@@ -215,6 +380,7 @@ export async function decrementPurchasedInventory(
   // 1. Update nexus_master_inventory in localStorage & IndexedDB if matching item exists
   let masterInventory: any[] = [];
   let masterChanged = false;
+  const supabaseInvUpdates: any[] = [];
   try {
     const rawLocal = localStorage.getItem('nexus_master_inventory');
     if (rawLocal) {
@@ -229,17 +395,24 @@ export async function decrementPurchasedInventory(
 
   for (const purchased of purchasedItems) {
     const targetId = String(purchased.productId || purchased.id || '').trim();
+    const linkedInvId = String(purchased.inventoryId || purchased.inventory_id || '').trim();
+    const linkedBandId = String(purchased.bandId || purchased.band_id || '').trim();
     const qty = Math.max(1, Number(purchased.quantity) || 1);
     const chosenSize = purchased.size;
-    if (!targetId) continue;
+    if (!targetId && !linkedInvId) continue;
 
-    // Locate in master inventory
+    // Locate in master inventory (prioritize explicit inventoryId link, then productId, then name+band)
     const invIndex = Array.isArray(masterInventory)
-      ? masterInventory.findIndex(
-          (inv: any) =>
-            String(inv.id || '') === targetId ||
-            (purchased.name && String(inv.name || inv.title || '').toLowerCase() === purchased.name.toLowerCase())
-        )
+      ? masterInventory.findIndex((inv: any) => {
+          const invRowId = String(inv?.id || '');
+          if (linkedInvId && invRowId === linkedInvId) return true;
+          if (targetId && invRowId === targetId) return true;
+          if (purchased.name && String(inv?.name || inv?.title || '').toLowerCase() === purchased.name.toLowerCase()) {
+            if (!linkedBandId || !inv?.band_id) return true;
+            return String(inv.band_id) === linkedBandId;
+          }
+          return false;
+        })
       : -1;
 
     let currentTotal: number | undefined;
@@ -274,24 +447,36 @@ export async function decrementPurchasedInventory(
       inv.status = currentTotal <= 0 ? 'Sold Out' : currentTotal <= (inv.low_threshold || 5) ? 'Low Stock' : 'Healthy';
       masterInventory[invIndex] = inv;
       masterChanged = true;
+      supabaseInvUpdates.push({
+        id: inv.id,
+        table_stock: inv.table_stock,
+        van_stock: inv.van_stock,
+        variants: inv.variants,
+        status: inv.status,
+      });
     }
 
     // Update stock override entry for non-master items (shop_merch, mock items, feed drops)
-    const existingOverride = overrides[targetId] || { updatedAt: new Date().toISOString() };
+    const overrideKey = targetId || linkedInvId;
+    const existingOverride = overrides[overrideKey] || { updatedAt: new Date().toISOString() };
     const knownStock =
       existingOverride.totalStock ??
       currentTotal ??
       (purchased.stock !== undefined ? Math.max(0, Number(purchased.stock) - qty) : undefined);
 
     if (chosenSize) {
-      const prevVarStock =
-        existingOverride.variantStocks?.[chosenSize] ??
-        currentVariantMap[chosenSize] ??
-        (knownStock !== undefined ? Math.max(0, knownStock) : 5);
+      const nextChosenStock =
+        currentVariantMap[chosenSize] !== undefined
+          ? currentVariantMap[chosenSize]
+          : Math.max(
+              0,
+              (existingOverride.variantStocks?.[chosenSize] ??
+                (knownStock !== undefined ? Math.max(0, knownStock) : 5)) - qty
+            );
       existingOverride.variantStocks = {
         ...(existingOverride.variantStocks || {}),
         ...currentVariantMap,
-        [chosenSize]: Math.max(0, prevVarStock - qty),
+        [chosenSize]: nextChosenStock,
       };
     }
 
@@ -299,12 +484,15 @@ export async function decrementPurchasedInventory(
       existingOverride.totalStock = currentTotal !== undefined ? currentTotal : Math.max(0, knownStock);
     }
     existingOverride.updatedAt = new Date().toISOString();
-    overrides[targetId] = existingOverride;
+    overrides[overrideKey] = existingOverride;
+    if (linkedInvId && linkedInvId !== overrideKey) {
+      overrides[linkedInvId] = existingOverride;
+    }
 
     // Best-effort Supabase decrement on shop_merch
     try {
       const sb = getSupabase();
-      if (sb && !targetId.startsWith('mock_') && !targetId.startsWith('m_')) {
+      if (sb && targetId && !targetId.startsWith('mock_') && !targetId.startsWith('m_')) {
         const { data: row } = await sb.from('shop_merch').select('id, stock').eq('id', targetId).maybeSingle();
         if (row && typeof row.stock === 'number') {
           await sb
@@ -315,6 +503,29 @@ export async function decrementPurchasedInventory(
       }
     } catch {
       // ignore if Supabase row doesn't exist
+    }
+  }
+
+  // Persist linked Band Inventory updates to Supabase `inventory` table (best-effort)
+  if (supabaseInvUpdates.length > 0) {
+    try {
+      const sb = getSupabase();
+      if (sb) {
+        for (const upd of supabaseInvUpdates) {
+          if (!upd.id || String(upd.id).startsWith('inv_')) continue;
+          await sb
+            .from('inventory')
+            .update({
+              table_stock: upd.table_stock,
+              van_stock: upd.van_stock,
+              variants: upd.variants,
+              status: upd.status,
+            })
+            .eq('id', upd.id);
+        }
+      }
+    } catch {
+      // ignore Supabase inventory sync failure for buyers without write access
     }
   }
 

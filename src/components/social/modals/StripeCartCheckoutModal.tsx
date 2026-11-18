@@ -26,6 +26,10 @@ import {
   commitShopPurchaseToCollections,
   type CartFulfillmentMap,
 } from '../../../services/shopCommerceService';
+import {
+  resolvePayoutRouteForItem,
+  recordOrderPayoutSettlements,
+} from '../../../services/payoutRoutingService';
 
 const stripePublicKey = (import.meta.env.VITE_STRIPE_PUBLIC_KEY || '').trim();
 const isRealStripeKey = typeof stripePublicKey === 'string' && stripePublicKey.startsWith('pk_') && !stripePublicKey.includes('placeholder');
@@ -91,6 +95,11 @@ export function StripeCartCheckoutModal({
   const requiresShipping = groups.some((g) => g.fulfillment.mode !== 'booth_pickup');
   const totalAmount = grandTotal;
 
+  const primaryPayoutRoute = React.useMemo(() => {
+    const firstItem = cartItems[0];
+    return resolvePayoutRouteForItem(firstItem, { bands, userProfile });
+  }, [cartItems, bands, userProfile]);
+
   useEffect(() => {
     if (totalAmount > 0) {
       setIsLoading(true);
@@ -99,7 +108,12 @@ export function StripeCartCheckoutModal({
       authFetch('/api/payments/create-payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: totalAmount, currency: 'usd' })
+        body: JSON.stringify({
+          amount: totalAmount,
+          currency: 'usd',
+          payoutRoute: primaryPayoutRoute,
+          stripeAccountId: primaryPayoutRoute.stripeAccountId,
+        })
       })
         .then(res => res.ok ? res.json() : null)
         .then(data => {
@@ -120,7 +134,7 @@ export function StripeCartCheckoutModal({
           setIsLoading(false);
         });
     }
-  }, [totalAmount]);
+  }, [totalAmount, primaryPayoutRoute]);
 
   const validateCustomAddress = (): boolean => {
     if (!requiresShipping || useWalletAddress) return true;
@@ -163,6 +177,8 @@ export function StripeCartCheckoutModal({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               cartItems,
+              payoutRoute: primaryPayoutRoute,
+              stripeAccountId: primaryPayoutRoute.stripeAccountId,
               shippingAddress: {
                 name: shippingName,
                 street: shippingStreet,
@@ -176,7 +192,10 @@ export function StripeCartCheckoutModal({
               metadata: {
                 customerName: shippingName || userProfile?.name || 'Customer',
                 customerEmail: userProfile?.email || '',
-                totalAmount: String(totalAmount)
+                totalAmount: String(totalAmount),
+                recipientName: primaryPayoutRoute.entityName,
+                payoutMethod: primaryPayoutRoute.preferredMethod,
+                payoutDestination: primaryPayoutRoute.destinationLabel,
               }
             })
           });
@@ -212,6 +231,17 @@ export function StripeCartCheckoutModal({
 
       // Decrement live stock counts & variant inventory
       await decrementPurchasedInventory(cartItems);
+
+      // Record itemized per-band/seller payout settlements (95% artist share + 100% shipping pass-through)
+      recordOrderPayoutSettlements({
+        items: cartItems,
+        orderId: generatedOrderId,
+        transactionId: paymentResult.transactionId,
+        buyerPaymentMethod: paymentResult.paymentMethod,
+        shippingTotal,
+        bands,
+        userProfile,
+      });
 
       // Save itemized receipts (with Booth Pickup passes & Digital Release unlocks) to collections
       const updatedCollections = commitShopPurchaseToCollections({
@@ -316,6 +346,15 @@ export function StripeCartCheckoutModal({
               <div className="flex justify-between items-center pt-1.5 border-t border-zinc-800/80">
                 <span className="text-white uppercase font-bold">Total Amount</span>
                 <span className="text-rose-500 text-base font-black">${totalAmount.toFixed(2)}</span>
+              </div>
+              <div className="pt-1.5 border-t border-zinc-800/70 flex items-center justify-between gap-2 text-[10px]">
+                <span className="text-zinc-400">
+                  Direct Artist Payout (95%):{' '}
+                  <strong className="text-emerald-400">{primaryPayoutRoute.entityName}</strong>
+                </span>
+                <span className="text-zinc-300 truncate max-w-[180px]" title={primaryPayoutRoute.destinationLabel}>
+                  → {primaryPayoutRoute.destinationLabel}
+                </span>
               </div>
             </div>
 

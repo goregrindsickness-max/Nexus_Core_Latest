@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, ShoppingCart, Tag, Flame, Clock, Shirt, Plus, Check, Layers, Package, Handshake, AlertCircle, Trash2, Image as ImageIcon, Star, Upload, Link as LinkIcon, Sparkles, Loader2 } from 'lucide-react';
+import { X, ShoppingCart, Tag, Flame, Clock, Shirt, Plus, Check, Layers, Package, Handshake, AlertCircle, Trash2, Image as ImageIcon, Star, Upload, Link as LinkIcon, Sparkles, Loader2, Users } from 'lucide-react';
 import { compressImageInSocialFeed } from '../../../utils/socialFeedUtils';
 
 export interface MerchDropModalProps {
@@ -32,6 +32,13 @@ export interface MerchDropModalProps {
   setMerchDropThumbnail: (val: string) => void;
   merchDropImages?: string[];
   setMerchDropImages?: (val: string[]) => void;
+  bands?: any[];
+  merchDropBandId?: string;
+  setMerchDropBandId?: (val: string) => void;
+  merchDropBandName?: string;
+  setMerchDropBandName?: (val: string) => void;
+  merchDropInventoryId?: string;
+  setMerchDropInventoryId?: (val: string) => void;
   triggerNotification?: (msg: string) => void;
 }
 
@@ -73,12 +80,67 @@ export const MerchDropModal: React.FC<MerchDropModalProps> = ({
   setMerchDropThumbnail,
   merchDropImages,
   setMerchDropImages,
+  bands = [],
+  merchDropBandId = '',
+  setMerchDropBandId,
+  merchDropBandName = '',
+  setMerchDropBandName,
+  merchDropInventoryId = '',
+  setMerchDropInventoryId,
   triggerNotification,
 }) => {
   const [newVariantInput, setNewVariantInput] = useState('');
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [isProcessingPhotos, setIsProcessingPhotos] = useState(false);
+  const [masterInventory, setMasterInventory] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const raw = localStorage.getItem('nexus_master_inventory');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setMasterInventory(parsed);
+      }
+    } catch {
+      setMasterInventory([]);
+    }
+  }, [isOpen]);
+
+  const bandOptions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    (bands || []).forEach((b: any) => {
+      const name = String(b?.band_name || b?.name || '').trim();
+      const id = String(b?.id || '').trim();
+      if (name && !map.has(name.toLowerCase())) {
+        map.set(name.toLowerCase(), { id, name });
+      }
+    });
+    (masterInventory || []).forEach((inv: any) => {
+      const name = String(inv?.artist || inv?.band || inv?.brand || '').trim();
+      const id = String(inv?.band_id || inv?.bandId || '').trim();
+      if (name && !map.has(name.toLowerCase())) {
+        map.set(name.toLowerCase(), { id, name });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [bands, masterInventory]);
+
+  const filteredInventorySkus = useMemo(() => {
+    if (!Array.isArray(masterInventory)) return [];
+    if (!merchDropBandName && !merchDropBandId) return masterInventory;
+    const targetName = (merchDropBandName || '').toLowerCase().trim();
+    const targetId = (merchDropBandId || '').trim();
+    const matches = masterInventory.filter((inv: any) => {
+      const invBandId = String(inv?.band_id || inv?.bandId || '').trim();
+      const invArtist = String(inv?.artist || inv?.band || inv?.brand || '').toLowerCase().trim();
+      if (targetId && invBandId && invBandId === targetId) return true;
+      if (targetName && invArtist && invArtist === targetName) return true;
+      return false;
+    });
+    return matches.length > 0 ? matches : masterInventory;
+  }, [masterInventory, merchDropBandId, merchDropBandName]);
 
   // Active images list (strict max 3)
   const activeImages = (merchDropImages && merchDropImages.length > 0 
@@ -260,6 +322,110 @@ export const MerchDropModal: React.FC<MerchDropModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Band Attribution & Inventory SKU Sync (useful when posting from Industry Pro / Personal profile) */}
+              {(bandOptions.length > 0 || masterInventory.length > 0) && (
+                <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[10px] font-black uppercase text-zinc-300 tracking-wider flex items-center gap-1.5 font-mono">
+                      <Users className="w-3.5 h-3.5 text-purple-400" /> Credit Band & Sync Inventory (Optional)
+                    </label>
+                    {merchDropInventoryId && (
+                      <span className="text-[9px] font-mono text-emerald-400 font-bold">SKU Linked</span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[9px] font-mono uppercase text-zinc-500 mb-1">
+                        Attribute to Band
+                      </label>
+                      <select
+                        value={merchDropBandName}
+                        onChange={(e) => {
+                          const chosenName = e.target.value;
+                          const matched = bandOptions.find((b) => b.name === chosenName);
+                          setMerchDropBandName?.(chosenName);
+                          setMerchDropBandId?.(matched?.id || '');
+                        }}
+                        className="w-full bg-black border border-zinc-800 focus:border-purple-500/60 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none cursor-pointer"
+                      >
+                        <option value="">Use Posting Profile (Default)</option>
+                        {bandOptions.map((b) => (
+                          <option key={`band-opt-${b.id || b.name}`} value={b.name}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-mono uppercase text-zinc-500 mb-1">
+                        Link Band Inventory SKU
+                      </label>
+                      <select
+                        value={merchDropInventoryId}
+                        onChange={(e) => {
+                          const skuId = e.target.value;
+                          setMerchDropInventoryId?.(skuId);
+                          const sku = masterInventory.find((inv: any) => String(inv?.id || '') === skuId);
+                          if (sku) {
+                            const skuName = String(sku.name || sku.title || '').trim();
+                            const skuBand = String(sku.artist || sku.band || sku.brand || '').trim();
+                            const skuBandId = String(sku.band_id || sku.bandId || '').trim();
+                            const totalUnits =
+                              sku.stock !== undefined
+                                ? Number(sku.stock)
+                                : Number(sku.table_stock || 0) + Number(sku.van_stock || 0);
+                            if (skuName) setMerchDropName(skuName);
+                            if (sku.price !== undefined && sku.price !== null) {
+                              setMerchDropPrice(String(sku.price));
+                            }
+                            if (skuBand) {
+                              setMerchDropBandName?.(skuBand);
+                              setMerchDropBandId?.(skuBandId);
+                            }
+                            if (sku.description) setMerchDropDescription?.(sku.description);
+                            if (Number.isFinite(totalUnits) && totalUnits > 0) {
+                              setMerchDropIsUnlimited?.(false);
+                              setMerchDropStock?.(String(totalUnits));
+                            }
+                            if (Array.isArray(sku.variants) && sku.variants.length > 0) {
+                              const varNames = sku.variants
+                                .map((v: any) => String(v?.size || v?.label || '').trim())
+                                .filter(Boolean);
+                              if (varNames.length > 0) setMerchDropVariants?.(varNames);
+                            }
+                            const skuImg = sku.image || sku.coverUrl || sku.artwork_url || sku.thumbnail;
+                            if (skuImg) {
+                              const imgs = Array.isArray(sku.images) && sku.images.length > 0 ? sku.images : [skuImg];
+                              updateImages(imgs);
+                            }
+                            triggerNotification?.(`Linked "${skuName}" inventory SKU.`);
+                          }
+                        }}
+                        className="w-full bg-black border border-zinc-800 focus:border-purple-500/60 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none cursor-pointer"
+                      >
+                        <option value="">Standalone Drop (No SKU Link)</option>
+                        {filteredInventorySkus.map((inv: any) => {
+                          const totalUnits =
+                            inv.stock !== undefined
+                              ? Number(inv.stock)
+                              : Number(inv.table_stock || 0) + Number(inv.van_stock || 0);
+                          return (
+                            <option key={`inv-sku-${inv.id}`} value={String(inv.id)}>
+                              {inv.name || inv.title} ({totalUnits} units)
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-zinc-500 font-mono leading-relaxed">
+                    Linking a Band Inventory SKU merges this drop with your band&apos;s Storefront card and decrements Band Inventory on every sale.
+                  </p>
+                </div>
+              )}
 
               {/* Category Selector */}
               <div>

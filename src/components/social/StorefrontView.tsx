@@ -42,6 +42,7 @@ import {
   submitListingOffer,
   isPhysicalMediaItem,
   resolveItemTracks,
+  deduplicateStorefrontItems,
   FREE_SHIPPING_THRESHOLD_PER_BAND,
   type ListingOfferRecord,
 } from '../../services/shopCommerceService';
@@ -357,62 +358,74 @@ export const StorefrontView: React.FC<StorefrontViewProps> = (props) => {
   useEffect(() => {
     loadLocalRealCatalog();
 
-    fetchShopMerchItems()
-      .then((rows) => {
-        if (!Array.isArray(rows) || rows.length === 0) return;
-        const mapped = rows.map((m) => {
-          const rawCat = String(m.category || '').toLowerCase();
-          const nameLower = String(m.name || '').toLowerCase();
-          const isPhysical =
-            rawCat.includes('vinyl') ||
-            rawCat.includes('cd') ||
-            rawCat.includes('cassette') ||
-            rawCat.includes('media') ||
-            nameLower.includes('vinyl') ||
-            nameLower.includes(' lp') ||
-            nameLower.includes('cassette');
-          return {
-            id: String(m.id),
-            name: m.name,
-            price: Number(m.price) || 0,
-            category: isPhysical ? 'media' : 'apparel',
-            subcategory: isPhysical
-              ? rawCat.includes('cd')
-                ? 'cds'
-                : rawCat.includes('cassette')
-                ? 'cassettes'
-                : 'vinyl'
-              : rawCat.includes('hoodie')
-              ? 'hoodies'
-              : rawCat.includes('longsleeve')
-              ? 'longsleeve'
-              : 't-shirts',
-            rawCategory: m.category,
-            condition: m.condition || 'New',
-            description: m.description || '',
-            sizes: Array.isArray(m.sizes) && m.sizes.length > 0 ? m.sizes : ['S', 'M', 'L', 'XL', '2XL'],
-            thumbnail: m.thumbnail,
-            images: Array.isArray(m.images) && m.images.length > 0 ? m.images : m.thumbnail ? [m.thumbnail] : [],
-            stock: m.stock !== undefined ? Number(m.stock) : 25,
-            isLimited: Boolean(m.is_timed || (m.stock !== undefined && Number(m.stock) <= 25)),
-            is_timed: Boolean(m.is_timed),
-            expires_at: m.expires_at,
-            duration_hours: m.duration_hours,
-            seller_id: m.seller_id,
-            seller: m.seller_name || 'Nexus Merchant',
-            brand: m.seller_name || 'Nexus Merchant',
-            artist: m.seller_name || 'Nexus Merchant',
-            allow_negotiation: m.allow_negotiation !== false,
-            is_real_account: true,
-            created_at: m.created_at,
-          };
-        });
-        setSupabaseDropItems(mapped);
-      })
-      .catch(() => {});
+    const refreshSupabaseDrops = () => {
+      fetchShopMerchItems()
+        .then((rows) => {
+          if (!Array.isArray(rows) || rows.length === 0) return;
+          const mapped = rows.map((m) => {
+            const rawCat = String(m.category || '').toLowerCase();
+            const nameLower = String(m.name || '').toLowerCase();
+            const isPhysical =
+              rawCat.includes('vinyl') ||
+              rawCat.includes('cd') ||
+              rawCat.includes('cassette') ||
+              rawCat.includes('media') ||
+              nameLower.includes('vinyl') ||
+              nameLower.includes(' lp') ||
+              nameLower.includes('cassette');
+            return {
+              id: String(m.id),
+              name: m.name,
+              price: Number(m.price) || 0,
+              category: isPhysical ? 'media' : 'apparel',
+              subcategory: isPhysical
+                ? rawCat.includes('cd')
+                  ? 'cds'
+                  : rawCat.includes('cassette')
+                  ? 'cassettes'
+                  : 'vinyl'
+                : rawCat.includes('hoodie')
+                ? 'hoodies'
+                : rawCat.includes('longsleeve')
+                ? 'longsleeve'
+                : 't-shirts',
+              rawCategory: m.category,
+              condition: m.condition || 'New',
+              description: m.description || '',
+              sizes: Array.isArray(m.sizes) && m.sizes.length > 0 ? m.sizes : ['S', 'M', 'L', 'XL', '2XL'],
+              thumbnail: m.thumbnail,
+              images: Array.isArray(m.images) && m.images.length > 0 ? m.images : m.thumbnail ? [m.thumbnail] : [],
+              stock: m.stock !== undefined ? Number(m.stock) : 25,
+              isLimited: Boolean(m.is_timed || (m.stock !== undefined && Number(m.stock) <= 25)),
+              is_timed: Boolean(m.is_timed),
+              expires_at: m.expires_at,
+              duration_hours: m.duration_hours,
+              seller_id: m.seller_id,
+              seller: m.seller_name || 'Nexus Merchant',
+              band_id: m.band_id || undefined,
+              bandName: m.band_name || undefined,
+              inventory_id: m.inventory_id || undefined,
+              brand: m.band_name || m.seller_name || 'Nexus Merchant',
+              artist: m.band_name || m.seller_name || 'Nexus Merchant',
+              allow_negotiation: m.allow_negotiation !== false,
+              is_real_account: true,
+              created_at: m.created_at,
+            };
+          });
+          setSupabaseDropItems(mapped);
+        })
+        .catch(() => {});
+    };
+
+    refreshSupabaseDrops();
 
     const onInvUpdate = () => {
       loadLocalRealCatalog();
+      setStoreVersion((v) => v + 1);
+    };
+    const onMerchDropCreated = () => {
+      loadLocalRealCatalog();
+      refreshSupabaseDrops();
       setStoreVersion((v) => v + 1);
     };
     const onWishlistUpdate = (e: any) => {
@@ -425,12 +438,14 @@ export const StorefrontView: React.FC<StorefrontViewProps> = (props) => {
 
     window.addEventListener('nexus_inventory_updated', onInvUpdate);
     window.addEventListener('nexus_shop_stock_updated', onInvUpdate);
+    window.addEventListener('nexus_merch_drop_created', onMerchDropCreated);
     window.addEventListener('nexus_wishlist_updated', onWishlistUpdate);
     window.addEventListener('nexus_listing_status_updated', onListingStatusUpdate);
     window.addEventListener('nexus_listing_offers_updated', onOffersUpdate);
     return () => {
       window.removeEventListener('nexus_inventory_updated', onInvUpdate);
       window.removeEventListener('nexus_shop_stock_updated', onInvUpdate);
+      window.removeEventListener('nexus_merch_drop_created', onMerchDropCreated);
       window.removeEventListener('nexus_wishlist_updated', onWishlistUpdate);
       window.removeEventListener('nexus_listing_status_updated', onListingStatusUpdate);
       window.removeEventListener('nexus_listing_offers_updated', onOffersUpdate);
@@ -450,12 +465,31 @@ export const StorefrontView: React.FC<StorefrontViewProps> = (props) => {
     (feed || []).forEach((post: any) => {
       if (!post) return;
       if (post.type === 'merch_drop' && post.merchData) {
+        const rawSub = String(post.merchData.category || '').toLowerCase();
+        const nameLower = String(post.merchData.name || post.title || '').toLowerCase();
+        const isPhysical = isPhysicalMediaItem(post.merchData) || rawSub.includes('media');
+        const normalizedSub = isPhysical
+          ? rawSub.includes('cd') || nameLower.includes('cd')
+            ? 'cds'
+            : rawSub.includes('cassette') || nameLower.includes('cassette')
+            ? 'cassettes'
+            : 'vinyl'
+          : rawSub.includes('hoodie') || nameLower.includes('hoodie')
+          ? 'hoodies'
+          : rawSub.includes('longsleeve') || nameLower.includes('longsleeve')
+          ? 'longsleeve'
+          : 't-shirts';
+        const creditedBand = post.merchData.bandName || post.merchData.band_name || '';
         items.push({
           id: post.merchData.dropId || `drop_${post.id}`,
+          dropId: post.merchData.dropId || undefined,
+          inventory_id: post.merchData.inventoryId || post.merchData.inventory_id || undefined,
+          band_id: post.merchData.bandId || post.merchData.band_id || undefined,
+          bandName: creditedBand || undefined,
           name: post.merchData.name || post.title || 'Merch Drop',
           price: Number(post.merchData.price) || 25,
-          category: isPhysicalMediaItem(post.merchData) ? 'media' : 'apparel',
-          subcategory: post.merchData.category || 't-shirts',
+          category: isPhysical ? 'media' : 'apparel',
+          subcategory: normalizedSub,
           description: post.merchData.description || post.content || post.message || 'Official merch drop from timeline.',
           thumbnail: post.merchData.thumbnail || post.image || '',
           images: post.merchData.images || (post.merchData.thumbnail ? [post.merchData.thumbnail] : []),
@@ -463,9 +497,9 @@ export const StorefrontView: React.FC<StorefrontViewProps> = (props) => {
           stock: post.merchData.stock,
           is_timed: Boolean(post.merchData.isTimed || post.merchData.expiresAt),
           expires_at: post.merchData.expiresAt,
-          brand: post.authorName || 'Artist Drop',
-          artist: post.authorName || 'Artist Drop',
-          seller: post.authorName || 'Artist Drop',
+          brand: creditedBand || post.authorName || 'Artist Drop',
+          artist: creditedBand || post.authorName || 'Artist Drop',
+          seller: post.authorName || creditedBand || 'Artist Drop',
           seller_id: post.authorId,
           allow_negotiation: post.merchData.allowNegotiation !== false,
           is_real_account: true,
@@ -501,15 +535,8 @@ export const StorefrontView: React.FC<StorefrontViewProps> = (props) => {
   // Unified Deduplicated Storefront Items
   const effectiveShopItems = useMemo(() => {
     const base = shopItems && shopItems.length > 0 ? shopItems : mockShopItems;
-    const seen = new Set<string>();
     const combined = [...supabaseDropItems, ...inventoryCatalogItems, ...feedShopItems, ...base];
-    return combined.filter((item) => {
-      if (!item) return false;
-      const idKey = String(item.id || `${item.name}_${item.seller || ''}`);
-      if (seen.has(idKey)) return false;
-      seen.add(idKey);
-      return true;
-    });
+    return deduplicateStorefrontItems(combined);
   }, [shopItems, supabaseDropItems, inventoryCatalogItems, feedShopItems]);
 
   const realAccountItems = useMemo(
@@ -2117,7 +2144,9 @@ export const StorefrontView: React.FC<StorefrontViewProps> = (props) => {
                               size: chosenSize,
                               quantity: pdpQty,
                               sizes: selectedShopItem.sizes || [chosenSize],
-                              bandName: selectedShopItem.artist || selectedShopItem.brand || selectedShopItem.seller || 'Artist / Label',
+                              bandName: selectedShopItem.bandName || selectedShopItem.artist || selectedShopItem.brand || selectedShopItem.seller || 'Artist / Label',
+                              inventory_id: selectedShopItem.inventory_id || selectedShopItem.inventoryId,
+                              band_id: selectedShopItem.band_id || selectedShopItem.bandId,
                             };
                             setSelectedShopItem(null);
                             openCheckout('merch', itemToCheckout);

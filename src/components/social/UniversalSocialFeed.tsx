@@ -16,6 +16,7 @@ import { useSocialStoriesState } from "./hooks/useSocialStoriesState";
 import { useSocialFeedSync } from "./hooks/useSocialFeedSync";
 import { mockShopItems } from '../../data/shopMockData';
 import { initialForumThreads } from '../../data/forumMockData';
+import { deduplicateStorefrontItems, isPhysicalMediaItem } from '../../services/shopCommerceService';
 import { getAvatarBorderColorClass, getRoleBorderAndGlowClass, compressImage, isValidUUID, isValidUUIDLocal } from './utils/socialUtils';
 import { generateDeterministicUUID } from './follows/followService';
 import { fanTheme, royalBlueTheme, getSocialTheme } from './utils/themeUtils';
@@ -65,6 +66,7 @@ import {
   getEffectiveShowEndDate,
   isShowPastOrEnded,
   formatShowDateRange,
+  formatShowCityLabel,
 } from '../../utils/showDisplayUtils';
 import { isValidStorageOrImageUrl } from '../../services/storageService';
 import {
@@ -1246,7 +1248,7 @@ export function UniversalSocialFeed({
                 date: dateDisplay,
                 rawDate: rawDate,
                 ...(resolvedEndDate ? { end_date: resolvedEndDate, endDate: resolvedEndDate } : {}),
-                city: rawCity,
+                city: formatShowCityLabel({ city: rawCity, state_province: rawState }) || rawCity,
                 state_province: rawState,
                 country: rawCountry,
                 price: priceDisplay,
@@ -1847,6 +1849,12 @@ export function UniversalSocialFeed({
     setMerchDropTimerHours,
     merchDropTimerMinutes,
     setMerchDropTimerMinutes,
+    merchDropBandId,
+    setMerchDropBandId,
+    merchDropBandName,
+    setMerchDropBandName,
+    merchDropInventoryId,
+    setMerchDropInventoryId,
     commentInputs,
     setCommentInputs,
 
@@ -4813,23 +4821,32 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         ]);
 
         const fromNexusShop = (!shopError && Array.isArray(shopData))
-          ? shopData.map((d: any) => ({
-              id: d.id,
-              name: d.name,
-              price: Number(d.price),
-              category: d.category,
-              subcategory: d.category,
-              description: d.description,
-              thumbnail: d.fallback_thumbnail,
-              fallbackThumbnail: d.fallback_thumbnail,
-              condition: d.condition,
-              year: 'N/A',
-              brand: d.brand_name || 'Generic',
-              seller: d.seller,
-              poster: d.seller,
-              location: d.location || 'Local',
-              is_real_account: true
-            }))
+          ? shopData.map((d: any) => {
+              const rawCat = String(d.category || '').toLowerCase();
+              const isGear = rawCat === 'gear' || rawCat.includes('gear');
+              const isClass = rawCat === 'classifieds' || rawCat.includes('classified');
+              const isPhys = !isGear && !isClass && (isPhysicalMediaItem({ category: d.category, name: d.name }) || rawCat.includes('media'));
+              const normalizedCat = isGear ? 'gear' : isClass ? 'classifieds' : isPhys ? 'media' : 'apparel';
+              return {
+                id: String(d.id),
+                name: d.name,
+                price: Number(d.price),
+                category: normalizedCat,
+                subcategory: isPhys ? (rawCat.includes('cd') ? 'cds' : rawCat.includes('cassette') ? 'cassettes' : 'vinyl') : (normalizedCat === 'apparel' ? (rawCat.includes('hoodie') ? 'hoodies' : rawCat.includes('longsleeve') ? 'longsleeve' : 't-shirts') : normalizedCat),
+                rawCategory: d.category,
+                description: d.description,
+                thumbnail: d.fallback_thumbnail,
+                fallbackThumbnail: d.fallback_thumbnail,
+                condition: d.condition,
+                year: 'N/A',
+                brand: d.brand_name || d.seller || 'Generic',
+                artist: d.brand_name || d.seller || 'Generic',
+                seller: d.seller,
+                poster: d.seller,
+                location: d.location || 'Local',
+                is_real_account: true
+              };
+            })
           : [];
 
         const fromMerchDrops = (Array.isArray(merchDrops) ? merchDrops : []).map((m: any) => {
@@ -4858,21 +4875,18 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
             duration_hours: m.duration_hours,
             seller_id: m.seller_id,
             seller: m.seller_name || 'Nexus Merchant',
-            brand: m.seller_name || 'Nexus Merchant',
-            artist: m.seller_name || 'Nexus Merchant',
+            band_id: m.band_id || undefined,
+            bandName: m.band_name || undefined,
+            inventory_id: m.inventory_id || undefined,
+            brand: m.band_name || m.seller_name || 'Nexus Merchant',
+            artist: m.band_name || m.seller_name || 'Nexus Merchant',
             allow_negotiation: m.allow_negotiation !== false,
             is_real_account: true,
             created_at: m.created_at
           };
         });
 
-        const seenIds = new Set<string>();
-        const merged = [...fromMerchDrops, ...fromNexusShop, ...mockShopItems].filter((item) => {
-          const idKey = String(item?.id || '');
-          if (!idKey || seenIds.has(idKey)) return false;
-          seenIds.add(idKey);
-          return true;
-        });
+        const merged = deduplicateStorefrontItems([...fromMerchDrops, ...fromNexusShop, ...mockShopItems]);
 
         setShopItemsList(merged);
         setShopItems(merged);
@@ -7056,6 +7070,12 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         setMerchDropTimerHours={setMerchDropTimerHours}
         merchDropTimerMinutes={merchDropTimerMinutes}
         setMerchDropTimerMinutes={setMerchDropTimerMinutes}
+        merchDropBandId={merchDropBandId}
+        setMerchDropBandId={setMerchDropBandId}
+        merchDropBandName={merchDropBandName}
+        setMerchDropBandName={setMerchDropBandName}
+        merchDropInventoryId={merchDropInventoryId}
+        setMerchDropInventoryId={setMerchDropInventoryId}
         handlePublishMerchDrop={() => {}}
 
         // DIY Event Modal

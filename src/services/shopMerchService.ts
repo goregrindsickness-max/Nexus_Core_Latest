@@ -18,6 +18,9 @@ export interface ShopMerchItem {
   duration_hours?: number;
   seller_id?: string;
   seller_name?: string;
+  band_id?: string;
+  band_name?: string;
+  inventory_id?: string;
   allow_negotiation?: boolean;
   created_at?: string;
 }
@@ -89,6 +92,9 @@ export async function fetchShopMerchItems(): Promise<ShopMerchItem[]> {
         duration_hours: item.duration_hours ? Number(item.duration_hours) : undefined,
         seller_id: item.seller_id || item.user_id || '',
         seller_name: item.seller_name || item.seller || 'Nexus Merchant',
+        band_id: item.band_id || undefined,
+        band_name: item.band_name || undefined,
+        inventory_id: item.inventory_id || undefined,
         allow_negotiation: item.allow_negotiation !== false,
         created_at: item.created_at || new Date().toISOString()
       }));
@@ -174,6 +180,9 @@ export async function createShopMerchItem(
     duration_hours: item.duration_hours,
     seller_id: userId,
     seller_name: item.seller_name || 'Nexus Merchant',
+    band_id: item.band_id || undefined,
+    band_name: item.band_name || undefined,
+    inventory_id: item.inventory_id || undefined,
     allow_negotiation: item.allow_negotiation !== false,
     created_at: new Date().toISOString()
   };
@@ -183,30 +192,50 @@ export async function createShopMerchItem(
     return newRecord;
   }
 
+  const basePayload: Record<string, any> = {
+    id: newRecord.id,
+    name: newRecord.name,
+    price: newRecord.price,
+    category: newRecord.category,
+    condition: newRecord.condition,
+    description: newRecord.description,
+    sizes: newRecord.sizes,
+    thumbnail: newRecord.thumbnail,
+    images: newRecord.images,
+    stock: newRecord.stock,
+    is_timed: newRecord.is_timed,
+    expires_at: newRecord.expires_at,
+    duration_hours: newRecord.duration_hours,
+    seller_id: newRecord.seller_id,
+    seller_name: newRecord.seller_name,
+    allow_negotiation: newRecord.allow_negotiation,
+    created_at: newRecord.created_at
+  };
+
+  const extendedPayload: Record<string, any> = {
+    ...basePayload,
+    ...(newRecord.band_id ? { band_id: newRecord.band_id } : {}),
+    ...(newRecord.band_name ? { band_name: newRecord.band_name } : {}),
+    ...(newRecord.inventory_id ? { inventory_id: newRecord.inventory_id } : {}),
+  };
+
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from(TABLE_NAME)
-      .insert([{
-        id: newRecord.id,
-        name: newRecord.name,
-        price: newRecord.price,
-        category: newRecord.category,
-        condition: newRecord.condition,
-        description: newRecord.description,
-        sizes: newRecord.sizes,
-        thumbnail: newRecord.thumbnail,
-        images: newRecord.images,
-        stock: newRecord.stock,
-        is_timed: newRecord.is_timed,
-        expires_at: newRecord.expires_at,
-        duration_hours: newRecord.duration_hours,
-        seller_id: newRecord.seller_id,
-        seller_name: newRecord.seller_name,
-        allow_negotiation: newRecord.allow_negotiation,
-        created_at: newRecord.created_at
-      }])
+      .insert([extendedPayload])
       .select()
       .single();
+
+    // Retry with core columns if shop_merch schema lacks optional band_id/band_name/inventory_id columns
+    if (error && (newRecord.band_id || newRecord.band_name || newRecord.inventory_id)) {
+      const retryRes = await supabase
+        .from(TABLE_NAME)
+        .insert([basePayload])
+        .select()
+        .single();
+      data = retryRes.data;
+      error = retryRes.error;
+    }
 
     if (error) {
       console.warn(`Insert into ${TABLE_NAME} failed (${error.message}). Attempting fallback table...`);
@@ -219,6 +248,7 @@ export async function createShopMerchItem(
         condition: newRecord.condition,
         description: newRecord.description,
         seller: newRecord.seller_name,
+        brand_name: newRecord.band_name || undefined,
         fallback_thumbnail: newRecord.thumbnail,
         created_at: newRecord.created_at
       }]);

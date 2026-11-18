@@ -48,6 +48,10 @@ import {
   isPhysicalMediaItem,
   type FulfillmentMode,
 } from '../../services/shopCommerceService';
+import {
+  resolvePayoutRouteForItem,
+  recordOrderPayoutSettlements,
+} from '../../services/payoutRoutingService';
 
 const stripePublicKey = (import.meta.env.VITE_STRIPE_PUBLIC_KEY || '').trim();
 const isRealStripeKey = typeof stripePublicKey === 'string' && stripePublicKey.startsWith('pk_') && !stripePublicKey.includes('placeholder');
@@ -226,6 +230,17 @@ export function StripeCheckoutModal({
   // Merch Booth Pickup detection for merch items
   const sellerBandName =
     rawItem?.bandName || rawItem?.band || rawItem?.artist || rawItem?.seller || rawItem?.brand || post?.authorName || 'Official Artist';
+  const resolvedPayoutRoute = resolvePayoutRouteForItem(
+    {
+      ...rawItem,
+      bandName: rawItem?.bandName || rawItem?.band || post?.merchData?.bandName,
+      bandId: rawItem?.bandId || rawItem?.band_id || post?.merchData?.bandId,
+      sellerName: rawItem?.seller || post?.authorName,
+      sellerId: rawItem?.sellerId || rawItem?.user_id || post?.authorId,
+      name: rawItem?.name || rawItem?.title || post?.title,
+    },
+    { bands, userProfile }
+  );
   const upcomingShowsForSeller = isMerch ? findUpcomingShowsForBand(sellerBandName, liveEvents) : [];
   const [merchFulfillmentMode, setMerchFulfillmentMode] = useState<FulfillmentMode>(
     rawItem?.fulfillment?.mode === 'booth_pickup' ? 'booth_pickup' : 'ship'
@@ -375,6 +390,12 @@ export function StripeCheckoutModal({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               cartItems: [lineItem],
+              payoutRoute: resolvedPayoutRoute,
+              stripeAccountId: resolvedPayoutRoute.stripeAccountId,
+              bandId: resolvedPayoutRoute.entityType === 'band' ? resolvedPayoutRoute.entityId : undefined,
+              bandName: resolvedPayoutRoute.entityType === 'band' ? resolvedPayoutRoute.entityName : sellerBandName,
+              sellerId: resolvedPayoutRoute.entityType === 'profile' ? resolvedPayoutRoute.entityId : undefined,
+              sellerName: resolvedPayoutRoute.entityName,
               shippingAddress: requiresShipping ? {
                 name: shippingName,
                 street: shippingStreet,
@@ -385,16 +406,19 @@ export function StripeCheckoutModal({
               } : undefined,
               customerEmail: userProfile?.email,
               orderType: isTicket ? 'ticket' : 'merch',
-                metadata: {
-                  customerName: shippingName || userProfile?.full_name || 'Customer',
-                  customerEmail: userProfile?.email || '',
-                  tier: activeTierConfig.id,
-                  tierName: activeTierConfig.name,
-                  isTicket: String(isTicket),
-                  quantity: String(quantity),
-                }
-              })
-            });
+              metadata: {
+                customerName: shippingName || userProfile?.full_name || 'Customer',
+                customerEmail: userProfile?.email || '',
+                tier: activeTierConfig.id,
+                tierName: activeTierConfig.name,
+                isTicket: String(isTicket),
+                quantity: String(quantity),
+                recipientName: resolvedPayoutRoute.entityName,
+                payoutMethod: resolvedPayoutRoute.preferredMethod,
+                payoutDestination: resolvedPayoutRoute.destinationLabel,
+              }
+            })
+          });
 
           if (response.ok) {
             const checkoutData = await response.json();
@@ -536,6 +560,8 @@ export function StripeCheckoutModal({
           {
             id: rawItem?.id || post?.id,
             productId: rawItem?.id || post?.id,
+            inventoryId: rawItem?.inventory_id || rawItem?.inventoryId || post?.merchData?.inventoryId,
+            bandId: rawItem?.band_id || rawItem?.bandId || post?.merchData?.bandId,
             name: itemName,
             size: selectedMerchSize,
             quantity,
@@ -579,6 +605,51 @@ export function StripeCheckoutModal({
 
         newRecord = updatedCollections[0];
         if (setMyCollections) setMyCollections(updatedCollections);
+      }
+
+      // Record itemized seller/band payout settlement into the persistent payout ledger
+      const payoutSettlements = recordOrderPayoutSettlements({
+        items: [
+          {
+            ...rawItem,
+            id: rawItem?.id || post?.id,
+            name: itemName,
+            price: unitPrice,
+            quantity,
+            selectedSize: isMerch ? selectedMerchSize : undefined,
+            bandName: resolvedPayoutRoute.entityName || sellerBandName,
+            bandId: resolvedPayoutRoute.entityType === 'band' ? resolvedPayoutRoute.entityId : undefined,
+            sellerName: rawItem?.seller || post?.authorName,
+          },
+          ...(selectedBundleItem
+            ? [
+                {
+                  ...selectedBundleItem,
+                  price: bundleAddonPrice,
+                  quantity: 1,
+                  selectedSize: bundleMerchSize,
+                  bandName:
+                    selectedBundleItem.artist ||
+                    selectedBundleItem.band ||
+                    resolvedPayoutRoute.entityName,
+                },
+              ]
+            : []),
+        ],
+        orderId,
+        transactionId: paymentResult.transactionId,
+        buyerPaymentMethod: paymentResult.paymentMethod,
+        shippingTotal: merchShippingCost,
+        bands,
+        userProfile,
+      });
+
+      if (newRecord) {
+        newRecord = {
+          ...newRecord,
+          payoutRoute: resolvedPayoutRoute,
+          payoutSettlements,
+        };
       }
 
       setConfirmedOrder(newRecord);
@@ -1331,6 +1402,15 @@ export function StripeCheckoutModal({
               <div className="flex justify-between items-center pt-2 border-t border-zinc-800/80 font-bold">
                 <span className="text-white uppercase">Grand Total</span>
                 <span className="text-rose-500 text-base font-black">${grandTotal.toFixed(2)}</span>
+              </div>
+              <div className="pt-2 mt-1 border-t border-zinc-800/70 flex items-center justify-between gap-2 text-[10px]">
+                <span className="text-zinc-400">
+                  Artist / Seller Payout (95%):{' '}
+                  <strong className="text-emerald-400">{resolvedPayoutRoute.entityName}</strong>
+                </span>
+                <span className="text-zinc-300 truncate max-w-[190px]" title={resolvedPayoutRoute.destinationLabel}>
+                  → {resolvedPayoutRoute.destinationLabel}
+                </span>
               </div>
             </div>
 

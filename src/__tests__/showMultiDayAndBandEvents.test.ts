@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
+  buildUpcomingShowsAndCities,
+  calculateShowDistanceMiles,
   doesShowFeatureBand,
   findMatchingExistingShowForBatchStop,
   formatShowDateRange,
@@ -270,4 +272,118 @@ describe('Multi-day festival dates & band profile show auto-linking', () => {
       ).toBe('old-chicago-show');
     });
   });
+
+  describe('GPS-based closest tour stop selection & All Cities trip-planning dropdown', () => {
+    const dyingFetusTourStops = [
+      {
+        id: 'df-dc',
+        headliner: 'Dying Fetus',
+        tour_name: 'Dying Fetus Fall Tour',
+        venue: 'Howard Theatre',
+        city: 'Washington',
+        state_province: 'DC',
+        rawDate: '2027-10-22',
+        date: 'Oct 22, 2027',
+        time: '7:00 PM',
+      },
+      {
+        id: 'df-chicago',
+        headliner: 'Dying Fetus',
+        tour_name: 'Dying Fetus Fall Tour',
+        venue: 'Concord Music Hall',
+        city: 'Chicago',
+        state_province: 'IL',
+        rawDate: '2027-10-28',
+        date: 'Oct 28, 2027',
+        time: '7:00 PM',
+      },
+      {
+        id: 'df-dallas',
+        headliner: 'Dying Fetus',
+        tour_name: 'Dying Fetus Fall Tour',
+        venue: 'The Studio at the Factory',
+        city: 'Dallas',
+        state_province: 'TX',
+        rawDate: '2027-11-04',
+        date: 'Nov 4, 2027',
+        time: '7:00 PM',
+      },
+      {
+        id: 'df-austin',
+        headliner: 'Dying Fetus',
+        tour_name: 'Dying Fetus Fall Tour',
+        venue: 'Come and Take It Live',
+        city: 'Austin',
+        state_province: 'TX',
+        rawDate: '2027-11-05',
+        date: 'Nov 5, 2027',
+        time: '7:00 PM',
+      },
+    ];
+
+    it('populates availableCities with ALL tour cities (sorted by GPS proximity) and defaults to the Dallas date instead of Washington, DC', () => {
+      const dallasGps = { lat: 32.7767, lng: -96.7970 };
+      const result = buildUpcomingShowsAndCities({
+        liveEvents: dyingFetusTourStops,
+        userProfile: null,
+        selectedCity: 'ALL',
+        gpsCoords: dallasGps,
+        activeTours: [],
+      });
+
+      // All 4 tour cities must appear in the dropdown
+      expect(result.availableCities).toEqual([
+        'Dallas, TX',
+        'Austin, TX',
+        'Chicago, IL',
+        'Washington, DC',
+      ]);
+      expect(result.allValidUpcomingGigs.length).toBe(4);
+
+      // Default view (selectedCity === 'ALL') collapses the tour to 1 featured stop: Dallas, TX (nearest to user GPS)
+      expect(result.featuredByProximityGigs.length).toBe(1);
+      expect(result.featuredByProximityGigs[0].id).toBe('df-dallas');
+      expect(result.featuredByProximityGigs[0].city).toBe('Dallas, TX');
+      expect(result.filteredGigs[0].id).toBe('df-dallas');
+    });
+
+    it('allows selecting any other tour city in the dropdown to plan a trip', () => {
+      const dallasGps = { lat: 32.7767, lng: -96.7970 };
+
+      const dcTrip = buildUpcomingShowsAndCities({
+        liveEvents: dyingFetusTourStops,
+        userProfile: null,
+        selectedCity: 'Washington, DC',
+        gpsCoords: dallasGps,
+        activeTours: [],
+      });
+      expect(dcTrip.filteredGigs.length).toBe(1);
+      expect(dcTrip.filteredGigs[0].id).toBe('df-dc');
+      expect(dcTrip.filteredGigs[0].city).toBe('Washington, DC');
+
+      const chicagoTrip = buildUpcomingShowsAndCities({
+        liveEvents: dyingFetusTourStops,
+        userProfile: null,
+        selectedCity: 'Chicago, IL',
+        gpsCoords: dallasGps,
+        activeTours: [],
+      });
+      expect(chicagoTrip.filteredGigs.length).toBe(1);
+      expect(chicagoTrip.filteredGigs[0].id).toBe('df-chicago');
+      expect(chicagoTrip.filteredGigs[0].city).toBe('Chicago, IL');
+    });
+
+    it('computes accurate Haversine distances for tour stops without explicit lat/lng', () => {
+      const dallasGps = { lat: 32.7767, lng: -96.7970 };
+      const distDallas = calculateShowDistanceMiles({ city: 'Dallas', state_province: 'TX' }, null, dallasGps);
+      const distAustin = calculateShowDistanceMiles({ city: 'Austin', state_province: 'TX' }, null, dallasGps);
+      const distDc = calculateShowDistanceMiles({ city: 'Washington', state_province: 'DC' }, null, dallasGps);
+
+      expect(distDallas).toBeLessThan(5);
+      expect(distAustin).toBeGreaterThan(150);
+      expect(distAustin).toBeLessThan(220);
+      expect(distDc).toBeGreaterThan(1100);
+    });
+  });
 });
+

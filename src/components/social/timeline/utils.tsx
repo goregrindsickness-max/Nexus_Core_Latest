@@ -211,7 +211,7 @@ export const HeaderMarqueeText: React.FC<{ children: React.ReactNode; className?
         style={
           scrollDistance !== 0
             ? {
-                animation: 'custom-marquee 8s ease-in-out infinite',
+                animation: 'custom-marquee 10.7s ease-in-out infinite',
                 // @ts-ignore
                 '--marquee-scroll': `${scrollDistance}px`
               }
@@ -292,7 +292,8 @@ export const MarqueeText: React.FC<{
   text: string;
   className?: string;
   maxLength?: number;
-}> = ({ text, className = '', maxLength = 22 }) => {
+  durationSeconds?: number;
+}> = ({ text, className = '', maxLength = 22, durationSeconds = 16 }) => {
   if (!text) return null;
   if (text.length <= maxLength) {
     return <span className={`truncate block ${className}`}>{text}</span>;
@@ -300,7 +301,10 @@ export const MarqueeText: React.FC<{
 
   return (
     <div className="overflow-hidden w-full relative group/marquee flex items-center">
-      <div className="animate-marquee cursor-default inline-flex">
+      <div
+        className="animate-marquee cursor-default inline-flex group-hover/marquee:[animation-play-state:paused]"
+        style={{ animationDuration: `${durationSeconds}s` }}
+      >
         <span className={`pr-8 shrink-0 ${className}`}>{text}</span>
         <span className={`pr-8 shrink-0 ${className}`}>{text}</span>
       </div>

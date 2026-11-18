@@ -705,3 +705,610 @@ export function doesShowFeatureBand(showOrGig: any, bandTarget: any): boolean {
   return getBandBillingRoleInShow(showOrGig, bandTarget) !== null;
 }
 
+export interface GeoCoords {
+  lat: number;
+  lng: number;
+  label?: string;
+}
+
+const CITY_COORDS_LOOKUP: Record<string, { lat: number; lng: number }> = {
+  // Texas & South Central
+  'dallas': { lat: 32.7767, lng: -96.7970 },
+  'dallas, tx': { lat: 32.7767, lng: -96.7970 },
+  'dfw': { lat: 32.7767, lng: -96.7970 },
+  'fort worth': { lat: 32.7555, lng: -97.3308 },
+  'fort worth, tx': { lat: 32.7555, lng: -97.3308 },
+  'denton': { lat: 33.2148, lng: -97.1331 },
+  'denton, tx': { lat: 33.2148, lng: -97.1331 },
+  'arlington': { lat: 32.7357, lng: -97.1081 },
+  'arlington, tx': { lat: 32.7357, lng: -97.1081 },
+  'austin': { lat: 30.2672, lng: -97.7431 },
+  'austin, tx': { lat: 30.2672, lng: -97.7431 },
+  'san antonio': { lat: 29.4241, lng: -98.4936 },
+  'san antonio, tx': { lat: 29.4241, lng: -98.4936 },
+  'houston': { lat: 29.7604, lng: -95.3698 },
+  'houston, tx': { lat: 29.7604, lng: -95.3698 },
+  'el paso': { lat: 31.7619, lng: -106.4850 },
+  'el paso, tx': { lat: 31.7619, lng: -106.4850 },
+  'lubbock': { lat: 33.5779, lng: -101.8552 },
+  'corpus christi': { lat: 27.8006, lng: -97.3964 },
+  'oklahoma city': { lat: 35.4676, lng: -97.5164 },
+  'oklahoma city, ok': { lat: 35.4676, lng: -97.5164 },
+  'tulsa': { lat: 36.1540, lng: -95.9928 },
+  'tulsa, ok': { lat: 36.1540, lng: -95.9928 },
+  'little rock': { lat: 34.7465, lng: -92.2896 },
+  'little rock, ar': { lat: 34.7465, lng: -92.2896 },
+  'new orleans': { lat: 29.9511, lng: -90.0715 },
+  'new orleans, la': { lat: 29.9511, lng: -90.0715 },
+  'baton rouge': { lat: 30.4515, lng: -91.1871 },
+
+  // Southeast & Mid-Atlantic
+  'memphis': { lat: 35.1495, lng: -90.0490 },
+  'memphis, tn': { lat: 35.1495, lng: -90.0490 },
+  'nashville': { lat: 36.1627, lng: -86.7816 },
+  'nashville, tn': { lat: 36.1627, lng: -86.7816 },
+  'knoxville': { lat: 35.9606, lng: -83.9207 },
+  'birmingham': { lat: 33.5186, lng: -86.8104 },
+  'atlanta': { lat: 33.7490, lng: -84.3880 },
+  'atlanta, ga': { lat: 33.7490, lng: -84.3880 },
+  'savannah': { lat: 32.0809, lng: -81.0912 },
+  'tampa': { lat: 27.9506, lng: -82.4572 },
+  'tampa, fl': { lat: 27.9506, lng: -82.4572 },
+  'st. petersburg': { lat: 27.7676, lng: -82.6403 },
+  'orlando': { lat: 28.5383, lng: -81.3792 },
+  'orlando, fl': { lat: 28.5383, lng: -81.3792 },
+  'miami': { lat: 25.7617, lng: -80.1918 },
+  'fort lauderdale': { lat: 26.1224, lng: -80.1373 },
+  'west palm beach': { lat: 26.7153, lng: -80.0534 },
+  'jacksonville': { lat: 30.3322, lng: -81.6557 },
+  'pensacola': { lat: 30.4213, lng: -87.2169 },
+  'columbia': { lat: 34.0007, lng: -81.0348 },
+  'greenville': { lat: 34.8526, lng: -82.3940 },
+  'charlotte': { lat: 35.2271, lng: -80.8431 },
+  'charlotte, nc': { lat: 35.2271, lng: -80.8431 },
+  'raleigh': { lat: 35.7796, lng: -78.6382 },
+  'greensboro': { lat: 36.0726, lng: -79.7920 },
+  'asheville': { lat: 35.5951, lng: -82.5515 },
+  'richmond': { lat: 37.5407, lng: -77.4360 },
+  'richmond, va': { lat: 37.5407, lng: -77.4360 },
+  'norfolk': { lat: 36.8508, lng: -76.2859 },
+  'virginia beach': { lat: 36.8529, lng: -75.9780 },
+  'baltimore': { lat: 39.2904, lng: -76.6122 },
+  'baltimore, md': { lat: 39.2904, lng: -76.6122 },
+  'silver spring': { lat: 38.9907, lng: -77.0261 },
+  'silver spring, md': { lat: 38.9907, lng: -77.0261 },
+  'washington': { lat: 38.9072, lng: -77.0369 },
+  'washington, dc': { lat: 38.9072, lng: -77.0369 },
+  'washington, d.c.': { lat: 38.9072, lng: -77.0369 },
+  'washington dc': { lat: 38.9072, lng: -77.0369 },
+
+  // Northeast & Canada
+  'philadelphia': { lat: 39.9526, lng: -75.1652 },
+  'philadelphia, pa': { lat: 39.9526, lng: -75.1652 },
+  'reading': { lat: 40.3356, lng: -75.9269 },
+  'allentown': { lat: 40.6084, lng: -75.4902 },
+  'harrisburg': { lat: 40.2732, lng: -76.8867 },
+  'pittsburgh': { lat: 40.4406, lng: -79.9959 },
+  'pittsburgh, pa': { lat: 40.4406, lng: -79.9959 },
+  'asbury park': { lat: 40.2204, lng: -74.0121 },
+  'sayreville': { lat: 40.4593, lng: -74.3610 },
+  'newark': { lat: 40.7357, lng: -74.1724 },
+  'new york': { lat: 40.7128, lng: -74.0060 },
+  'new york, ny': { lat: 40.7128, lng: -74.0060 },
+  'nyc': { lat: 40.7128, lng: -74.0060 },
+  'brooklyn': { lat: 40.6782, lng: -73.9442 },
+  'brooklyn, ny': { lat: 40.6782, lng: -73.9442 },
+  'queens': { lat: 40.7282, lng: -73.7949 },
+  'patchogue': { lat: 40.7654, lng: -73.0151 },
+  'poughkeepsie': { lat: 41.7004, lng: -73.9210 },
+  'albany': { lat: 42.6526, lng: -73.7562 },
+  'syracuse': { lat: 43.0481, lng: -76.1474 },
+  'rochester': { lat: 43.1566, lng: -77.6088 },
+  'buffalo': { lat: 42.8864, lng: -78.8784 },
+  'buffalo, ny': { lat: 42.8864, lng: -78.8784 },
+  'new haven': { lat: 41.3083, lng: -72.9279 },
+  'hartford': { lat: 41.7658, lng: -72.6734 },
+  'providence': { lat: 41.8240, lng: -71.4128 },
+  'worcester': { lat: 42.2626, lng: -71.8023 },
+  'worcester, ma': { lat: 42.2626, lng: -71.8023 },
+  'boston': { lat: 42.3601, lng: -71.0589 },
+  'boston, ma': { lat: 42.3601, lng: -71.0589 },
+  'cambridge': { lat: 42.3736, lng: -71.1097 },
+  'portland, me': { lat: 43.6591, lng: -70.2568 },
+  'burlington': { lat: 44.4759, lng: -73.2121 },
+  'toronto': { lat: 43.6532, lng: -79.3832 },
+  'toronto, on': { lat: 43.6532, lng: -79.3832 },
+  'montreal': { lat: 45.5017, lng: -73.5673 },
+  'montreal, qc': { lat: 45.5017, lng: -73.5673 },
+  'ottawa': { lat: 45.4215, lng: -75.6972 },
+  'quebec city': { lat: 46.8139, lng: -71.2080 },
+
+  // Midwest
+  'cleveland': { lat: 41.4993, lng: -81.6944 },
+  'cleveland, oh': { lat: 41.4993, lng: -81.6944 },
+  'lakewood': { lat: 41.4820, lng: -81.7982 },
+  'columbus': { lat: 39.9612, lng: -82.9988 },
+  'columbus, oh': { lat: 39.9612, lng: -82.9988 },
+  'cincinnati': { lat: 39.1031, lng: -84.5120 },
+  'cincinnati, oh': { lat: 39.1031, lng: -84.5120 },
+  'detroit': { lat: 42.3314, lng: -83.0458 },
+  'detroit, mi': { lat: 42.3314, lng: -83.0458 },
+  'pontiac': { lat: 42.6389, lng: -83.2910 },
+  'grand rapids': { lat: 42.9634, lng: -85.6681 },
+  'grand rapids, mi': { lat: 42.9634, lng: -85.6681 },
+  'indianapolis': { lat: 39.7684, lng: -86.1581 },
+  'indianapolis, in': { lat: 39.7684, lng: -86.1581 },
+  'fort wayne': { lat: 41.0793, lng: -85.1394 },
+  'louisville': { lat: 38.2527, lng: -85.7585 },
+  'chicago': { lat: 41.8781, lng: -87.6298 },
+  'chicago, il': { lat: 41.8781, lng: -87.6298 },
+  'joliet': { lat: 41.5250, lng: -88.0817 },
+  'joliet, il': { lat: 41.5250, lng: -88.0817 },
+  'milwaukee': { lat: 43.0389, lng: -87.9065 },
+  'milwaukee, wi': { lat: 43.0389, lng: -87.9065 },
+  'madison': { lat: 43.0731, lng: -89.4012 },
+  'green bay': { lat: 44.5133, lng: -88.0133 },
+  'minneapolis': { lat: 44.9778, lng: -93.2650 },
+  'minneapolis, mn': { lat: 44.9778, lng: -93.2650 },
+  'st. paul': { lat: 44.9537, lng: -93.0900 },
+  'des moines': { lat: 41.5868, lng: -93.6250 },
+  'omaha': { lat: 41.2565, lng: -95.9345 },
+  'lincoln': { lat: 40.8136, lng: -96.7026 },
+  'lawrence': { lat: 38.9717, lng: -95.2353 },
+  'lawrence, ks': { lat: 38.9717, lng: -95.2353 },
+  'wichita': { lat: 37.6872, lng: -97.3301 },
+  'kansas city': { lat: 39.0997, lng: -94.5786 },
+  'kansas city, mo': { lat: 39.0997, lng: -94.5786 },
+  'st. louis': { lat: 38.6270, lng: -90.1994 },
+  'st. louis, mo': { lat: 38.6270, lng: -90.1994 },
+  'st louis': { lat: 38.6270, lng: -90.1994 },
+
+  // Mountain & West Coast
+  'denver': { lat: 39.7392, lng: -104.9903 },
+  'denver, co': { lat: 39.7392, lng: -104.9903 },
+  'colorado springs': { lat: 38.8339, lng: -104.8214 },
+  'salt lake city': { lat: 40.7608, lng: -111.8910 },
+  'salt lake city, ut': { lat: 40.7608, lng: -111.8910 },
+  'boise': { lat: 43.6150, lng: -116.2023 },
+  'albuquerque': { lat: 35.0844, lng: -106.6504 },
+  'albuquerque, nm': { lat: 35.0844, lng: -106.6504 },
+  'phoenix': { lat: 33.4484, lng: -112.0740 },
+  'phoenix, az': { lat: 33.4484, lng: -112.0740 },
+  'tempe': { lat: 33.4255, lng: -111.9400 },
+  'mesa': { lat: 33.4152, lng: -111.8315 },
+  'mesa, az': { lat: 33.4152, lng: -111.8315 },
+  'tucson': { lat: 32.2226, lng: -110.9747 },
+  'las vegas': { lat: 36.1699, lng: -115.1398 },
+  'las vegas, nv': { lat: 36.1699, lng: -115.1398 },
+  'reno': { lat: 39.5296, lng: -119.8138 },
+  'san diego': { lat: 32.7157, lng: -117.1611 },
+  'san diego, ca': { lat: 32.7157, lng: -117.1611 },
+  'santa ana': { lat: 33.7455, lng: -117.8677 },
+  'santa ana, ca': { lat: 33.7455, lng: -117.8677 },
+  'anaheim': { lat: 33.8366, lng: -117.9143 },
+  'pomona': { lat: 34.0551, lng: -117.7500 },
+  'los angeles': { lat: 34.0522, lng: -118.2437 },
+  'los angeles, ca': { lat: 34.0522, lng: -118.2437 },
+  'hollywood': { lat: 34.0928, lng: -118.3287 },
+  'sacramento': { lat: 38.5816, lng: -121.4944 },
+  'sacramento, ca': { lat: 38.5816, lng: -121.4944 },
+  'roseville': { lat: 38.7521, lng: -121.2880 },
+  'san francisco': { lat: 37.7749, lng: -122.4194 },
+  'san francisco, ca': { lat: 37.7749, lng: -122.4194 },
+  'oakland': { lat: 37.8044, lng: -122.2712 },
+  'berkeley': { lat: 37.8715, lng: -122.2730 },
+  'san jose': { lat: 37.3382, lng: -121.8863 },
+  'santa cruz': { lat: 36.9741, lng: -122.0308 },
+  'portland': { lat: 45.5152, lng: -122.6784 },
+  'portland, or': { lat: 45.5152, lng: -122.6784 },
+  'seattle': { lat: 47.6062, lng: -122.3321 },
+  'seattle, wa': { lat: 47.6062, lng: -122.3321 },
+  'tacoma': { lat: 47.2529, lng: -122.4443 },
+  'spokane': { lat: 47.6588, lng: -117.4260 },
+  'vancouver': { lat: 49.2827, lng: -123.1207 },
+  'vancouver, bc': { lat: 49.2827, lng: -123.1207 },
+  'calgary': { lat: 51.0447, lng: -114.0719 },
+  'edmonton': { lat: 53.5461, lng: -113.4938 },
+  'winnipeg': { lat: 49.8951, lng: -97.1384 },
+};
+
+const STATE_CENTROIDS: Record<string, { lat: number; lng: number }> = {
+  tx: { lat: 32.7767, lng: -96.7970 },
+  texas: { lat: 32.7767, lng: -96.7970 },
+  ok: { lat: 35.4676, lng: -97.5164 },
+  la: { lat: 30.4515, lng: -91.1871 },
+  ar: { lat: 34.7465, lng: -92.2896 },
+  nm: { lat: 35.0844, lng: -106.6504 },
+  az: { lat: 33.4484, lng: -112.0740 },
+  ca: { lat: 34.0522, lng: -118.2437 },
+  co: { lat: 39.7392, lng: -104.9903 },
+  ut: { lat: 40.7608, lng: -111.8910 },
+  nv: { lat: 36.1699, lng: -115.1398 },
+  or: { lat: 45.5152, lng: -122.6784 },
+  wa: { lat: 47.6062, lng: -122.3321 },
+  ks: { lat: 38.9717, lng: -95.2353 },
+  mo: { lat: 38.6270, lng: -90.1994 },
+  ne: { lat: 41.2565, lng: -95.9345 },
+  ia: { lat: 41.5868, lng: -93.6250 },
+  mn: { lat: 44.9778, lng: -93.2650 },
+  wi: { lat: 43.0389, lng: -87.9065 },
+  il: { lat: 41.8781, lng: -87.6298 },
+  in: { lat: 39.7684, lng: -86.1581 },
+  mi: { lat: 42.3314, lng: -83.0458 },
+  oh: { lat: 39.9612, lng: -82.9988 },
+  ky: { lat: 38.2527, lng: -85.7585 },
+  tn: { lat: 36.1627, lng: -86.7816 },
+  al: { lat: 33.5186, lng: -86.8104 },
+  ga: { lat: 33.7490, lng: -84.3880 },
+  fl: { lat: 28.5383, lng: -81.3792 },
+  sc: { lat: 34.0007, lng: -81.0348 },
+  nc: { lat: 35.2271, lng: -80.8431 },
+  va: { lat: 37.5407, lng: -77.4360 },
+  md: { lat: 39.2904, lng: -76.6122 },
+  dc: { lat: 38.9072, lng: -77.0369 },
+  pa: { lat: 39.9526, lng: -75.1652 },
+  nj: { lat: 40.4593, lng: -74.3610 },
+  ny: { lat: 40.7128, lng: -74.0060 },
+  ct: { lat: 41.7658, lng: -72.6734 },
+  ri: { lat: 41.8240, lng: -71.4128 },
+  ma: { lat: 42.3601, lng: -71.0589 },
+  on: { lat: 43.6532, lng: -79.3832 },
+  qc: { lat: 45.5017, lng: -73.5673 },
+  bc: { lat: 49.2827, lng: -123.1207 },
+};
+
+// Default GPS fallback: Dallas / DFW, TX
+export const DEFAULT_USER_GPS_COORDS: GeoCoords = {
+  lat: 32.7767,
+  lng: -96.7970,
+  label: 'Dallas, TX',
+};
+
+export function formatShowCityLabel(showOrGig: any): string {
+  if (!showOrGig) return '';
+  if (typeof showOrGig === 'string') return showOrGig.trim();
+  const rawCity = String(showOrGig.city || '').trim();
+  const rawState = String(showOrGig.state_province || showOrGig.state || '').trim();
+  if (!rawCity && !rawState) return '';
+  if (rawCity && rawState && !rawCity.includes(',')) {
+    return `${rawCity}, ${rawState}`;
+  }
+  return rawCity || rawState;
+}
+
+export function resolveCityCoords(cityOrShow: any): GeoCoords | null {
+  if (!cityOrShow) return null;
+
+  if (typeof cityOrShow === 'object') {
+    const lat = Number(cityOrShow.lat ?? cityOrShow.latitude);
+    const lng = Number(cityOrShow.lng ?? cityOrShow.longitude);
+    // Ignore synthetic placeholder coords like 34.0 + (idx % 8) * 0.1
+    const isSyntheticPlaceholder =
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      lat >= 34.0 &&
+      lat <= 34.8 &&
+      lng <= -118.2 &&
+      lng >= -119.0 &&
+      cityOrShow.city &&
+      !String(cityOrShow.city).toLowerCase().includes('los angeles');
+
+    if (
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      Math.abs(lat) > 0.1 &&
+      Math.abs(lng) > 0.1 &&
+      !isSyntheticPlaceholder
+    ) {
+      return { lat, lng, label: formatShowCityLabel(cityOrShow) };
+    }
+  }
+
+  const label =
+    typeof cityOrShow === 'string'
+      ? cityOrShow.trim()
+      : formatShowCityLabel(cityOrShow);
+  if (!label) return null;
+
+  const normalized = label
+    .toLowerCase()
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (CITY_COORDS_LOOKUP[normalized]) {
+    return { ...CITY_COORDS_LOOKUP[normalized], label };
+  }
+
+  const parts = normalized.split(',').map((p) => p.trim());
+  const cityPart = parts[0];
+  const statePart = parts[1]?.split(/\s+/)[0];
+
+  if (cityPart && CITY_COORDS_LOOKUP[cityPart]) {
+    return { ...CITY_COORDS_LOOKUP[cityPart], label };
+  }
+
+  for (const [key, coords] of Object.entries(CITY_COORDS_LOOKUP)) {
+    if (key.length >= 4 && (normalized.includes(key) || cityPart.includes(key))) {
+      return { ...coords, label };
+    }
+  }
+
+  if (statePart && STATE_CENTROIDS[statePart]) {
+    return { ...STATE_CENTROIDS[statePart], label };
+  }
+  if (STATE_CENTROIDS[normalized]) {
+    return { ...STATE_CENTROIDS[normalized], label };
+  }
+
+  return null;
+}
+
+export function haversineMiles(a: GeoCoords, b: GeoCoords): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const R = 3958.8; // Earth radius in miles
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLng = Math.sin(dLng / 2);
+  const h =
+    sinDLat * sinDLat +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * sinDLng * sinDLng;
+  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
+  return Math.round(R * c * 10) / 10;
+}
+
+export function resolveUserReferenceCoords(
+  userProfile?: any,
+  explicitGpsCoords?: GeoCoords | null
+): GeoCoords {
+  if (
+    explicitGpsCoords &&
+    Number.isFinite(explicitGpsCoords.lat) &&
+    Number.isFinite(explicitGpsCoords.lng)
+  ) {
+    return explicitGpsCoords;
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const rawGps = localStorage.getItem('nexus_user_gps_coords');
+      if (rawGps) {
+        const parsed = JSON.parse(rawGps);
+        if (
+          parsed &&
+          Number.isFinite(Number(parsed.lat)) &&
+          Number.isFinite(Number(parsed.lng))
+        ) {
+          return {
+            lat: Number(parsed.lat),
+            lng: Number(parsed.lng),
+            label: parsed.label || 'Current GPS',
+          };
+        }
+      }
+    } catch {
+      // Ignore storage error
+    }
+  }
+
+  if (
+    userProfile &&
+    Number.isFinite(Number(userProfile.lat)) &&
+    Number.isFinite(Number(userProfile.lng)) &&
+    Math.abs(Number(userProfile.lat)) > 0.1
+  ) {
+    return {
+      lat: Number(userProfile.lat),
+      lng: Number(userProfile.lng),
+      label: userProfile.city || userProfile.location || 'Profile Location',
+    };
+  }
+
+  const candidateLocation =
+    userProfile?.city ||
+    userProfile?.location ||
+    userProfile?.hometown ||
+    (typeof window !== 'undefined'
+      ? localStorage.getItem('nexus_user_city') ||
+        localStorage.getItem('nexus_user_location')
+      : null);
+
+  if (candidateLocation) {
+    const resolved = resolveCityCoords(candidateLocation);
+    if (resolved) return resolved;
+  }
+
+  return DEFAULT_USER_GPS_COORDS;
+}
+
+export function calculateShowDistanceMiles(
+  gig: any,
+  userProfile?: any,
+  explicitGpsCoords?: GeoCoords | null
+): number {
+  if (!gig) return 99999;
+
+  const userCoords = resolveUserReferenceCoords(userProfile, explicitGpsCoords);
+  const gigCoords = resolveCityCoords(gig);
+
+  if (gigCoords && userCoords) {
+    return haversineMiles(userCoords, gigCoords);
+  }
+
+  if (gig.distanceMiles !== undefined && Number.isFinite(Number(gig.distanceMiles))) {
+    return Number(gig.distanceMiles);
+  }
+  if (gig.distance && typeof gig.distance === 'string') {
+    const cleaned = gig.distance.replace(/,/g, '').match(/\d+(\.\d+)?/);
+    if (cleaned) return parseFloat(cleaned[0]);
+  }
+
+  return 99999;
+}
+
+export function buildUpcomingShowsAndCities<T extends Record<string, any>>(params: {
+  liveEvents: T[];
+  userProfile?: any;
+  selectedCity?: string;
+  gpsCoords?: GeoCoords | null;
+  activeTours?: TourLike[];
+}): {
+  allValidUpcomingGigs: T[];
+  availableCities: string[];
+  cityCounts: Record<string, number>;
+  featuredByProximityGigs: T[];
+  filteredGigs: T[];
+} {
+  const {
+    liveEvents = [],
+    userProfile,
+    selectedCity = 'ALL',
+    gpsCoords,
+    activeTours = [],
+  } = params;
+
+  const allValidUpcomingGigs: T[] = [];
+  const citySet = new Map<string, { display: string; count: number; minMiles: number }>();
+
+  for (const gig of liveEvents) {
+    if (!gig) continue;
+    if (isShowEmbargoedOrDraft(gig, activeTours)) continue;
+
+    const gigId = String(gig.id || '').trim();
+    const h = String(gig.headliner || gig.name || '').toLowerCase().trim();
+    const authoritativeDate = String(gig.rawDate || gig.show_date || gig.date || '').trim();
+    const d = authoritativeDate.toLowerCase();
+
+    if (
+      !h.includes('nile') &&
+      (isShowPastOrEnded(gig) ||
+        (h.includes('vader') && d.includes('2026-09-24')) ||
+        gigId === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee')
+    ) {
+      continue;
+    }
+
+    const formattedCity = formatShowCityLabel(gig);
+    const distanceMiles = calculateShowDistanceMiles(gig, userProfile, gpsCoords);
+    const enrichedGig = {
+      ...gig,
+      ...(formattedCity ? { city: formattedCity } : {}),
+      distanceMiles,
+    } as T;
+
+    allValidUpcomingGigs.push(enrichedGig);
+
+    if (formattedCity) {
+      const normCity = formattedCity.toLowerCase().trim();
+      const existing = citySet.get(normCity);
+      if (existing) {
+        existing.count += 1;
+        if (distanceMiles < existing.minMiles) {
+          existing.minMiles = distanceMiles;
+        }
+      } else {
+        citySet.set(normCity, {
+          display: formattedCity,
+          count: 1,
+          minMiles: distanceMiles,
+        });
+      }
+    }
+  }
+
+  // Sort cities so the user's geographically nearest cities appear first, then alphabetically
+  const sortedCityEntries = Array.from(citySet.values()).sort((a, b) => {
+    if (Math.abs(a.minMiles - b.minMiles) > 5) {
+      return a.minMiles - b.minMiles;
+    }
+    return a.display.localeCompare(b.display);
+  });
+
+  const availableCities = sortedCityEntries.map((c) => c.display);
+  const cityCounts: Record<string, number> = {};
+  sortedCityEntries.forEach((c) => {
+    cityCounts[c.display] = c.count;
+  });
+
+  const groupAndPickBestStop = (sourceGigs: T[]): T[] => {
+    const tourGroups = new Map<string, T[]>();
+
+    for (const gig of sourceGigs) {
+      const gigId = String(gig.id || '').trim();
+      const h = String(gig.headliner || gig.name || '').toLowerCase().trim();
+      const tourKey = gig.tour_id || gig.tour_name || (h ? h : `gig-${gigId}`);
+      const group = tourGroups.get(tourKey) || [];
+      group.push(gig);
+      tourGroups.set(tourKey, group);
+    }
+
+    const featured: T[] = [];
+    for (const [, gigs] of tourGroups) {
+      if (gigs.length === 0) continue;
+      const sharedFlyer = gigs
+        .map((g) => g.flyer_url || g.flyerUrl || g.image_url || g.cover_url)
+        .find(Boolean);
+
+      gigs.sort((a, b) => {
+        const distA = calculateShowDistanceMiles(a, userProfile, gpsCoords);
+        const distB = calculateShowDistanceMiles(b, userProfile, gpsCoords);
+        if (Math.abs(distA - distB) > 0.5) return distA - distB;
+        return String(a.rawDate || a.show_date || a.date || '').localeCompare(
+          String(b.rawDate || b.show_date || b.date || '')
+        );
+      });
+
+      const best = gigs[0];
+      featured.push({
+        ...best,
+        ...(sharedFlyer && !(best.flyer_url || best.flyerUrl)
+          ? { flyer_url: sharedFlyer, flyerUrl: sharedFlyer }
+          : {}),
+        totalTourDates: gigs.length,
+        otherTourStopsCount: Math.max(0, gigs.length - 1),
+      });
+    }
+
+    featured.sort((a, b) => {
+      const distA = calculateShowDistanceMiles(a, userProfile, gpsCoords);
+      const distB = calculateShowDistanceMiles(b, userProfile, gpsCoords);
+      // Prioritize local/nearby shows within 120 miles first
+      const aIsLocal = distA <= 120;
+      const bIsLocal = distB <= 120;
+      if (aIsLocal !== bIsLocal) return aIsLocal ? -1 : 1;
+      if (a.isFollowed && !b.isFollowed) return -1;
+      if (!a.isFollowed && b.isFollowed) return 1;
+      if (Math.abs(distA - distB) > 0.5) return distA - distB;
+      return String(a.rawDate || a.show_date || a.date || '').localeCompare(
+        String(b.rawDate || b.show_date || b.date || '')
+      );
+    });
+
+    return featured;
+  };
+
+  const featuredByProximityGigs = groupAndPickBestStop(allValidUpcomingGigs);
+
+  const normalizedFilter = String(selectedCity || 'ALL').trim().toLowerCase();
+  const filteredGigs =
+    !normalizedFilter || normalizedFilter === 'all'
+      ? featuredByProximityGigs
+      : groupAndPickBestStop(
+          allValidUpcomingGigs.filter((g) =>
+            String(g.city || '')
+              .toLowerCase()
+              .includes(normalizedFilter)
+          )
+        );
+
+  return {
+    allValidUpcomingGigs,
+    availableCities,
+    cityCounts,
+    featuredByProximityGigs,
+    filteredGigs,
+  };
+}
+
+

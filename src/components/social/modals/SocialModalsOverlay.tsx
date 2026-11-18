@@ -365,6 +365,13 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
         setMerchDropThumbnail={setMerchDropThumbnail}
         merchDropImages={props.merchDropImages}
         setMerchDropImages={props.setMerchDropImages}
+        bands={props.bands}
+        merchDropBandId={props.merchDropBandId}
+        setMerchDropBandId={props.setMerchDropBandId}
+        merchDropBandName={props.merchDropBandName}
+        setMerchDropBandName={props.setMerchDropBandName}
+        merchDropInventoryId={props.merchDropInventoryId}
+        setMerchDropInventoryId={props.setMerchDropInventoryId}
         triggerNotification={triggerNotification}
       />
 

@@ -71,7 +71,7 @@ const AutoScrollText: React.FC<{
           isOverflowing
             ? {
                 display: 'inline-block',
-                animation: `bandcampMarqueeScroll ${Math.max(6, overflowAmount / 16)}s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate`,
+                animation: `bandcampMarqueeScroll ${Math.max(8, overflowAmount / 12)}s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate`,
                 ['--marquee-scroll-offset' as any]: `-${overflowAmount}px`,
               }
             : undefined

@@ -124,6 +124,9 @@ export function useSocialFeedState({
   const [merchDropIsTimed, setMerchDropIsTimed] = useState(false);
   const [merchDropTimerHours, setMerchDropTimerHours] = useState('24');
   const [merchDropTimerMinutes, setMerchDropTimerMinutes] = useState('0');
+  const [merchDropBandId, setMerchDropBandId] = useState('');
+  const [merchDropBandName, setMerchDropBandName] = useState('');
+  const [merchDropInventoryId, setMerchDropInventoryId] = useState('');
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 
   // Tape Creator states
@@ -864,8 +867,16 @@ export function useSocialFeedState({
         .slice(0, 3);
       const primaryThumb = resolvedImages[0] || merchDropThumbnail.trim() || 'https://images.unsplash.com/photo-1572913017567-02f06497f1f9?w=500';
 
+      const generatedDropId = merchDropName.trim()
+        ? `merch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+        : undefined;
+      const resolvedDropBandName = merchDropBandName.trim() || (isBandRole ? authorName : '') || undefined;
+      const resolvedDropBandId = merchDropBandId.trim() || (isBandRole ? (activeBand?.id || resolvedPersona.id) : '') || undefined;
+      const resolvedInventoryId = merchDropInventoryId.trim() || undefined;
+
       const merchDataValue = merchDropName.trim()
         ? {
+            dropId: generatedDropId,
             name: merchDropName.trim(),
             price: Number(merchDropPrice.trim()) || 25,
             thumbnail: primaryThumb,
@@ -880,12 +891,16 @@ export function useSocialFeedState({
             category: merchDropCategory || 'Apparel',
             description: merchDropDescription.trim() || undefined,
             allowNegotiation: merchDropAllowNegotiation,
+            bandId: resolvedDropBandId,
+            bandName: resolvedDropBandName,
+            inventoryId: resolvedInventoryId,
           }
         : undefined;
 
       if (merchDataValue) {
         const sellerId = isBandRole ? (activeBand?.id || resolvedPersona.id || activeAuthorId) : (resolvedPersona.id || activeAuthorId);
         createShopMerchItem({
+          id: generatedDropId,
           name: merchDataValue.name,
           price: merchDataValue.price,
           thumbnail: merchDataValue.thumbnail,
@@ -895,11 +910,18 @@ export function useSocialFeedState({
           expires_at: merchDataValue.expiresAt,
           duration_hours: merchDataValue.durationHours,
           seller_name: authorName,
+          band_id: resolvedDropBandId,
+          band_name: resolvedDropBandName,
+          inventory_id: resolvedInventoryId,
           category: merchDataValue.category,
           description: merchDataValue.description,
           stock: merchDataValue.stock,
           allow_negotiation: merchDataValue.allowNegotiation,
-        }, sellerId);
+        }, sellerId)
+          .then(() => {
+            window.dispatchEvent(new CustomEvent('nexus_merch_drop_created'));
+          })
+          .catch(() => {});
       }
 
       // Deduplicated & Persistent Event Page Integration (Completely Optional)
@@ -1225,6 +1247,9 @@ export function useSocialFeedState({
       setMerchDropIsTimed(false);
       setMerchDropTimerHours('24');
       setMerchDropTimerMinutes('0');
+      setMerchDropBandId('');
+      setMerchDropBandName('');
+      setMerchDropInventoryId('');
       setTapeTitle('');
       setTapeBand('');
       setTapeDate('');
@@ -1357,6 +1382,12 @@ export function useSocialFeedState({
     setMerchDropTimerHours,
     merchDropTimerMinutes,
     setMerchDropTimerMinutes,
+    merchDropBandId,
+    setMerchDropBandId,
+    merchDropBandName,
+    setMerchDropBandName,
+    merchDropInventoryId,
+    setMerchDropInventoryId,
     commentInputs,
     setCommentInputs,
 

@@ -40,8 +40,8 @@ export default function MarqueeText({ text, className = "", style }: MarqueeText
   }, [text]);
 
   const styleObj = shouldScroll ? {
-    '--marquee-scroll': `px`,
-    animation: 'custom-marquee 8s ease-in-out 2s infinite'
+    '--marquee-scroll': `-${overflowOffset}px`,
+    animation: 'custom-marquee 10.7s ease-in-out 2s infinite'
   } as React.CSSProperties : {};
 
   return (

@@ -57,6 +57,9 @@ import {
   isShowPastOrEnded,
   formatShowDateRange,
   getSupportActsList,
+  formatShowCityLabel,
+  resolveCityCoords,
+  calculateShowDistanceMiles,
 } from '../../../utils/showDisplayUtils';
 import { tourPackageManager } from '../../../lib/tourPackageManager';
 import { authFetch } from '../../../utils/apiConfig';
@@ -920,7 +923,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
       }
 
       const venue = evt.venue || evt.venue_name || 'Underground Venue';
-      const city = evt.city || (evt.state_province ? `${evt.state_province}` : 'Los Angeles, CA');
+      const city = formatShowCityLabel(evt) || evt.city || (evt.state_province ? `${evt.state_province}` : 'Los Angeles, CA');
       const date = evt.date || 'Upcoming';
       const time = evt.time || evt.doors_time || 'Doors 8:00 PM';
       const price = evt.price || (evt.presale_price ? `$${evt.presale_price}` : '$25');
@@ -969,6 +972,8 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
       const computedIsPast = isShowPastOrEnded({ ...evt, rawDate, end_date: resolvedEndDate, additional_notes: extraNotesObj });
       const computedIsArchived = computedIsPast || Boolean(extraNotesObj?.archived || evt.isArchived);
 
+      const resolvedCoords = resolveCityCoords({ ...evt, city });
+
       return {
         ...evt,
         id: evt.id || `event-${idx}`,
@@ -992,8 +997,8 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
         isPersonallyBooked,
         isCommunityShow,
         is_community_submitted: isCommunityShow,
-        lat: evt.lat || (34.0 + (idx % 8) * 0.1),
-        lng: evt.lng || (-118.2 - (idx % 8) * 0.1),
+        lat: resolvedCoords?.lat ?? evt.lat ?? (34.0 + (idx % 8) * 0.1),
+        lng: resolvedCoords?.lng ?? evt.lng ?? (-118.2 - (idx % 8) * 0.1),
         description: evt.description || (isFromShowsTable ? `Official booked tour date at ${venue}. Advance ticketing, tour merch and door entries active.` : `Live underground performance at ${venue}. All ages & support welcome.`),
         ticketsAvailable: Boolean(evt.ticketsAvailable || ticketUrl || evt.ticketStatus === 'active')
       };
@@ -1445,14 +1450,17 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
 
         // Exact city match with filter or user hometown is top rank
         if (userCityHint && stopCity.includes(userCityHint)) {
-          score = 0 + stopIdx;
-        } else if (typeof stop.lat === 'number' && typeof stop.lng === 'number') {
-          // Geographic distance
-          const dist = Math.hypot(stop.lat - userLat, stop.lng - userLng);
-          score = 100 + dist;
+          score = 0 + stopIdx * 0.01;
         } else {
-          // Chronological fallback
-          score = 500 + stopIdx;
+          const distMiles = calculateShowDistanceMiles(stop, userProfile || promoterProfile);
+          if (distMiles < 99999) {
+            score = 10 + distMiles;
+          } else if (typeof stop.lat === 'number' && typeof stop.lng === 'number') {
+            const dist = Math.hypot(stop.lat - userLat, stop.lng - userLng);
+            score = 5000 + dist;
+          } else {
+            score = 9000 + stopIdx;
+          }
         }
 
         if (score < bestScore) {

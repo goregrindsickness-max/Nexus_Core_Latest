@@ -428,6 +428,135 @@ paymentsRouter.post(
   }
 );
 
+const payoutSettlementsCacheFile = path.join(uploadsDir, 'payout_settlements_cache.json');
+
+async function loadCachedPayoutSettlements(): Promise<any[]> {
+  try {
+    if (fs.existsSync(payoutSettlementsCacheFile)) {
+      const raw = await fs.promises.readFile(payoutSettlementsCacheFile, 'utf8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+  } catch {
+    // Ignore read error
+  }
+  return [];
+}
+
+async function saveCachedPayoutSettlements(records: any[]): Promise<void> {
+  try {
+    await fs.promises.mkdir(uploadsDir, { recursive: true });
+    await fs.promises.writeFile(
+      payoutSettlementsCacheFile,
+      JSON.stringify(records.slice(0, 500), null, 2),
+      'utf8'
+    );
+  } catch {
+    // Ignore write error
+  }
+}
+
+async function resolveSellerConnectAccount(body: any): Promise<{
+  stripeAccountId?: string;
+  payoutMethod: string;
+  payoutDestination: string;
+  recipientName: string;
+}> {
+  const payoutRoute = body?.payoutRoute || {};
+  const explicitStripeId =
+    body?.stripeAccountId ||
+    payoutRoute?.stripeAccountId ||
+    body?.metadata?.stripeAccountId ||
+    undefined;
+  const payoutMethod = String(
+    body?.payoutMethod ||
+      payoutRoute?.preferredMethod ||
+      body?.metadata?.payoutMethod ||
+      'stripe'
+  );
+  const recipientName = String(
+    payoutRoute?.entityName ||
+      body?.recipientName ||
+      body?.bandName ||
+      body?.sellerName ||
+      body?.metadata?.recipientName ||
+      'Independent Artist'
+  );
+  const payoutDestination = String(
+    payoutRoute?.destinationLabel ||
+      body?.payoutDestination ||
+      body?.metadata?.payoutDestination ||
+      `${recipientName} (${payoutMethod.toUpperCase()})`
+  );
+
+  if (explicitStripeId && typeof explicitStripeId === 'string') {
+    return {
+      stripeAccountId: explicitStripeId,
+      payoutMethod,
+      payoutDestination,
+      recipientName,
+    };
+  }
+
+  const supabase = getSupabaseService();
+  if (supabase) {
+    try {
+      const bandId = body?.bandId || payoutRoute?.entityId;
+      const sellerId = body?.sellerId || body?.metadata?.sellerId;
+      if (bandId) {
+        const { data: bandRow } = await supabase
+          .from('bands')
+          .select('stripe_account_id, name')
+          .eq('id', String(bandId))
+          .maybeSingle();
+        if (bandRow?.stripe_account_id) {
+          return {
+            stripeAccountId: bandRow.stripe_account_id,
+            payoutMethod,
+            payoutDestination,
+            recipientName: bandRow.name || recipientName,
+          };
+        }
+      }
+      if (sellerId) {
+        const { data: profileRow } = await supabase
+          .from('profiles')
+          .select('stripe_account_id, name, username')
+          .eq('id', String(sellerId))
+          .maybeSingle();
+        if (profileRow?.stripe_account_id) {
+          return {
+            stripeAccountId: profileRow.stripe_account_id,
+            payoutMethod,
+            payoutDestination,
+            recipientName:
+              profileRow.name || profileRow.username || recipientName,
+          };
+        }
+      }
+    } catch {
+      // Ignore DB lookup errors
+    }
+  }
+
+  return {
+    stripeAccountId: undefined,
+    payoutMethod,
+    payoutDestination,
+    recipientName,
+  };
+}
+
+function isLiveConnectDestination(accountId?: string): boolean {
+  if (!accountId || typeof accountId !== 'string') return false;
+  return (
+    accountId.startsWith('acct_') &&
+    !accountId.startsWith('acct_sandbox_') &&
+    !accountId.startsWith('acct_live_') &&
+    !accountId.startsWith('acct_stripe_')
+  );
+}
+
 paymentsRouter.post(
   '/api/payments/create-payment-intent',
   requireAuth,
@@ -446,7 +575,11 @@ paymentsRouter.post(
       }
 
       const amountInCents = Math.max(50, Math.round(numericAmount * 100));
-      const paymentIntent = await stripe.paymentIntents.create({
+      const platformFeeCents = Math.max(0, Math.round(amountInCents * 0.05));
+      const sellerNetCents = Math.max(0, amountInCents - platformFeeCents);
+      const resolvedPayout = await resolveSellerConnectAccount(req.body);
+
+      const baseIntentParams: Stripe.PaymentIntentCreateParams = {
         amount: amountInCents,
         currency: String(currency || 'usd').toLowerCase(),
         automatic_payment_methods: { enabled: true },
@@ -454,12 +587,48 @@ paymentsRouter.post(
           ...(metadata && typeof metadata === 'object' ? metadata : {}),
           userId: req.authUser!.id,
           app: 'Nexus-Core',
+          recipientName: resolvedPayout.recipientName.slice(0, 120),
+          payoutMethod: resolvedPayout.payoutMethod.slice(0, 50),
+          payoutDestination: resolvedPayout.payoutDestination.slice(0, 200),
+          sellerNetCents: String(sellerNetCents),
+          platformFeeCents: String(platformFeeCents),
         },
-      });
+      };
+
+      let paymentIntent: Stripe.PaymentIntent;
+      if (
+        resolvedPayout.payoutMethod === 'stripe' &&
+        isLiveConnectDestination(resolvedPayout.stripeAccountId)
+      ) {
+        try {
+          paymentIntent = await stripe.paymentIntents.create({
+            ...baseIntentParams,
+            application_fee_amount: platformFeeCents,
+            transfer_data: {
+              destination: resolvedPayout.stripeAccountId!,
+            },
+          });
+        } catch (connectErr: any) {
+          console.warn(
+            '[STRIPE CONNECT FALLBACK]: Destination transfer rejected, creating standard intent with payout metadata:',
+            connectErr?.message
+          );
+          paymentIntent = await stripe.paymentIntents.create(baseIntentParams);
+        }
+      } else {
+        paymentIntent = await stripe.paymentIntents.create(baseIntentParams);
+      }
 
       res.json({
         clientSecret: paymentIntent.client_secret,
         paymentIntentId: paymentIntent.id,
+        payoutRouting: {
+          recipientName: resolvedPayout.recipientName,
+          payoutMethod: resolvedPayout.payoutMethod,
+          payoutDestination: resolvedPayout.payoutDestination,
+          sellerNetCents,
+          platformFeeCents,
+        },
       });
     } catch (e: any) {
       console.error('[STRIPE PAYMENT INTENT ERROR]:', e);
@@ -563,15 +732,29 @@ paymentsRouter.post(
       }
 
       const hasPhysicalMerch = cartItems.some((item: any) => item.type !== 'ticket');
+      const resolvedPayout = await resolveSellerConnectAccount(req.body);
+      const totalGoodsCents = cartItems.slice(0, 50).reduce((acc: number, item: any) => {
+        const itemPrice = Math.min(50000, Math.max(0.5, Number(item.price) || 15));
+        const qty = Math.min(100, Math.max(1, Number(item.quantity) || 1));
+        return acc + Math.max(50, Math.round(itemPrice * 100)) * qty;
+      }, 0);
+      const platformFeeCents = Math.max(0, Math.round(totalGoodsCents * 0.05));
+      const sellerNetCents = Math.max(0, totalGoodsCents - platformFeeCents);
 
       const sessionParams: Stripe.Checkout.SessionCreateParams = {
         line_items: lineItems,
         mode: 'payment',
         client_reference_id: userId || undefined,
         metadata: {
+          ...(req.body.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : {}),
           userId: userId || '',
           orderType,
           itemCount: String(cartItems.length),
+          recipientName: resolvedPayout.recipientName.slice(0, 120),
+          payoutMethod: resolvedPayout.payoutMethod.slice(0, 50),
+          payoutDestination: resolvedPayout.payoutDestination.slice(0, 200),
+          sellerNetCents: String(sellerNetCents),
+          platformFeeCents: String(platformFeeCents),
           app: 'Nexus-Core',
         },
         success_url: resolveSafeRedirectUrl(
@@ -595,8 +778,43 @@ paymentsRouter.post(
         sessionParams.customer_email = verifiedEmail;
       }
 
-      const session = await stripe.checkout.sessions.create(sessionParams);
-      res.json({ url: session.url, sessionId: session.id });
+      let session: Stripe.Checkout.Session;
+      if (
+        resolvedPayout.payoutMethod === 'stripe' &&
+        isLiveConnectDestination(resolvedPayout.stripeAccountId)
+      ) {
+        try {
+          session = await stripe.checkout.sessions.create({
+            ...sessionParams,
+            payment_intent_data: {
+              application_fee_amount: platformFeeCents,
+              transfer_data: {
+                destination: resolvedPayout.stripeAccountId!,
+              },
+            },
+          });
+        } catch (connectErr: any) {
+          console.warn(
+            '[STRIPE CART CONNECT FALLBACK]: Destination transfer rejected, creating standard checkout session with payout metadata:',
+            connectErr?.message
+          );
+          session = await stripe.checkout.sessions.create(sessionParams);
+        }
+      } else {
+        session = await stripe.checkout.sessions.create(sessionParams);
+      }
+
+      res.json({
+        url: session.url,
+        sessionId: session.id,
+        payoutRouting: {
+          recipientName: resolvedPayout.recipientName,
+          payoutMethod: resolvedPayout.payoutMethod,
+          payoutDestination: resolvedPayout.payoutDestination,
+          sellerNetCents,
+          platformFeeCents,
+        },
+      });
     } catch (e: any) {
       console.error('[STRIPE CART CHECKOUT ERROR]:', e);
       res.status(500).json({ error: e.message || 'Failed to create cart checkout session.' });
@@ -1055,3 +1273,54 @@ paymentsRouter.delete(
     }
   }
 );
+
+paymentsRouter.get(
+  '/api/payments/payout-settlements',
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const recipient = String(req.query.recipient || '').trim().toLowerCase();
+      const settlements = await loadCachedPayoutSettlements();
+      const filtered = recipient
+        ? settlements.filter(
+            (s: any) =>
+              String(s?.recipientName || '').toLowerCase() === recipient ||
+              String(s?.recipientId || '').toLowerCase() === recipient
+          )
+        : settlements;
+      res.json({ settlements: filtered });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to load payout settlements' });
+    }
+  }
+);
+
+paymentsRouter.post(
+  '/api/payments/payout-settlements',
+  apiMutationLimiter,
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const incoming = Array.isArray(req.body?.settlements)
+        ? req.body.settlements
+        : req.body?.settlement
+        ? [req.body.settlement]
+        : [];
+      if (incoming.length === 0) {
+        return res.status(400).json({ error: 'No payout settlements provided.' });
+      }
+      const existing = await loadCachedPayoutSettlements();
+      const deduplicated = existing.filter(
+        (r: any) =>
+          !incoming.some(
+            (inc: any) =>
+              inc.orderId === r.orderId && inc.recipientName === r.recipientName
+          )
+      );
+      const merged = [...incoming, ...deduplicated].slice(0, 500);
+      await saveCachedPayoutSettlements(merged);
+      res.json({ success: true, count: incoming.length, settlements: incoming });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to record payout settlements' });
+    }
+  }
+);
+

@@ -65,6 +65,11 @@ export function useSocialMarketplaceState({
     stock?: number;
     maxStock?: number | null;
     tracks?: any[];
+    inventoryId?: string;
+    inventory_id?: string;
+    bandId?: string;
+    band_id?: string;
+    dropId?: string;
   }[]>(() => readStoredCart());
   const [fulfillmentMap, setFulfillmentMap] = useState<CartFulfillmentMap>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -106,6 +111,8 @@ export function useSocialMarketplaceState({
       }
 
       const initialQty = maxAvailable !== null ? Math.min(maxAvailable, requestedQty) : requestedQty;
+      const linkedInvId = product.inventory_id || product.inventoryId;
+      const linkedBandId = product.band_id || product.bandId;
       return [
         ...prev,
         {
@@ -122,6 +129,11 @@ export function useSocialMarketplaceState({
           stock: product.stock,
           maxStock: maxAvailable,
           tracks: product.tracks,
+          inventoryId: linkedInvId,
+          inventory_id: linkedInvId,
+          bandId: linkedBandId,
+          band_id: linkedBandId,
+          dropId: product.dropId,
         },
       ];
     });

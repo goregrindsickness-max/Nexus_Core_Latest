@@ -9,8 +9,11 @@ import {
   formatShowDateRange,
   isMultiDayShow,
   getMultiDaySpanDays,
+  buildUpcomingShowsAndCities,
+  type GeoCoords,
 } from '../../utils/showDisplayUtils';
 import { tourPackageManager } from '../../lib/tourPackageManager';
+import { getCurrentCoordinates } from '../../services/locationService';
 
 export interface LiveTonightGig {
   id: string;
@@ -79,77 +82,37 @@ export const UpcomingShowsCarousel: React.FC<UpcomingShowsCarouselProps> = ({
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const isHoveredRef = React.useRef(false);
 
-  // Filter shows so each multi-city tour or headliner features ONLY 1 geographically closest show to avoid feed clutter
-  const uniqueLiveEvents = useMemo(() => {
-    if (!liveEvents || !Array.isArray(liveEvents)) return [];
-
-    const tourGroups = new Map<string, LiveTonightGig[]>();
-    const activeTours = tourPackageManager.getAllTours();
-
-    for (const gig of liveEvents) {
-      if (!gig) continue;
-      if (isShowEmbargoedOrDraft(gig, activeTours)) {
-        continue;
-      }
-      const gigId = String(gig.id || '').trim();
-      const h = String(gig.headliner || (gig as any).name || '').toLowerCase().trim();
-      const authoritativeDate = String(gig.rawDate || gig.show_date || gig.date || '').trim();
-      const d = authoritativeDate.toLowerCase();
-
-      if (!h.includes('nile') && (isShowPastOrEnded(gig) || (h.includes('vader') && d.includes('2026-09-24')) || gigId === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee')) {
-        continue;
-      }
-
-      const tourKey = (gig as any).tour_id || (gig as any).tour_name || (h ? h : `gig-${gigId}`);
-      const group = tourGroups.get(tourKey) || [];
-      group.push(gig);
-      tourGroups.set(tourKey, group);
-    }
-
-    const parseMiles = (gig: LiveTonightGig): number => {
-      if ((gig as any).distanceMiles !== undefined) return Number((gig as any).distanceMiles);
-      if (gig.distance && typeof gig.distance === 'string') {
-        const cleaned = gig.distance.replace(/,/g, '').match(/\d+(\.\d+)?/);
-        if (cleaned) return parseFloat(cleaned[0]);
-      }
-      const cityLower = String(gig.city || '').toLowerCase();
-      const userCity = String(userProfile?.city || userProfile?.location || '').toLowerCase();
-      if (userCity && cityLower.includes(userCity)) return 5;
-      if (cityLower.includes('kansas city') || cityLower.includes('denver') || cityLower.includes('st. louis')) return 20;
-      return 99999;
-    };
-
-    const featuredGigs: LiveTonightGig[] = [];
-
-    for (const [, gigs] of tourGroups) {
-      if (gigs.length === 0) continue;
-      const sharedFlyer = gigs.map(g => (g as any).flyer_url || (g as any).flyerUrl || (g as any).image_url || (g as any).cover_url).find(Boolean);
-      if (gigs.length === 1) {
-        featuredGigs.push(sharedFlyer && !((gigs[0] as any).flyer_url || (gigs[0] as any).flyerUrl) ? { ...gigs[0], flyer_url: sharedFlyer, flyerUrl: sharedFlyer } as any : gigs[0]);
-        continue;
-      }
-
-      gigs.sort((a, b) => {
-        const distA = parseMiles(a);
-        const distB = parseMiles(b);
-        if (distA !== distB) return distA - distB;
-        return String(a.rawDate || a.show_date || a.date || '').localeCompare(String(b.rawDate || b.show_date || b.date || ''));
-      });
-
-      const best = gigs[0];
-      featuredGigs.push(sharedFlyer && !((best as any).flyer_url || (best as any).flyerUrl) ? { ...best, flyer_url: sharedFlyer, flyerUrl: sharedFlyer } as any : best);
-    }
-
-    featuredGigs.sort((a, b) => {
-      if (a.isFollowed && !b.isFollowed) return -1;
-      if (!a.isFollowed && b.isFollowed) return 1;
-      return parseMiles(a) - parseMiles(b);
-    });
-
-    return featuredGigs;
-  }, [liveEvents, userProfile]);
-
   const [selectedCity, setSelectedCity] = useState<string>('ALL');
+  const [gpsCoords, setGpsCoords] = useState<GeoCoords | null>(() => {
+    try {
+      const raw = localStorage.getItem('nexus_user_gps_coords');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+          return { lat: parsed.lat, lng: parsed.lng };
+        }
+      }
+    } catch {}
+    return null;
+  });
+
+  React.useEffect(() => {
+    let mounted = true;
+    getCurrentCoordinates({ enableHighAccuracy: false, timeout: 8000 })
+      .then((res) => {
+        if (!mounted || !res) return;
+        const coords = { lat: res.latitude, lng: res.longitude };
+        setGpsCoords(coords);
+        try {
+          localStorage.setItem('nexus_user_gps_coords', JSON.stringify(coords));
+        } catch {}
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const [rsvpedIds, setRsvpedIds] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem('nexus_rsvped_events_v1');
@@ -176,20 +139,21 @@ export const UpcomingShowsCarousel: React.FC<UpcomingShowsCarouselProps> = ({
     };
   }, []);
 
-  const availableCities = useMemo(() => {
-    const set = new Set<string>();
-    (uniqueLiveEvents || []).forEach(g => {
-      if (g.city && g.city.trim()) {
-        set.add(g.city.trim());
-      }
+  const {
+    allValidUpcomingGigs,
+    featuredByProximityGigs: uniqueLiveEvents,
+    availableCities,
+    cityCounts,
+    filteredGigs,
+  } = useMemo(() => {
+    return buildUpcomingShowsAndCities<LiveTonightGig>({
+      liveEvents,
+      userProfile,
+      selectedCity,
+      gpsCoords,
+      activeTours: tourPackageManager.getAllTours(),
     });
-    return Array.from(set);
-  }, [uniqueLiveEvents]);
-
-  const filteredGigs = useMemo(() => {
-    if (selectedCity === 'ALL') return uniqueLiveEvents;
-    return uniqueLiveEvents.filter(g => (g.city || '').toLowerCase().includes(selectedCity.toLowerCase()));
-  }, [uniqueLiveEvents, selectedCity]);
+  }, [liveEvents, userProfile, selectedCity, gpsCoords]);
 
   const getGigCountdownBadge = (gig: LiveTonightGig) => {
     const dateStr = (gig.date || '').toLowerCase().trim();
@@ -337,9 +301,13 @@ export const UpcomingShowsCarousel: React.FC<UpcomingShowsCarouselProps> = ({
                 onChange={(e) => setSelectedCity(e.target.value)}
                 className="w-full bg-transparent text-amber-300 font-mono font-bold focus:outline-none cursor-pointer text-[11px] truncate"
               >
-                <option value="ALL" className="bg-zinc-950 text-white">All Cities ({uniqueLiveEvents.length})</option>
+                <option value="ALL" className="bg-zinc-950 text-white">
+                  📍 Nearest to You (GPS Default) • {uniqueLiveEvents.length} Featured / {allValidUpcomingGigs.length} Total Dates
+                </option>
                 {availableCities.map(c => (
-                  <option key={c} value={c} className="bg-zinc-950 text-white">{c}</option>
+                  <option key={c} value={c} className="bg-zinc-950 text-white">
+                    {c}{cityCounts[c] ? ` (${cityCounts[c]})` : ''}
+                  </option>
                 ))}
               </select>
             </div>
