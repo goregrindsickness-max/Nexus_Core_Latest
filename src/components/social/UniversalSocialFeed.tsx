@@ -2675,6 +2675,10 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
         setActiveEventData(matched);
         setIsEventModeActive(true);
         setShowMapModal(false);
+      } else if (payload && (payload as any).venue && (payload as any).headliner) {
+        setActiveEventData(payload);
+        setIsEventModeActive(true);
+        setShowMapModal(false);
       } else {
         setShowMapModal(true);
       }

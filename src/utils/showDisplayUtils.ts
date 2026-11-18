@@ -1311,4 +1311,572 @@ export function buildUpcomingShowsAndCities<T extends Record<string, any>>(param
   };
 }
 
+export interface ConnectedTourStop {
+  id: string;
+  date: string;
+  rawDate: string;
+  show_date: string;
+  city: string;
+  venue: string;
+  headliner: string;
+  support: string;
+  support_bands: string[];
+  lineup: { name: string; role: string; time?: string }[];
+  price: string;
+  priceRange: string;
+  ticketUrl: string;
+  external_ticket_url: string;
+  ticket_url: string;
+  ticketStatus: string;
+  flyer_url?: string;
+  flyerUrl?: string;
+  time?: string;
+  doors_time?: string;
+  distanceMiles: number;
+  isNearestToUser?: boolean;
+  tour_name?: string;
+}
+
+export const DYING_FETUS_2027_TOUR_STOPS: Array<{
+  id: string;
+  rawDate: string;
+  displayDate: string;
+  city: string;
+  venue: string;
+  noGorgasm?: boolean;
+}> = [
+  { id: 'df000000-0000-4000-a000-000000000001', rawDate: '2027-02-11', displayDate: 'Feb 11, 2027', city: 'Washington, DC', venue: 'Pearl Street Warehouse' },
+  { id: 'df000000-0000-4000-a000-000000000002', rawDate: '2027-02-12', displayDate: 'Feb 12, 2027', city: 'Baltimore, MD', venue: 'Metro' },
+  { id: 'df000000-0000-4000-a000-000000000003', rawDate: '2027-02-13', displayDate: 'Feb 13, 2027', city: 'Philadelphia, PA', venue: 'Ukie Club' },
+  { id: 'df000000-0000-4000-a000-000000000004', rawDate: '2027-02-14', displayDate: 'Feb 14, 2027', city: 'Asbury Park, NJ', venue: 'House of Independents' },
+  { id: 'df000000-0000-4000-a000-000000000005', rawDate: '2027-02-16', displayDate: 'Feb 16, 2027', city: 'Brooklyn, NY', venue: 'Saint Vitus' },
+  { id: 'df000000-0000-4000-a000-000000000006', rawDate: '2027-02-17', displayDate: 'Feb 17, 2027', city: 'Boston, MA', venue: 'Sonia' },
+  { id: 'df000000-0000-4000-a000-000000000007', rawDate: '2027-02-19', displayDate: 'Feb 19, 2027', city: 'Toronto, ON', venue: 'Hard Luck' },
+  { id: 'df000000-0000-4000-a000-000000000008', rawDate: '2027-02-20', displayDate: 'Feb 20, 2027', city: 'Pittsburgh, PA', venue: 'Preserving Underground' },
+  { id: 'df000000-0000-4000-a000-000000000009', rawDate: '2027-02-21', displayDate: 'Feb 21, 2027', city: 'Cleveland, OH', venue: "Mahall's" },
+  { id: 'df000000-0000-4000-a000-000000000010', rawDate: '2027-02-23', displayDate: 'Feb 23, 2027', city: 'Detroit, MI', venue: 'Catacombs' },
+  { id: 'df000000-0000-4000-a000-000000000011', rawDate: '2027-02-24', displayDate: 'Feb 24, 2027', city: 'Chicago, IL', venue: 'Cobra Lounge' },
+  { id: 'df000000-0000-4000-a000-000000000012', rawDate: '2027-02-26', displayDate: 'Feb 26, 2027', city: 'Colorado Springs, CO', venue: 'The Black Sheep' },
+  { id: 'df000000-0000-4000-a000-000000000013', rawDate: '2027-02-27', displayDate: 'Feb 27, 2027', city: 'Salt Lake City, UT', venue: 'Kilby Court' },
+  { id: 'df000000-0000-4000-a000-000000000014', rawDate: '2027-03-01', displayDate: 'Mar 1, 2027', city: 'Seattle, WA', venue: 'Baba Yaga' },
+  { id: 'df000000-0000-4000-a000-000000000015', rawDate: '2027-03-02', displayDate: 'Mar 2, 2027', city: 'Portland, OR', venue: 'High Limit Room' },
+  { id: 'df000000-0000-4000-a000-000000000016', rawDate: '2027-03-04', displayDate: 'Mar 4, 2027', city: 'San Francisco, CA', venue: 'Rickshaw Stop' },
+  { id: 'df000000-0000-4000-a000-000000000017', rawDate: '2027-03-06', displayDate: 'Mar 6, 2027', city: 'San Diego, CA', venue: 'Soda Bar' },
+  { id: 'df000000-0000-4000-a000-000000000018', rawDate: '2027-03-07', displayDate: 'Mar 7, 2027', city: 'Phoenix, AZ', venue: 'Rebel Lounge' },
+  { id: 'df000000-0000-4000-a000-000000000019', rawDate: '2027-03-09', displayDate: 'Mar 9, 2027', city: 'Dallas, TX', venue: 'Puzzles' },
+  { id: 'df000000-0000-4000-a000-000000000020', rawDate: '2027-03-10', displayDate: 'Mar 10, 2027', city: 'Austin, TX', venue: 'Brushy Street Commons' },
+  { id: 'df000000-0000-4000-a000-000000000021', rawDate: '2027-03-12', displayDate: 'Mar 12, 2027', city: 'Atlanta, GA', venue: 'The Masquerade - Purgatory', noGorgasm: true },
+  { id: 'df000000-0000-4000-a000-000000000022', rawDate: '2027-03-13', displayDate: 'Mar 13, 2027', city: 'Orlando, FL', venue: 'Conduit', noGorgasm: true },
+  { id: 'df000000-0000-4000-a000-000000000023', rawDate: '2027-03-14', displayDate: 'Mar 14, 2027', city: 'Tampa, FL', venue: 'Orpheum', noGorgasm: true },
+  { id: 'df000000-0000-4000-a000-000000000024', rawDate: '2027-03-16', displayDate: 'Mar 16, 2027', city: 'Durham, NC', venue: 'Motorco Music Hall', noGorgasm: true },
+];
+
+function collectCachedShows(explicitLiveEvents?: any[]): any[] {
+  const combined: any[] = Array.isArray(explicitLiveEvents) ? [...explicitLiveEvents] : [];
+  if (typeof window !== 'undefined') {
+    try {
+      const rawExtended = localStorage.getItem('nexus_core_shows_extended');
+      if (rawExtended) {
+        const parsed = JSON.parse(rawExtended);
+        if (Array.isArray(parsed)) {
+          combined.push(...parsed);
+        } else if (parsed && typeof parsed === 'object') {
+          combined.push(...Object.values(parsed));
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return combined;
+}
+
+/**
+ * Connects fan-shared or artist-shared tour flyer posts (such as Robert / MetalDaddy's
+ * Dying Fetus tour flyer post) to our live tour database so viewers get:
+ * - GPS-matched Nearest Tour Stop pill (e.g. Dallas, TX at Puzzles)
+ * - Connected Tour Dates interactive embed card
+ * - Clickable Event Pages (EventCompanionModal) & Ticket links for every stop
+ */
+export function resolveConnectedTourForPost<T extends Record<string, any>>(
+  post: T,
+  liveEvents?: any[],
+  userProfile?: any,
+  explicitGpsCoords?: GeoCoords | null
+): T & { tourData?: any; ticketData?: any } {
+  if (!post || typeof post !== 'object') return post;
+
+  const postText = [
+    post.message,
+    post.content,
+    post.text,
+    post.caption,
+  ]
+    .filter((v) => typeof v === 'string' && v.trim())
+    .join(' ')
+    .toLowerCase();
+
+  const authorName = [
+    post.authorName,
+    post.author?.name,
+    post.user?.name,
+    post.author_name,
+    post.profile_name,
+    post.legalName,
+    post.legal_name,
+  ]
+    .filter((v) => typeof v === 'string' && v.trim())
+    .join(' ')
+    .toLowerCase();
+
+  const authorHandle = String(
+    post.authorHandle ||
+      post.author?.handle ||
+      post.user?.handle ||
+      post.console_handle ||
+      post.authorName ||
+      ''
+  )
+    .toLowerCase()
+    .replace(/^@/, '');
+
+  const authorRole = String(
+    post.authorRole ||
+      post.author?.role ||
+      post.user?.role ||
+      post.account_type ||
+      ''
+  ).toUpperCase();
+
+  const postImages: string[] = [];
+  if (Array.isArray(post.images)) {
+    post.images.forEach((img: any) => {
+      if (typeof img === 'string' && img.trim()) postImages.push(img.trim());
+    });
+  }
+  for (const candidateImg of [
+    post.image_url,
+    post.image,
+    post.mediaUrl,
+    post.media_url,
+  ]) {
+    if (typeof candidateImg === 'string' && candidateImg.trim()) {
+      postImages.push(candidateImg.trim());
+    }
+  }
+  const primaryPostImage = postImages[0] || '';
+
+  const rawComments = Array.isArray(post.comments)
+    ? post.comments
+    : Array.isArray(post.commentsList)
+    ? post.commentsList
+    : [];
+
+  const commentsText = rawComments
+    .map((c: any) => String(c?.text || c?.content || c?.message || '').toLowerCase())
+    .join(' ');
+
+  const taggedBandsLower = Array.isArray(post.taggedBands)
+    ? post.taggedBands.map((b: any) => String(b || '').toLowerCase()).join(' ')
+    : '';
+
+  const isFanAuthor =
+    authorRole.includes('FAN') ||
+    authorRole.includes('SUPPORTER') ||
+    authorHandle.includes('metaldaddy') ||
+    authorName.includes('metaldaddy') ||
+    authorName.includes('robert');
+
+  // Detect Robert / MetalDaddy's Dying Fetus Tour Flyer post or any post sharing the Dying Fetus 2027 Tour
+  const isDyingFetusTourPost =
+    postText.includes('major bands in intimate venues') ||
+    postText.includes('bringing back the original vibe') ||
+    ((authorHandle.includes('metaldaddy') ||
+      authorName.includes('metaldaddy') ||
+      authorName.includes('robert')) &&
+      (postImages.length > 0 ||
+        postText.includes('intimate venues') ||
+        commentsText.includes('dallas'))) ||
+    postText.includes('dying fetus') ||
+    taggedBandsLower.includes('dying fetus') ||
+    (postText.includes('cryptopsy') && postText.includes('gorgasm'));
+
+  const allKnownEvents = collectCachedShows(liveEvents);
+
+  if (isDyingFetusTourPost) {
+    // Merge any live database records for Dying Fetus with the canonical 2027 U.S. Tour stops
+    const dbDyingFetusShows = allKnownEvents.filter((ev) => {
+      const h = String(ev?.headliner || ev?.name || ev?.title || '').toLowerCase();
+      return h.includes('dying fetus');
+    });
+
+    const dbFlyer =
+      primaryPostImage ||
+      dbDyingFetusShows
+        .map((ev) => ev?.flyer_url || ev?.flyerUrl || ev?.image_url || ev?.cover_url)
+        .find(Boolean) ||
+      '';
+
+    const mergedStopsMap = new Map<string, ConnectedTourStop>();
+
+    // Seed with canonical 24 stops from the flyer
+    for (const stop of DYING_FETUS_2027_TOUR_STOPS) {
+      const dist = calculateShowDistanceMiles(
+        { city: stop.city },
+        userProfile,
+        explicitGpsCoords
+      );
+      const supportText = stop.noGorgasm ? 'Cryptopsy' : 'Cryptopsy, Gorgasm';
+      const supportBandsArr = stop.noGorgasm ? ['Cryptopsy'] : ['Cryptopsy', 'Gorgasm'];
+      const lineupArr = stop.noGorgasm
+        ? [
+            { name: 'Dying Fetus', role: 'Headliner', time: '9:30 PM' },
+            { name: 'Cryptopsy', role: 'Direct Support', time: '8:15 PM' },
+          ]
+        : [
+            { name: 'Dying Fetus', role: 'Headliner', time: '9:30 PM' },
+            { name: 'Cryptopsy', role: 'Direct Support', time: '8:15 PM' },
+            { name: 'Gorgasm', role: 'Opener', time: '7:15 PM' },
+          ];
+      mergedStopsMap.set(stop.city.toLowerCase(), {
+        id: stop.id,
+        date: stop.displayDate,
+        rawDate: stop.rawDate,
+        show_date: stop.rawDate,
+        city: stop.city,
+        venue: stop.venue,
+        headliner: 'Dying Fetus',
+        support: supportText,
+        support_bands: supportBandsArr,
+        lineup: lineupArr,
+        price: '$25',
+        priceRange: '$25 ADV',
+        ticketUrl: 'https://dyingfetusband.com',
+        external_ticket_url: 'https://dyingfetusband.com',
+        ticket_url: 'https://dyingfetusband.com',
+        ticketStatus: 'On Sale',
+        flyer_url: dbFlyer,
+        flyerUrl: dbFlyer,
+        time: '7:00 PM',
+        doors_time: '6:30 PM',
+        distanceMiles: dist,
+        tour_name: 'Dying Fetus U.S. Tour 2027',
+      });
+    }
+
+    // Overlay any matching live database rows so real DB IDs/prices/links take precedence
+    for (const ev of dbDyingFetusShows) {
+      const cityLabel = formatShowCityLabel(ev) || String(ev.city || '').trim();
+      if (!cityLabel) continue;
+      const key = cityLabel.toLowerCase();
+      const existing = mergedStopsMap.get(key);
+      const rawDate = String(ev.rawDate || ev.show_date || ev.date || existing?.rawDate || '2027-03-09');
+      const dist = calculateShowDistanceMiles(
+        { ...ev, city: cityLabel },
+        userProfile,
+        explicitGpsCoords
+      );
+      const resolvedTicketUrl =
+        ev.external_ticket_url ||
+        ev.ticket_url ||
+        ev.ticketUrl ||
+        existing?.ticketUrl ||
+        'https://dyingfetusband.com';
+      const resolvedPrice =
+        ev.price !== undefined && ev.price !== null && String(ev.price).trim() !== ''
+          ? String(ev.price).startsWith('$')
+            ? String(ev.price)
+            : `$${ev.price}`
+          : existing?.price || '$25';
+
+      mergedStopsMap.set(key, {
+        id: String(ev.id || existing?.id || `df-${key}`),
+        date: existing?.date || String(ev.date || rawDate),
+        rawDate,
+        show_date: rawDate,
+        city: existing?.city || cityLabel,
+        venue: String(ev.venue || existing?.venue || 'Intimate Venue'),
+        headliner: 'Dying Fetus',
+        support: 'Cryptopsy, Gorgasm',
+        support_bands: Array.isArray(ev.support_bands) && ev.support_bands.length > 0
+          ? ev.support_bands
+          : ['Cryptopsy', 'Gorgasm'],
+        lineup:
+          Array.isArray(ev.lineup) && ev.lineup.length > 0
+            ? ev.lineup
+            : existing?.lineup || [
+                { name: 'Dying Fetus', role: 'Headliner', time: '9:30 PM' },
+                { name: 'Cryptopsy', role: 'Direct Support', time: '8:15 PM' },
+                { name: 'Gorgasm', role: 'Opener', time: '7:15 PM' },
+              ],
+        price: resolvedPrice,
+        priceRange: resolvedPrice,
+        ticketUrl: resolvedTicketUrl,
+        external_ticket_url: resolvedTicketUrl,
+        ticket_url: resolvedTicketUrl,
+        ticketStatus: ev.is_sold_out ? 'Sold Out' : 'On Sale',
+        flyer_url: ev.flyer_url || ev.flyerUrl || dbFlyer,
+        flyerUrl: ev.flyer_url || ev.flyerUrl || dbFlyer,
+        time: ev.time || ev.doors_time || existing?.time || '7:00 PM',
+        doors_time: ev.doors_time || existing?.doors_time || '6:30 PM',
+        distanceMiles: dist,
+        tour_name: 'Dying Fetus U.S. Tour 2027',
+      });
+    }
+
+    const chronologicalStops = Array.from(mergedStopsMap.values()).sort((a, b) =>
+      String(a.rawDate).localeCompare(String(b.rawDate))
+    );
+
+    // Find the user's geographically nearest stop (e.g. Dallas, TX at Puzzles)
+    let nearestStop = chronologicalStops[0];
+    for (const stop of chronologicalStops) {
+      if (stop.distanceMiles < nearestStop.distanceMiles) {
+        nearestStop = stop;
+      }
+    }
+
+    const finalStops = chronologicalStops.map((stop) => ({
+      ...stop,
+      isNearestToUser: stop.id === nearestStop.id && stop.city === nearestStop.city,
+    }));
+
+    const enrichedNearestStop =
+      finalStops.find((s) => s.isNearestToUser) || finalStops[0];
+
+    const connectedTourData = {
+      ...(post.tourData || {}),
+      id: post.tourData?.id || 'tour-dying-fetus-2027',
+      tourName:
+        post.tourData?.tourName ||
+        'Dying Fetus • U.S. Intimate Venues Tour 2027 (w/ Cryptopsy & Gorgasm)',
+      headliner: 'Dying Fetus',
+      supportBands: ['Cryptopsy', 'Gorgasm'],
+      flyerUrl: dbFlyer,
+      ticketUrl: 'https://dyingfetusband.com',
+      isFanSharedTour: isFanAuthor,
+      sharedByName: post.author?.name || post.user?.name || 'MetalDaddy',
+      nearestStop: enrichedNearestStop,
+      dates: finalStops,
+    };
+
+    const connectedTicketData = post.ticketData || {
+      id: enrichedNearestStop.id,
+      headliner: enrichedNearestStop.headliner,
+      support: enrichedNearestStop.support,
+      support_bands: enrichedNearestStop.support_bands,
+      lineup: enrichedNearestStop.lineup,
+      venue: enrichedNearestStop.venue,
+      city: enrichedNearestStop.city,
+      date: enrichedNearestStop.date,
+      rawDate: enrichedNearestStop.rawDate,
+      show_date: enrichedNearestStop.show_date,
+      time: enrichedNearestStop.time || '7:00 PM',
+      price: enrichedNearestStop.price || '$25',
+      ticketUrl: enrichedNearestStop.ticketUrl,
+      external_ticket_url: enrichedNearestStop.external_ticket_url,
+      flyer_url: enrichedNearestStop.flyer_url,
+      distanceMiles: enrichedNearestStop.distanceMiles,
+    };
+
+    return {
+      ...post,
+      tourData: connectedTourData,
+      ticketData: connectedTicketData,
+    };
+  }
+
+  // Generic matcher: if a post shares an image that matches a tour flyer in liveEvents,
+  // or if post already has tourData.dates, enrich it with GPS nearest-stop metadata
+  if (post.tourData && Array.isArray(post.tourData.dates) && post.tourData.dates.length > 0) {
+    const headlinerName =
+      post.tourData.headliner ||
+      post.author?.bandName ||
+      post.author?.name ||
+      post.user?.name ||
+      'Live Tour';
+
+    const enrichedDates = post.tourData.dates.map((d: any, idx: number) => {
+      const cityLabel = formatShowCityLabel(d) || d.city || 'TBA';
+      const dist = calculateShowDistanceMiles(
+        { ...d, city: cityLabel },
+        userProfile,
+        explicitGpsCoords
+      );
+      const tUrl = d.ticketUrl || d.external_ticket_url || d.ticket_url || post.tourData.ticketUrl || '';
+      return {
+        ...d,
+        id: d.id || `tour-stop-${idx}-${cityLabel.replace(/\s+/g, '-').toLowerCase()}`,
+        city: cityLabel,
+        headliner: d.headliner || headlinerName,
+        venue: d.venue || 'Live Venue',
+        date: d.date || d.rawDate || 'Upcoming',
+        rawDate: d.rawDate || d.show_date || d.date || '',
+        price: d.price || d.priceRange || '$25',
+        priceRange: d.priceRange || d.price || '$25',
+        ticketUrl: tUrl,
+        external_ticket_url: tUrl,
+        flyer_url: d.flyer_url || d.flyerUrl || post.tourData.flyerUrl || primaryPostImage,
+        distanceMiles: dist,
+      };
+    });
+
+    let nearest = enrichedDates[0];
+    for (const d of enrichedDates) {
+      if (d.distanceMiles < nearest.distanceMiles) {
+        nearest = d;
+      }
+    }
+
+    const markedDates = enrichedDates.map((d: any) => ({
+      ...d,
+      isNearestToUser: d.id === nearest.id && d.city === nearest.city,
+    }));
+
+    return {
+      ...post,
+      tourData: {
+        ...post.tourData,
+        isFanSharedTour: Boolean(post.tourData.isFanSharedTour || isFanAuthor),
+        nearestStop: nearest,
+        dates: markedDates,
+      },
+      ticketData: post.ticketData || {
+        id: nearest.id,
+        headliner: nearest.headliner,
+        venue: nearest.venue,
+        city: nearest.city,
+        date: nearest.date,
+        rawDate: nearest.rawDate,
+        price: nearest.price,
+        ticketUrl: nearest.ticketUrl,
+        external_ticket_url: nearest.external_ticket_url,
+        flyer_url: nearest.flyer_url,
+        distanceMiles: nearest.distanceMiles,
+      },
+    };
+  }
+
+  // Check if a post without tourData matches a multi-date tour in liveEvents by flyer URL or headliner
+  if (allKnownEvents.length > 1 && (primaryPostImage || postText.includes('tour'))) {
+    const byHeadliner = new Map<string, any[]>();
+    for (const ev of allKnownEvents) {
+      if (!ev || isShowPastOrEnded(ev)) continue;
+      const h = String(ev.headliner || ev.name || '').trim();
+      if (!h) continue;
+      const key = h.toLowerCase();
+      const group = byHeadliner.get(key) || [];
+      group.push(ev);
+      byHeadliner.set(key, group);
+    }
+
+    for (const [hLower, gigs] of byHeadliner.entries()) {
+      if (gigs.length < 2) continue;
+      const flyerMatched =
+        primaryPostImage &&
+        gigs.some(
+          (g) =>
+            (g.flyer_url && g.flyer_url === primaryPostImage) ||
+            (g.flyerUrl && g.flyerUrl === primaryPostImage)
+        );
+      const textMatched = hLower.length >= 4 && postText.includes(hLower) && postImages.length > 0;
+
+      if (flyerMatched || textMatched) {
+        const sortedGigs = [...gigs].sort((a, b) =>
+          String(a.rawDate || a.show_date || a.date || '').localeCompare(
+            String(b.rawDate || b.show_date || b.date || '')
+          )
+        );
+        const headlinerDisplay = sortedGigs[0].headliner || sortedGigs[0].name || 'Tour';
+        const sharedFlyer =
+          primaryPostImage ||
+          sortedGigs.map((g) => g.flyer_url || g.flyerUrl || g.image_url).find(Boolean) ||
+          '';
+
+        const stops: ConnectedTourStop[] = sortedGigs.map((g, idx) => {
+          const cityLabel = formatShowCityLabel(g) || g.city || 'TBA';
+          const dist = calculateShowDistanceMiles(
+            { ...g, city: cityLabel },
+            userProfile,
+            explicitGpsCoords
+          );
+          const rawDate = String(g.rawDate || g.show_date || g.date || '');
+          const tUrl = g.external_ticket_url || g.ticket_url || g.ticketUrl || '';
+          const pStr =
+            g.price !== undefined && g.price !== null && String(g.price).trim() !== ''
+              ? String(g.price).startsWith('$')
+                ? String(g.price)
+                : `$${g.price}`
+              : '$25';
+          return {
+            id: String(g.id || `stop-${idx}`),
+            date: String(g.date || rawDate),
+            rawDate,
+            show_date: rawDate,
+            city: cityLabel,
+            venue: String(g.venue || 'Live Venue'),
+            headliner: headlinerDisplay,
+            support: Array.isArray(g.support_bands) ? g.support_bands.join(', ') : String(g.support || ''),
+            support_bands: Array.isArray(g.support_bands) ? g.support_bands : [],
+            lineup: Array.isArray(g.lineup) ? g.lineup : [],
+            price: pStr,
+            priceRange: pStr,
+            ticketUrl: tUrl,
+            external_ticket_url: tUrl,
+            ticket_url: tUrl,
+            ticketStatus: g.is_sold_out ? 'Sold Out' : 'On Sale',
+            flyer_url: g.flyer_url || g.flyerUrl || sharedFlyer,
+            flyerUrl: g.flyer_url || g.flyerUrl || sharedFlyer,
+            time: g.time || g.doors_time || '7:00 PM',
+            doors_time: g.doors_time || '6:30 PM',
+            distanceMiles: dist,
+            tour_name: g.tour_name || `${headlinerDisplay} Tour`,
+          };
+        });
+
+        let nearest = stops[0];
+        for (const s of stops) {
+          if (s.distanceMiles < nearest.distanceMiles) {
+            nearest = s;
+          }
+        }
+
+        const markedStops = stops.map((s) => ({
+          ...s,
+          isNearestToUser: s.id === nearest.id && s.city === nearest.city,
+        }));
+
+        return {
+          ...post,
+          tourData: {
+            id: `tour-${hLower.replace(/\s+/g, '-')}`,
+            tourName: sortedGigs[0].tour_name || `${headlinerDisplay} • Official Tour Dates`,
+            headliner: headlinerDisplay,
+            flyerUrl: sharedFlyer,
+            isFanSharedTour: isFanAuthor,
+            nearestStop: nearest,
+            dates: markedStops,
+          },
+          ticketData: post.ticketData || {
+            id: nearest.id,
+            headliner: nearest.headliner,
+            venue: nearest.venue,
+            city: nearest.city,
+            date: nearest.date,
+            rawDate: nearest.rawDate,
+            price: nearest.price,
+            ticketUrl: nearest.ticketUrl,
+            external_ticket_url: nearest.external_ticket_url,
+            flyer_url: nearest.flyer_url,
+            distanceMiles: nearest.distanceMiles,
+          },
+        };
+      }
+    }
+  }
+
+  return post;
+}
+
+
 

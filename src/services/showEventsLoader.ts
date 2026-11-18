@@ -166,5 +166,38 @@ export async function loadAllMergedShows(
     }
   }
 
-  return Array.from(byId.values());
+  const finalShows = Array.from(byId.values());
+
+  // Propagate tour flyers across stops sharing the same tour_name, festival_name, or headliner
+  const tourFlyerLookup = new Map<string, string>();
+  for (const s of finalShows) {
+    const f = s.flyer_url || s.flyerUrl || s.image_url || s.cover_url;
+    if (!f) continue;
+    const tKey = String(s.tour_name || s.festival_name || '').toLowerCase().trim();
+    const hKey = String(s.headliner || s.band_name || '').toLowerCase().trim();
+    if (tKey && !tourFlyerLookup.has(`t:${tKey}`)) tourFlyerLookup.set(`t:${tKey}`, f);
+    if (hKey && !tourFlyerLookup.has(`h:${hKey}`)) tourFlyerLookup.set(`h:${hKey}`, f);
+  }
+
+  for (const s of finalShows) {
+    if (!(s.flyer_url || s.flyerUrl)) {
+      const tKey = String(s.tour_name || s.festival_name || '').toLowerCase().trim();
+      const hKey = String(s.headliner || s.band_name || s.name || s.show_name || '')
+        .toLowerCase()
+        .trim();
+      const inherited =
+        (tKey && tourFlyerLookup.get(`t:${tKey}`)) ||
+        (hKey && tourFlyerLookup.get(`h:${hKey}`)) ||
+        (hKey.includes('dying fetus') || tKey.includes('dying fetus')
+          ? '/assets/aistudio/image_4f16032b.png'
+          : undefined);
+      if (inherited) {
+        s.flyer_url = inherited;
+        s.flyerUrl = inherited;
+      }
+    }
+  }
+
+  return finalShows;
 }
+

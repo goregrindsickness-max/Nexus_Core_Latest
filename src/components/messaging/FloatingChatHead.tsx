@@ -21,8 +21,12 @@ import {
   Flame,
   ShieldCheck,
   User,
-  CheckCheck
+  CheckCheck,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
 } from 'lucide-react';
+import { usePinchZoom } from '../../hooks/usePinchZoom';
 
 interface ChatMessage {
   id?: string | number;
@@ -126,6 +130,13 @@ export const FloatingChatHead: React.FC = () => {
   const [viewMode, setViewMode] = useState<'chat' | 'list'>('chat');
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   const [inputText, setInputText] = useState('');
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
+  const fchZoom = usePinchZoom({ minScale: 1, maxScale: 5 });
+
+  useEffect(() => {
+    fchZoom.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightboxImageUrl]);
 
   // Explicitly dismiss chat head and persist preference across reloads
   const handleDismissChatHead = useCallback(() => {
@@ -1338,7 +1349,8 @@ export const FloatingChatHead: React.FC = () => {
                 const isMe = msg.sender_id === currentUserId || msg.sender_id === 'me' || (msg as any).sender === 'user';
                 const parsed = parseChatMessagePayload(msg);
                 const displayPreview = getDisplayPreviewForMessage(msg);
-                const cleanText = parsed.text || displayPreview.preview || msg.message;
+                const mediaUrl = parsed.mediaUrl || (msg as any).mediaUrl || (msg as any).media_url;
+                const cleanText = parsed.text || (!mediaUrl ? displayPreview.preview || msg.message : '');
                 return (
                   <div key={msg.id ? `msg-${msg.id}-${idx}` : `msg-${idx}`} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                     <div
@@ -1370,7 +1382,23 @@ export const FloatingChatHead: React.FC = () => {
                           ⚡ {parsed.offerCard.title || 'Tour Offer'}{parsed.offerCard.venue ? ` • ${parsed.offerCard.venue}` : ''}{parsed.offerCard.guarantee ? ` (${parsed.offerCard.guarantee})` : ''}
                         </div>
                       )}
-                      <div>{cleanText}</div>
+                      {cleanText ? <div>{cleanText}</div> : null}
+                      {mediaUrl && (
+                        <div className={`${cleanText ? 'mt-2' : ''} flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                          <button
+                            type="button"
+                            onClick={() => setLightboxImageUrl(mediaUrl)}
+                            className="inline-block w-fit max-w-full rounded-xl overflow-hidden border border-white/15 shadow-md relative group/fchimg cursor-zoom-in"
+                            title="Tap to view full size with pinch-to-zoom"
+                          >
+                            <img
+                              src={mediaUrl}
+                              alt="Attachment"
+                              className="block max-h-64 w-auto max-w-full h-auto object-contain rounded-xl select-none"
+                            />
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {msg.created_at && (
                       <span className="text-[9px] font-mono text-zinc-600 px-1 mt-0.5">
@@ -1454,6 +1482,74 @@ export const FloatingChatHead: React.FC = () => {
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {lightboxImageUrl && (
+        <div
+          className="fixed inset-0 z-[999999] bg-black/95 backdrop-blur-2xl flex flex-col justify-between select-none"
+          onClick={() => setLightboxImageUrl(null)}
+        >
+          <div
+            className="w-full px-4 py-3 bg-gradient-to-b from-black/90 to-transparent flex items-center justify-between gap-2 z-20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="text-xs font-mono text-zinc-300">
+              Pinch or double-tap to zoom • Drag to pan
+            </span>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-xl p-1">
+                <button
+                  type="button"
+                  onClick={() => fchZoom.zoomOut()}
+                  className="p-1.5 text-zinc-300 hover:text-white cursor-pointer"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <span className="px-2 text-xs font-mono text-orange-400 tabular-nums">
+                  {Math.round(fchZoom.scale * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => fchZoom.zoomIn()}
+                  className="p-1.5 text-zinc-300 hover:text-white cursor-pointer"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                {fchZoom.scale > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => fchZoom.reset()}
+                    className="p-1.5 text-zinc-300 hover:text-white cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setLightboxImageUrl(null)}
+                className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-200 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div
+            className="flex-1 w-full h-full flex items-center justify-center overflow-hidden p-4"
+            onClick={(e) => e.stopPropagation()}
+            {...fchZoom.containerProps}
+          >
+            <img
+              src={lightboxImageUrl}
+              alt="Full size media"
+              style={fchZoom.imageStyle}
+              className="max-w-full max-h-[82vh] w-auto h-auto object-contain rounded-lg shadow-2xl select-none"
+              draggable={false}
+            />
+          </div>
+          <div className="h-4 shrink-0" />
         </div>
       )}
     </div>

@@ -2058,20 +2058,52 @@ export const LoginView: React.FC<LoginViewProps> = ({
   // Sign-up Tab Render
   if (activeTab === 'signup') {
     return (
-      <div className="w-full min-h-screen bg-[#07080a] text-zinc-100 font-sans p-0 select-none overflow-y-auto">
-        <div className="w-full min-h-screen bg-[#0c0e12] p-1.5 sm:p-4 md:p-6 relative">
-          <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-emerald-500 via-[#00ffcc] to-purple-500" />
-          
-          <div className="w-full max-w-md mx-auto mt-6">
-            {onBackToSplash && (
-              <button
-                type="button"
-                onClick={onBackToSplash}
-                className="mb-4 inline-flex items-center gap-1.5 text-[10px] font-mono font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors cursor-pointer"
-              >
-                <span>← Back to Splash &amp; Download</span>
-              </button>
+      <div className="w-full min-h-screen bg-[#07080c] text-zinc-100 font-sans p-0 select-none overflow-y-auto relative">
+        <div
+          className="fixed inset-0 pointer-events-none opacity-30"
+          style={{
+            background:
+              'radial-gradient(circle at 15% 15%, rgba(16, 185, 129, 0.14) 0%, transparent 45%), radial-gradient(circle at 85% 80%, rgba(168, 85, 247, 0.14) 0%, transparent 45%)',
+          }}
+        />
+        <div className="w-full min-h-screen p-3 sm:p-6 md:p-8 relative z-10">
+          <div className="w-full max-w-xl mx-auto mt-2 sm:mt-4 bg-[#0c0e14]/95 border border-white/[0.09] rounded-2xl p-5 sm:p-8 shadow-[0_32px_90px_rgba(0,0,0,0.85)] backdrop-blur-xl">
+            <div className="flex items-center justify-between gap-2 mb-5">
+              {onBackToSplash ? (
+                <button
+                  type="button"
+                  onClick={onBackToSplash}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 border border-white/[0.08] text-xs font-medium text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                >
+                  <span>← Back to Overview</span>
+                </button>
+              ) : (
+                <div />
+              )}
+              <span className="text-xs font-mono text-emerald-400 font-semibold">
+                Step {registrationPage} of 2 · {registrationPage === 1 ? 'Account & Role' : 'Visual Identity'}
+              </span>
+            </div>
+
+            {!isWorkspaceRegistration && (
+              <div className="grid grid-cols-2 gap-1.5 bg-[#080a0f] p-1.5 rounded-xl border border-white/[0.07] mb-6">
+                <button
+                  type="button"
+                  onClick={() => selectTab('unlock')}
+                  className="py-2.5 px-3 rounded-lg text-xs font-bold tracking-wide transition-all flex items-center justify-center gap-2 text-zinc-400 hover:text-white hover:bg-white/[0.04] cursor-pointer"
+                >
+                  <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Sign In</span>
+                </button>
+                <button
+                  type="button"
+                  className="py-2.5 px-3 rounded-lg text-xs font-bold tracking-wide transition-all flex items-center justify-center gap-2 bg-[#161b26] border border-purple-500/40 text-white shadow-md cursor-pointer"
+                >
+                  <span>Create Account</span>
+                </button>
+              </div>
             )}
+
             <form onSubmit={handleSignup} className="w-full flex flex-col items-stretch space-y-5" autoComplete="off" noValidate>
               {registrationPage === 1 ? (
                 <>
@@ -2532,34 +2564,50 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     />
                   )}
 
-                  {/* Account Type Selector (Moved to Bottom) */}
+                  {/* Account Type Selector */}
                   {!isWorkspaceRegistration && (
                     <div className="pt-2">
-                      <label className="text-[10px] font-mono uppercase text-zinc-400 block mb-1.5">Account Type</label>
-                      <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800 mb-2">
+                      <label className="text-xs font-semibold text-zinc-300 block mb-2">Choose Your Account Path</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                         <button
                           type="button"
                           onClick={() => setAccountTypeToggle('Fan Only Supporter')}
-                          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded transition-all ${accountTypeToggle === 'Fan Only Supporter' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'text-zinc-500 hover:text-zinc-300'}`}
+                          className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            accountTypeToggle === 'Fan Only Supporter'
+                              ? 'bg-emerald-500/15 border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.18)]'
+                              : 'bg-[#080a0f] border-zinc-800 hover:border-zinc-700'
+                          }`}
                         >
-                          Fan Only Supporter
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-xs font-bold ${accountTypeToggle === 'Fan Only Supporter' ? 'text-emerald-300' : 'text-zinc-200'}`}>
+                              Fan Supporter
+                            </span>
+                            <span className={`w-2.5 h-2.5 rounded-full ${accountTypeToggle === 'Fan Only Supporter' ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
+                          </div>
+                          <p className="text-[11px] text-zinc-400 leading-relaxed">
+                            Follow bands, discover local GPS shows, stream vault releases, and collect merch. Upgrade anytime.
+                          </p>
                         </button>
+
                         <button
                           type="button"
                           onClick={() => setAccountTypeToggle('Industry Pro')}
-                          className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded transition-all ${accountTypeToggle === 'Industry Pro' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50 shadow-[0_0_10px_rgba(168,85,247,0.2)]' : 'text-zinc-500 hover:text-zinc-300'}`}
+                          className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            accountTypeToggle === 'Industry Pro'
+                              ? 'bg-purple-500/15 border-purple-500/60 shadow-[0_0_20px_rgba(168,85,247,0.18)]'
+                              : 'bg-[#080a0f] border-zinc-800 hover:border-zinc-700'
+                          }`}
                         >
-                          Industry Pro
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-xs font-bold ${accountTypeToggle === 'Industry Pro' ? 'text-purple-300' : 'text-zinc-200'}`}>
+                              Industry Pro &amp; Artist
+                            </span>
+                            <span className={`w-2.5 h-2.5 rounded-full ${accountTypeToggle === 'Industry Pro' ? 'bg-purple-400' : 'bg-zinc-700'}`} />
+                          </div>
+                          <p className="text-[11px] text-zinc-400 leading-relaxed">
+                            Register as an active Band / Solo Artist, Venue Promoter, Record Label, or Creative Studio.
+                          </p>
                         </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 px-1 mb-2 text-center">
-                        <p className="text-[9px] sm:text-[10px] font-sans text-zinc-400 leading-normal">
-                          Joining purely as a fan / supporter. You can upgrade to an industry creator account at any time.
-                        </p>
-                        <p className="text-[9px] sm:text-[10px] font-sans text-zinc-400 leading-normal">
-                          Registering as an active Band/ Solo Artist, Venue Promoter, Record Label, or Creative Professional.
-                        </p>
                       </div>
                     </div>
                   )}
@@ -2574,12 +2622,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
                         onChange={(e) => setNexusConsentChecked(e.target.checked)}
                         className="w-4 h-4 rounded border-zinc-800 bg-zinc-950 text-emerald-500 focus:ring-emerald-500/50 mt-0.5 cursor-pointer accent-emerald-500"
                       />
-                      <label htmlFor="terms-checkbox" className="text-[11px] font-sans text-zinc-400 leading-relaxed cursor-pointer select-none">
+                      <label htmlFor="terms-checkbox" className="text-xs font-sans text-zinc-400 leading-relaxed cursor-pointer select-none">
                         I agree to the{' '}
                         <button
                           type="button"
                           onClick={() => setViewingTerms(true)}
-                          className="text-emerald-500 hover:text-emerald-400 underline inline font-semibold"
+                          className="text-emerald-400 hover:text-emerald-300 underline inline font-semibold"
                         >
                           Terms of Service
                         </button>{' '}
@@ -2587,34 +2635,38 @@ export const LoginView: React.FC<LoginViewProps> = ({
                         <button
                           type="button"
                           onClick={() => setViewingTerms(true)}
-                          className="text-emerald-500 hover:text-emerald-400 underline inline font-semibold"
+                          className="text-emerald-400 hover:text-emerald-300 underline inline font-semibold"
                         >
                           Privacy Policy
                         </button>
-                        , including acceptance of the 7.77% platform fee for completed creative projects/ jobs.
+                        , including acceptance of the 7.77% platform fee for completed creative projects/jobs.
                       </label>
                     </div>
 
-                    {error && <div className="text-center font-mono text-red-500 uppercase mb-4 text-xs font-black">⚠️ {error}</div>}
+                    {error && (
+                      <div className="text-xs font-medium text-rose-300 bg-rose-950/40 border border-rose-500/40 px-3.5 py-2.5 rounded-xl mb-4">
+                        ⚠️ {error}
+                      </div>
+                    )}
                     
-                    <div className="flex space-x-3">
+                    <div className="flex gap-3">
                       <button
                         type="button"
                         onClick={() => selectTab('unlock')}
-                        className="w-1/3 border border-zinc-800 text-zinc-400 py-2.5 rounded-lg text-xs font-medium text-center hover:bg-zinc-900 transition-all"
+                        className="w-1/3 border border-zinc-800 text-zinc-300 py-3 rounded-xl text-xs font-semibold text-center hover:bg-zinc-900 transition-all cursor-pointer"
                       >
-                        BACK TO ROLES
+                        Sign In Instead
                       </button>
                       <button
                         type="submit"
                         disabled={isLoading}
-                        className={`w-2/3 font-bold py-2.5 rounded-lg text-xs tracking-wider uppercase transition-all shadow-md ${
+                        className={`w-2/3 font-bold py-3 rounded-xl text-xs tracking-wide transition-all shadow-lg cursor-pointer ${
                           isLoading
-                            ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
-                            : 'bg-emerald-500 hover:bg-emerald-400 text-neutral-950'
+                            ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-emerald-500 to-[#00ffcc] hover:from-emerald-400 hover:to-[#33ffd6] text-neutral-950 shadow-emerald-500/20'
                         }`}
                       >
-                        {isLoading ? 'SAVING...' : 'SAVE & UNLOCK WORKSPACE'}
+                        {isLoading ? 'Saving Account...' : 'Continue to Visual Setup →'}
                       </button>
                     </div>
                   </div>
@@ -3007,7 +3059,14 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
   // Sign-in / Unlock Tab Render
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#07080a] text-zinc-100 font-sans min-h-[900px] select-none">
+    <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 bg-[#07080c] text-zinc-100 font-sans min-h-screen select-none relative overflow-hidden">
+      <div
+        className="fixed inset-0 pointer-events-none opacity-35"
+        style={{
+          background:
+            'radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.16) 0%, transparent 45%), radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.15) 0%, transparent 45%)',
+        }}
+      />
       <UnlockTab
         email={email}
         setEmail={setEmail}

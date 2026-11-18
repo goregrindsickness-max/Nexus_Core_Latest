@@ -43,6 +43,7 @@ import { isMiguelNameOrProfile } from './utils/profileUtils';
 import { resolveCreativeLogo, resolvePromoterLogo, resolveBandLogo } from '../../utils/bandProfileUtils';
 import { generateValidUUID } from '../../services/postInteractionsService';
 import { isProfileFollowedGlobally } from '../../utils/followSyncService';
+import { resolveConnectedTourForPost } from '../../utils/showDisplayUtils';
 
 export {
   PostComposerTrigger,
@@ -753,8 +754,18 @@ export const FeedViewRouter: React.FC<any> = (props) => {
             })),
             is_pinned: p.is_pinned,
           };
-          return mergePostWithReactions(parsedPost, userProfile?.id);
-        }) : (isFilterActive ? [] : labelPosts.map((p: any) => mergePostWithReactions(p, userProfile?.id)));
+          return resolveConnectedTourForPost(
+            mergePostWithReactions(parsedPost, userProfile?.id),
+            props.liveEvents,
+            userProfile
+          );
+        }) : (isFilterActive ? [] : labelPosts.map((p: any) =>
+          resolveConnectedTourForPost(
+            mergePostWithReactions(p, userProfile?.id),
+            props.liveEvents,
+            userProfile
+          )
+        ));
 
         return (
           <div className="max-w-2xl mx-auto pt-2 pb-28 sm:pb-24 px-4">
@@ -1132,10 +1143,20 @@ export const FeedViewRouter: React.FC<any> = (props) => {
               }}
               onOpenTicketModal={(ticketData) => {
                 setActiveEventData({
-                  id: `ticket_${Date.now()}`,
-                  venue: ticketData.venue,
-                  headliner: ticketData.headliner || 'Event',
-                  time: `Doors ${ticketData.doorTime}`
+                  ...ticketData,
+                  id: ticketData.id || `ticket_${Date.now()}`,
+                  venue: ticketData.venue || 'Live Venue',
+                  city: ticketData.city || 'Tour Stop',
+                  headliner: ticketData.headliner || 'Live Event',
+                  date: ticketData.date || ticketData.rawDate || 'Upcoming',
+                  rawDate: ticketData.rawDate || ticketData.show_date || ticketData.date,
+                  time: ticketData.time || (ticketData.doorTime ? `Doors ${ticketData.doorTime}` : '7:00 PM'),
+                  price: ticketData.price || ticketData.priceRange || '$25',
+                  flyer_url: ticketData.flyer_url || ticketData.flyerUrl,
+                  lineup: ticketData.lineup,
+                  support_bands: ticketData.support_bands,
+                  external_ticket_url: ticketData.external_ticket_url || ticketData.ticketUrl,
+                  ticket_url: ticketData.ticket_url || ticketData.ticketUrl,
                 });
                 setIsEventModeActive(true);
               }}

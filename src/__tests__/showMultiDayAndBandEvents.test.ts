@@ -14,6 +14,7 @@ import {
   getShowDateBadgeParts,
   isMultiDayShow,
   isShowPastOrEnded,
+  resolveConnectedTourForPost,
   shiftIsoDateYear,
 } from '../utils/showDisplayUtils';
 import { sanitizeShowForDb } from '../services/schemaResilienceService';
@@ -384,6 +385,75 @@ describe('Multi-day festival dates & band profile show auto-linking', () => {
       expect(distAustin).toBeLessThan(220);
       expect(distDc).toBeGreaterThan(1100);
     });
+
+    it('enriches fan-shared tour flyer posts (Robert / MetalDaddy Dying Fetus post) with connected tour stops, GPS-nearest Dallas stop, event pages, and ticket links', () => {
+      const robertFanPost = {
+        id: 'post-robert-df-2027',
+        author: {
+          name: 'MetalDaddy',
+          handle: '@MetalDaddy',
+          role: 'FAN SUPPORTER',
+        },
+        content:
+          'Major bands in intimate venues! Bringing back the original vibe before they made it big!',
+        image_url: 'https://example.com/dying-fetus-2027-flyer.jpg',
+        commentsList: [
+          {
+            id: 'c1',
+            author: 'Miguel Goregrinder Medina',
+            text: "Hell yeah! Definitely looking forward to this one too. I'm gonna try hitting the Dallas date.",
+          },
+        ],
+      };
+
+      const dallasGps = { lat: 32.7767, lng: -96.7970 };
+      const enriched = resolveConnectedTourForPost(
+        robertFanPost,
+        dyingFetusTourStops,
+        null,
+        dallasGps
+      );
+
+      expect(enriched.tourData).toBeDefined();
+      expect(enriched.tourData.isFanSharedTour).toBe(true);
+      expect(enriched.tourData.headliner).toBe('Dying Fetus');
+      expect(enriched.tourData.dates.length).toBeGreaterThanOrEqual(24);
+
+      // Nearest stop to Dallas GPS must be Dallas, TX
+      expect(enriched.tourData.nearestStop.city).toBe('Dallas, TX');
+      expect(enriched.ticketData.city).toBe('Dallas, TX');
+      expect(enriched.ticketData.ticketUrl).toBe('https://dyingfetusband.com');
+
+      // Also verify the parsed FeedPost shape used in FeedViewRouter / PostCard (message, authorName, authorRole, comments)
+      const feedRouterPost = {
+        id: 'post-robert-feedpost-shape',
+        authorName: 'MetalDaddy',
+        authorRole: 'FAN',
+        message:
+          'Major bands in intimate venues! Bringing back the original vibe before they made it big!',
+        image_url: 'https://example.com/dying-fetus-2027-flyer.jpg',
+        comments: [
+          {
+            id: 'c1',
+            author: 'Miguel Goregrinder Medina',
+            text: "Hell yeah! Definitely looking forward to this one too. I'm gonna try hitting the Dallas date.",
+          },
+        ],
+      };
+
+      const enrichedFeedPost = resolveConnectedTourForPost(
+        feedRouterPost,
+        [],
+        null,
+        dallasGps
+      );
+      expect(enrichedFeedPost.tourData).toBeDefined();
+      expect(enrichedFeedPost.tourData.isFanSharedTour).toBe(true);
+      expect(enrichedFeedPost.tourData.nearestStop.city).toBe('Dallas, TX');
+      expect(enrichedFeedPost.tourData.nearestStop.venue).toBe('Puzzles');
+      expect(enrichedFeedPost.ticketData.city).toBe('Dallas, TX');
+    });
   });
 });
+
 

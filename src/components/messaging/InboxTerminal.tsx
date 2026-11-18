@@ -31,6 +31,11 @@ import {
   ChevronDown,
   Link2,
   Palette,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Maximize2,
+  Download,
 } from 'lucide-react';
 import { InboxPreferences } from './InboxPreferences';
 import { InboxComposerModal, ComposerContact } from './InboxComposerModal';
@@ -39,6 +44,7 @@ import { InlineAudioWaveformCard } from './InlineAudioWaveformCard';
 import { TourOfferCard } from './TourOfferCard';
 import { RichSignalComposerSheet, SignalComposerMode } from './RichSignalComposerSheet';
 import { registerBackHandler } from '../../utils/swipeBackRegistry';
+import { usePinchZoom } from '../../hooks/usePinchZoom';
 import {
   THREAD_THEMES,
   ThreadTheme,
@@ -352,6 +358,37 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [showImageInput, setShowImageInput] = useState(false);
   const [customImageUrl, setCustomImageUrl] = useState('');
+  const [activeLightboxImage, setActiveLightboxImage] = useState<{
+    url: string;
+    caption?: string;
+    senderName?: string;
+    timestamp?: string;
+  } | null>(null);
+  const dmLightboxZoom = usePinchZoom({ minScale: 1, maxScale: 5 });
+
+  useEffect(() => {
+    dmLightboxZoom.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLightboxImage?.url]);
+
+  useEffect(() => {
+    if (!activeLightboxImage) return;
+    const unregister = registerBackHandler('dm-image-lightbox', {
+      priority: 200,
+      canGoBack: () => true,
+      goBack: () => setActiveLightboxImage(null),
+    });
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActiveLightboxImage(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      unregister();
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [activeLightboxImage]);
 
   // Modals & Preferences
   const [showSettings, setShowSettings] = useState(false);
@@ -3452,12 +3489,37 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                             ) : null}
 
                             {msg.mediaUrl && (
-                              <div className="mt-2 rounded-xl overflow-hidden border border-white/[0.08] bg-black">
-                                <img
-                                  src={msg.mediaUrl}
-                                  alt="Attachment"
-                                  className="max-h-60 w-auto object-contain"
-                                />
+                              <div
+                                className={`${
+                                  textContent || msg.replyTo || msg.audioCard || msg.offerCard ? 'mt-2' : ''
+                                } flex ${isSentByMe ? 'justify-end' : 'justify-start'}`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveLightboxImage({
+                                      url: msg.mediaUrl!,
+                                      caption: textContent || undefined,
+                                      senderName: isSentByMe
+                                        ? 'You'
+                                        : (msg as any).senderName || selectedContact?.profileName || 'Contact',
+                                      timestamp: timeStr,
+                                    });
+                                  }}
+                                  className="inline-block w-fit max-w-full rounded-xl overflow-hidden border border-white/[0.14] shadow-lg relative group/dmimg cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+                                  title="Tap to view full size with pinch-to-zoom"
+                                >
+                                  <img
+                                    src={msg.mediaUrl}
+                                    alt="Message attachment"
+                                    className="block max-h-80 sm:max-h-96 w-auto max-w-full h-auto object-contain rounded-xl select-none transition-transform duration-200 group-hover/dmimg:scale-[1.01]"
+                                  />
+                                  <span className="absolute bottom-2 right-2 px-2 py-1 rounded-md bg-black/70 backdrop-blur-md border border-white/15 text-[10px] font-medium text-white/90 flex items-center gap-1 opacity-85 group-hover/dmimg:opacity-100 transition-opacity pointer-events-none shadow-md">
+                                    <Maximize2 className="w-3 h-3 text-emerald-400" />
+                                    <span>Full Size</span>
+                                  </span>
+                                </button>
                               </div>
                             )}
 
@@ -3605,11 +3667,24 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                 <div className="flex items-center gap-2.5">
                   <ImageIcon className={`w-4 h-4 ${activeThreadTheme.accentIconClass}`} />
                   <span className="text-xs text-zinc-300">Attachment ready</span>
-                  <img
-                    src={attachmentUrl}
-                    alt="Preview"
-                    className="w-9 h-9 rounded-lg object-cover border border-white/[0.1]"
-                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActiveLightboxImage({
+                        url: attachmentUrl,
+                        caption: 'Attachment preview',
+                        senderName: 'You',
+                      })
+                    }
+                    className="inline-block w-fit rounded-lg overflow-hidden border border-white/[0.14] cursor-zoom-in"
+                    title="Tap to preview full size"
+                  >
+                    <img
+                      src={attachmentUrl}
+                      alt="Preview"
+                      className="max-h-12 w-auto h-auto object-contain block"
+                    />
+                  </button>
                 </div>
                 <button
                   type="button"
@@ -4207,6 +4282,127 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
           });
         }}
       />
+
+      {/* Full-Size DM Image Lightbox with Pinch-to-Zoom & Pan Controls */}
+      {activeLightboxImage && (
+        <div
+          className="fixed inset-0 z-[999999] bg-black/95 backdrop-blur-2xl flex flex-col justify-between select-none animate-fade-in"
+          onClick={() => setActiveLightboxImage(null)}
+        >
+          {/* Top Bar */}
+          <div
+            className="w-full px-4 sm:px-6 py-3.5 bg-gradient-to-b from-black/90 via-black/60 to-transparent flex items-center justify-between gap-3 z-20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="min-w-0 flex flex-col">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white truncate">
+                  {activeLightboxImage.senderName || 'Shared Media'}
+                </span>
+                {activeLightboxImage.timestamp && (
+                  <span className="text-[11px] text-zinc-400 tabular-nums">
+                    • {activeLightboxImage.timestamp}
+                  </span>
+                )}
+              </div>
+              <span className="text-[11px] text-zinc-400">
+                Pinch or double-tap to zoom • Drag to pan
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <div className="flex items-center bg-zinc-900/90 border border-white/[0.12] rounded-xl p-1">
+                <button
+                  type="button"
+                  onClick={() => dmLightboxZoom.zoomOut()}
+                  disabled={dmLightboxZoom.scale <= 1}
+                  className="p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-white/[0.08] disabled:opacity-40 transition-colors cursor-pointer"
+                  title="Zoom out"
+                  aria-label="Zoom out"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <span className="px-2 text-xs font-mono font-semibold text-emerald-400 tabular-nums min-w-[48px] text-center">
+                  {Math.round(dmLightboxZoom.scale * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => dmLightboxZoom.zoomIn()}
+                  disabled={dmLightboxZoom.scale >= 5}
+                  className="p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-white/[0.08] disabled:opacity-40 transition-colors cursor-pointer"
+                  title="Zoom in"
+                  aria-label="Zoom in"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                {dmLightboxZoom.scale > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => dmLightboxZoom.reset()}
+                    className="p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer border-l border-white/[0.08] ml-0.5"
+                    title="Reset zoom"
+                    aria-label="Reset zoom"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <a
+                href={activeLightboxImage.url}
+                download="nexus-media.jpg"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="p-2.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-white/[0.12] text-zinc-200 hover:text-white transition-colors cursor-pointer"
+                title="Open / Save full resolution"
+                aria-label="Open or save full resolution"
+              >
+                <Download className="w-4 h-4" />
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setActiveLightboxImage(null)}
+                className="p-2.5 rounded-xl bg-zinc-900/90 hover:bg-rose-500/20 border border-white/[0.12] hover:border-rose-500/40 text-zinc-200 hover:text-rose-300 transition-colors cursor-pointer"
+                title="Close lightbox"
+                aria-label="Close lightbox"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive Pinch-to-Zoom & Pan Stage */}
+          <div
+            className="flex-1 w-full h-full flex items-center justify-center overflow-hidden p-2 sm:p-6 relative"
+            onClick={(e) => e.stopPropagation()}
+            {...dmLightboxZoom.containerProps}
+          >
+            <img
+              src={activeLightboxImage.url}
+              alt={activeLightboxImage.caption || 'Full size media'}
+              style={dmLightboxZoom.imageStyle}
+              className="max-w-full max-h-[82vh] w-auto h-auto object-contain rounded-lg shadow-2xl select-none"
+              draggable={false}
+            />
+          </div>
+
+          {/* Optional Caption Footer */}
+          {activeLightboxImage.caption ? (
+            <div
+              className="w-full px-6 py-4 bg-gradient-to-t from-black/90 via-black/70 to-transparent text-center z-20"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-sm text-zinc-100 max-w-2xl mx-auto leading-relaxed break-words">
+                {activeLightboxImage.caption}
+              </p>
+            </div>
+          ) : (
+            <div className="h-4 shrink-0" />
+          )}
+        </div>
+      )}
     </div>
   );
 };

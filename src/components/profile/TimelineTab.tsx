@@ -32,6 +32,9 @@ import { YouTubeEmbedCard } from '../social/embeds/YouTubeEmbedCard';
 import { PollWidget } from '../social/embeds/PollWidget';
 import { TapeEmbedCard } from '../social/embeds/TapeEmbedCard';
 import { BandcampEmbedCard } from '../social/embeds/BandcampEmbedCard';
+import { TourEmbedCard } from '../social/embeds/TourEmbedCard';
+import { GigProximityPill } from '../social/timeline/GigProximityPill';
+import { resolveConnectedTourForPost } from '../../utils/showDisplayUtils';
 import { PollEmbedData, REACTION_PALETTE } from '../social/timeline/types';
 import { tapeAudioEngine } from '../social/utils/tapeAudioEngine';
 import { awardSonicPoints } from '../../services/sonicFootprintService';
@@ -2515,6 +2518,57 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* Connected Tour / Show Experience for Fan or Band Tour Posts */}
+                {(() => {
+                  const enrichedTourPost = resolveConnectedTourForPost(
+                    {
+                      ...post,
+                      image_url: post.media_url || (post as any).image_url,
+                      author: {
+                        ...(post.author || {}),
+                        name: post.author?.name || profileName,
+                        handle:
+                          post.author?.handle ||
+                          selectedUserProfile?.handle ||
+                          selectedUserProfile?.console_handle,
+                      },
+                    },
+                    undefined,
+                    selectedUserProfile
+                  );
+                  if (!enrichedTourPost?.tourData && !enrichedTourPost?.ticketData) {
+                    return null;
+                  }
+                  const handleOpenConnectedEventPage = (eventData: any) => {
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(
+                        new CustomEvent('nexus_open_show_details', {
+                          detail: {
+                            ...eventData,
+                            showId: eventData?.id,
+                            title: eventData?.headliner,
+                          },
+                        })
+                      );
+                    }
+                  };
+                  return (
+                    <div className="mt-3 space-y-2.5">
+                      <GigProximityPill
+                        post={enrichedTourPost}
+                        userProfile={selectedUserProfile}
+                        onOpenTicketModal={handleOpenConnectedEventPage}
+                        onSelectTicketShow={handleOpenConnectedEventPage}
+                      />
+                      <TourEmbedCard
+                        post={enrichedTourPost}
+                        onOpenTicketModal={handleOpenConnectedEventPage}
+                        onSelectTicketShow={handleOpenConnectedEventPage}
+                      />
+                    </div>
+                  );
+                })()}
 
                 {/* Divider Line Under Media / Content */}
                 <div className="border-t border-zinc-900/80 my-2.5" />

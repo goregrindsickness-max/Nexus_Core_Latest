@@ -90,15 +90,27 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
       </div>
 
       {/* Bottom Subtle Vignette Gradient & Integrated Metadata Overlay */}
-      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent z-20 pt-8 pb-3 px-3 sm:px-4 flex items-end justify-between gap-3 pointer-events-none">
+      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/95 via-black/75 to-transparent z-20 pt-8 pb-3 px-3 sm:px-4 flex items-end justify-between gap-2 pointer-events-none">
         <div className="min-w-0 pointer-events-auto">
-          {location ? (
-            <div className="inline-flex items-center gap-1.5 bg-black/80 backdrop-blur-md border border-zinc-700/70 px-2.5 py-1 rounded-lg shadow-md max-w-full truncate">
-              <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
-              <span className="text-[11px] font-mono font-bold text-zinc-200 uppercase tracking-wider truncate">
-                {location}
+          {location || ticketData?.city ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (ticketData && onOpenTicketModal) {
+                  onOpenTicketModal(ticketData);
+                }
+              }}
+              className="inline-flex items-center gap-1.5 bg-black/85 hover:bg-zinc-900 backdrop-blur-md border border-emerald-500/40 px-2.5 py-1.5 rounded-lg shadow-md max-w-full truncate cursor-pointer transition-colors"
+              title="Open nearest stop event page"
+            >
+              <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+              <span className="text-[11px] font-mono font-bold text-zinc-100 uppercase tracking-wider truncate">
+                {ticketData?.city
+                  ? `${ticketData.city}${ticketData.venue ? ` • ${ticketData.venue}` : ''}${ticketData.date ? ` (${ticketData.date})` : ''}`
+                  : location}
               </span>
-            </div>
+            </button>
           ) : (
             <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest hidden sm:inline-block">
               Edge-to-Edge Showcase
@@ -106,28 +118,60 @@ export const MediaGalleryGrid: React.FC<MediaGalleryGridProps> = ({
           )}
         </div>
 
-        {/* Optional Integrated 1-Tap Ticket / RSVP CTA (only when valid ticket links or explicit dates exist) */}
+        {/* Integrated 1-Tap Event Page & Tickets CTAs */}
         {hasValidTickets && ticketData && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (onOpenTicketModal) {
-                onOpenTicketModal(ticketData);
-              } else if (onSelectTicketShow) {
-                onSelectTicketShow({
-                  date: ticketData.date,
-                  venue: ticketData.venue,
-                  city: location || 'Local Venue',
-                  ticketStatus: 'available',
-                });
-              }
-            }}
-            className="pointer-events-auto px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1.5 shadow-lg shrink-0 cursor-pointer"
-          >
-            <Ticket className="w-3 h-3" />
-            <span>Tickets</span>
-          </button>
+          <div className="pointer-events-auto flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onOpenTicketModal) {
+                  onOpenTicketModal(ticketData);
+                } else if (onSelectTicketShow) {
+                  onSelectTicketShow(ticketData);
+                }
+              }}
+              className="px-2.5 py-1.5 bg-zinc-900/95 hover:bg-zinc-800 border border-emerald-500/40 text-emerald-300 rounded-lg text-[10px] font-mono font-bold uppercase transition-all flex items-center gap-1 shadow-lg cursor-pointer"
+            >
+              <Calendar className="w-3 h-3 text-emerald-400" />
+              <span>Event Page</span>
+            </button>
+
+            {ticketData.external_ticket_url || ticketData.ticketUrl ? (
+              <a
+                href={ticketData.external_ticket_url || ticketData.ticketUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg text-[10px] font-mono font-extrabold uppercase transition-all flex items-center gap-1 shadow-lg cursor-pointer"
+              >
+                <Ticket className="w-3 h-3" />
+                <span>Tickets</span>
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onSelectTicketShow) {
+                    onSelectTicketShow({
+                      ...ticketData,
+                      date: ticketData.date,
+                      venue: ticketData.venue,
+                      city: ticketData.city || location || 'Local Venue',
+                      ticketStatus: 'available',
+                    });
+                  } else if (onOpenTicketModal) {
+                    onOpenTicketModal(ticketData);
+                  }
+                }}
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg text-[10px] font-mono font-extrabold uppercase transition-all flex items-center gap-1 shadow-lg cursor-pointer"
+              >
+                <Ticket className="w-3 h-3" />
+                <span>Tickets</span>
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

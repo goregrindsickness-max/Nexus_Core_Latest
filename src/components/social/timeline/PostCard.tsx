@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
+import { resolveConnectedTourForPost } from '../../../utils/showDisplayUtils';
 import {
   Pin,
   Rocket,
@@ -178,7 +179,7 @@ const KNOWN_USER_FULL_NAMES: Record<string, string> = {
 };
 
 export const PostCard: React.FC<PostCardProps> = ({
-  post,
+  post: rawPost,
   currentUserId,
   currentUserName,
   userProfile,
@@ -262,6 +263,10 @@ export const PostCard: React.FC<PostCardProps> = ({
   isBookmarked: propIsBookmarked,
   onToggleBookmark,
 }) => {
+  const post = useMemo(
+    () => resolveConnectedTourForPost(rawPost as any, undefined, userProfile) as FeedPost,
+    [rawPost, userProfile]
+  );
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [localBookmarked, setLocalBookmarked] = useState<boolean>(() => {
     try {
@@ -1638,8 +1643,15 @@ export const PostCard: React.FC<PostCardProps> = ({
             {/* RICH EMBED 0: AUTO LINK PREVIEW CARD */}
             <LinkPreviewCard message={post.message} />
 
-            {/* GOOGLE MAPS GROUNDED VENUE BADGE */}
+            {/* GOOGLE MAPS GROUNDED VENUE BADGE (skip on connected multi-stop tour posts) */}
             {(() => {
+              const hasConnectedTour = Boolean(
+                (post as any).tourData &&
+                  Array.isArray((post as any).tourData.dates) &&
+                  (post as any).tourData.dates.length > 0
+              );
+              if (hasConnectedTour) return null;
+
               const explicitTaggedVenue = String(
                 (post as any).taggedVenue ||
                 (post as any).tagged_venue ||
@@ -1650,7 +1662,6 @@ export const PostCard: React.FC<PostCardProps> = ({
                 (post as any).event_data?.locationName ||
                 (post as any).festivalData?.venueName ||
                 (post as any).festival_data?.venueName ||
-                (post as any).tourData?.venue ||
                 (post as any).ticketData?.venue ||
                 ''
               ).trim();
