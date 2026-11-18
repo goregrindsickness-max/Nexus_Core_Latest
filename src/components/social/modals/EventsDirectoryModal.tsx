@@ -51,7 +51,13 @@ import {
   getExternalTicketProviderName,
   getShowTicketTiers
 } from '../../../utils/socialFeedUtils';
-import { isShowEmbargoedOrDraft } from '../../../utils/showDisplayUtils';
+import {
+  isShowEmbargoedOrDraft,
+  getEffectiveShowEndDate,
+  isShowPastOrEnded,
+  formatShowDateRange,
+  getSupportActsList,
+} from '../../../utils/showDisplayUtils';
 import { tourPackageManager } from '../../../lib/tourPackageManager';
 import { authFetch } from '../../../utils/apiConfig';
 
@@ -255,43 +261,13 @@ export const normalizeShowToEventDirectoryItem = (show: any, idx: number = 0, us
   const isPersonallyBooked = checkIsPersonallyBooked(show, userProfile, promoterProfile);
   const isCommunityShow = !isPersonallyBooked || Boolean(show.is_community_submitted || show.is_community || show.source === 'community');
 
-  // Format date display and calculate isPast accurately
-  let dateDisplay = 'Upcoming';
-  const rawDate = show.date || show.show_date;
-  let isPast = isPastShowDate(String(rawDate || ''));
+  // Format date display and calculate isPast accurately (respecting multi-day end_date)
+  const rawDate = show.rawDate || show.date || show.show_date;
+  const resolvedEndDate = getEffectiveShowEndDate({ ...show, additional_notes: extraNotes });
+  let dateDisplay = rawDate ? formatShowDateRange(String(rawDate), resolvedEndDate) || String(rawDate) : 'Upcoming';
+  const isPast = isShowPastOrEnded({ ...show, rawDate, end_date: resolvedEndDate, additional_notes: extraNotes });
 
-  if (rawDate) {
-    try {
-      const dateStr = String(rawDate).split('T')[0];
-      const parts = dateStr.split('-');
-      if (parts.length === 3) {
-        const year = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const day = parseInt(parts[2], 10);
-        const parsedDate = new Date(year, month, day);
-        const today = new Date();
-        const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const tomorrowNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-
-        if (parsedDate.getTime() === todayNorm.getTime()) {
-          dateDisplay = 'Tonight';
-        } else if (parsedDate.getTime() === tomorrowNorm.getTime()) {
-          dateDisplay = 'Tomorrow';
-        } else if (parsedDate.getTime() < todayNorm.getTime()) {
-          isPast = true;
-          dateDisplay = parsedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-        } else {
-          dateDisplay = parsedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-        }
-      } else {
-        dateDisplay = String(rawDate);
-      }
-    } catch {
-      dateDisplay = String(rawDate);
-    }
-  }
-
-  const isArchived = isPast || Boolean(show.additional_notes && String(show.additional_notes).includes('"archived":true'));
+  const isArchived = isPast || Boolean(extraNotes?.archived);
 
   const doorsVal = show.doors_time;
   const timeDisplay = doorsVal
@@ -322,14 +298,8 @@ export const normalizeShowToEventDirectoryItem = (show: any, idx: number = 0, us
     }
   }
 
-  let supportList: string[] = [];
-  if (Array.isArray(show.support)) {
-    supportList = show.support;
-  } else if (Array.isArray(show.lineup)) {
-    supportList = show.lineup.map((l: any) => typeof l === 'string' ? l : (l.band || l.name)).filter(Boolean);
-  } else if (typeof show.support === 'string' && show.support.trim()) {
-    supportList = show.support.split(',').map((s: string) => s.trim());
-  } else if (Array.isArray(show.guest_list) && show.guest_list.length > 0) {
+  let supportList: string[] = getSupportActsList({ ...show, additional_notes: extraNotes });
+  if (supportList.length === 0 && Array.isArray(show.guest_list) && show.guest_list.length > 0) {
     supportList = show.guest_list.slice(0, 3).map((g: any) => g.name || g.contact_name).filter(Boolean);
   }
 
@@ -389,6 +359,7 @@ export const normalizeShowToEventDirectoryItem = (show: any, idx: number = 0, us
     country: show.country,
     date: dateDisplay,
     rawDate: rawDate || show.date,
+    ...(resolvedEndDate ? { end_date: resolvedEndDate, endDate: resolvedEndDate } : {}),
     isPast,
     isArchived,
     isPersonallyBooked,
@@ -683,7 +654,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
       try {
         const client = getSupabase();
         if (client) {
-          const dbShows = await fetchCachedShowsList(client, { limit: 200, ascending: true });
+          const dbShows = await fetchCachedShowsList(client, { limit: 500, ascending: true });
           if (Array.isArray(dbShows) && dbShows.length > 0) {
             allExtractedShows.push(...dbShows);
           }
@@ -993,6 +964,10 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
       const isFromShowsTable = Boolean(evt.isFromShowsTable || evt.source === 'shows_table');
       const isPersonallyBooked = checkIsPersonallyBooked(evt, userProfile, promoterProfile);
       const isCommunityShow = !isPersonallyBooked || Boolean(evt.is_community_submitted || evt.is_community || evt.source === 'community');
+      const rawDate = evt.rawDate || evt.show_date || (typeof evt.date === 'string' && /\d{4}-\d{1,2}-\d{1,2}/.test(evt.date) ? evt.date : undefined);
+      const resolvedEndDate = getEffectiveShowEndDate({ ...evt, additional_notes: extraNotesObj });
+      const computedIsPast = isShowPastOrEnded({ ...evt, rawDate, end_date: resolvedEndDate, additional_notes: extraNotesObj });
+      const computedIsArchived = computedIsPast || Boolean(extraNotesObj?.archived || evt.isArchived);
 
       return {
         ...evt,
@@ -1002,6 +977,10 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
         venue,
         city,
         date,
+        ...(rawDate ? { rawDate } : {}),
+        ...(resolvedEndDate ? { end_date: resolvedEndDate, endDate: resolvedEndDate } : {}),
+        isPast: computedIsPast,
+        isArchived: computedIsArchived,
         time,
         price,
         genre,
@@ -1023,13 +1002,11 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
 
   // Dedicated list of community archive shows (shows concluded that were not booked personally by the promoter)
   const communityArchiveEvents = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
     return normalizedEvents.filter(evt => {
       const isBooked = checkIsPersonallyBooked(evt, userProfile, promoterProfile);
       if (isBooked) return false;
-      const rawDate = evt.rawDate || evt.date || '';
-      const isPast = evt.isPast || evt.isArchived || (rawDate && String(rawDate).split('T')[0] < todayStr);
-      return Boolean(isPast);
+      const isPast = Boolean(evt.isPast || evt.isArchived || isShowPastOrEnded(evt));
+      return isPast;
     });
   }, [normalizedEvents, userProfile, promoterProfile]);
 
@@ -1279,7 +1256,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
       const isPastEvent = Boolean(
         evt.isPast ||
         evt.isArchived ||
-        isPastShowDate(rawDate) ||
+        isShowPastOrEnded(evt) ||
         evt.id === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee' ||
         ((evt.headliner || '').toLowerCase().includes('vader') && String(rawDate).includes('2026-09-24'))
       );
@@ -1304,7 +1281,7 @@ export const EventsDirectoryModal: React.FC<EventsDirectoryModalProps> = ({
 
       return true;
     });
-  }, [normalizedEvents, searchQuery, selectedCityFilter, mapFilterGenre, dateFilter, verifiedOnly, ticketOnly]);
+  }, [normalizedEvents, searchQuery, selectedCityFilter, mapFilterGenre, dateFilter, viewMode, verifiedOnly, ticketOnly]);
 
   // Group upcoming shows into Tour Packages and Single Standalone Shows (including closest tour stops for user proximity)
   const { toursList, singleShowsList } = useMemo(() => {

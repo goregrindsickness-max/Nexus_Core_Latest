@@ -437,6 +437,7 @@ export default function VenueReputationCard({
               
               {/* Intel Scroll & Carousel panel */}
               <div 
+                data-no-swipe-back={entries.length > 1 ? 'true' : undefined}
                 className="relative p-3 bg-[#00ffcc] rounded-lg border border-[#00ffcc]/80 flex flex-col gap-2 min-h-[76px] text-left touch-pan-y"
                 onTouchStart={onTouchStart}
                 onTouchMove={onTouchMove}

@@ -38,6 +38,7 @@ import { InboxThreadDetailsModal } from './InboxThreadDetailsModal';
 import { InlineAudioWaveformCard } from './InlineAudioWaveformCard';
 import { TourOfferCard } from './TourOfferCard';
 import { RichSignalComposerSheet, SignalComposerMode } from './RichSignalComposerSheet';
+import { registerBackHandler } from '../../utils/swipeBackRegistry';
 import {
   THREAD_THEMES,
   ThreadTheme,
@@ -2362,6 +2363,39 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
     setToastMessage('You left the group conversation.');
   };
 
+  const latestInboxBackRef = useRef({
+    selectedContact,
+    setSelectedContact,
+    showThreadSettings,
+    setShowThreadSettings,
+  });
+  latestInboxBackRef.current = {
+    selectedContact,
+    setSelectedContact,
+    showThreadSettings,
+    setShowThreadSettings,
+  };
+
+  useEffect(() => {
+    return registerBackHandler('inbox-terminal', {
+      priority: 15,
+      canGoBack: () => {
+        const s = latestInboxBackRef.current;
+        return Boolean(s.showThreadSettings || s.selectedContact);
+      },
+      goBack: () => {
+        const s = latestInboxBackRef.current;
+        if (s.showThreadSettings) {
+          s.setShowThreadSettings(false);
+          return;
+        }
+        if (s.selectedContact) {
+          s.setSelectedContact(null);
+        }
+      },
+    });
+  }, []);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -3241,6 +3275,7 @@ export const InboxTerminal: React.FC<InboxTerminalProps> = ({
                       )}
 
                       <div
+                        data-no-swipe-back="true"
                         onTouchStart={(e) => {
                           const touch = e.touches[0];
                           if (!touch) return;

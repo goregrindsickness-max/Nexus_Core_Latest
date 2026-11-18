@@ -2,6 +2,7 @@ import { getSupabase } from './clientService';
 import { executeWithSchemaResilience } from './schemaResilienceService';
 import { uploadArchiveFlyer } from './storageService';
 import { fetchCachedShowsList } from '../lib/supabaseQueryCache';
+import { isShowPastOrEnded } from '../utils/showDisplayUtils';
 
 export interface ArchiveShowItem {
   id: string;
@@ -244,14 +245,12 @@ export async function fetchArchiveShowsFromDatabase(userId = '5403162d-1947-43aa
 
     // Automatically import past shows from the public.shows table (dates prior to today)
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const pastShowsData = await fetchCachedShowsList(supabase, { limit: 200, ascending: false });
+      const pastShowsData = await fetchCachedShowsList(supabase, { limit: 500, ascending: false });
 
       if (pastShowsData && Array.isArray(pastShowsData)) {
         const pastFromShowsTable: ArchiveShowItem[] = pastShowsData
           .filter(s => {
-            const sDate = s.date || s.show_date;
-            const isPast = sDate && String(sDate).split('T')[0] < todayStr;
+            const isPast = isShowPastOrEnded(s);
             const isArchived = s.additional_notes && String(s.additional_notes).includes('"archived":true');
             const isStatusConcluded = s.status === 'Concluded' || s.status === 'Archived' || s.status === 'Completed';
             return isPast || isArchived || isStatusConcluded;

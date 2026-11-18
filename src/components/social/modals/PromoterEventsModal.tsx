@@ -34,6 +34,22 @@ import { fetchArchiveShowsFromDatabase, ArchiveShowItem, parseVenueAndAddress, c
 import BandClaimHandoverModal from './BandClaimHandoverModal';
 import { communityBandManager, CommunityBandRecord } from '../../../lib/communityBands';
 import { syncShowRsvpWithServer, trigger24hShowRemindersOnServer } from '../../../lib/pushNotifications';
+import { getSupabase } from '../../../supabase';
+import { loadAllMergedShows } from '../../../services/showEventsLoader';
+import {
+  BandShowBillingRole,
+  doesShowFeatureBand,
+  formatShowDateRange,
+  getBandBillingRoleInShow,
+  getEffectiveShowEndDate,
+  getEffectiveShowStartDate,
+  getFullShowLineup,
+  getLocalTodayIso,
+  getMultiDaySpanDays,
+  getShowDateBadgeParts,
+  isMultiDayShow,
+  isShowPastOrEnded,
+} from '../../../utils/showDisplayUtils';
 
 export interface PromoterEventsModalProps {
   isOpen: boolean;
@@ -52,6 +68,7 @@ export interface PromoterEventItem {
   type: 'festival' | 'tour' | 'club_gig' | 'showcase';
   date: string;
   dateRaw?: string;
+  endDate?: string;
   venue: string;
   venueAddress?: string;
   city: string;
@@ -64,10 +81,65 @@ export interface PromoterEventItem {
   description?: string;
   bannerUrl?: string;
   isFeatured?: boolean;
+  rawShow?: any;
+  billingRole?: BandShowBillingRole;
+  isMultiDay?: boolean;
+  multiDaySpan?: number;
+  creator_id?: string;
+  user_id?: string;
+  promoter_id?: string;
+  band_id?: string;
 }
 
 // Default upcoming anchor events are empty so non-real mock events are removed
 const DEFAULT_NEXUS_UPCOMING_EVENTS: PromoterEventItem[] = [];
+
+export function deduplicatePromoterEventItems<
+  T extends PromoterEventItem & {
+    isPast?: boolean;
+    attendance?: string;
+    milestone?: string;
+    historicalNotes?: string;
+    bannerUrl?: string;
+  }
+>(events: T[]): T[] {
+  const result: T[] = [];
+  const indexById = new Map<string, number>();
+  const seenKeys = new Set<string>();
+
+  for (const ev of events) {
+    if (!ev) continue;
+    const normId = String(ev.id || '').toLowerCase().trim();
+    const normDate = (getEffectiveShowStartDate(ev.rawShow || { date: ev.dateRaw || ev.date }) || ev.dateRaw || ev.date || '')
+      .toLowerCase()
+      .trim();
+    const titleDateKey = `${String(ev.title || '').toLowerCase().trim()}_${normDate}`;
+
+    const existingIdxById = normId ? indexById.get(normId) : undefined;
+    if (existingIdxById !== undefined) {
+      const existing = result[existingIdxById];
+      result[existingIdxById] = {
+        ...existing,
+        attendance: existing.attendance || ev.attendance,
+        milestone: existing.milestone || ev.milestone,
+        historicalNotes: existing.historicalNotes || ev.historicalNotes,
+        bannerUrl: existing.bannerUrl || ev.bannerUrl,
+        lineup: existing.lineup?.length ? existing.lineup : ev.lineup,
+        billingRole: existing.billingRole || ev.billingRole,
+      };
+      seenKeys.add(titleDateKey);
+      continue;
+    }
+
+    if (seenKeys.has(titleDateKey)) continue;
+
+    seenKeys.add(titleDateKey);
+    if (normId) indexById.set(normId, result.length);
+    result.push(ev);
+  }
+
+  return result;
+}
 
 export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
   isOpen,
@@ -86,6 +158,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
   // New Event Form State (for promoter self)
   const [newEventTitle, setNewEventTitle] = useState('');
   const [newEventDate, setNewEventDate] = useState('');
+  const [newEventEndDate, setNewEventEndDate] = useState('');
   const [newEventVenue, setNewEventVenue] = useState(
     Array.isArray(promoterProfile?.active_venues) && promoterProfile.active_venues.length > 0 
       ? promoterProfile.active_venues[0] 
@@ -96,6 +169,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
   const [newEventType, setNewEventType] = useState<'festival' | 'tour' | 'club_gig'>('festival');
   const [newEventPrice, setNewEventPrice] = useState('$25.00');
   const [localCustomEvents, setLocalCustomEvents] = useState<PromoterEventItem[]>([]);
+  const [mergedLiveShows, setMergedLiveShows] = useState<any[]>(Array.isArray(shows) ? shows : []);
 
   // RSVP'd Shows State (stored in localStorage)
   const [rsvpedShowIds, setRsvpedShowIds] = useState<Set<string>>(() => {
@@ -225,6 +299,35 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
     };
   }, [isOpen, promoterProfile?.id, promoterProfile?.user_id]);
 
+  // Self-load & merge live shows (Supabase + IndexedDB + localStorage + passed prop) and react to new shows
+  useEffect(() => {
+    let isMounted = true;
+    const syncShows = async () => {
+      try {
+        const merged = await loadAllMergedShows(getSupabase(), shows);
+        if (isMounted) setMergedLiveShows(merged);
+      } catch (err) {
+        if (isMounted && Array.isArray(shows)) setMergedLiveShows(shows);
+      }
+    };
+    if (isOpen) {
+      syncShows();
+    } else if (Array.isArray(shows) && shows.length > 0) {
+      setMergedLiveShows(shows);
+    }
+
+    const handleRefresh = () => {
+      if (isOpen && isMounted) syncShows();
+    };
+    window.addEventListener('COMMUNITY_SHOWS_UPDATED', handleRefresh);
+    window.addEventListener('shows_updated_from_tour_manager', handleRefresh);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('COMMUNITY_SHOWS_UPDATED', handleRefresh);
+      window.removeEventListener('shows_updated_from_tour_manager', handleRefresh);
+    };
+  }, [isOpen, shows]);
+
   if (!isOpen) return null;
 
   const promoterName = promoterProfile?.entity_name || promoterProfile?.corporate_name || promoterProfile?.band_name || promoterProfile?.name || 'Live Calendar';
@@ -235,7 +338,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
     (userProfile?.email && promoterProfile?.email === userProfile?.email)
   );
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalTodayIso();
 
   // Map dbArchiveShows to PromoterEventItem format
   const archiveEvents: (PromoterEventItem & { isPast?: boolean; attendance?: string; milestone?: string; historicalNotes?: string; bannerUrl?: string })[] = dbArchiveShows.map(a => {
@@ -269,57 +372,80 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
     };
   });
 
-  // Consolidate shows from Supabase and defaults
+  // Consolidate shows from Supabase, IndexedDB, local storage and archives
   const allEvents: (PromoterEventItem & { isPast?: boolean; attendance?: string; milestone?: string; historicalNotes?: string; bannerUrl?: string })[] = [
     ...localCustomEvents,
     ...DEFAULT_NEXUS_UPCOMING_EVENTS,
-    // Map any active live shows from DB
-    ...(shows || []).filter(s => {
+    ...(mergedLiveShows || []).filter(s => {
       if (s.is_published === false || s.publication_status === 'embargoed_private' || s.publication_status === 'draft' || s.status === 'Draft' || s.status === 'Embargoed') {
         return false;
       }
       return true;
     }).map(s => {
-      const lineupArray = Array.isArray(s.lineup)
-        ? s.lineup
-        : (s.lineup ? String(s.lineup).split(',').map((x: string) => x.trim()) : [s.headliner || s.name].filter(Boolean));
-
-      const rawDate = s.date || s.show_date || '';
-      const isPast = Boolean(rawDate && rawDate.split('T')[0] < todayStr);
+      const lineupArray = getFullShowLineup(s);
+      const rawDate = getEffectiveShowStartDate(s) || s.date || s.show_date || '';
+      const endDate = getEffectiveShowEndDate(s);
+      const isMulti = isMultiDayShow({ date: rawDate, end_date: endDate });
+      const spanDays = getMultiDaySpanDays(rawDate, endDate);
+      const isPast = isShowPastOrEnded({ ...s, date: rawDate, end_date: endDate });
+      const formattedDate = rawDate
+        ? formatShowDateRange(rawDate, endDate, { includeWeekday: true })
+        : 'TBA';
 
       const { venueName, venueAddress } = parseVenueAndAddress(s);
       const evType = classifyEventType(s);
+      const billingRole = getBandBillingRoleInShow(s, promoterProfile);
+      let descriptionText = '';
+      if (typeof s.description === 'string' && s.description.trim()) {
+        descriptionText = s.description.trim();
+      } else if (typeof s.additional_notes === 'string' && s.additional_notes.trim() && !s.additional_notes.trim().startsWith('{')) {
+        descriptionText = s.additional_notes.trim();
+      } else {
+        descriptionText = isMulti ? `${spanDays}-day multi-day extreme metal festival.` : 'Confirmed live extreme metal show.';
+      }
+
+      const displayTitle =
+        s.festival_name ||
+        s.tour_name ||
+        s.name ||
+        s.show_name ||
+        s.title ||
+        (s.headliner ? (isMulti ? `${s.headliner} (${spanDays}-Day Fest)` : s.headliner) : 'Live Show');
 
       return {
         id: String(s.id || Math.random().toString(36).substring(2, 9)),
-        title: s.festival_name || s.tour_name || s.name || s.title || 'Live Show',
-        type: evType as any,
-        date: s.date || s.show_date || 'TBA',
+        title: displayTitle,
+        type: (isMulti && evType === 'club_gig' ? 'festival' : evType) as any,
+        date: formattedDate || rawDate || 'TBA',
         dateRaw: rawDate,
+        endDate,
         venue: venueName,
         venueAddress: venueAddress,
         city: s.city ? (s.state_province ? `${s.city}, ${s.state_province}` : s.city) : 'Chicago, IL',
         lineup: lineupArray,
         doorsTime: s.doors_time || '7:00 PM',
         setTime: s.set_time || '8:00 PM',
-        price: s.price ? (String(s.price).startsWith('$') ? String(s.price) : `$${s.price}`) : '$25.00',
+        price: s.ticket_price || (s.price ? (String(s.price).startsWith('$') ? String(s.price) : `$${s.price}`) : '$25.00'),
         ticketStatus: (s.ticket_status || 'on_sale') as any,
         ticketUrl: s.ticket_link || s.ticket_url,
-        description: s.additional_notes || s.description || 'Confirmed live extreme metal show.',
-        isPast
+        description: descriptionText,
+        bannerUrl: s.flyer_url || s.flyerUrl,
+        isPast,
+        rawShow: s,
+        billingRole,
+        isMultiDay: isMulti,
+        multiDaySpan: spanDays,
+        creator_id: s.creator_id || s.user_id,
+        user_id: s.user_id,
+        promoter_id: s.promoter_id,
+        band_id: s.band_id
       };
     }),
     ...archiveEvents
   ];
 
-  // Deduplicate by title + date
-  const seenKeys = new Set<string>();
-  const deduplicatedEvents = allEvents.filter(ev => {
-    const key = `${ev.title.toLowerCase().trim()}_${ev.date.toLowerCase().trim()}`;
-    if (seenKeys.has(key)) return false;
-    seenKeys.add(key);
-    return true;
-  });
+  // Deduplicate by show ID and title + normalized start date (preventing live+archive double-counting)
+  const deduplicatedEvents = deduplicatePromoterEventItems(allEvents);
 
   // Toggle RSVP for a show
   const toggleRsvp = (event: PromoterEventItem) => {
@@ -407,6 +533,9 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
       const now = new Date();
       startIso = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     }
+    const rawEndStr = event.endDate || rawDateStr;
+    let endIso = rawEndStr.replace(/[^0-9]/g, '').slice(0, 8);
+    if (endIso.length < 8) endIso = startIso;
 
     const title = encodeURIComponent(event.title);
     const location = encodeURIComponent(`${event.venue}, ${event.city}`);
@@ -414,7 +543,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
       `${event.description || 'Live Show'}\n\nLineup: ${event.lineup?.join(', ')}\nDoors: ${event.doorsTime || '6:00 PM'}\nTickets: ${event.price || 'GA'}`
     );
 
-    const googleUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startIso}T200000Z/${startIso}T235900Z&details=${details}&location=${location}`;
+    const googleUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startIso}T200000Z/${endIso}T235900Z&details=${details}&location=${location}`;
     window.open(googleUrl, '_blank', 'noopener,noreferrer');
     triggerNotification?.(`📅 Opening Calendar export for "${event.title}"...`);
   };
@@ -427,6 +556,9 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
       const now = new Date();
       startIso = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     }
+    const rawEndStr = event.endDate || rawDateStr;
+    let endIso = rawEndStr.replace(/[^0-9]/g, '').slice(0, 8);
+    if (endIso.length < 8) endIso = startIso;
 
     const icsContent = [
       'BEGIN:VCALENDAR',
@@ -436,7 +568,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
       `UID:${event.id}-${Date.now()}@nexuslive.app`,
       `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
       `DTSTART:${startIso}T200000Z`,
-      `DTEND:${startIso}T235900Z`,
+      `DTEND:${endIso}T235900Z`,
       `SUMMARY:${event.title.replace(/,/g, '\\,')}`,
       `DESCRIPTION:${(event.description || '').replace(/\n/g, '\\n')}\\nLineup: ${(event.lineup || []).join(', ')}`,
       `LOCATION:${event.venue.replace(/,/g, '\\,')}\\, ${event.city.replace(/,/g, '\\,')}`,
@@ -476,42 +608,27 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
   );
 
   const isEventMatchingProfile = (ev: PromoterEventItem & { isPast?: boolean; creator_id?: string; user_id?: string; promoter_id?: string; band_id?: string }) => {
-    // 1. Direct ID match
-    if (targetId) {
-      if (
-        ev.creator_id === targetId ||
-        ev.user_id === targetId ||
-        ev.promoter_id === targetId ||
-        ev.band_id === targetId
-      ) {
-        return true;
-      }
+    // 1. Primary unified matcher (headliner, all support acts, band_id, promoter_id)
+    if (doesShowFeatureBand(ev.rawShow || ev, promoterProfile)) {
+      return true;
     }
 
-    // 2. Lineup / Title match for artists
+    // 2. Fallback ID match for archive / custom items
+    if (targetId && (ev.promoter_id === targetId || ev.band_id === targetId)) {
+      return true;
+    }
+
+    // 3. Fallback title match for historic archives or promoter accounts
     if (targetName && targetName.length >= 2) {
-      const matchInLineup = Array.isArray(ev.lineup) && ev.lineup.some(b => {
-        const bName = typeof b === 'string' ? b.toLowerCase() : String(b).toLowerCase();
-        return bName.includes(targetName) || targetName.includes(bName);
-      });
-      if (matchInLineup) {
-        return true;
-      }
-
-      if (
-        ev.title.toLowerCase().includes(targetName) ||
-        (ev.description && ev.description.toLowerCase().includes(targetName))
-      ) {
+      if (ev.title.toLowerCase().includes(targetName)) {
         return true;
       }
     }
 
-    // 3. If promoter account and title matches or no specific artist restriction
     if (isPromoterType && (!targetName || ev.title.toLowerCase().includes(targetName))) {
       return true;
     }
 
-    // If neither name nor ID matched, exclude this event from this band's profile
     return false;
   };
 
@@ -519,10 +636,12 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
   const profileEvents = deduplicatedEvents.filter(isEventMatchingProfile);
 
   const myRsvpCount = profileEvents.filter(ev => rsvpedShowIds.has(ev.id)).length;
-  const pastEventsCount = profileEvents.filter(ev => ev.isPast || (ev.dateRaw && ev.dateRaw.split('T')[0] < todayStr)).length;
+  const pastEventsCount = profileEvents.filter(ev =>
+    Boolean(ev.isPast || isShowPastOrEnded({ date: ev.dateRaw || ev.date, end_date: ev.endDate }))
+  ).length;
 
   const filteredEvents = profileEvents.filter(ev => {
-    const isPastDate = Boolean(ev.dateRaw && ev.dateRaw.split('T')[0] < todayStr);
+    const isPastDate = isShowPastOrEnded({ date: ev.dateRaw || ev.date, end_date: ev.endDate });
     const isPastShow = Boolean(ev.isPast || isPastDate);
 
     if (filterType === 'rsvps') {
@@ -596,12 +715,18 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
       return;
     }
 
+    const cleanStart = newEventDate.trim();
+    const cleanEnd = newEventEndDate.trim();
+    const isMulti = Boolean(cleanEnd && cleanEnd > cleanStart);
     const created: PromoterEventItem = {
       id: `ev_${Date.now()}`,
       title: newEventTitle.trim(),
-      type: newEventType,
-      date: newEventDate.trim(),
-      dateRaw: newEventDate.trim(),
+      type: isMulti ? 'festival' : newEventType,
+      date: formatShowDateRange(cleanStart, cleanEnd || undefined, { includeWeekday: true }) || cleanStart,
+      dateRaw: cleanStart,
+      endDate: cleanEnd || undefined,
+      isMultiDay: isMulti,
+      multiDaySpan: isMulti ? getMultiDaySpanDays(cleanStart, cleanEnd) : 1,
       venue: newEventVenue.trim(),
       city: newEventCity.trim(),
       lineup: newLineupText.split(',').map(s => s.trim()).filter(Boolean),
@@ -609,7 +734,9 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
       setTime: '7:00 PM',
       price: newEventPrice.trim() || '$25.00',
       ticketStatus: 'on_sale',
-      description: `Official event announced by ${promoterName}.`
+      description: `Official event announced by ${promoterName}.`,
+      promoter_id: isPromoterType ? targetId : undefined,
+      band_id: !isPromoterType ? targetId : undefined
     };
 
     const updated = [created, ...localCustomEvents];
@@ -621,6 +748,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
     triggerNotification?.(`⚡ Created upcoming event: ${created.title}!`);
     setShowAddForm(false);
     setNewEventTitle('');
+    setNewEventEndDate('');
     setNewLineupText('');
   };
 
@@ -714,7 +842,7 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div className="sm:col-span-2">
                   <label className="text-[10px] uppercase font-mono text-zinc-400 block mb-1">Event / Festival Name</label>
                   <input
@@ -727,14 +855,23 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] uppercase font-mono text-zinc-400 block mb-1">Date</label>
+                  <label className="text-[10px] uppercase font-mono text-zinc-400 block mb-1">Start Date</label>
                   <input
-                    type="text"
+                    type="date"
                     required
-                    placeholder="e.g. NOV 28, 2026"
                     value={newEventDate}
                     onChange={(e) => setNewEventDate(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-yellow-500"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-yellow-500 [color-scheme:dark]"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase font-mono text-zinc-400 block mb-1">End Date (Fest Opt.)</label>
+                  <input
+                    type="date"
+                    min={newEventDate || undefined}
+                    value={newEventEndDate}
+                    onChange={(e) => setNewEventEndDate(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-yellow-500 [color-scheme:dark]"
                   />
                 </div>
               </div>
@@ -928,22 +1065,27 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
           ) : (
             filteredEvents.map((event) => {
               const isExpanded = expandedShowIds.has(event.id);
-              const isPastShow = Boolean(event.isPast || (event.dateRaw && event.dateRaw.split('T')[0] < todayStr) || filterType === 'past');
+              const isPastShow = Boolean(
+                event.isPast ||
+                isShowPastOrEnded({ date: event.dateRaw || event.date, end_date: event.endDate }) ||
+                filterType === 'past'
+              );
               const isFest = event.type === 'festival';
               const isTour = event.type === 'tour';
               const isRsvped = rsvpedShowIds.has(event.id);
               const isReminded = remindedShowIds.has(event.id);
+              const badgeParts = getShowDateBadgeParts(event.dateRaw, event.endDate, event.date);
+              const isMulti = Boolean(event.isMultiDay || (event.endDate && event.dateRaw && event.endDate > event.dateRaw));
+              const spanDays = event.multiDaySpan || (isMulti ? getMultiDaySpanDays(event.dateRaw, event.endDate) : 1);
 
               // Filter out duplicate active band name from supporting lineup array
               const cleanedLineup = (event.lineup || []).filter((band: string) => {
                 if (!band) return false;
                 const bLower = String(band).trim().toLowerCase();
                 if (!bLower) return false;
-                // Exclude if targetName is already present in title
-                if (targetName && bLower === targetName && event.title.toLowerCase().includes(targetName)) {
+                if (targetName && bLower === targetName) {
                   return false;
                 }
-                // Exclude if title equals band name exactly
                 if (event.title.trim().toLowerCase() === bLower) {
                   return false;
                 }
@@ -965,15 +1107,15 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                     {/* Left: Date & Main Summary */}
                     <div className="flex items-center gap-3.5 min-w-0 flex-1">
                       {/* Date Badge */}
-                      <div className="shrink-0 w-16 sm:w-20 text-center bg-zinc-950 border border-zinc-800 group-hover:border-yellow-500/30 rounded-lg p-2 shadow-inner">
+                      <div className="shrink-0 min-w-[68px] sm:min-w-[82px] text-center bg-zinc-950 border border-zinc-800 group-hover:border-yellow-500/30 rounded-lg px-2 py-2 shadow-inner">
                         <div className="text-[10px] font-mono uppercase font-bold text-yellow-400 leading-none">
-                          {event.date.split(' ')[0] || 'DATE'}
+                          {badgeParts.month}
                         </div>
-                        <div className="text-base sm:text-lg font-black text-white font-mono leading-tight mt-0.5">
-                          {event.date.split(' ')[1]?.replace(',', '') || '—'}
+                        <div className="text-sm sm:text-base font-black text-white font-mono leading-tight mt-0.5 whitespace-nowrap">
+                          {badgeParts.day}
                         </div>
                         <div className="text-[9px] font-mono text-zinc-500">
-                          {event.date.includes('202') ? event.date.slice(-4) : (event.dateRaw ? event.dateRaw.slice(0, 4) : '2026')}
+                          {badgeParts.year}
                         </div>
                       </div>
 
@@ -989,6 +1131,24 @@ export const PromoterEventsModal: React.FC<PromoterEventsModalProps> = ({
                           }`}>
                             {isFest ? 'FESTIVAL' : isTour ? 'TOUR STOP' : 'CLUB GIG'}
                           </span>
+
+                          {isMulti && (
+                            <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase font-mono bg-amber-500/15 text-amber-300 border border-amber-500/40">
+                              {spanDays}-DAY FEST
+                            </span>
+                          )}
+
+                          {event.billingRole === 'headliner' && (
+                            <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase font-mono bg-yellow-500/15 text-yellow-300 border border-yellow-500/40">
+                              ★ HEADLINER
+                            </span>
+                          )}
+
+                          {event.billingRole === 'support' && (
+                            <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase font-mono bg-cyan-500/15 text-cyan-300 border border-cyan-500/40">
+                              SUPPORT ACT
+                            </span>
+                          )}
 
                           {isPastShow ? (
                             <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase font-mono bg-zinc-800 text-amber-400 border border-amber-500/30 flex items-center gap-1 shadow-sm">

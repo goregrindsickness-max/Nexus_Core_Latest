@@ -1480,6 +1480,14 @@ export default function ShowsView({
       }
     }
 
+    try {
+      const { invalidateSupabaseQueryCache } = await import('../../../lib/supabaseQueryCache');
+      invalidateSupabaseQueryCache('shows:');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('COMMUNITY_SHOWS_UPDATED'));
+      }
+    } catch (_) {}
+
     // Reset modals
     setIsFormModalOpen(false);
     setEditingFormShow(null);

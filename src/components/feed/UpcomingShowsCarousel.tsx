@@ -1,7 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, MapPin, Building2, Star, Clock, Plus, Check } from 'lucide-react';
 import { formatTimeTo12h, isPastShowDate, formatShowDate } from '../../utils/socialFeedUtils';
-import { isShowEmbargoedOrDraft, formatSupportActsPreview } from '../../utils/showDisplayUtils';
+import {
+  isShowEmbargoedOrDraft,
+  formatSupportActsPreview,
+  getEffectiveShowEndDate,
+  isShowPastOrEnded,
+  formatShowDateRange,
+  isMultiDayShow,
+  getMultiDaySpanDays,
+} from '../../utils/showDisplayUtils';
 import { tourPackageManager } from '../../lib/tourPackageManager';
 
 export interface LiveTonightGig {
@@ -88,7 +96,7 @@ export const UpcomingShowsCarousel: React.FC<UpcomingShowsCarouselProps> = ({
       const authoritativeDate = String(gig.rawDate || gig.show_date || gig.date || '').trim();
       const d = authoritativeDate.toLowerCase();
 
-      if (!h.includes('nile') && (isPastShowDate(authoritativeDate) || (h.includes('vader') && d.includes('2026-09-24')) || gigId === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee')) {
+      if (!h.includes('nile') && (isShowPastOrEnded(gig) || (h.includes('vader') && d.includes('2026-09-24')) || gigId === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee')) {
         continue;
       }
 
@@ -194,6 +202,7 @@ export const UpcomingShowsCarousel: React.FC<UpcomingShowsCarouselProps> = ({
       return { text: '⚡ TOMORROW', style: 'bg-amber-950/70 border-amber-500/60 text-amber-300 font-bold' };
     }
 
+    const rawEnd = getEffectiveShowEndDate(gig);
     const rawSource = String(gig.rawDate || gig.show_date || gig.date || '').trim();
     if (rawSource) {
       try {
@@ -205,10 +214,23 @@ export const UpcomingShowsCarousel: React.FC<UpcomingShowsCarouselProps> = ({
           const parsed = new Date(rawSource);
           if (!isNaN(parsed.getTime())) gigDate = parsed;
         }
+        let endDateObj: Date | null = null;
+        if (rawEnd) {
+          const endIso = rawEnd.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
+          if (endIso) {
+            endDateObj = new Date(parseInt(endIso[1], 10), parseInt(endIso[2], 10) - 1, parseInt(endIso[3], 10));
+          }
+        }
         if (gigDate && !isNaN(gigDate.getTime())) {
           gigDate.setHours(0, 0, 0, 0);
           const today = new Date();
           today.setHours(0, 0, 0, 0);
+          if (endDateObj) {
+            endDateObj.setHours(0, 0, 0, 0);
+            if (today >= gigDate && today <= endDateObj) {
+              return { text: '🔥 HAPPENING NOW', style: 'bg-rose-950/80 border-rose-500/60 text-rose-300 animate-pulse font-bold' };
+            }
+          }
           const diffDays = Math.round((gigDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
           if (diffDays === 0) return { text: '🔥 TONIGHT', style: 'bg-rose-950/80 border-rose-500/60 text-rose-300 animate-pulse font-bold' };
           if (diffDays === 1) return { text: '⚡ TOMORROW', style: 'bg-amber-950/70 border-amber-500/60 text-amber-300 font-bold' };
@@ -475,15 +497,19 @@ export const UpcomingShowsCarousel: React.FC<UpcomingShowsCarouselProps> = ({
                             </span>
                           )}
 
-                          {gig.date && !countdownBadge && (
+                          {(gig.date || gig.rawDate) && (!countdownBadge || isMultiDayShow(gig)) && (
                             <span className={`text-[8.5px] font-mono font-bold px-1.5 py-0.2 rounded border shrink-0 whitespace-nowrap ${
-                              isTonight 
+                              isMultiDayShow(gig)
+                                ? 'bg-amber-950/70 border-amber-500/50 text-amber-300'
+                                : isTonight 
                                 ? isBand ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 animate-pulse' : isIndustryPro ? 'bg-purple-950/80 border-purple-500/60 text-purple-200 animate-pulse' : 'bg-rose-950/70 border-rose-500/50 text-rose-300 animate-pulse' 
                                 : isTomorrow
                                 ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
                                 : 'bg-zinc-900 border-zinc-800 text-zinc-300'
                             }`}>
-                              {formatShowDate(gig.date)}
+                              {isMultiDayShow(gig)
+                                ? `${formatShowDateRange(gig.rawDate || gig.date, getEffectiveShowEndDate(gig))} (${getMultiDaySpanDays(gig.rawDate || gig.date, getEffectiveShowEndDate(gig))}d)`
+                                : formatShowDate(gig.date)}
                             </span>
                           )}
                         </div>

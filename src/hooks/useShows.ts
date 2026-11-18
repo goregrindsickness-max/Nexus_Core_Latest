@@ -4,7 +4,7 @@ import { getSupabase, executeWithSchemaResilience, sanitizeShowForDb, ensureUUID
 import { tourPackageManager } from '../lib/tourPackageManager';
 import { getScopedFollowsMap } from '../utils/followSyncService';
 import { isPastShowDate } from '../utils/socialFeedUtils';
-import { isShowEmbargoedOrDraft } from '../utils/showDisplayUtils';
+import { getLocalTodayIso, isShowEmbargoedOrDraft } from '../utils/showDisplayUtils';
 import { formatTimeTo12Hour } from '../lib/timeUtils';
 import { mockLiveTonight, bandSetlists } from '../data/socialFeedMockData';
 
@@ -172,13 +172,13 @@ export function useShows(options: UseShowsOptions = {}) {
   const currentOrNextShow = useMemo(() => {
     const active = sortedShows.find((s) => s.status === 'Active');
     if (active) return active;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalTodayIso();
     const upcoming = sortedShows.find((s) => (s.date || (s as any).show_date || '') >= today);
     return upcoming || sortedShows[sortedShows.length - 1];
   }, [sortedShows]);
 
   const showsNeedingSettlement = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalTodayIso();
     return sortedShows.filter((s) => {
       const sDate = s.date || (s as any).show_date || '';
       return sDate < today && !(s as any).is_settled && s.status !== 'Completed';

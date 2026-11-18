@@ -5,6 +5,13 @@ import {
   Check, ZoomIn, Layers, Music, Shield, ExternalLink
 } from 'lucide-react';
 import { compressImageInSocialFeed, getShowTicketTiers } from '../../../utils/socialFeedUtils';
+import {
+  findMatchingExistingShowForBatchStop,
+  getMultiDaySpanDays,
+  isShowPastOrEnded,
+  parseShowExtraNotes,
+  shiftIsoDateYear,
+} from '../../../utils/showDisplayUtils';
 import { showsStore, venuesStore } from '../../../utils/indexedDB';
 import { generateUUID, ensureUUID, uploadBase64ToStorage, syncCommunityShowToCloud } from '../../../supabase';
 import { CustomTicketTiersBuilder } from '../../shows/CustomTicketTiersBuilder';
@@ -21,6 +28,7 @@ export interface CreateCommunityShowModalProps {
 export interface TourStopItem {
   id: string;
   show_date: string;
+  end_date?: string;
   city: string;
   state: string;
   venue_name: string;
@@ -45,6 +53,8 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
   const [name, setName] = useState('');
   const [festivalName, setFestivalName] = useState('');
   const [date, setDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [isMultiDayFest, setIsMultiDayFest] = useState(false);
   const [doorsTime, setDoorsTime] = useState('19:00');
   const [setTime, setSetTime] = useState('20:00');
   const [venueName, setVenueName] = useState('');
@@ -88,6 +98,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
 
   // Tour Stop Inline Add Form State
   const [stopDate, setStopDate] = useState('');
+  const [stopEndDate, setStopEndDate] = useState('');
   const [stopCity, setStopCity] = useState('');
   const [stopState, setStopState] = useState('');
   const [stopVenue, setStopVenue] = useState('');
@@ -196,8 +207,15 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       setCity(cityVal);
       setStateProvince(stateVal);
       
-      const rawDate = editingShow.date || editingShow.show_date || '';
-      setDate(rawDate ? String(rawDate).split('T')[0] : '');
+      const rawDate = editingShow.rawDate || editingShow.date || editingShow.show_date || '';
+      const parsedStart = rawDate && /^\d{4}-\d{2}-\d{2}/.test(String(rawDate)) ? String(rawDate).split('T')[0] : '';
+      setDate(parsedStart);
+
+      const extraEdit = parseShowExtraNotes(editingShow);
+      const rawEnd = editingShow.end_date || editingShow.endDate || extraEdit.end_date || extraEdit.endDate || '';
+      const parsedEnd = rawEnd && /^\d{4}-\d{2}-\d{2}/.test(String(rawEnd)) ? String(rawEnd).split('T')[0] : '';
+      setEndDate(parsedEnd);
+      setIsMultiDayFest(Boolean(parsedEnd && (!parsedStart || parsedEnd > parsedStart)));
 
       setDoorsTime(editingShow.doors_time || '19:00');
       setSetTime(editingShow.set_time || '20:00');
@@ -239,6 +257,8 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       setName('');
       setFestivalName('');
       setDate('');
+      setEndDate('');
+      setIsMultiDayFest(false);
       setDoorsTime('19:00');
       setSetTime('20:00');
       setVenueName('');
@@ -265,6 +285,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       setTourFlyerUrl('');
       setTourStops([]);
       setStopDate('');
+      setStopEndDate('');
       setStopCity('');
       setStopState('');
       setStopVenue('');
@@ -373,10 +394,12 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       triggerNotification?.('⚠️ Please enter the city for this stop.');
       return;
     }
+    const cleanStopEnd = stopEndDate && stopEndDate > stopDate ? stopEndDate : undefined;
 
     const newStop: TourStopItem = {
       id: 'stop_' + Math.random().toString(36).substring(2, 9),
       show_date: stopDate,
+      ...(cleanStopEnd ? { end_date: cleanStopEnd } : {}),
       city: stopCity.trim(),
       state: stopState.trim().toUpperCase(),
       venue_name: stopVenue.trim() || 'Live Venue',
@@ -387,6 +410,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
     setTourStops(prev => [...prev, newStop]);
 
     // Reset inline inputs but keep date close or ready for next entry
+    setStopEndDate('');
     setStopCity('');
     setStopState('');
     setStopVenue('');
@@ -395,6 +419,37 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
 
   const handleRemoveTourStop = (id: string) => {
     setTourStops(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleUpdateTourStopDate = (id: string, nextDate: string) => {
+    if (!nextDate) return;
+    setTourStops(prev =>
+      prev.map(s => {
+        if (s.id !== id) return s;
+        const nextEnd = s.end_date && s.end_date > nextDate ? s.end_date : undefined;
+        return {
+          ...s,
+          show_date: nextDate,
+          ...(nextEnd ? { end_date: nextEnd } : { end_date: undefined }),
+        };
+      })
+    );
+  };
+
+  const handleShiftAllPastStopsNextYear = () => {
+    setTourStops(prev =>
+      prev.map(s => {
+        if (!isShowPastOrEnded({ date: s.show_date, end_date: s.end_date })) return s;
+        const shiftedStart = shiftIsoDateYear(s.show_date, 1);
+        const shiftedEnd = s.end_date ? shiftIsoDateYear(s.end_date, 1) : undefined;
+        return {
+          ...s,
+          show_date: shiftedStart,
+          ...(shiftedEnd ? { end_date: shiftedEnd } : {}),
+        };
+      })
+    );
+    triggerNotification?.('Updated past tour stop dates to next year.');
   };
 
   // Submit Handler for Single Show Tab
@@ -408,6 +463,10 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
     }
     if (!date) {
       triggerNotification?.('⚠️ Please choose a show date.');
+      return;
+    }
+    if (isMultiDayFest && endDate && endDate < date) {
+      triggerNotification?.('⚠️ Festival end date cannot be earlier than the start date.');
       return;
     }
     if (!city.trim()) {
@@ -456,6 +515,8 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       computedPrice = 'External Tickets';
     }
 
+    const effectiveEndDate = isMultiDayFest && endDate && endDate > date ? endDate : undefined;
+
     const showId = editingShow?.id ? ensureUUID(editingShow.id) : generateUUID();
     const showPayload = {
       id: showId,
@@ -466,6 +527,8 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       tour_name: trimmedFestival || undefined,
       date,
       show_date: date,
+      end_date: effectiveEndDate,
+      endDate: effectiveEndDate,
       doors_time: doorsTime || undefined,
       set_time: setTime || undefined,
       venue_name: explicitVenueName || explicitVenueAddress || 'Live Stage',
@@ -498,6 +561,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
       additional_notes: JSON.stringify({
         tour_name: trimmedFestival || undefined,
         tour_title: trimmedFestival || undefined,
+        end_date: effectiveEndDate,
         flyer_url: (flyerUrl && !flyerUrl.startsWith('data:image/')) ? flyerUrl : undefined,
         ...(validTiers.length > 0 ? { ticket_tiers: validTiers } : {}),
       }),
@@ -526,33 +590,24 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
     const sharedLineup = tourSupportBands.map(b => ({ band_name: b, set_duration: '35 mins' }));
 
     try {
-      // Load existing shows to detect and reuse already saved local dates (e.g. Dallas, Austin)
-      const existingShowsMap = new Map<string, any>();
+      // Load existing shows only to update exact matching headliner + date records (never overwrite prior-year shows in the same city)
+      const existingShowsList: any[] = [];
       try {
         await showsStore.iterate((val: any) => {
-          if (val) {
-            const h = String(val.headliner || val.name || '').toLowerCase().trim();
-            const c = String(val.city || '').toLowerCase().trim();
-            const d = String(val.date || val.show_date || '').toLowerCase().trim();
-            const t = String(val.tour_name || val.festival_name || '').toLowerCase().trim();
-            if (h && d) existingShowsMap.set(`${h}__${d}`, val);
-            if (h && c) existingShowsMap.set(`${h}__${c}`, val);
-            if (t && c) existingShowsMap.set(`${t}__${c}`, val);
+          if (val && typeof val === 'object') {
+            existingShowsList.push(val);
           }
         });
       } catch (_) {}
 
       for (const stop of tourStops) {
-        const stopCityLower = stop.city.toLowerCase().trim();
-        const stopDateLower = stop.show_date.toLowerCase().trim();
-        const hLower = headlinerVal.toLowerCase();
-        const tLower = activeTourName.toLowerCase();
-
-        // Check if this date / city is already saved in the system
-        const existingShow = 
-          existingShowsMap.get(`${hLower}__${stopDateLower}`) ||
-          existingShowsMap.get(`${hLower}__${stopCityLower}`) ||
-          existingShowsMap.get(`${tLower}__${stopCityLower}`);
+        // Check if this exact headliner + date stop already exists
+        const existingShow = findMatchingExistingShowForBatchStop(
+          existingShowsList,
+          headlinerVal,
+          stop.show_date,
+          stop.city
+        );
 
         const showId = ensureUUID(existingShow?.id || generateUUID());
         const venueVal = stop.venue_name || existingShow?.venue_name || existingShow?.venue || 'Live Venue';
@@ -574,8 +629,16 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
         }
 
         const resolvedStopFlyer = tourFlyerUrl || existingShow?.flyer_url || existingShow?.flyerUrl || undefined;
+        const resolvedStopEndDate = stop.end_date || existingShow?.end_date || undefined;
+        const {
+          isPast: _staleIsPast,
+          isArchived: _staleIsArchived,
+          is_past: _staleIsPastSnake,
+          completed: _staleCompleted,
+          ...safeExisting
+        } = existingShow || {};
         const showPayload: any = {
-          ...(existingShow || {}),
+          ...safeExisting,
           id: showId,
           creator_id: existingShow?.creator_id,
           name: finalName,
@@ -585,6 +648,8 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
           tour_name: activeTourName,
           date: stop.show_date,
           show_date: stop.show_date,
+          status: 'Active',
+          ...(resolvedStopEndDate ? { end_date: resolvedStopEndDate, endDate: resolvedStopEndDate } : {}),
           doors_time: stop.doors_time || existingShow?.doors_time || '19:00',
           set_time: '20:00',
           venue_name: venueVal,
@@ -606,6 +671,7 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
           additional_notes: JSON.stringify({
             tour_name: activeTourName,
             tour_title: activeTourName,
+            ...(resolvedStopEndDate ? { end_date: resolvedStopEndDate } : {}),
             stop_id: showId,
             flyer_url: (resolvedStopFlyer && !resolvedStopFlyer.startsWith('data:image/')) ? resolvedStopFlyer : undefined,
           }),
@@ -888,32 +954,74 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
 
               {/* Date & Schedule */}
               <div className="space-y-3 pt-2 border-t border-zinc-800/80">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[11px] text-zinc-300 uppercase tracking-wider font-bold">Schedule & Time</span>
-                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-zinc-400 font-mono">
-                    <input 
-                      type="checkbox"
-                      checked={isTime24Hour}
-                      onChange={(e) => setIsTime24Hour(e.target.checked)}
-                      className="rounded bg-black border-zinc-800 text-emerald-400 focus:ring-0 cursor-pointer"
-                    />
-                    <span>24-Hour Format</span>
-                  </label>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] text-zinc-300 uppercase tracking-wider font-bold">Schedule & Time</span>
+                    {isMultiDayFest && date && endDate && endDate > date && (
+                      <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-[10px] font-bold">
+                        {getMultiDaySpanDays(date, endDate)}-Day Fest
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-amber-300 font-mono font-bold">
+                      <input 
+                        type="checkbox"
+                        checked={isMultiDayFest}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIsMultiDayFest(checked);
+                          if (!checked) setEndDate('');
+                        }}
+                        className="rounded bg-black border-zinc-800 text-amber-400 focus:ring-0 cursor-pointer"
+                      />
+                      <span>Multi-Day Fest</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-zinc-400 font-mono">
+                      <input 
+                        type="checkbox"
+                        checked={isTime24Hour}
+                        onChange={(e) => setIsTime24Hour(e.target.checked)}
+                        className="rounded bg-black border-zinc-800 text-emerald-400 focus:ring-0 cursor-pointer"
+                      />
+                      <span>24-Hour Format</span>
+                    </label>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className={`grid grid-cols-1 ${isMultiDayFest ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-3`}>
                   <div>
                     <label className="block font-mono text-[11px] text-zinc-400 mb-1">
-                      Show Date <span className="text-emerald-400">*</span>
+                      {isMultiDayFest ? 'Start Date' : 'Show Date'} <span className="text-emerald-400">*</span>
                     </label>
                     <input 
                       type="date"
                       required
                       value={date}
-                      onChange={(e) => setDate(e.target.value)}
+                      onChange={(e) => {
+                        const nextStart = e.target.value;
+                        setDate(nextStart);
+                        if (endDate && nextStart && endDate < nextStart) {
+                          setEndDate(nextStart);
+                        }
+                      }}
                       className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-400"
                     />
                   </div>
+                  {isMultiDayFest && (
+                    <div>
+                      <label className="block font-mono text-[11px] text-amber-300 mb-1">
+                        End Date <span className="text-amber-400">(Multi-Day)</span>
+                      </label>
+                      <input 
+                        type="date"
+                        min={date || undefined}
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="w-full bg-black border border-amber-500/40 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  )}
                   <div>
                     <label className="block font-mono text-[11px] text-zinc-400 mb-1 flex items-center justify-between">
                       <span>Doors Time</span>
@@ -1344,16 +1452,32 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
                       <span className="text-[10px] text-zinc-500 font-mono">Enter date & venue from poster</span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div>
                         <label className="block font-mono text-[10px] text-zinc-400 mb-0.5">
-                          Date <span className="text-emerald-400">*</span>
+                          Start Date <span className="text-emerald-400">*</span>
                         </label>
                         <input 
                           type="date"
                           value={stopDate}
-                          onChange={(e) => setStopDate(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setStopDate(val);
+                            if (stopEndDate && val && stopEndDate < val) setStopEndDate(val);
+                          }}
                           className="w-full bg-black border border-zinc-800 rounded px-2 py-1 text-xs text-white font-mono focus:border-emerald-400 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-mono text-[10px] text-zinc-400 mb-0.5">
+                          End Date <span className="text-zinc-500">(Fest Opt.)</span>
+                        </label>
+                        <input 
+                          type="date"
+                          min={stopDate || undefined}
+                          value={stopEndDate}
+                          onChange={(e) => setStopEndDate(e.target.value)}
+                          className="w-full bg-black border border-zinc-800 rounded px-2 py-1 text-xs text-white font-mono focus:border-amber-400 outline-none"
                         />
                       </div>
                       <div>
@@ -1413,6 +1537,23 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
                         + Add Stop
                       </button>
                     </div>
+
+                    {stopDate && isShowPastOrEnded({ date: stopDate, end_date: stopEndDate || undefined }) && (
+                      <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-amber-950/60 border border-amber-500/40 text-amber-200 font-mono text-[10px]">
+                        <span>Selected date ({stopDate}) is in the past and will be filed as an archived show.</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextYearDate = shiftIsoDateYear(stopDate, 1);
+                            setStopDate(nextYearDate);
+                            if (stopEndDate) setStopEndDate(shiftIsoDateYear(stopEndDate, 1));
+                          }}
+                          className="px-2 py-0.5 rounded bg-amber-400 hover:bg-amber-300 text-black font-bold shrink-0 cursor-pointer"
+                        >
+                          Use {shiftIsoDateYear(stopDate, 1)}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* List of Added Tour Stops */}
@@ -1437,47 +1578,96 @@ export const CreateCommunityShowModal: React.FC<CreateCommunityShowModalProps> =
                       )}
                     </div>
 
+                    {(() => {
+                      const pastCount = tourStops.filter((s) =>
+                        isShowPastOrEnded({ date: s.show_date, end_date: s.end_date })
+                      ).length;
+                      if (pastCount === 0) return null;
+                      return (
+                        <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-amber-950/50 border border-amber-500/50 text-amber-200 font-mono text-[11px]">
+                          <span>
+                            {pastCount} tour {pastCount === 1 ? 'stop has' : 'stops have'} a past date (check year) and will show under Past Shows.
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleShiftAllPastStopsNextYear}
+                            className="px-2.5 py-1 rounded bg-amber-400 hover:bg-amber-300 text-black font-bold text-[10px] shrink-0 cursor-pointer"
+                          >
+                            Shift Past Stops +1 Year
+                          </button>
+                        </div>
+                      );
+                    })()}
+
                     {tourStops.length === 0 ? (
                       <div className="p-6 text-center rounded-xl border border-dashed border-zinc-800 text-zinc-500 font-mono text-xs">
                         No tour stops added yet. Use the form above to add dates from your poster.
                       </div>
                     ) : (
                       <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
-                        {tourStops.map((stop, idx) => (
-                          <div 
-                            key={stop.id}
-                            className="p-2.5 rounded-lg bg-black/60 border border-zinc-800 flex items-center justify-between gap-2 hover:border-zinc-700 transition"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0 font-mono">
-                              <span className="text-[10px] text-zinc-500 shrink-0 font-bold w-5">
-                                #{idx + 1}
-                              </span>
-                              <span className="text-emerald-400 font-bold shrink-0">
-                                {stop.show_date}
-                              </span>
-                              <span className="text-zinc-200 truncate">
-                                {stop.city}{stop.state ? `, ${stop.state}` : ''}
-                              </span>
-                              <span className="text-zinc-500 truncate hidden sm:inline">
-                                @ {stop.venue_name}
-                              </span>
-                            </div>
+                        {tourStops.map((stop, idx) => {
+                          const isStopPast = isShowPastOrEnded({ date: stop.show_date, end_date: stop.end_date });
+                          return (
+                            <div 
+                              key={stop.id}
+                              className={`p-2 rounded-lg bg-black/60 border flex items-center justify-between gap-2 transition ${
+                                isStopPast
+                                  ? 'border-amber-500/50 bg-amber-950/20'
+                                  : 'border-zinc-800 hover:border-zinc-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0 font-mono flex-1">
+                                <span className="text-[10px] text-zinc-500 shrink-0 font-bold w-5">
+                                  #{idx + 1}
+                                </span>
+                                <input
+                                  type="date"
+                                  value={stop.show_date}
+                                  onChange={(e) => handleUpdateTourStopDate(stop.id, e.target.value)}
+                                  aria-label={`Date for stop ${idx + 1}`}
+                                  className={`bg-zinc-950 border rounded px-1.5 py-0.5 text-[11px] font-bold font-mono shrink-0 outline-none ${
+                                    isStopPast
+                                      ? 'border-amber-500/60 text-amber-300'
+                                      : 'border-zinc-800 text-emerald-400 focus:border-emerald-400'
+                                  }`}
+                                />
+                                {stop.end_date && stop.end_date > stop.show_date && (
+                                  <span className="text-[10px] text-amber-300 shrink-0">– {stop.end_date}</span>
+                                )}
+                                <span className="text-zinc-200 truncate">
+                                  {stop.city}{stop.state ? `, ${stop.state}` : ''}
+                                </span>
+                                <span className="text-zinc-500 truncate hidden sm:inline">
+                                  @ {stop.venue_name}
+                                </span>
+                              </div>
 
-                            <div className="flex items-center gap-2 shrink-0">
-                              {stop.ticket_url && (
-                                <ExternalLink className="w-3 h-3 text-cyan-400" />
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveTourStop(stop.id)}
-                                className="text-zinc-500 hover:text-rose-400 p-1 transition cursor-pointer"
-                                title="Remove stop"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {isStopPast && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateTourStopDate(stop.id, shiftIsoDateYear(stop.show_date, 1))}
+                                    className="px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-400 hover:text-black border border-amber-500/50 text-amber-300 font-mono font-bold text-[10px] cursor-pointer"
+                                    title="Shift year forward by 1 year"
+                                  >
+                                    +1 Yr
+                                  </button>
+                                )}
+                                {stop.ticket_url && (
+                                  <ExternalLink className="w-3 h-3 text-cyan-400" />
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveTourStop(stop.id)}
+                                  className="text-zinc-500 hover:text-rose-400 p-1 transition cursor-pointer"
+                                  title="Remove stop"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

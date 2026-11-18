@@ -988,9 +988,10 @@ export const hasGigTickets = (gig: any): boolean => {
   return hasUrl || tiers.length > 0 || hasNumericPrice || gig.hasTickets === true;
 };
 
-export const isPastShowDate = (dateVal?: string): boolean => {
-  if (!dateVal) return false;
-  const str = String(dateVal).trim().toLowerCase();
+export const isPastShowDate = (dateVal?: string, endDateVal?: string): boolean => {
+  const effectiveSource = endDateVal && String(endDateVal).trim() ? String(endDateVal).trim() : dateVal;
+  if (!effectiveSource) return false;
+  const str = String(effectiveSource).trim().toLowerCase();
   if (
     !str ||
     str === 'tonight' ||

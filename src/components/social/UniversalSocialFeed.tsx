@@ -59,7 +59,13 @@ import { mergePostWithReactions } from './utils/reactionStore';
 import { useSocialProfileState } from './hooks/useSocialProfileState';
 import { FeedTopHeader } from './navigation/FeedTopHeader';
 import { formatTimeAgo, isPastShowDate, getShowTicketTiers } from '../../utils/socialFeedUtils';
-import { isShowEmbargoedOrDraft, parseShowExtraNotes } from '../../utils/showDisplayUtils';
+import {
+  isShowEmbargoedOrDraft,
+  parseShowExtraNotes,
+  getEffectiveShowEndDate,
+  isShowPastOrEnded,
+  formatShowDateRange,
+} from '../../utils/showDisplayUtils';
 import { isValidStorageOrImageUrl } from '../../services/storageService';
 import {
   isAudioAssetFilename,
@@ -103,6 +109,7 @@ import { triggerPictureViewer } from '../../utils/avatarPopupEvents';
 import { formatTimeTo12Hour } from '../../lib/timeUtils';
 import { formatLocationDisplay } from '../../constants/location';
 import { PROFILE_REGISTRY, isMiguelNameOrProfile } from './utils/profileUtils';
+import { registerBackHandler } from '../../utils/swipeBackRegistry';
 import { consumePendingShowDeepLink, peekPendingDmThread } from '../../lib/pushClient';
 
 const FeedSideDrawers = React.lazy(() =>
@@ -210,7 +217,7 @@ export function UniversalSocialFeed({
       const delList: string[] = rawDel ? JSON.parse(rawDel) : [];
       const delSet = new Set(delList.map(s => String(s).toLowerCase().trim()));
       return mockLiveTonight.filter(g => {
-        if (isPastShowDate(g.date) || g.id === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee' || (String(g.headliner || '').toLowerCase().includes('vader') && String(g.date || '').includes('2026-09-24'))) {
+        if (isShowPastOrEnded(g) || g.id === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee' || (String(g.headliner || '').toLowerCase().includes('vader') && String(g.date || '').includes('2026-09-24'))) {
           return false;
         }
         const gId = String(g.id || '').toLowerCase().trim();
@@ -218,7 +225,7 @@ export function UniversalSocialFeed({
         return !delSet.has(gId) && !delSet.has(gSig);
       });
     } catch {
-      return mockLiveTonight.filter(g => !isPastShowDate(g.date));
+      return mockLiveTonight.filter(g => !isShowPastOrEnded(g));
     }
   });
   const [liveSetlists, setLiveSetlists] = useState<Record<string, string[]>>(bandSetlists);
@@ -359,6 +366,7 @@ export function UniversalSocialFeed({
     const inputTitle = payload.show_name || payload.festival_name || payload.title || payload.name || payload.headliner;
     const finalShowName = inputTitle || `${headlinerVal} Live`;
 
+    const resolvedEndDate = getEffectiveShowEndDate(payload);
     const newShow: any = {
       id: showId,
       created_at: timestamp,
@@ -369,6 +377,7 @@ export function UniversalSocialFeed({
       festival_name: payload.festival_name || payload.tour_name || payload.tourTitle || payload.tour_title,
       date: payload.date,
       show_date: payload.show_date || payload.date,
+      ...(resolvedEndDate ? { end_date: resolvedEndDate, endDate: resolvedEndDate } : {}),
       status: payload.status || 'Active',
       guarantee_amount: payload.guarantee_amount || payload.revenue || 0,
       show_type: payload.show_type || 'headliner',
@@ -503,7 +512,9 @@ export function UniversalSocialFeed({
         venue_capacity: newShow.capacity,
         headliner: newShow.headliner || newShow.name || 'Live Show',
         time: doorsDisplay,
-        date: newShow.date || 'Upcoming',
+        date: formatShowDateRange(newShow.date, resolvedEndDate) || newShow.date || 'Upcoming',
+        rawDate: newShow.date || newShow.show_date,
+        ...(resolvedEndDate ? { end_date: resolvedEndDate, endDate: resolvedEndDate } : {}),
         city: newShow.city,
         state_province: newShow.state_province,
         country: newShow.country,
@@ -518,16 +529,19 @@ export function UniversalSocialFeed({
       };
       setLiveEvents(prev => {
         const normNewHeadliner = String(newGig.headliner || '').toLowerCase().trim();
-        const normNewDate = String(newGig.date || '').toLowerCase().trim();
+        const normNewDate = String(newGig.rawDate || newGig.date || '').toLowerCase().trim();
         const filtered = prev.filter(g => {
           if (g.id === showId || g.id === payload.id) return false;
           const gHeadliner = String(g.headliner || (g as any).name || '').toLowerCase().trim();
-          const gDate = String(g.date || '').toLowerCase().trim();
+          const gDate = String((g as any).rawDate || g.date || '').toLowerCase().trim();
           if (gHeadliner && normNewDate && gHeadliner === normNewHeadliner && gDate === normNewDate) return false;
           return true;
         });
         return [newGig, ...filtered];
       });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('COMMUNITY_SHOWS_UPDATED'));
+      }
     } catch (_) {}
   };
 
@@ -1099,7 +1113,7 @@ export function UniversalSocialFeed({
           const allRawShows: any[] = [];
 
           // 1. Fetch from Supabase shows table via shared 60s cached query
-          const showsData = await fetchCachedShowsList(supabaseClient, { limit: 200, ascending: true });
+          const showsData = await fetchCachedShowsList(supabaseClient, { limit: 500, ascending: true });
 
           if (showsData && Array.isArray(showsData) && showsData.length > 0) {
             allRawShows.push(...showsData);
@@ -1145,20 +1159,20 @@ export function UniversalSocialFeed({
               }
             });
 
-            const todayStr = new Date().toISOString().split('T')[0];
             const showsGigs = dedupedRawShows
               .filter(s => {
                 if (isShowEmbargoedOrDraft(s, allActiveTours)) {
                   return false;
                 }
+                const extra = parseShowExtraNotes(s);
+                const resolvedEndDate = getEffectiveShowEndDate(s);
                 const sDate = s.date || s.show_date;
                 const sId = String(s.id || '').toLowerCase().trim();
                 const sH = String(s.headliner || s.band_name || s.name || s.show_name || '').toLowerCase().trim();
                 // Exclude shows that have already passed or are in community archives from UPCOMING live feeds (Exempt Nile)
-                if (!sH.includes('nile') && (isPastShowDate(sDate) || sId === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee' || (sH.includes('vader') && String(sDate).includes('2026-09-24')))) {
+                if (!sH.includes('nile') && (isShowPastOrEnded({ ...s, end_date: resolvedEndDate, additional_notes: extra }) || sId === '5c8a0bc3-aff4-491f-9693-d3ca3ed406ee' || (sH.includes('vader') && String(sDate).includes('2026-09-24')))) {
                   return false;
                 }
-                const extra = parseShowExtraNotes(s);
                 if (extra.archived || extra.status === 'Archived' || extra.completed) return false;
                 const sD = String(s.date || s.show_date || '').toLowerCase().trim();
                 const sig = `${sH}__${sD}`;
@@ -1169,39 +1183,14 @@ export function UniversalSocialFeed({
               .map(s => {
               const extra = extendedMap[s.id] || (s.show_name ? Object.values(extendedMap).find((v: any) => v.name === s.show_name || v.show_name === s.show_name || (v.date === s.date && v.city === s.city)) : null);
               const extraNotes = parseShowExtraNotes(s);
+              const resolvedEndDate = getEffectiveShowEndDate({ ...(extra || {}), ...s, additional_notes: extraNotes });
               const headlinerClean = (extra?.headliner || s.headliner || s.band_name || s.name || s.show_name || extra?.name || 'Headliner').trim();
               const isFollowed = !!(localFollows[headlinerClean.toLowerCase()] || (s.band_id && localFollows[s.band_id]));
               
-              let dateDisplay = 'Upcoming';
               const rawDate = s.date || s.show_date || extra?.date;
-              if (rawDate) {
-                try {
-                  const dateStr = String(rawDate).split('T')[0];
-                  const parts = dateStr.split('-');
-                  if (parts.length === 3) {
-                    const year = parseInt(parts[0], 10);
-                    const month = parseInt(parts[1], 10) - 1;
-                    const day = parseInt(parts[2], 10);
-                    const parsedDate = new Date(year, month, day);
-                    const today = new Date();
-                    const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                    const tomorrowNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-
-                    if (parsedDate.getTime() === todayNorm.getTime()) {
-                      dateDisplay = 'Tonight';
-                    } else if (parsedDate.getTime() === tomorrowNorm.getTime()) {
-                      dateDisplay = 'Tomorrow';
-                    } else {
-                      dateDisplay = parsedDate.toLocaleDateString(undefined, {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                        ...(year !== today.getFullYear() ? { year: 'numeric' } : {}),
-                      });
-                    }
-                  }
-                } catch (e) {}
-              }
+              const dateDisplay = rawDate
+                ? formatShowDateRange(String(rawDate), resolvedEndDate) || 'Upcoming'
+                : 'Upcoming';
 
               const doorsVal = extra?.doors_time || s.doors_time;
               const formattedDoors = doorsVal ? formatTimeTo12Hour(doorsVal) : '';
@@ -1256,6 +1245,7 @@ export function UniversalSocialFeed({
                 time: timeDisplay,
                 date: dateDisplay,
                 rawDate: rawDate,
+                ...(resolvedEndDate ? { end_date: resolvedEndDate, endDate: resolvedEndDate } : {}),
                 city: rawCity,
                 state_province: rawState,
                 country: rawCountry,
@@ -2604,6 +2594,30 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
     }
   }, [activeTab]);
 
+  // Social sub-tab & overlay stack for swipe-right-to-go-back
+  const socialTabHistoryRef = useRef<Array<'feed' | 'shop' | 'forum' | 'messages' | 'gallery' | 'reels'>>([]);
+  const prevSocialTabRef = useRef<'feed' | 'shop' | 'forum' | 'messages' | 'gallery' | 'reels'>(activeTab);
+  const isRestoringSocialTabRef = useRef(false);
+
+  useEffect(() => {
+    const prev = prevSocialTabRef.current;
+    if (isRestoringSocialTabRef.current) {
+      isRestoringSocialTabRef.current = false;
+      prevSocialTabRef.current = activeTab;
+      return;
+    }
+    if (prev !== activeTab) {
+      const stack = socialTabHistoryRef.current;
+      if (stack[stack.length - 1] !== prev) {
+        stack.push(prev);
+        if (stack.length > 15) stack.shift();
+      }
+      prevSocialTabRef.current = activeTab;
+    }
+  }, [activeTab]);
+
+  const latestSocialBackRef = useRef<any>(null);
+
   // Deep-link listeners for push notification taps (DM -> INBOX, Show Reminder -> Event Companion)
   useEffect(() => {
     const openShowByPayload = async (payload: { showId?: string; targetId?: string; title?: string }) => {
@@ -3147,7 +3161,7 @@ loadProfileIndexedDBCache(portalRole, userProfile?.id).then((data: any) => {
 
       let allowedTabs = ['timeline', 'gallery', 'collection', 'resale_closet'];
       if (isArtist || isLabel) {
-        allowedTabs = ['timeline', 'music', 'gallery', 'shop'];
+        allowedTabs = ['timeline', 'music', 'events', 'gallery', 'shop'];
       } else if (isPromoter) {
         allowedTabs = ['timeline', 'gallery', 'tickets'];
       } else if (isCreative) {
@@ -6173,6 +6187,148 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
 
 
 
+
+  latestSocialBackRef.current = {
+    activeStory,
+    setActiveStory,
+    selectedGalleryItem,
+    setSelectedGalleryItem,
+    selectedShopItem,
+    setSelectedShopItem,
+    selectedMerch,
+    setSelectedMerch,
+    selectedGigOnMap,
+    setSelectedGigOnMap,
+    activeEventData,
+    setActiveEventData,
+    activePitWallShow,
+    setActivePitWallShow,
+    viewingReactionsPost,
+    setViewingReactionsPost,
+    viewingFollowersOrFollowing,
+    setViewingFollowersOrFollowing,
+    selectedSecondaryUserProfile,
+    setSelectedSecondaryUserProfile,
+    selectedUserProfile,
+    handleBackProfile,
+    isComposerModalOpen,
+    setIsComposerModalOpen,
+    isCommunityShowModalOpen,
+    setIsCommunityShowModalOpen,
+    setEditingCommunityShow,
+    showPromoterArchivesModal,
+    setShowPromoterArchivesModal,
+    isPostListingOpen,
+    setIsPostListingOpen,
+    isCartOpen,
+    setIsCartOpen,
+    showAdminPINModal,
+    setShowAdminPINModal,
+    rightDrawerOpen,
+    setRightDrawerOpen,
+    leftDrawerOpen,
+    setLeftDrawerOpen,
+    bottomSheetOpen,
+    setBottomSheetOpen,
+    activeTab,
+    setActiveTab,
+    isEmbedded,
+    onBack,
+  };
+
+  useEffect(() => {
+    const unregisterOverlays = registerBackHandler('social-feed-overlays', {
+      priority: 20,
+      canGoBack: () => {
+        const s = latestSocialBackRef.current;
+        if (!s) return false;
+        return Boolean(
+          s.activeStory ||
+            s.selectedGalleryItem ||
+            s.selectedShopItem ||
+            s.selectedMerch ||
+            s.selectedGigOnMap ||
+            s.activeEventData ||
+            s.activePitWallShow ||
+            s.viewingReactionsPost ||
+            s.viewingFollowersOrFollowing ||
+            s.selectedSecondaryUserProfile ||
+            s.selectedUserProfile ||
+            s.isComposerModalOpen ||
+            s.isCommunityShowModalOpen ||
+            s.showPromoterArchivesModal ||
+            s.isPostListingOpen ||
+            s.isCartOpen ||
+            s.showAdminPINModal ||
+            s.rightDrawerOpen ||
+            s.leftDrawerOpen ||
+            s.bottomSheetOpen
+        );
+      },
+      goBack: () => {
+        const s = latestSocialBackRef.current;
+        if (!s) return;
+
+        if (s.activeStory) { s.setActiveStory(null); return; }
+        if (s.selectedGalleryItem) { s.setSelectedGalleryItem(null); return; }
+        if (s.selectedShopItem) { s.setSelectedShopItem(null); return; }
+        if (s.selectedMerch) { s.setSelectedMerch(null); return; }
+        if (s.selectedGigOnMap) { s.setSelectedGigOnMap(null); return; }
+        if (s.activeEventData) { s.setActiveEventData(null); return; }
+        if (s.activePitWallShow) { s.setActivePitWallShow(null); return; }
+        if (s.viewingReactionsPost) { s.setViewingReactionsPost(null); return; }
+        if (s.viewingFollowersOrFollowing) { s.setViewingFollowersOrFollowing(null); return; }
+        if (s.selectedSecondaryUserProfile) { s.setSelectedSecondaryUserProfile(null); return; }
+        if (s.selectedUserProfile) { s.handleBackProfile(); return; }
+        if (s.isComposerModalOpen) { s.setIsComposerModalOpen(false); return; }
+        if (s.isCommunityShowModalOpen) { s.setIsCommunityShowModalOpen(false); s.setEditingCommunityShow(null); return; }
+        if (s.showPromoterArchivesModal) { s.setShowPromoterArchivesModal(false); return; }
+        if (s.isPostListingOpen) { s.setIsPostListingOpen(false); return; }
+        if (s.isCartOpen) { s.setIsCartOpen(false); return; }
+        if (s.showAdminPINModal) { s.setShowAdminPINModal(false); return; }
+        if (s.rightDrawerOpen) { s.setRightDrawerOpen(false); return; }
+        if (s.leftDrawerOpen) { s.setLeftDrawerOpen(false); return; }
+        if (s.bottomSheetOpen) { s.setBottomSheetOpen(false); }
+      },
+    });
+
+    const unregisterTabs = registerBackHandler('social-feed-tabs', {
+      priority: 10,
+      canGoBack: () => {
+        const s = latestSocialBackRef.current;
+        if (!s) return false;
+        return Boolean(
+          s.activeTab !== 'feed' ||
+            socialTabHistoryRef.current.length > 0 ||
+            (s.isEmbedded && typeof s.onBack === 'function')
+        );
+      },
+      goBack: () => {
+        const s = latestSocialBackRef.current;
+        if (!s) return;
+
+        const prevTab = socialTabHistoryRef.current.pop();
+        if (prevTab && prevTab !== s.activeTab) {
+          isRestoringSocialTabRef.current = true;
+          s.setActiveTab(prevTab);
+          return;
+        }
+        if (s.activeTab !== 'feed') {
+          isRestoringSocialTabRef.current = true;
+          s.setActiveTab('feed');
+          return;
+        }
+        if (s.isEmbedded && typeof s.onBack === 'function') {
+          s.onBack();
+        }
+      },
+    });
+
+    return () => {
+      unregisterOverlays();
+      unregisterTabs();
+    };
+  }, []);
 
   const gridStyle = {
     backgroundImage: `linear-gradient(to right, ${currentTheme.gridColor || 'rgba(239,68,68,0.025)'} 1px, transparent 1px), linear-gradient(to bottom, ${currentTheme.gridColor || 'rgba(239,68,68,0.025)'} 1px, transparent 1px)`,

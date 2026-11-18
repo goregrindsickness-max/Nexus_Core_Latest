@@ -31,6 +31,9 @@ import { pushManager } from './lib/pushNotifications';
 import { initializeSonicActivityListeners } from './services/sonicFootprintService';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
+import { useSwipeBackGesture } from './hooks/useSwipeBackGesture';
+import { SwipeBackEdgeIndicator } from './components/common/SwipeBackEdgeIndicator';
+import { registerBackHandler, triggerTopBackHandler } from './utils/swipeBackRegistry';
 import { formatTimeAgo, extractUUID } from './utils/socialFeedUtils';
 import { isShowEmbargoedOrDraft } from './utils/showDisplayUtils';
 import { 
@@ -823,6 +826,7 @@ export default function App() {
     if (typeof window === 'undefined' || !Capacitor.isNativePlatform()) return;
 
     let appListener: any;
+    let backBtnListener: any;
     try {
       appListener = CapacitorApp.addListener('appStateChange', (state) => {
         if (state.isActive) {
@@ -848,6 +852,10 @@ export default function App() {
           communityBandManager.fetchFromSupabase().catch(() => {});
         }
       });
+
+      backBtnListener = CapacitorApp.addListener('backButton', () => {
+        triggerTopBackHandler();
+      });
     } catch (e) {
       console.warn('[AppLifecycle] App state listener notice:', e);
     }
@@ -855,6 +863,9 @@ export default function App() {
     return () => {
       if (appListener && typeof appListener.remove === 'function') {
         appListener.remove();
+      }
+      if (backBtnListener && typeof backBtnListener.remove === 'function') {
+        backBtnListener.remove();
       }
     };
   }, []);
@@ -1086,6 +1097,143 @@ export default function App() {
       }
     }
   }, [activeTab]);
+
+  // Global swipe-right-to-go-back gesture & root navigation history stack
+  const swipeBackState = useSwipeBackGesture(true);
+  const appNavHistoryRef = useRef<Array<{ activeTab: any; dashboardV2ActiveNav: any }>>([]);
+  const prevAppNavRef = useRef<{ activeTab: any; dashboardV2ActiveNav: any }>({
+    activeTab,
+    dashboardV2ActiveNav,
+  });
+  const isRestoringAppNavRef = useRef(false);
+
+  useEffect(() => {
+    const prev = prevAppNavRef.current;
+    if (isRestoringAppNavRef.current) {
+      isRestoringAppNavRef.current = false;
+      prevAppNavRef.current = { activeTab, dashboardV2ActiveNav };
+      return;
+    }
+
+    if (
+      prev.activeTab !== activeTab ||
+      (activeTab === 'home-v2' && prev.dashboardV2ActiveNav !== dashboardV2ActiveNav)
+    ) {
+      if (prev.activeTab && prev.activeTab !== 'landing') {
+        const stack = appNavHistoryRef.current;
+        const last = stack[stack.length - 1];
+        if (!last || last.activeTab !== prev.activeTab || last.dashboardV2ActiveNav !== prev.dashboardV2ActiveNav) {
+          stack.push({ ...prev });
+          if (stack.length > 25) stack.shift();
+        }
+      }
+      prevAppNavRef.current = { activeTab, dashboardV2ActiveNav };
+    }
+  }, [activeTab, dashboardV2ActiveNav]);
+
+  const latestAppBackStateRef = useRef({
+    showSplash,
+    isLoggedOut,
+    isNotificationDrawerOpen,
+    showWorkspaceRegistration,
+    isTransferModalOpen,
+    isQuickActionPanelOpen,
+    isNavMenuOpen,
+    activeTab,
+    dashboardV2ActiveNav,
+    userProfile,
+  });
+  latestAppBackStateRef.current = {
+    showSplash,
+    isLoggedOut,
+    isNotificationDrawerOpen,
+    showWorkspaceRegistration,
+    isTransferModalOpen,
+    isQuickActionPanelOpen,
+    isNavMenuOpen,
+    activeTab,
+    dashboardV2ActiveNav,
+    userProfile,
+  };
+
+  useEffect(() => {
+    return registerBackHandler('app-root', {
+      priority: 0,
+      canGoBack: () => {
+        const s = latestAppBackStateRef.current;
+        if (s.showSplash) return false;
+        if (s.isLoggedOut) return true;
+        if (
+          s.isNotificationDrawerOpen ||
+          s.showWorkspaceRegistration ||
+          s.isTransferModalOpen ||
+          s.isQuickActionPanelOpen ||
+          s.isNavMenuOpen
+        ) {
+          return true;
+        }
+        if (appNavHistoryRef.current.length > 0) return true;
+        if (s.activeTab === 'pay-portal' || s.activeTab === 'landing') return true;
+        if (s.activeTab && s.activeTab !== 'social' && s.activeTab !== 'home-v2') return true;
+        if (s.activeTab === 'home-v2' && s.dashboardV2ActiveNav !== 'EVENTS') return true;
+        return false;
+      },
+      goBack: () => {
+        const s = latestAppBackStateRef.current;
+        if (s.isNotificationDrawerOpen) {
+          setIsNotificationDrawerOpen(false);
+          return;
+        }
+        if (s.showWorkspaceRegistration) {
+          setShowWorkspaceRegistration(false);
+          return;
+        }
+        if (s.isTransferModalOpen) {
+          setIsTransferModalOpen(false);
+          return;
+        }
+        if (s.isQuickActionPanelOpen) {
+          setIsQuickActionPanelOpen(false);
+          return;
+        }
+        if (s.isNavMenuOpen) {
+          setIsNavMenuOpen(false);
+          return;
+        }
+        if (s.isLoggedOut && !s.showSplash) {
+          setShowSplash(true);
+          return;
+        }
+
+        const prevEntry = appNavHistoryRef.current.pop();
+        if (prevEntry) {
+          isRestoringAppNavRef.current = true;
+          if (prevEntry.dashboardV2ActiveNav) {
+            setDashboardV2ActiveNav(prevEntry.dashboardV2ActiveNav);
+          }
+          setActiveTab(prevEntry.activeTab);
+          return;
+        }
+
+        if (s.activeTab === 'home-v2' && s.dashboardV2ActiveNav !== 'EVENTS') {
+          isRestoringAppNavRef.current = true;
+          setDashboardV2ActiveNav('EVENTS');
+          return;
+        }
+
+        if (s.activeTab === 'pay-portal' || s.activeTab === 'landing') {
+          isRestoringAppNavRef.current = true;
+          setActiveTab('home-v2');
+          return;
+        }
+
+        if (s.activeTab !== 'social') {
+          isRestoringAppNavRef.current = true;
+          setActiveTab('social');
+        }
+      },
+    });
+  }, []);
 
 
   const playPttSound = (type: 'beep-on' | 'beep-off' | 'static') => {
@@ -1455,10 +1603,16 @@ export default function App() {
         if (revs) setUserReviews(JSON.parse(revs as string));
 
         const vens = await venuesStore.getItem('nexus_master_venues');
-        if (vens) setVenues(JSON.parse(vens as string));
-        else {
+        if (vens) {
+          setVenues(JSON.parse(vens as string));
+          try { localStorage.removeItem('nexus_core_venues'); } catch (_) {}
+        } else {
           const oldV = localStorage.getItem('nexus_core_venues');
-          if (oldV) setVenues(JSON.parse(oldV));
+          if (oldV) {
+            setVenues(JSON.parse(oldV));
+            venuesStore.setItem('nexus_master_venues', oldV).catch(() => {});
+            try { localStorage.removeItem('nexus_core_venues'); } catch (_) {}
+          }
         }
 
         const offs = await offersStore.getItem('nexus_master_offers');
@@ -1613,12 +1767,12 @@ export default function App() {
 
   useEffect(() => {
     if (!isHydrated) return;
+    venuesStore
+      .setItem('nexus_master_venues', JSON.stringify(venues))
+      .catch((e) => console.warn('Failed to save venues to IndexedDB:', e));
     try {
-      venuesStore.setItem('nexus_master_venues', JSON.stringify(venues)).catch(e => console.warn(e));
-      localStorage.setItem('nexus_core_venues', JSON.stringify(venues));
-    } catch (e) {
-      console.error('Failed to save venues:', e);
-    }
+      localStorage.removeItem('nexus_core_venues');
+    } catch (_) {}
   }, [venues, isHydrated]);
 
   // Sync bands list with localStorage namespaced by profile ID
@@ -4471,17 +4625,23 @@ list.push({
 
   if (activeTab === 'pay-portal' || window.location.pathname === '/pay') {
     return (
-      <Suspense fallback={null}>
-        <CustomerPayView onBackToApp={() => setActiveTab('home-v2')} />
-      </Suspense>
+      <>
+        <SwipeBackEdgeIndicator state={swipeBackState} />
+        <Suspense fallback={null}>
+          <CustomerPayView onBackToApp={() => setActiveTab('home-v2')} />
+        </Suspense>
+      </>
     );
   }
 
   if (activeTab === 'landing' || window.location.pathname === '/landing') {
     return (
-      <Suspense fallback={null}>
-        <LandingView onEnterApp={() => setActiveTab('home-v2')} />
-      </Suspense>
+      <>
+        <SwipeBackEdgeIndicator state={swipeBackState} />
+        <Suspense fallback={null}>
+          <LandingView onEnterApp={() => setActiveTab('home-v2')} />
+        </Suspense>
+      </>
     );
   }
 
@@ -4499,6 +4659,7 @@ list.push({
                   : 'bg-[#0c0e12] pb-20'
           }`
     }`} style={{ fontSize: '16px' }}>
+      <SwipeBackEdgeIndicator state={swipeBackState} />
       
       {/* Dynamic Alert Banner */}
       <AnimatePresence>

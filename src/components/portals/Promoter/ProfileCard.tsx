@@ -124,7 +124,8 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   supabase,
   liveProfileStats,
   setLiveProfileStats,
-  feed
+  feed,
+  shows
 }) => {
   const [liveRoutingStats, setLiveRoutingStats] = React.useState<{ toursCount: number; showsCount: number }>({ toursCount: 0, showsCount: 0 });
   const [showBandBookingModal, setShowBandBookingModal] = React.useState(false);
@@ -4101,6 +4102,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       onClose={() => setShowEventsModal(false)}
       promoterProfile={selectedUserProfile || targetProfile}
       userProfile={userProfile}
+      shows={shows}
       triggerNotification={triggerNotification}
       openCheckout={openCheckout}
     />

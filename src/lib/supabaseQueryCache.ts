@@ -174,7 +174,7 @@ export async function fetchCachedShowsList(
   options: { limit?: number; ascending?: boolean } = {}
 ): Promise<any[]> {
   if (!client) return [];
-  const limit = Math.min(200, Math.max(1, options.limit ?? 200));
+  const limit = Math.min(500, Math.max(1, options.limit ?? 500));
   const ascending = options.ascending ?? true;
   const cacheKey = `shows:list:${ascending ? 'asc' : 'desc'}:${limit}`;
 

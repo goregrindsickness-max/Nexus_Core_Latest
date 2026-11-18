@@ -70,6 +70,8 @@ export function safeSetLocalStorageItem(key: string, value: any): boolean {
 
       try {
         const nonEssentialKeys = [
+          'nexus_core_venues',
+          'nexus_musicbrainz_venues',
           'nexus_core_notifications',
           'nexus_core_shows_extended',
           'nexus_core_sales_offline',

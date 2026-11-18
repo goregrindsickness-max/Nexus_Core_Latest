@@ -419,6 +419,7 @@ export const SwipableWorkspaceEntityCard: React.FC<SwipableWorkspaceEntityCardPr
 
   return (
     <div
+      data-no-swipe-back={hasMultiple ? 'true' : undefined}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}

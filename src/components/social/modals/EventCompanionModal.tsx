@@ -42,6 +42,11 @@ import {
   parseSingleAdmissionPrice,
   findInAppPassForEvent
 } from '../../../utils/socialFeedUtils';
+import {
+  formatShowDateRange,
+  getEffectiveShowEndDate,
+  getEffectiveShowStartDate,
+} from '../../../utils/showDisplayUtils';
 
 type PitCategory = 'chat' | 'set_times' | 'merch' | 'meetup' | 'pit';
 
@@ -652,6 +657,9 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
     if (Array.isArray(activeEventData.support_lineup) && activeEventData.support_lineup.length > 0) {
       return [headlinerName, ...activeEventData.support_lineup.map((s: any) => s.name || s.band_name || s)];
     }
+    if (typeof activeEventData.support_bands === 'string' && activeEventData.support_bands.trim().length > 0) {
+      return [headlinerName, ...activeEventData.support_bands.split(',').map((s: string) => s.trim()).filter(Boolean)];
+    }
 
     // Curated tour package rosters
     const upper = headlinerName.toUpperCase();
@@ -700,9 +708,16 @@ export const EventCompanionModal: React.FC<EventCompanionModalProps> = ({
                   <h2 className="text-white font-black uppercase tracking-wider leading-tight text-sm sm:text-base truncate">
                     {activeEventData.headliner || activeEventData.title}
                   </h2>
-                  {activeEventData.date && (
+                  {(activeEventData.date || getEffectiveShowStartDate(activeEventData)) && (
                     <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-rose-950/80 border border-rose-500/40 text-rose-300">
-                      {activeEventData.date}
+                      {(() => {
+                        const startRaw = getEffectiveShowStartDate(activeEventData);
+                        const endRaw = getEffectiveShowEndDate(activeEventData);
+                        if (endRaw && startRaw) {
+                          return formatShowDateRange(startRaw, endRaw, { includeWeekday: true }) || activeEventData.date;
+                        }
+                        return activeEventData.date || startRaw;
+                      })()}
                     </span>
                   )}
                 </div>

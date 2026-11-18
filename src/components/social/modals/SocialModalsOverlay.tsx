@@ -554,6 +554,7 @@ export const SocialModalsOverlay: React.FC<SocialModalsOverlayProps> = (props) =
         setProfilePlaybackProgress={setProfilePlaybackProgress}
         getProfileForUser={getProfileForUser}
         supabase={supabase}
+        shows={props.liveEvents}
         liveProfileStats={props.liveProfileStats}
         setLiveProfileStats={setLiveProfileStats}
       />

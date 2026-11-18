@@ -243,6 +243,7 @@ export interface PublicProfileModalProps {
   setProfilePlaybackProgress: (val: number) => void;
   getProfileForUser: (userParam: any) => any;
   supabase?: any;
+  shows?: any[];
   liveProfileStats?: any;
   setLiveProfileStats?: React.Dispatch<React.SetStateAction<any>>;
   feed?: any[];

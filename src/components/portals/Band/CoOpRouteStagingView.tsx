@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronDown, Plus, Trash2, Calendar, MapPin, Truck, Settings, Share2, Send, Activity, UserPlus, Clock, Sparkles, Users, Fuel, AlertTriangle, FileText, Check, Copy, TrendingUp, RefreshCw, Sun, CloudSun, Wind, Thermometer, CloudRain, CloudSnow, CloudLightning, Cloud } from 'lucide-react';
 import { motion } from 'motion/react';
 import { getShowWeatherAndWarnings } from '../../../utils/weatherUtils';
+import { venuesStore } from '../../../utils/indexedDB';
 
 // Coordinates registry for major tour nodes to simulate highly realistic routes
 const cityCoords: { [key: string]: { lat: number; lng: number } } = {
@@ -294,31 +295,48 @@ export default function CoOpRouteStagingView({ onBack, triggerNotification, addL
   const [showPromoterSandbox, setShowPromoterSandbox] = useState(false);
   const [promoterGuarantees, setPromoterGuarantees] = useState<{ [bandId: string]: number }>({});
 
-  // Load registered venues on mount
+  // Load registered venues on mount from IndexedDB (with legacy localStorage & default fallback)
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('nexus_core_venues');
-      const defaultVenues = [
-        { name: "Emo's Austin", city: "Austin", state_province: "TX" },
-        { name: "Tulips FTW", city: "Fort Worth", state_province: "TX" },
-        { name: "The Double Door", city: "Chicago", state_province: "IL" },
-        { name: "Cactus Club", city: "Cudahy", state_province: "WI" },
-        { name: "Whisky A Go Go", city: "Los Angeles", state_province: "CA" },
-        { name: "The Fillmore", city: "San Francisco", state_province: "CA" },
-        { name: "Bluebird Theater", city: "Denver", state_province: "CO" },
-        { name: "Showbox", city: "Seattle", state_province: "WA" },
-      ];
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.length > 0) {
-          setVenueDatabase(parsed);
-          return;
+    let active = true;
+    const defaultVenues = [
+      { name: "Emo's Austin", city: "Austin", state_province: "TX" },
+      { name: "Tulips FTW", city: "Fort Worth", state_province: "TX" },
+      { name: "The Double Door", city: "Chicago", state_province: "IL" },
+      { name: "Cactus Club", city: "Cudahy", state_province: "WI" },
+      { name: "Whisky A Go Go", city: "Los Angeles", state_province: "CA" },
+      { name: "The Fillmore", city: "San Francisco", state_province: "CA" },
+      { name: "Bluebird Theater", city: "Denver", state_province: "CO" },
+      { name: "Showbox", city: "Seattle", state_province: "WA" },
+    ];
+
+    const loadVenues = async () => {
+      try {
+        const stored = await venuesStore.getItem('nexus_master_venues');
+        if (active && stored) {
+          const parsed = typeof stored === 'string' ? JSON.parse(stored) : stored;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setVenueDatabase(parsed);
+            return;
+          }
         }
+        const saved = localStorage.getItem('nexus_core_venues');
+        if (active && saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setVenueDatabase(parsed);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error(e);
       }
-      setVenueDatabase(defaultVenues);
-    } catch (e) {
-      console.error(e);
-    }
+      if (active) setVenueDatabase(defaultVenues);
+    };
+
+    loadVenues();
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Nodes (Dates with schedule lists)

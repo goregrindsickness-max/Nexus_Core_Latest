@@ -273,6 +273,15 @@ export function sanitizeShowForDb(show: any): any {
     }
   }
 
+  const rawEndDate = show.end_date || show.endDate || parsedExtraNotes.end_date || parsedExtraNotes.endDate;
+  if (typeof rawEndDate === 'string' && rawEndDate.trim()) {
+    const cleanEndDate = rawEndDate.trim().split('T')[0];
+    const startRef = String(dbShow.date || dbShow.show_date || '').trim().split('T')[0];
+    if (!startRef || cleanEndDate >= startRef) {
+      parsedExtraNotes.end_date = cleanEndDate;
+    }
+  }
+
   if (Object.keys(parsedExtraNotes).length > 0) {
     if (
       Object.keys(parsedExtraNotes).length === 1 &&

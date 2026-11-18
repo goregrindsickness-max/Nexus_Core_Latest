@@ -39,6 +39,20 @@ import {
   isMutualConnection,
 } from '../../../utils/birthdayUtils';
 import { sendDirectMessage } from '../../../store/useChatStore';
+import { loadAllMergedShows } from '../../../services/showEventsLoader';
+import {
+  doesShowFeatureBand,
+  formatShowDateRange,
+  getBandBillingRoleInShow,
+  getEffectiveShowEndDate,
+  getEffectiveShowStartDate,
+  getFullShowLineup,
+  getLocalTodayIso,
+  getMultiDaySpanDays,
+  getShowDateBadgeParts,
+  isMultiDayShow,
+  isShowPastOrEnded,
+} from '../../../utils/showDisplayUtils';
 
 export type { ListenerMetric };
 export { calculateListenerMetrics };
@@ -136,9 +150,24 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   supabase,
   liveProfileStats,
   setLiveProfileStats,
-  feed
+  feed,
+  shows
 }) => {
   const [liveRoutingStats, setLiveRoutingStats] = React.useState<{ toursCount: number; showsCount: number }>({ toursCount: 0, showsCount: 0 });
+  const [allLoadedShowsForProfile, setAllLoadedShowsForProfile] = React.useState<any[]>(Array.isArray(shows) ? shows : []);
+  const [profileEventsFilter, setProfileEventsFilter] = React.useState<'upcoming' | 'past'>('upcoming');
+  const discoScrollRef = React.useRef<HTMLDivElement | null>(null);
+  const tabsSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const isDiscoPausedRef = React.useRef<boolean>(false);
+  const discoTouchResumeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const jumpToEventsTab = React.useCallback((filter: 'upcoming' | 'past' = 'upcoming') => {
+    setProfileEventsFilter(filter);
+    setProfileActiveTab('events');
+    window.setTimeout(() => {
+      tabsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  }, [setProfileActiveTab]);
   const [fetchedBandData, setFetchedBandData] = React.useState<any>(null);
   const [fetchedProfileData, setFetchedProfileData] = React.useState<any>(null);
   const [isEditingBio, setIsEditingBio] = React.useState(false);
@@ -166,6 +195,32 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
   const [isIsolatedStorefrontOpen, setIsIsolatedStorefrontOpen] = useState(false);
   const [storefrontBandData, setStorefrontBandData] = useState<any>(null);
   const [isAudioUploaderOpen, setIsAudioUploaderOpen] = useState(false);
+
+  // Auto-scroll discography carousel when a band has more than 2 releases
+  React.useEffect(() => {
+    const el = discoScrollRef.current;
+    if (!el || el.children.length <= 2) return;
+    const cardStep = 157; // 145px card width + 12px gap
+    const intervalId = window.setInterval(() => {
+      const container = discoScrollRef.current;
+      if (!container) return;
+      if (isDiscoPausedRef.current || selectedRelease) return;
+      const maxScroll = container.scrollWidth - container.clientWidth;
+      if (maxScroll <= 8) return;
+      const nextLeft = container.scrollLeft + cardStep;
+      if (container.scrollLeft >= maxScroll - 16) {
+        container.scrollTo({ left: 0, behavior: 'smooth' });
+      } else {
+        container.scrollTo({ left: Math.min(nextLeft, maxScroll), behavior: 'smooth' });
+      }
+    }, 2600);
+    return () => {
+      window.clearInterval(intervalId);
+      if (discoTouchResumeTimerRef.current) {
+        clearTimeout(discoTouchResumeTimerRef.current);
+      }
+    };
+  }, [dbReleases, communityArchiveMatch, fetchedBandData?.id, selectedUserProfile?.id, selectedUserProfile?.name, targetProfile?.id, targetProfile?.name, selectedRelease]);
 
   // Synchronous sync of communityArchiveMatch on profile selection changes
   React.useEffect(() => {
@@ -500,20 +555,26 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       const targetId = base.id || selectedUserProfile?.id;
       const targetName = base.band_name || base.name || base.bandName || selectedUserProfile?.name;
 
-      // A) Fetch shows from Supabase table 'shows' to compute real Live Routing Status
-      if (supabase && isBand) {
-        try {
-          let showsList: any[] = [];
-          const validUUID = targetId && extractUUID(targetId);
-          if (validUUID || targetName) {
-            const data = await fetchCachedShowsList(supabase, { limit: 200, ascending: false });
-            if (data && data.length > 0) {
-              showsList = data.filter((s: any) => 
-                (validUUID && (s.band_id === validUUID || s.user_id === validUUID || s.creator_id === validUUID)) ||
-                (targetName && (s.headliner?.toLowerCase().includes(targetName.toLowerCase()) || s.band_name?.toLowerCase().includes(targetName.toLowerCase())))
-              );
-            }
-          }
+      // A) Fetch merged shows from Supabase + IndexedDB + localStorage to compute Live Routing Status & auto-linked events
+      try {
+        const mergedShows = await loadAllMergedShows(supabase, shows);
+        if (isMounted) {
+          setAllLoadedShowsForProfile(mergedShows);
+        }
+
+        if (isBand) {
+          const bandMatchTarget = {
+            id: targetId,
+            band_id: base?.band_id || selectedUserProfile?.band_id || targetId,
+            user_id: base?.user_id,
+            name: targetName,
+            band_name: base?.band_name || base?.bandName || targetName,
+            account_type: base?.account_type,
+            role: base?.role,
+          };
+          const showsList = mergedShows.filter(
+            (s: any) => doesShowFeatureBand(s, bandMatchTarget) && !isShowPastOrEnded(s)
+          );
 
           if (isMounted) {
             if (showsList.length > 0) {
@@ -528,10 +589,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
               setLiveRoutingStats({ toursCount: 0, showsCount: 0 });
             }
           }
-        } catch (e) {
-          if (isMounted) setLiveRoutingStats({ toursCount: 0, showsCount: 0 });
+        } else if (isMounted) {
+          setLiveRoutingStats({ toursCount: 0, showsCount: 0 });
         }
-      } else {
+      } catch (e) {
         if (isMounted) setLiveRoutingStats({ toursCount: 0, showsCount: 0 });
       }
 
@@ -747,8 +808,23 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     }
 
     loadProfileBandDataAndShows();
-    return () => { isMounted = false; };
-  }, [selectedUserProfile?.id, selectedUserProfile?.email, selectedUserProfile?.console_handle, selectedUserProfile?.name, targetProfile?.id, targetProfile?.name, supabase]);
+    const handleShowsRefresh = () => {
+      if (isMounted) {
+        loadAllMergedShows(supabase, shows)
+          .then((merged) => {
+            if (isMounted) setAllLoadedShowsForProfile(merged);
+          })
+          .catch(() => {});
+      }
+    };
+    window.addEventListener('COMMUNITY_SHOWS_UPDATED', handleShowsRefresh);
+    window.addEventListener('shows_updated_from_tour_manager', handleShowsRefresh);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('COMMUNITY_SHOWS_UPDATED', handleShowsRefresh);
+      window.removeEventListener('shows_updated_from_tour_manager', handleShowsRefresh);
+    };
+  }, [selectedUserProfile?.id, selectedUserProfile?.email, selectedUserProfile?.console_handle, selectedUserProfile?.name, targetProfile?.id, targetProfile?.name, supabase, shows]);
 
   // Realtime subscription on Supabase 'bands' table so profiles always update live when changed in DB
   React.useEffect(() => {
@@ -1354,6 +1430,55 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
     : parsedDisplayLineup;
 
   const hasLineup = displayLineup.length > 0;
+
+  const { profileMatchedShows, upcomingMatchedShows, pastMatchedShows } = React.useMemo(() => {
+    const bandTargetObj = {
+      id: bData?.id || fetchedBandData?.id || baseTarget?.id,
+      band_id: bData?.band_id || fetchedBandData?.band_id || baseTarget?.band_id || bData?.id,
+      user_id: bData?.user_id || baseTarget?.user_id,
+      name: rawResolvedBandName || bData?.name || baseTarget?.name,
+      band_name: rawResolvedBandName || bData?.band_name || baseTarget?.band_name,
+      entity_name: baseTarget?.entity_name,
+      account_type: baseTarget?.account_type || bData?.account_type,
+      role: baseTarget?.role || bData?.role,
+    };
+
+    const matched = (allLoadedShowsForProfile || []).filter((s) =>
+      doesShowFeatureBand(s, bandTargetObj)
+    );
+
+    const upcoming: any[] = [];
+    const past: any[] = [];
+
+    for (const s of matched) {
+      const startRaw = getEffectiveShowStartDate(s) || '';
+      const endRaw = getEffectiveShowEndDate(s);
+      const ended = isShowPastOrEnded({ ...s, date: startRaw, end_date: endRaw });
+      const enriched = {
+        ...s,
+        _startRaw: startRaw,
+        _endRaw: endRaw,
+        _billingRole: getBandBillingRoleInShow(s, bandTargetObj),
+        _lineup: getFullShowLineup(s),
+        _isMultiDay: isMultiDayShow({ date: startRaw, end_date: endRaw }),
+        _spanDays: getMultiDaySpanDays(startRaw, endRaw),
+        _formattedDate: formatShowDateRange(startRaw || s.date, endRaw, { includeWeekday: true }) || s.date || 'TBA',
+      };
+      if (ended) past.push(enriched);
+      else upcoming.push(enriched);
+    }
+
+    upcoming.sort((a, b) => String(a._startRaw || '9999').localeCompare(String(b._startRaw || '9999')));
+    past.sort((a, b) => String(b._startRaw || '').localeCompare(String(a._startRaw || '')));
+
+    return {
+      profileMatchedShows: [...upcoming, ...past],
+      upcomingMatchedShows: upcoming,
+      pastMatchedShows: past,
+    };
+  }, [allLoadedShowsForProfile, bData, fetchedBandData, baseTarget, rawResolvedBandName]);
+
+  const upcomingMatchedCount = upcomingMatchedShows.length;
 
   const matchLineupMemberToProfile = (mem: any) => {
     if (!mem || !Array.isArray(allProfiles)) return null;
@@ -2037,7 +2162,15 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           }`}
                           title="Upcoming shows, tours, and festivals"
                         >
-                          <Calendar className={`w-3.5 h-3.5 ${isTargetPromoter ? 'text-black' : 'text-yellow-400'}`} /> EVENTS
+                          <Calendar className={`w-3.5 h-3.5 ${isTargetPromoter ? 'text-black' : 'text-yellow-400'}`} />
+                          <span>EVENTS</span>
+                          {upcomingMatchedCount > 0 && (
+                            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black leading-none ${
+                              isTargetPromoter ? 'bg-black/20 text-black' : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
+                            }`}>
+                              {upcomingMatchedCount}
+                            </span>
+                          )}
                         </button>
 
                         {/* 3. Message Button (Full width col-span-2 with Purple Glow) */}
@@ -2340,8 +2473,13 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             <Disc className="w-3.5 h-3.5 text-amber-400" />
                             Official Discography
                           </span>
-                          <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider font-semibold">
-                            {resolvedDiscography.length} {resolvedDiscography.length === 1 ? 'Release' : 'Releases'}
+                          <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider font-semibold flex items-center gap-2">
+                            {resolvedDiscography.length > 2 && (
+                              <span className="text-[8px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400/90 border border-amber-500/25 tracking-widest">
+                                AUTO-SCROLL
+                              </span>
+                            )}
+                            <span>{resolvedDiscography.length} {resolvedDiscography.length === 1 ? 'Release' : 'Releases'}</span>
                           </span>
                         </div>
 
@@ -2352,7 +2490,23 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                             <p className="text-[9px] text-zinc-500 font-sans">The band has not added any detailed records to their discography yet.</p>
                           </div>
                         ) : (
-                          <div className="flex gap-3 overflow-x-auto pb-3 pt-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent snap-x snap-mandatory">
+                          <div
+                            ref={discoScrollRef}
+                            data-no-swipe-back="true"
+                            onMouseEnter={() => { isDiscoPausedRef.current = true; }}
+                            onMouseLeave={() => { isDiscoPausedRef.current = false; }}
+                            onTouchStart={() => {
+                              if (discoTouchResumeTimerRef.current) clearTimeout(discoTouchResumeTimerRef.current);
+                              isDiscoPausedRef.current = true;
+                            }}
+                            onTouchEnd={() => {
+                              if (discoTouchResumeTimerRef.current) clearTimeout(discoTouchResumeTimerRef.current);
+                              discoTouchResumeTimerRef.current = setTimeout(() => {
+                                isDiscoPausedRef.current = false;
+                              }, 2200);
+                            }}
+                            className="flex gap-3 overflow-x-auto pb-3 pt-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent snap-x snap-mandatory"
+                          >
                             {resolvedDiscography.map((release: any, rIdx: number) => {
                               const coverSrc = getReleaseCoverUrl(release);
                               return (
@@ -2400,6 +2554,167 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                           </div>
                         )}
                       </div>
+
+                      {/* Conditional Upcoming Show Spotlight (Hidden cleanly when band has no upcoming announced dates) */}
+                      {isBandProfile && upcomingMatchedShows.length > 0 && (() => {
+                        const nextShow = upcomingMatchedShows[0];
+                        const secondShow = upcomingMatchedShows[1];
+                        const remainingCount = upcomingMatchedShows.length - 1;
+                        const badgeParts = getShowDateBadgeParts(
+                          nextShow._startRaw || nextShow.date,
+                          nextShow._endRaw,
+                          nextShow._formattedDate
+                        );
+                        const todayIso = getLocalTodayIso();
+                        const startIso = (nextShow._startRaw || '').slice(0, 10);
+                        const endIso = (nextShow._endRaw || '').slice(0, 10);
+                        const isHappeningNow = Boolean(
+                          nextShow._isMultiDay && startIso && endIso && todayIso >= startIso && todayIso <= endIso
+                        );
+                        const isTonight = Boolean(startIso && startIso === todayIso && !isHappeningNow);
+                        const showTitle =
+                          nextShow.festival_name ||
+                          nextShow.tour_name ||
+                          nextShow.name ||
+                          nextShow.show_name ||
+                          nextShow.title ||
+                          nextShow.headliner ||
+                          'Confirmed Live Date';
+                        const venueName = nextShow.venue_name || nextShow.venue || 'TBA Venue';
+                        const cityLabel = nextShow.city
+                          ? nextShow.state_province
+                            ? `${nextShow.city}, ${nextShow.state_province}`
+                            : nextShow.city
+                          : '';
+                        const otherActs = (Array.isArray(nextShow._lineup) ? nextShow._lineup : []).filter(
+                          (act: string) =>
+                            !rawResolvedBandName ||
+                            act.toLowerCase().trim() !== rawResolvedBandName.toLowerCase().trim()
+                        );
+
+                        return (
+                          <div className="mt-4 text-left">
+                            <div className="flex items-center justify-between mb-2 pb-1 border-b border-zinc-800/80">
+                              <span className="text-[10px] font-mono font-black text-yellow-400 uppercase tracking-widest flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-yellow-400" />
+                                {upcomingMatchedShows.length === 1 ? 'Next Upcoming Show' : 'Upcoming Shows'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => jumpToEventsTab('upcoming')}
+                                className="text-[9px] font-mono font-bold text-yellow-300/90 hover:text-yellow-200 uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors"
+                              >
+                                <span>
+                                  {upcomingMatchedShows.length}{' '}
+                                  {upcomingMatchedShows.length === 1 ? 'Confirmed' : 'Dates'}
+                                </span>
+                                <span aria-hidden="true">→</span>
+                              </button>
+                            </div>
+
+                            <div className="rounded-xl border border-yellow-500/35 bg-gradient-to-br from-yellow-950/20 via-zinc-900/90 to-zinc-950 shadow-[0_0_24px_rgba(234,179,8,0.08)] overflow-hidden">
+                              <div
+                                onClick={() => setShowEventsModal(true)}
+                                className="p-3 cursor-pointer hover:bg-zinc-900/60 transition-colors flex items-start gap-3 group"
+                              >
+                                <div className="shrink-0 min-w-[56px] text-center bg-zinc-950 border border-yellow-500/30 rounded-lg px-2 py-1.5 shadow-inner">
+                                  <div className="text-[9px] font-mono font-black uppercase text-yellow-400 leading-none">
+                                    {badgeParts.month}
+                                  </div>
+                                  <div className="text-sm font-black text-white font-mono leading-tight mt-0.5 whitespace-nowrap">
+                                    {badgeParts.day}
+                                  </div>
+                                  <div className="text-[8px] font-mono text-zinc-500">{badgeParts.year}</div>
+                                </div>
+
+                                <div className="min-w-0 flex-1 space-y-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {isHappeningNow ? (
+                                      <span className="px-1.5 py-0.5 rounded text-[8px] font-mono font-black uppercase bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse">
+                                        🔥 HAPPENING NOW
+                                      </span>
+                                    ) : isTonight ? (
+                                      <span className="px-1.5 py-0.5 rounded text-[8px] font-mono font-black uppercase bg-red-500/20 text-red-300 border border-red-500/40">
+                                        TONIGHT
+                                      </span>
+                                    ) : (
+                                      <span className="px-1.5 py-0.5 rounded text-[8px] font-mono font-black uppercase bg-yellow-500 text-black">
+                                        NEXT SHOW
+                                      </span>
+                                    )}
+
+                                    {nextShow._billingRole === 'headliner' && (
+                                      <span className="px-1.5 py-0.5 rounded text-[8px] font-mono font-black uppercase bg-yellow-500/15 text-yellow-300 border border-yellow-500/40">
+                                        ★ HEADLINER
+                                      </span>
+                                    )}
+                                    {nextShow._billingRole === 'support' && (
+                                      <span className="px-1.5 py-0.5 rounded text-[8px] font-mono font-black uppercase bg-cyan-500/15 text-cyan-300 border border-cyan-500/40">
+                                        SUPPORT
+                                      </span>
+                                    )}
+                                    {nextShow._isMultiDay && (
+                                      <span className="px-1.5 py-0.5 rounded text-[8px] font-mono font-black uppercase bg-amber-500/15 text-amber-300 border border-amber-500/40">
+                                        {nextShow._spanDays}D FEST
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <h4 className="text-xs font-black text-white uppercase tracking-tight font-mono truncate group-hover:text-yellow-300 transition-colors">
+                                    {showTitle}
+                                  </h4>
+
+                                  <div className="text-[10px] font-mono text-zinc-300 flex items-center gap-1 flex-wrap">
+                                    <MapPin className="w-3 h-3 text-amber-400 shrink-0" />
+                                    <span className="font-bold text-amber-300 truncate">{venueName}</span>
+                                    {cityLabel && (
+                                      <>
+                                        <span className="text-zinc-600">•</span>
+                                        <span className="text-zinc-400 truncate">{cityLabel}</span>
+                                      </>
+                                    )}
+                                  </div>
+
+                                  {otherActs.length > 0 && (
+                                    <p className="text-[9px] font-mono text-zinc-400 truncate">
+                                      w/ {otherActs.slice(0, 3).join(', ')}
+                                      {otherActs.length > 3 ? ` +${otherActs.length - 3}` : ''}
+                                    </p>
+                                  )}
+                                </div>
+
+                                <div className="shrink-0 flex flex-col items-end justify-between self-stretch">
+                                  <span className="px-2 py-1 rounded-md bg-yellow-500/15 group-hover:bg-yellow-500 text-yellow-300 group-hover:text-black border border-yellow-500/35 text-[9px] font-mono font-black uppercase transition-colors">
+                                    RSVP
+                                  </span>
+                                  <span className="text-[8px] font-mono text-zinc-500 mt-1">
+                                    {nextShow._formattedDate}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {remainingCount > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => jumpToEventsTab('upcoming')}
+                                  className="w-full px-3 py-2 border-t border-yellow-500/20 bg-zinc-950/70 hover:bg-zinc-900 flex items-center justify-between gap-2 text-[10px] font-mono transition-colors cursor-pointer"
+                                >
+                                  <span className="text-zinc-400 truncate">
+                                    Also playing:{' '}
+                                    <strong className="text-zinc-200">
+                                      {secondShow._formattedDate}
+                                    </strong>{' '}
+                                    {secondShow.city ? `• ${secondShow.city}` : `• ${secondShow.venue_name || secondShow.venue || 'TBA'}`}
+                                  </span>
+                                  <span className="text-yellow-400 font-black uppercase shrink-0">
+                                    +{remainingCount} more in Events →
+                                  </span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Band Lineup Section */}
                       {hasLineup && isBandProfile && (
@@ -4087,12 +4402,22 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                               EPK Analytics & Booking
                             </h3>
                             <div className="flex items-center justify-between gap-3 bg-zinc-900/30 border border-zinc-900/60 p-2.5 rounded-xl">
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[9px] font-black uppercase tracking-wider text-zinc-500 leading-none">Live Routing Status</div>
-                                <div className="text-zinc-400 text-[10px] font-mono mt-1 font-bold">
-                                  {liveRoutingStats.toursCount} {liveRoutingStats.toursCount === 1 ? 'Tour' : 'Tours'} • {liveRoutingStats.showsCount} Active {liveRoutingStats.showsCount === 1 ? 'Date' : 'Dates'}
+                              <button
+                                type="button"
+                                onClick={() => jumpToEventsTab('upcoming')}
+                                className="min-w-0 flex-1 text-left group cursor-pointer"
+                                title="View Events & Tour Schedule"
+                              >
+                                <div className="text-[9px] font-black uppercase tracking-wider text-zinc-500 group-hover:text-yellow-400 transition-colors leading-none flex items-center gap-1">
+                                  <span>Live Routing Status</span>
+                                  {upcomingMatchedCount > 0 && <span className="text-yellow-400">→</span>}
                                 </div>
-                              </div>
+                                <div className="text-zinc-300 text-[10px] font-mono mt-1 font-bold">
+                                  {upcomingMatchedCount > 0
+                                    ? `${liveRoutingStats.toursCount} ${liveRoutingStats.toursCount === 1 ? 'Tour' : 'Tours'} • ${upcomingMatchedCount} Upcoming ${upcomingMatchedCount === 1 ? 'Date' : 'Dates'}`
+                                    : '0 Tours • No Upcoming Dates'}
+                                </div>
+                              </button>
                               <button 
                                 type="button"
                                 onClick={(e) => {
@@ -4136,6 +4461,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                   tabButtons = [
                     { id: 'timeline', label: 'TIMELINE', icon: <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> },
                     { id: 'music', label: 'MUSIC', icon: <Disc className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> },
+                    { id: 'events', label: upcomingMatchedCount > 0 ? `EVENTS (${upcomingMatchedCount})` : 'EVENTS', icon: <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> },
                     { id: 'gallery', label: 'PHOTO PIT', icon: <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> },
                     { id: 'shop', label: 'MERCH', icon: <ShoppingCart className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> }
                   ];
@@ -4160,7 +4486,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                 }
 
                 return (
-                  <div className="mt-6 flex flex-nowrap overflow-x-auto hide-scrollbar items-center justify-start sm:justify-around border-b border-zinc-800 bg-zinc-950/60 p-1 sm:p-2 w-full gap-1 sm:gap-2">
+                  <div ref={tabsSectionRef} className="mt-6 flex flex-nowrap overflow-x-auto hide-scrollbar items-center justify-start sm:justify-around border-b border-zinc-800 bg-zinc-950/60 p-1 sm:p-2 w-full gap-1 sm:gap-2">
                     {tabButtons.map((tab, tIdx) => {
                       const isActive = profileActiveTab === tab.id;
                       return (
@@ -4542,6 +4868,207 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     setSelectedGalleryItem={setSelectedGalleryItem}
                     feed={feed}
                   />
+                )}
+
+                {profileActiveTab === 'events' && (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-950/70 border border-zinc-800/80 rounded-xl p-3">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setProfileEventsFilter('upcoming')}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer ${
+                            profileEventsFilter === 'upcoming'
+                              ? 'bg-yellow-500 text-black shadow-md'
+                              : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                          }`}
+                        >
+                          Upcoming ({upcomingMatchedShows.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setProfileEventsFilter('past')}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all cursor-pointer ${
+                            profileEventsFilter === 'past'
+                              ? 'bg-amber-500 text-black shadow-md'
+                              : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                          }`}
+                        >
+                          Past Shows ({pastMatchedShows.length})
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowEventsModal(true)}
+                        className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-yellow-500/30 text-yellow-400 text-[10px] font-mono font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Calendar className="w-3.5 h-3.5" /> Full Calendar & Guest Passes
+                      </button>
+                    </div>
+
+                    {(() => {
+                      const activeList = profileEventsFilter === 'upcoming' ? upcomingMatchedShows : pastMatchedShows;
+                      if (activeList.length === 0) {
+                        return (
+                          <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-8 text-center space-y-3">
+                            <Calendar className="w-8 h-8 text-zinc-600 mx-auto" />
+                            <div>
+                              <h4 className="text-zinc-300 font-mono text-xs uppercase tracking-widest font-black">
+                                {profileEventsFilter === 'upcoming'
+                                  ? 'No Upcoming Shows Scheduled'
+                                  : 'No Concluded Shows Recorded'}
+                              </h4>
+                              <p className="text-zinc-500 text-[10px] font-mono mt-1 max-w-xs mx-auto">
+                                Any community or tour show featuring {rawResolvedBandName || 'this band'} as headliner or support automatically appears here.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowEventsModal(true)}
+                              className="px-3.5 py-2 rounded-xl bg-yellow-500/15 hover:bg-yellow-500/25 border border-yellow-500/40 text-yellow-300 text-[10px] font-mono font-black uppercase tracking-wider inline-flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Calendar className="w-3.5 h-3.5" /> Open Full Archive & Calendar
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      const todayStr = getLocalTodayIso();
+
+                      return (
+                        <div className="space-y-3">
+                          {activeList.map((ev: any, idx: number) => {
+                            const badgeParts = getShowDateBadgeParts(ev._startRaw || ev.date, ev._endRaw, ev._formattedDate);
+                            const isHappeningNow = Boolean(
+                              ev._isMultiDay &&
+                              ev._startRaw &&
+                              ev._endRaw &&
+                              todayStr >= ev._startRaw.slice(0, 10) &&
+                              todayStr <= ev._endRaw.slice(0, 10)
+                            );
+                            const title =
+                              ev.festival_name ||
+                              ev.tour_name ||
+                              ev.name ||
+                              ev.show_name ||
+                              ev.title ||
+                              ev.headliner ||
+                              'Live Show';
+                            const venueName = ev.venue_name || ev.venue || 'TBA Venue';
+                            const cityLabel = ev.city ? (ev.state_province ? `${ev.city}, ${ev.state_province}` : ev.city) : '';
+                            const lineupList: string[] = Array.isArray(ev._lineup) ? ev._lineup : [];
+
+                            return (
+                              <div
+                                key={ev.id ? `band-ev-${ev.id}-${idx}` : `band-ev-${idx}`}
+                                onClick={() => setShowEventsModal(true)}
+                                className="bg-zinc-950/70 hover:bg-zinc-900/90 border border-zinc-800/90 hover:border-yellow-500/40 rounded-xl p-3.5 transition-all cursor-pointer group"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className="shrink-0 min-w-[64px] text-center bg-zinc-900 border border-zinc-800 group-hover:border-yellow-500/40 rounded-lg px-2 py-2">
+                                    <div className="text-[9px] font-mono font-black uppercase text-yellow-400 leading-none">
+                                      {badgeParts.month}
+                                    </div>
+                                    <div className="text-sm font-black text-white font-mono leading-tight mt-0.5 whitespace-nowrap">
+                                      {badgeParts.day}
+                                    </div>
+                                    <div className="text-[8px] font-mono text-zinc-500">
+                                      {badgeParts.year}
+                                    </div>
+                                  </div>
+
+                                  <div className="min-w-0 flex-1 space-y-1.5">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {ev._billingRole === 'headliner' && (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-black uppercase bg-yellow-500/15 text-yellow-300 border border-yellow-500/40">
+                                          ★ HEADLINER
+                                        </span>
+                                      )}
+                                      {ev._billingRole === 'support' && (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-black uppercase bg-cyan-500/15 text-cyan-300 border border-cyan-500/40">
+                                          SUPPORT ACT
+                                        </span>
+                                      )}
+                                      {ev._isMultiDay && (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-black uppercase bg-amber-500/15 text-amber-300 border border-amber-500/40">
+                                          {ev._spanDays}-DAY FEST
+                                        </span>
+                                      )}
+                                      {isHappeningNow && (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-black uppercase bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse">
+                                          🔥 HAPPENING NOW
+                                        </span>
+                                      )}
+                                      <span className="text-[10px] font-mono text-zinc-400">
+                                        {ev._formattedDate}
+                                      </span>
+                                    </div>
+
+                                    <h4 className="text-sm font-black text-white uppercase tracking-tight font-mono group-hover:text-yellow-300 transition-colors truncate">
+                                      {title}
+                                    </h4>
+
+                                    <div className="text-xs font-mono text-zinc-300 flex items-center gap-1.5 flex-wrap">
+                                      <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                      <span className="font-bold text-amber-300">{venueName}</span>
+                                      {cityLabel && (
+                                        <>
+                                          <span className="text-zinc-600">•</span>
+                                          <span className="text-zinc-400">{cityLabel}</span>
+                                        </>
+                                      )}
+                                    </div>
+
+                                    {lineupList.length > 0 && (
+                                      <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                        {lineupList.slice(0, 8).map((act, actIdx) => {
+                                          const isSelf = Boolean(
+                                            rawResolvedBandName &&
+                                            act.toLowerCase().trim() === rawResolvedBandName.toLowerCase().trim()
+                                          );
+                                          return (
+                                            <span
+                                              key={`${ev.id || idx}-act-${actIdx}`}
+                                              className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold ${
+                                                isSelf
+                                                  ? 'bg-yellow-500/20 text-yellow-200 border border-yellow-500/40'
+                                                  : 'bg-zinc-900 text-zinc-300 border border-zinc-800'
+                                              }`}
+                                            >
+                                              {actIdx === 0 ? `★ ${act}` : act}
+                                            </span>
+                                          );
+                                        })}
+                                        {lineupList.length > 8 && (
+                                          <span className="text-[9px] font-mono text-zinc-500">
+                                            +{lineupList.length - 8} more
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="shrink-0 flex flex-col items-end justify-between gap-2">
+                                    {(ev.ticket_price || ev.price) && (
+                                      <span className="text-[11px] font-mono font-black text-emerald-400">
+                                        {String(ev.ticket_price || ev.price).startsWith('$')
+                                          ? (ev.ticket_price || ev.price)
+                                          : `$${ev.ticket_price || ev.price}`}
+                                      </span>
+                                    )}
+                                    <span className="text-[9px] font-mono uppercase text-zinc-500 group-hover:text-yellow-400 flex items-center gap-1">
+                                      RSVP / Info <ArrowUpRight className="w-3 h-3" />
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 )}
 
                 {profileActiveTab === 'tour' && (
@@ -5346,6 +5873,7 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       onClose={() => setShowEventsModal(false)}
       promoterProfile={selectedUserProfile || targetProfile}
       userProfile={userProfile}
+      shows={allLoadedShowsForProfile.length > 0 ? allLoadedShowsForProfile : shows}
       triggerNotification={triggerNotification}
       openCheckout={openCheckout}
     />
