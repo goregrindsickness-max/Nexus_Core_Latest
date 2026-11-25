@@ -1012,95 +1012,101 @@ export const MetalArchivesImportModal: React.FC<MetalArchivesImportModalProps> =
                       >
                         <div
                           onClick={() => toggleSelectRelease(rel.id)}
-                          className="flex items-center justify-between px-3 sm:px-4 py-3 sm:py-3.5 hover:bg-zinc-900/60 transition-colors cursor-pointer gap-2 sm:gap-4"
+                          className="flex items-start gap-2.5 sm:gap-3.5 px-3 sm:px-4 py-3 sm:py-3.5 hover:bg-zinc-900/60 transition-colors cursor-pointer"
                         >
-                          <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
-                            <button
-                              type="button"
-                              onClick={(e) => toggleSelectRelease(rel.id, e)}
-                              className="text-zinc-400 shrink-0 cursor-pointer p-0.5"
-                            >
-                              {isSelected ? (
-                                <CheckSquare className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />
-                              ) : (
-                                <Square className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-600" />
-                              )}
-                            </button>
+                          <button
+                            type="button"
+                            onClick={(e) => toggleSelectRelease(rel.id, e)}
+                            className="text-zinc-400 shrink-0 cursor-pointer p-0.5 mt-4 sm:mt-5"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />
+                            ) : (
+                              <Square className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-600" />
+                            )}
+                          </button>
 
-                            <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-zinc-850 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden shadow-md">
-                              {coverSrc ? (
-                                <img
-                                  src={coverSrc}
-                                  alt={rel.title}
-                                  className="w-full h-full object-cover"
-                                  referrerPolicy="no-referrer"
-                                  onError={(e) => {
-                                    (e.target as HTMLElement).style.display = 'none';
-                                  }}
-                                />
-                              ) : (
-                                <Music2 className="w-6 h-6 text-zinc-600" />
-                              )}
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm sm:text-base font-semibold text-zinc-100 truncate">
-                                  {rel.title}
-                                </p>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs text-zinc-400 mt-1">
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-300 text-[11px] font-medium truncate max-w-[150px] sm:max-w-[220px]">
-                                  <Building className="w-2.5 h-2.5 text-zinc-400 shrink-0" />
-                                  <span className="truncate">{rel.label || 'Underground Label'}</span>
-                                </span>
-
-                                {rel.catalogId && rel.catalogId !== 'N/A' && (
-                                  <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/60 text-zinc-400 text-[11px] font-mono">
-                                    <Tag className="w-2.5 h-2.5 text-zinc-500" />
-                                    {rel.catalogId}
-                                  </span>
-                                )}
-
-                                <span className="text-zinc-600">&middot;</span>
-                                <span className="text-zinc-400 text-[11px] whitespace-nowrap">
-                                  {trackCount} {trackCount === 1 ? 'track' : 'tracks'} ({totalRuntime})
-                                </span>
-                              </div>
-                            </div>
+                          <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-zinc-850 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden shadow-md">
+                            {coverSrc ? (
+                              <img
+                                src={coverSrc}
+                                alt={rel.title}
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <Music2 className="w-6 h-6 text-zinc-600" />
+                            )}
                           </div>
 
-                          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 pl-1">
-                            <span
-                              className={`px-2 py-0.5 rounded-md text-[11px] sm:text-xs font-semibold ${
-                                rel.type === 'Full-length'
-                                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                                  : rel.type === 'EP'
-                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                  : rel.type === 'Demo'
-                                  ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                                  : rel.type === 'Live'
-                                  ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                                  : 'bg-zinc-800 text-zinc-300'
-                              }`}
-                            >
-                              {rel.type}
-                            </span>
-                            <span className="text-xs font-mono font-medium text-zinc-300 w-11 text-right">
-                              {rel.release_date || rel.releaseDate}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => toggleExpandRelease(rel.id, e)}
-                              className="p-1 sm:p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
-                              title={isExpanded ? 'Hide Tracklist' : 'View Tracklist'}
-                            >
-                              {isExpanded ? (
-                                <ChevronUp className="w-4 h-4" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4" />
+                          <div className="min-w-0 flex-1 space-y-1.5">
+                            {/* Top Row: Full Album Title + Expand Tracklist Button */}
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-sm sm:text-base font-bold text-zinc-100 leading-snug break-words line-clamp-2">
+                                {rel.title}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={(e) => toggleExpandRelease(rel.id, e)}
+                                className="p-1 sm:p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer shrink-0 -mt-0.5"
+                                title={isExpanded ? 'Hide Tracklist' : 'View Tracklist'}
+                              >
+                                {isExpanded ? (
+                                  <ChevronUp className="w-4 h-4" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Middle Row: Type Pill + Release Year + Track Count */}
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs">
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-semibold shrink-0 ${
+                                  rel.type === 'Full-length'
+                                    ? 'bg-red-500/15 text-red-400 border border-red-500/30'
+                                    : rel.type === 'EP'
+                                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                                    : rel.type === 'Split'
+                                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                    : rel.type === 'Demo'
+                                    ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                                    : rel.type === 'Live'
+                                    ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                                    : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
+                                }`}
+                              >
+                                {rel.type || 'Full-length'}
+                              </span>
+
+                              {(rel.release_date || rel.releaseDate) && (
+                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[11px] font-mono font-semibold text-zinc-200 shrink-0">
+                                  {rel.release_date || rel.releaseDate}
+                                </span>
                               )}
-                            </button>
+
+                              <span className="text-zinc-400 text-[11px] font-mono whitespace-nowrap">
+                                {trackCount} {trackCount === 1 ? 'track' : 'tracks'} ({totalRuntime})
+                              </span>
+                            </div>
+
+                            {/* Bottom Row: Record Label + Optional Catalog ID */}
+                            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-400">
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-zinc-900/90 border border-zinc-800/80 text-zinc-300 font-medium max-w-full">
+                                <Building className="w-3 h-3 text-zinc-400 shrink-0" />
+                                <span className="truncate">{rel.label || 'Underground Label'}</span>
+                              </span>
+
+                              {rel.catalogId && rel.catalogId !== 'N/A' && (
+                                <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900/60 text-zinc-400 text-[10px] font-mono">
+                                  <Tag className="w-2.5 h-2.5 text-zinc-500" />
+                                  {rel.catalogId}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 

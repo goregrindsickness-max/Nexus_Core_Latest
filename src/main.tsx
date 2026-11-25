@@ -20,6 +20,32 @@ try {
   communityBandManager.fetchFromSupabase().catch(() => {});
 } catch (e) {}
 
+// Immediate Service Worker update activation for iOS Safari & Home Screen PWAs
+try {
+  if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    const isNativeCapacitor = Boolean(
+      ((window as any).Capacitor &&
+        typeof (window as any).Capacitor.isNativePlatform === 'function' &&
+        (window as any).Capacitor.isNativePlatform()) ||
+      window.location.protocol === 'capacitor:' ||
+      window.location.protocol === 'ionic:' ||
+      window.location.protocol === 'file:' ||
+      (window.location.origin === 'https://localhost' && !window.location.port)
+    );
+
+    if (!isNativeCapacitor) {
+      const hadInitialController = Boolean(navigator.serviceWorker.controller);
+      let isRefreshing = false;
+
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadInitialController || isRefreshing) return;
+        isRefreshing = true;
+        window.location.reload();
+      });
+    }
+  }
+} catch (_) {}
+
 
 try {
   if (typeof window !== 'undefined' && window.performance && typeof window.performance.measure === 'function') {

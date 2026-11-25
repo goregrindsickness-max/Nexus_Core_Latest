@@ -18,6 +18,13 @@ import {
   Megaphone
 } from 'lucide-react';
 import { pushManager, PushPermissionStatus, isIframeEnvironment } from '../../../lib/pushNotifications';
+import { getSupabase } from '../../../supabase';
+import { extractUUID } from '../../../utils/socialFeedUtils';
+import {
+  filterAndDeduplicateNotifications,
+  isNotificationForCurrentUser,
+  normalizeNotificationItem,
+} from '../utils/notificationUtils';
 
 interface RightNotificationsDrawerProps {
   rightDrawerOpen: boolean;
@@ -60,8 +67,11 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
 
     const handleInAppNotice = (e: any) => {
       const notice = e.detail;
-      if (notice) {
-        setNotifications((prev) => [notice, ...prev]);
+      if (notice && isNotificationForCurrentUser(notice, userProfile)) {
+        const norm = normalizeNotificationItem(notice);
+        if (norm) {
+          setNotifications((prev) => [norm, ...prev.filter((item) => item.id !== norm.id)]);
+        }
       }
     };
 
@@ -116,26 +126,27 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
 
   if (!rightDrawerOpen) return null;
 
-  const filteredNotifs = notifications.filter((n) => {
-    // Exclude any self-notifications where the current user was the actor
-    const myId = userProfile?.id;
-    const myEmail = userProfile?.email;
-    if (myId && (n.actor_id === myId || n.data?.actor_id === myId)) return false;
-    if (myEmail && (n.actor_email === myEmail || n.data?.actor_email === myEmail)) return false;
+  const userScopedNotifs = filterAndDeduplicateNotifications(notifications, userProfile);
+  const actualUnreadCount = userScopedNotifs.filter((n) => !n.read && !n.is_read).length;
+  const displayUnreadCount = actualUnreadCount;
 
-    // For reaction notifications, ensure it is strictly intended for this user
-    const isReaction = n.category === 'REACTION' || n.type === 'post_reaction' || (n.title && String(n.title).toUpperCase().includes('REACTION'));
-    if (isReaction) {
-      const isForMe = Boolean(
-        (myId && n.user_id === myId) ||
-        (myEmail && (n.user_id === myEmail || n.data?.user_id === myEmail))
+  const filteredNotifs = userScopedNotifs.filter((n) => {
+    const typeLower = String(n.type || '').toLowerCase();
+    const catUpper = String(n.category || '').toUpperCase();
+    if (notifFilter === 'unread') return !n.read && !n.is_read;
+    if (notifFilter === 'social') {
+      return (
+        ['like', 'comment', 'mention', 'share', 'follow', 'post_reaction', 'reaction'].includes(typeLower) ||
+        catUpper === 'REACTION' ||
+        catUpper === 'SOCIAL'
       );
-      if (!isForMe) return false;
     }
-
-    if (notifFilter === 'unread') return !n.read;
-    if (notifFilter === 'social') return ['like', 'comment', 'mention', 'share', 'follow', 'post_reaction'].includes(n.type) || n.category === 'REACTION';
-    if (notifFilter === 'system') return ['system', 'alert', 'security', 'gig', 'shop'].includes(n.type);
+    if (notifFilter === 'system') {
+      return (
+        ['system', 'alert', 'security', 'gig', 'shop'].includes(typeLower) ||
+        catUpper === 'SYSTEM'
+      );
+    }
     return true;
   });
 
@@ -182,9 +193,9 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
             <h2 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
               <Bell className="w-4 h-4 text-rose-500 animate-pulse" /> Alerts & Notices
             </h2>
-            {unreadNotifsCount > 0 && (
+            {displayUnreadCount > 0 && (
               <span className="text-[10px] text-rose-400 font-bold uppercase mt-0.5 tracking-wider font-mono">
-                {unreadNotifsCount} UNREAD NOTIFICATIONS
+                {displayUnreadCount} UNREAD {displayUnreadCount === 1 ? 'NOTIFICATION' : 'NOTIFICATIONS'}
               </span>
             )}
           </div>
@@ -265,10 +276,21 @@ export const RightNotificationsDrawer: React.FC<RightNotificationsDrawerProps> =
               <div
                 key={n.id ? `notif-${n.id}-${nIdx}` : `notif-${nIdx}`}
                 onClick={() => {
-                  if (!n.read) {
+                  if (!n.read || !n.is_read) {
                     setNotifications((prev) =>
-                      prev.map((item) => (item.id === n.id ? { ...item, read: true } : item))
+                      prev.map((item) =>
+                        item.id === n.id ? { ...item, read: true, is_read: true } : item
+                      )
                     );
+                    const notifUUID = n.id && extractUUID(String(n.id));
+                    const supabaseClient = getSupabase();
+                    if (supabaseClient && notifUUID) {
+                      supabaseClient
+                        .from('nexus_notifications')
+                        .update({ is_read: true })
+                        .eq('id', notifUUID)
+                        .then(() => {});
+                    }
                   }
                   if (n.targetTab) {
                     setActiveTab(n.targetTab);

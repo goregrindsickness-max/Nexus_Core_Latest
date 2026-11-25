@@ -293,8 +293,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
         logo_url: rawResolvedBandLogo || bData?.logo_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400',
         cover_url: bData?.cover_url || bData?.banner_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=1200',
         banner_url: bData?.cover_url || bData?.banner_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=1200',
-        spotify_url: publicDetails.spotify_url || bData?.spotify_url || '',
-        bandcamp_url: bData?.bandcamp_url || '',
+        spotify_url: publicDetails.spotify_url || bData?.spotify_url || (bData as any)?.spotify || '',
+        spotify: publicDetails.spotify_url || (bData as any)?.spotify || bData?.spotify_url || '',
+        bandcamp_url: bData?.bandcamp_url || (bData as any)?.bandcamp || '',
+        bandcamp: (bData as any)?.bandcamp || bData?.bandcamp_url || '',
         metal_archives_url: publicDetails.metal_archives_url || bData?.metal_archives_url || '',
         youtube_url: publicDetails.youtube_url || bData?.youtube_url || '',
         lineup: initialLineup,
@@ -706,7 +708,12 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
               banner_url: cleanRecCover,
               lineup: cleanRecLineup,
               name: record.band_name || record.name || '',
-              band_name: record.band_name || record.name || ''
+              band_name: record.band_name || record.name || '',
+              spotify: record.spotify || record.spotify_url || '',
+              spotify_url: record.spotify_url || record.spotify || '',
+              bandcamp: record.bandcamp || record.bandcamp_url || '',
+              bandcamp_url: record.bandcamp_url || record.bandcamp || '',
+              metal_archives_url: record.metal_archives_url || record.metal_archives || ''
             };
             setFetchedBandData(normalizedRecord);
             try {
@@ -1057,6 +1064,26 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       resolvedLineupList = GORGASM_OFFICIAL_LINEUP;
     }
 
+    const resolvedSpotify =
+      fetchedBandData?.spotify ||
+      fetchedBandData?.spotify_url ||
+      directMatch?.spotify_url ||
+      (directMatch as any)?.spotify ||
+      (isOwnBand ? (localSavedBand?.spotify || localSavedBand?.spotify_url) : '') ||
+      '';
+    const resolvedBandcamp =
+      fetchedBandData?.bandcamp ||
+      fetchedBandData?.bandcamp_url ||
+      directMatch?.bandcamp_url ||
+      (directMatch as any)?.bandcamp ||
+      (isOwnBand ? (localSavedBand?.bandcamp || localSavedBand?.bandcamp_url) : '') ||
+      '';
+    const resolvedMetalArchives =
+      fetchedBandData?.metal_archives_url ||
+      directMatch?.metal_archives_url ||
+      (isOwnBand ? localSavedBand?.metal_archives_url : '') ||
+      '';
+
     return {
       ...(isOwnBand ? (localSavedBand || {}) : {}),
       ...(directMatch || {}),
@@ -1066,6 +1093,11 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       cover_url: rawCover,
       banner_url: rawCover,
       bio: fetchedBandData?.bio || (isOwnBand ? localSavedBand?.bio : null) || directMatch?.bio || '',
+      spotify: resolvedSpotify,
+      spotify_url: resolvedSpotify,
+      bandcamp: resolvedBandcamp,
+      bandcamp_url: resolvedBandcamp,
+      metal_archives_url: resolvedMetalArchives,
       lineup: resolvedLineupList,
       discography: fetchedBandData?.discography?.length
         ? fetchedBandData.discography
@@ -1315,6 +1347,10 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
       top_song_title: bData.top_song_title || fetchedProfileData?.top_song_title || baseTarget?.top_song_title,
       favoriteSong: bData.favoriteSong || fetchedProfileData?.favoriteSong || baseTarget?.favoriteSong,
       metal_archives_url: bData.metal_archives_url || baseTarget.metal_archives_url,
+      spotify: bData.spotify || bData.spotify_url || baseTarget.spotify || baseTarget.spotify_url,
+      spotify_url: bData.spotify_url || bData.spotify || baseTarget.spotify_url || baseTarget.spotify,
+      bandcamp: bData.bandcamp || bData.bandcamp_url || baseTarget.bandcamp || baseTarget.bandcamp_url,
+      bandcamp_url: bData.bandcamp_url || bData.bandcamp || baseTarget.bandcamp_url || baseTarget.bandcamp,
       booking_email: bData.booking_email || baseTarget.booking_email,
       booking_phone: bData.booking_phone || baseTarget.booking_phone,
     } : {
@@ -2014,22 +2050,102 @@ export const ProfileCard: React.FC<PublicProfileModalProps> = ({
                     );
                   })()}
 
-                  {/* Metal Archives Link right under genres */}
+                  {/* External Artist & Archive Links (Spotify, Bandcamp, Metal Archives) */}
                   {(() => {
-                    const maUrl = effTarget?.metal_archives_url || selectedUserProfile?.metal_archives_url || (selectedUserProfile as any)?.metal_archives;
-                    if (!isBandTarget || !maUrl) return null;
+                    if (!isBandTarget) return null;
+
+                    const toValidExternalHref = (raw: any): string | null => {
+                      if (typeof raw !== 'string') return null;
+                      const trimmed = raw.trim();
+                      if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return null;
+                      return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+                    };
+
+                    const rawStream =
+                      effTarget?.streaming_url ||
+                      bData?.streaming_url ||
+                      selectedUserProfile?.streaming_url ||
+                      '';
+
+                    const spotifyHref = toValidExternalHref(
+                      effTarget?.spotify_url ||
+                      effTarget?.spotify ||
+                      bData?.spotify_url ||
+                      bData?.spotify ||
+                      communityArchiveMatch?.spotify_url ||
+                      (communityArchiveMatch as any)?.spotify ||
+                      selectedUserProfile?.spotify_url ||
+                      (selectedUserProfile as any)?.spotify ||
+                      (typeof rawStream === 'string' && rawStream.toLowerCase().includes('spotify.com') ? rawStream : '')
+                    );
+
+                    const bandcampHref = toValidExternalHref(
+                      effTarget?.bandcamp_url ||
+                      effTarget?.bandcamp ||
+                      bData?.bandcamp_url ||
+                      bData?.bandcamp ||
+                      communityArchiveMatch?.bandcamp_url ||
+                      (communityArchiveMatch as any)?.bandcamp ||
+                      selectedUserProfile?.bandcamp_url ||
+                      (selectedUserProfile as any)?.bandcamp ||
+                      (typeof rawStream === 'string' && rawStream.toLowerCase().includes('bandcamp.com') ? rawStream : '')
+                    );
+
+                    const maHref = toValidExternalHref(
+                      effTarget?.metal_archives_url ||
+                      bData?.metal_archives_url ||
+                      communityArchiveMatch?.metal_archives_url ||
+                      selectedUserProfile?.metal_archives_url ||
+                      (selectedUserProfile as any)?.metal_archives
+                    );
+
+                    if (!spotifyHref && !bandcampHref && !maHref) return null;
+
                     return (
-                      <div className="mt-2 mb-1">
-                        <a
-                          href={maUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-600/40 hover:border-rose-500 text-rose-300 hover:text-white rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all shadow-sm group cursor-pointer"
-                        >
-                          <Disc className="w-3.5 h-3.5 text-rose-400 group-hover:rotate-45 transition-transform" />
-                          <span>Metal Archives Encyclopaedia</span>
-                          <ArrowUpRight className="w-3 h-3 text-rose-400" />
-                        </a>
+                      <div className="mt-2.5 mb-1 flex flex-wrap items-center gap-2">
+                        {spotifyHref && (
+                          <a
+                            href={spotifyHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-white rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all shadow-sm group cursor-pointer"
+                            title="Listen on Spotify"
+                          >
+                            <svg className="w-3.5 h-3.5 text-[#1DB954] shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                              <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
+                            </svg>
+                            <span>Spotify</span>
+                            <ArrowUpRight className="w-3 h-3 text-emerald-400" />
+                          </a>
+                        )}
+                        {bandcampHref && (
+                          <a
+                            href={bandcampHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 hover:text-white rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all shadow-sm group cursor-pointer"
+                            title="Support on Bandcamp"
+                          >
+                            <svg className="w-3.5 h-3.5 text-[#1DA0C3] shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                              <path d="M0 18.75l7.437-13.5H24l-7.438 13.5H0z" />
+                            </svg>
+                            <span>Bandcamp</span>
+                            <ArrowUpRight className="w-3 h-3 text-cyan-400" />
+                          </a>
+                        )}
+                        {maHref && (
+                          <a
+                            href={maHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-600/40 hover:border-rose-500 text-rose-300 hover:text-white rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all shadow-sm group cursor-pointer"
+                            title="View on Encyclopaedia Metallum (Metal Archives)"
+                          >
+                            <Disc className="w-3.5 h-3.5 text-rose-400 group-hover:rotate-45 transition-transform shrink-0" />
+                            <span>Metal Archives</span>
+                            <ArrowUpRight className="w-3 h-3 text-rose-400" />
+                          </a>
+                        )}
                       </div>
                     );
                   })()}

@@ -32,7 +32,12 @@ import {
   AlertCircle,
   Database,
   RefreshCw,
-  Camera
+  Camera,
+  ClipboardPaste,
+  Wand2,
+  Filter,
+  ArrowUpDown,
+  Eye
 } from 'lucide-react';
 import {
   communityBandManager,
@@ -43,6 +48,7 @@ import {
   saveBandDiscographyToCache,
   loadBandDiscographyFromCache,
   clearBandDiscographyFromCache,
+  isDiscographyWiped,
   deduplicateDiscography,
   deduplicateLineup,
   markReleaseDeletedInStorage,
@@ -90,6 +96,149 @@ const getReleaseCoverUrl = (r: any, bandName?: string): string => {
 import { resolvePublicBandData, enrichBandMetadataAsync } from '../../../services/bandEnrichmentService';
 import { getSupabase } from '../../../services/clientService';
 import { BandActivityStatus, resolveBandStatus, getBandStatusLabel, getBandStatusBadgeClass } from '../../../utils/bandProfileUtils';
+
+const INSTRUMENT_ROLE_PRESETS = [
+  'Vocals',
+  'Guitars',
+  'Lead Guitar',
+  'Rhythm Guitar',
+  'Bass',
+  'Drums',
+  'Guitars, Vocals',
+  'Bass, Vocals',
+];
+
+const ACTIVITY_STATUS_OPTIONS: { value: BandActivityStatus; label: string; activeClass: string }[] = [
+  { value: 'active', label: 'Active', activeClass: 'bg-emerald-500 text-black border-emerald-400 shadow-sm' },
+  { value: 'on-hold', label: 'On Hold', activeClass: 'bg-amber-500 text-black border-amber-400 shadow-sm' },
+  { value: 'split-up', label: 'Split-Up', activeClass: 'bg-rose-500 text-white border-rose-400 shadow-sm' },
+  { value: 'unknown', label: 'Unknown', activeClass: 'bg-zinc-300 text-black border-zinc-200 shadow-sm' },
+];
+
+const RELEASE_TYPE_OPTIONS: { value: 'album' | 'ep' | 'single' | 'demo'; label: string }[] = [
+  { value: 'album', label: 'Full Album' },
+  { value: 'ep', label: 'EP' },
+  { value: 'single', label: 'Single' },
+  { value: 'demo', label: 'Demo' },
+];
+
+function parseBulkLineupText(rawText: string): LineupMember[] {
+  if (!rawText || !rawText.trim()) return [];
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((l) => l.replace(/^[*•\-–—]+\s*/, '').trim())
+    .filter((l) => l.length >= 2);
+
+  const parsed: LineupMember[] = [];
+  for (const line of lines) {
+    let working = line;
+    let years = 'Present';
+    let status: 'active' | 'past' | 'touring' = 'active';
+
+    // Extract parenthesized years e.g. (1991-present) or (2001-2007)
+    const yearsMatch = working.match(/\(([^)]*\d{4}[^)]*)\)/);
+    if (yearsMatch) {
+      years = yearsMatch[1].trim();
+      working = working.replace(yearsMatch[0], '').trim();
+      const lowerY = years.toLowerCase();
+      if (!lowerY.includes('present') && !lowerY.includes('now') && /\d{4}\s*[-–—]\s*\d{4}/.test(lowerY)) {
+        status = 'past';
+      }
+    }
+
+    if (/\b(past|former|ex-)\b/i.test(working)) {
+      status = 'past';
+      working = working.replace(/\b(past|former)\b/gi, '').trim();
+    } else if (/\b(live|touring|session)\b/i.test(working)) {
+      status = 'touring';
+    }
+
+    let memberName = '';
+    let role = 'Musician';
+
+    if (working.includes('\t')) {
+      const parts = working.split('\t').map((s) => s.trim()).filter(Boolean);
+      memberName = parts[0] || '';
+      role = parts.slice(1).join(', ') || 'Musician';
+    } else if (/\s+[-–—:]\s+/.test(working)) {
+      const parts = working.split(/\s+[-–—:]\s+/).map((s) => s.trim()).filter(Boolean);
+      memberName = parts[0] || '';
+      role = parts.slice(1).join(' - ') || 'Musician';
+    } else if (working.includes(',')) {
+      const parts = working.split(',').map((s) => s.trim()).filter(Boolean);
+      memberName = parts[0] || '';
+      role = parts.slice(1).join(', ') || 'Musician';
+    } else {
+      memberName = working.trim();
+    }
+
+    if (!memberName) continue;
+    parsed.push({
+      id: `mem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-${parsed.length}`,
+      name: memberName,
+      role: role.replace(/^[-–—,\s]+|[-–—,\s]+$/g, '') || 'Musician',
+      status,
+      years,
+    });
+  }
+  return parsed;
+}
+
+function parseBulkTracklistText(rawText: string): DiscographyTrack[] {
+  if (!rawText || !rawText.trim()) return [];
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  const tracks: DiscographyTrack[] = [];
+  for (const rawLine of lines) {
+    // Skip pure "Total length" or "Side A / Side B" header lines
+    if (/^(total\s+length|total\s+playing\s+time|side\s+[a-d1-4]|disc\s+\d+)$/i.test(rawLine)) {
+      continue;
+    }
+    if (/^\d{1,3}:\d{2}$/.test(rawLine) && tracks.length > 0) {
+      // Standalone duration line right after a track title (common in Metal-Archives copy-paste)
+      tracks[tracks.length - 1].duration = rawLine;
+      continue;
+    }
+
+    let line = rawLine.replace(/^\d{1,3}\s*[.):\-–—]\s*/, '').trim();
+    if (!line) continue;
+
+    let duration = '3:30';
+    // Match trailing duration like "04:15", "(4:15)", "[04:15]", "- 4:15"
+    const durMatch = line.match(/(?:[\s\-–—([|]+)?(\d{1,2}:\d{2})(?:[\])\s]*)?$/);
+    if (durMatch) {
+      duration = durMatch[1];
+      line = line.slice(0, durMatch.index).replace(/[\s\-–—([|]+$/, '').trim();
+    }
+
+    if (!line || /^(show\s+lyrics|instrumental)$/i.test(line)) continue;
+    line = line.replace(/\s*\(show\s+lyrics\)\s*/gi, '').trim();
+
+    tracks.push({
+      number: tracks.length + 1,
+      title: line,
+      duration,
+    });
+  }
+  return tracks;
+}
+
+function formatTotalTrackRuntime(tracks: DiscographyTrack[]): string {
+  if (!Array.isArray(tracks) || tracks.length === 0) return '0:00';
+  let totalSec = 0;
+  for (const t of tracks) {
+    const parts = String(t.duration || '').trim().split(':').map(Number);
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      totalSec += parts[0] * 60 + parts[1];
+    }
+  }
+  const mins = Math.floor(totalSec / 60);
+  const secs = String(totalSec % 60).padStart(2, '0');
+  return `${mins}:${secs}`;
+}
 
 interface CommunityBandCuratorModalProps {
   isOpen: boolean;
@@ -191,6 +340,18 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
   const [newTrackDuration, setNewTrackDuration] = useState('');
   const [newTrackLyrics, setNewTrackLyrics] = useState('');
   const [showNewTrackLyricsInput, setShowNewTrackLyricsInput] = useState(false);
+
+  // Directory Filter & Sort State
+  const [directoryFilter, setDirectoryFilter] = useState<'all' | 'active' | 'split-up' | 'needs-releases' | 'needs-lineup' | 'has-streaming'>('all');
+  const [directorySort, setDirectorySort] = useState<'az' | 'most-releases' | 'completeness'>('az');
+
+  // Editor Quick-Paste & Custom Tag State
+  const [customMicroGenreInput, setCustomMicroGenreInput] = useState('');
+  const [showQuickPasteLineup, setShowQuickPasteLineup] = useState(false);
+  const [quickPasteLineupText, setQuickPasteLineupText] = useState('');
+  const [showQuickPasteTracklist, setShowQuickPasteTracklist] = useState(false);
+  const [quickPasteTracklistText, setQuickPasteTracklistText] = useState('');
+  const [confirmWipeDisco, setConfirmWipeDisco] = useState(false);
 
   // Upload States
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -527,8 +688,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     setAvatarUrl(resolvedAvatar);
     const resolvedCover = resolveCanonicalBandCover(band);
     setCoverUrl(resolvedCover);
-    setSpotifyUrl(band.spotify_url || publicDetails.spotify_url || '');
-    setBandcampUrl(band.bandcamp_url || '');
+    setSpotifyUrl(band.spotify_url || band.spotify || publicDetails.spotify_url || '');
+    setBandcampUrl(band.bandcamp_url || band.bandcamp || '');
     setMetalArchivesUrl(band.metal_archives_url || publicDetails.metal_archives_url || '');
     setYoutubeUrl(band.youtube_url || band.featured_youtube_url || publicDetails.youtube_url || '');
     setCuratorHandle(band.curated_by || (userProfile?.console_handle || userProfile?.handle || '@community_archivist'));
@@ -588,10 +749,16 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
       setLineup(cleanLineup);
     }
 
-    let initialAlbums = (band.discography && band.discography.length > 0) ? band.discography : [];
-    const cached = loadBandDiscographyFromCache(band.id, band.name);
-    const enriched = resolvePublicBandData(band.name || (band as any).band_name || '');
-    const combined = deduplicateDiscography([...initialAlbums, ...(cached || []), ...(enriched.discography || [])]);
+    const bandWiped = isDiscographyWiped(band.id, undefined, band.name || (band as any).band_name);
+    let initialAlbums = (!bandWiped && band.discography && band.discography.length > 0) ? band.discography : [];
+    const cached = bandWiped ? [] : loadBandDiscographyFromCache(band.id, band.name);
+    const enriched = bandWiped ? { discography: [] } : resolvePublicBandData(band.name || (band as any).band_name || '');
+    const combined = bandWiped
+      ? []
+      : deduplicateDiscography(
+          [...initialAlbums, ...(cached || []), ...(initialAlbums.length === 0 && (!cached || cached.length === 0) ? (enriched.discography || []) : [])],
+          band.name
+        );
     if (combined.length > 0) {
       initialAlbums = combined;
     }
@@ -659,8 +826,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
             if (liveLogo) setAvatarUrl(liveLogo);
             const liveCover = resolveCanonicalBandCover(liveBand);
             if (liveCover) setCoverUrl(liveCover);
-            if (liveBand.spotify) setSpotifyUrl(liveBand.spotify);
-            if (liveBand.bandcamp) setBandcampUrl(liveBand.bandcamp);
+            if (liveBand.spotify || liveBand.spotify_url) setSpotifyUrl(liveBand.spotify || liveBand.spotify_url);
+            if (liveBand.bandcamp || liveBand.bandcamp_url) setBandcampUrl(liveBand.bandcamp || liveBand.bandcamp_url);
             if (liveBand.metal_archives_url) setMetalArchivesUrl(liveBand.metal_archives_url);
             if (liveBand.featured_youtube_url) setYoutubeUrl(liveBand.featured_youtube_url);
 
@@ -680,7 +847,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
             }
           }
 
-          if (liveReleases && Array.isArray(liveReleases) && liveReleases.length > 0) {
+          const currentlyWiped = isDiscographyWiped(band.id, validUUID || undefined, bandName);
+          if (!currentlyWiped && liveReleases && Array.isArray(liveReleases) && liveReleases.length > 0) {
             const mappedReleases: DiscographyRelease[] = liveReleases.map((r: any) => {
               const cover = getReleaseCoverUrl(r);
               return {
@@ -700,7 +868,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                 tracks: Array.isArray(r.tracks) ? r.tracks : []
               };
             });
-            const mergedReleases = deduplicateDiscography([...initialAlbums, ...mappedReleases], bandName);
+            const latestCached = loadBandDiscographyFromCache(band.id, band.name);
+            const mergedReleases = deduplicateDiscography([...initialAlbums, ...(latestCached || []), ...mappedReleases], bandName);
             setAlbums(mergedReleases.sort((a: any, b: any) => parseInt(b.year || '0') - parseInt(a.year || '0')));
             if (band.id) saveBandDiscographyToCache(band.id, band.name, mergedReleases);
             if (liveBand?.id) saveBandDiscographyToCache(liveBand.id, liveBand.band_name, mergedReleases);
@@ -955,6 +1124,59 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
     setReleaseTracks(filtered);
   };
 
+  const handleMoveTrack = (tIdx: number, direction: -1 | 1) => {
+    const targetIdx = tIdx + direction;
+    if (targetIdx < 0 || targetIdx >= releaseTracks.length) return;
+    const copy = [...releaseTracks];
+    const [moved] = copy.splice(tIdx, 1);
+    copy.splice(targetIdx, 0, moved);
+    setReleaseTracks(copy.map((t, idx) => ({ ...t, number: idx + 1 })));
+  };
+
+  const handleMoveLineupMember = (mIdx: number, direction: -1 | 1) => {
+    const targetIdx = mIdx + direction;
+    if (targetIdx < 0 || targetIdx >= lineup.length) return;
+    lineupDirtyRef.current = true;
+    const copy = [...lineup];
+    const [moved] = copy.splice(mIdx, 1);
+    copy.splice(targetIdx, 0, moved);
+    setLineup(copy);
+  };
+
+  const handleBulkParseLineup = () => {
+    const parsed = parseBulkLineupText(quickPasteLineupText);
+    if (parsed.length === 0) {
+      triggerNotification?.('⚠️ Could not detect members. Format each line like: "John Gallagher - Guitars, Vocals (1991-present)"');
+      return;
+    }
+    lineupDirtyRef.current = true;
+    setLineup((prev) => deduplicateLineup([...prev, ...parsed]));
+    setQuickPasteLineupText('');
+    setShowQuickPasteLineup(false);
+    triggerNotification?.(`✅ Added ${parsed.length} members to lineup!`);
+  };
+
+  const handleBulkParseTracklist = () => {
+    const parsed = parseBulkTracklistText(quickPasteTracklistText);
+    if (parsed.length === 0) {
+      triggerNotification?.('⚠️ Could not parse tracks. Paste one song per line (e.g. "1. Grotesque Impalement 05:10").');
+      return;
+    }
+    setReleaseTracks(parsed);
+    setQuickPasteTracklistText('');
+    setShowQuickPasteTracklist(false);
+    triggerNotification?.(`✅ Parsed ${parsed.length} tracks (${formatTotalTrackRuntime(parsed)} total)!`);
+  };
+
+  const handleAddCustomMicroGenre = () => {
+    const trimmed = customMicroGenreInput.trim();
+    if (!trimmed) return;
+    if (!microGenres.some((g) => g.toLowerCase() === trimmed.toLowerCase())) {
+      setMicroGenres((prev) => [...prev, trimmed]);
+    }
+    setCustomMicroGenreInput('');
+  };
+
   // Full Save to Supabase and Local Storage
   const handleSave = async () => {
     if (isSaving || isSavingRef.current || !name.trim()) return;
@@ -1167,12 +1389,73 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
 
   if (!isOpen) return null;
 
+  const getBandStats = (band: CommunityBandRecord) => {
+    const cached = loadBandDiscographyFromCache(band.id, band.name) || [];
+    const direct = band.discography || [];
+    const releases = deduplicateDiscography([...direct, ...cached], band.name);
+    const members = parseBandLineup(band.lineup);
+    const isGorg = isGorgasmBand(band.id || band.name || (band as any).band_name, (band as any).custom_slug);
+    const logo = resolveCanonicalBandLogo(band) || (isGorg ? GORGASM_OFFICIAL_LOGO : '');
+    const cover = resolveCanonicalBandCover(band);
+    const hasBio = Boolean(band.bio && band.bio !== 'Not written yet.' && !band.bio.startsWith('Community-curated archive'));
+    const hasSpotify = Boolean(band.spotify_url || band.spotify);
+    const hasBandcamp = Boolean(band.bandcamp_url || band.bandcamp);
+    const hasMA = Boolean(band.metal_archives_url);
+    const hasYT = Boolean(band.youtube_url || band.featured_youtube_url);
+
+    let score = 0;
+    if (logo) score += 25;
+    if (hasBio) score += 25;
+    if (members.length > 0) score += 25;
+    if (releases.length > 0) score += 25;
+
+    return {
+      releasesCount: releases.length,
+      membersCount: members.length,
+      logo,
+      cover,
+      hasBio,
+      hasSpotify,
+      hasBandcamp,
+      hasMA,
+      hasYT,
+      completeness: score,
+      status: resolveBandStatus(band),
+    };
+  };
+
   const filteredBands = bandsList
-    .filter((b) =>
-      (b.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (b.genre || '').toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true }));
+    .filter((b) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesQuery =
+        !q ||
+        (b.name || '').toLowerCase().includes(q) ||
+        (b.genre || '').toLowerCase().includes(q) ||
+        (b.city || '').toLowerCase().includes(q) ||
+        (b.country || '').toLowerCase().includes(q) ||
+        (b.record_label || '').toLowerCase().includes(q) ||
+        (Array.isArray(b.micro_genres) && b.micro_genres.some((g) => g.toLowerCase().includes(q)));
+
+      if (!matchesQuery) return false;
+
+      const stats = getBandStats(b);
+      if (directoryFilter === 'active') return stats.status === 'active';
+      if (directoryFilter === 'split-up') return stats.status === 'split-up';
+      if (directoryFilter === 'needs-releases') return stats.releasesCount === 0;
+      if (directoryFilter === 'needs-lineup') return stats.membersCount === 0;
+      if (directoryFilter === 'has-streaming') return stats.hasSpotify || stats.hasBandcamp;
+      return true;
+    })
+    .sort((a, b) => {
+      if (directorySort === 'most-releases') {
+        const diff = getBandStats(b).releasesCount - getBandStats(a).releasesCount;
+        if (diff !== 0) return diff;
+      } else if (directorySort === 'completeness') {
+        const diff = getBandStats(b).completeness - getBandStats(a).completeness;
+        if (diff !== 0) return diff;
+      }
+      return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true });
+    });
 
   return (
     <div className="fixed inset-0 z-[1000005] bg-black/90 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 md:p-6 pb-0 sm:pb-6 overflow-y-auto animate-in fade-in duration-200">
@@ -1327,139 +1610,279 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
               </div>
             </div>
 
-            {/* Search */}
-            <div className="relative">
-              <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search by band name, genre, location..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-sm font-mono text-white placeholder-zinc-500 outline-none focus:border-amber-500/60 shadow-inner"
-              />
+            {/* Search + Instant Filter Pills & Sort Controls */}
+            <div className="space-y-2.5">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search by band name, subgenre, city, country, label..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-10 pr-8 py-2.5 text-sm font-mono text-white placeholder-zinc-500 outline-none focus:border-amber-500/60 shadow-inner"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Sort Selector */}
+                <div className="flex items-center gap-1 bg-zinc-900/90 border border-zinc-800 rounded-xl p-1 shrink-0">
+                  <ArrowUpDown className="w-3.5 h-3.5 text-amber-400 ml-2 mr-1" />
+                  {(
+                    [
+                      { id: 'az', label: 'A–Z' },
+                      { id: 'most-releases', label: 'Most Releases' },
+                      { id: 'completeness', label: 'Completeness' },
+                    ] as const
+                  ).map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setDirectorySort(s.id)}
+                      className={`px-2.5 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase transition cursor-pointer ${
+                        directorySort === s.id
+                          ? 'bg-amber-500 text-black shadow-sm'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filter Chips */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                <span className="text-[10px] font-mono text-zinc-500 uppercase flex items-center gap-1 shrink-0 mr-1">
+                  <Filter className="w-3 h-3 text-amber-400" />
+                  Filter:
+                </span>
+                {(
+                  [
+                    { id: 'all', label: `All (${bandsList.length})` },
+                    { id: 'active', label: 'Active Bands' },
+                    { id: 'split-up', label: 'Split-Up' },
+                    { id: 'has-streaming', label: 'Has Spotify / Bandcamp' },
+                    { id: 'needs-releases', label: 'Needs Releases' },
+                    { id: 'needs-lineup', label: 'Needs Lineup' },
+                  ] as const
+                ).map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setDirectoryFilter(f.id)}
+                    className={`px-2.5 py-1 rounded-lg font-mono text-[10px] font-bold uppercase shrink-0 border transition cursor-pointer ${
+                      directoryFilter === f.id
+                        ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-sm'
+                        : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Band Cards Grid */}
+            {/* Rich Banner-Backed Band Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-6">
-              {filteredBands.map((band, bIdx) => (
-                <div
-                  key={band.id ? `band-${band.id}-${bIdx}` : `band-${bIdx}`}
-                  onClick={() => populateForm(band)}
-                  className="w-full text-left p-3.5 sm:p-4 rounded-xl border bg-zinc-900/60 border-zinc-800/80 hover:border-amber-500/50 hover:bg-zinc-900 transition-all flex items-center gap-3.5 cursor-pointer shadow-sm group"
-                >
-                  {(() => {
-                    const cardKey = String(band.id || band.name || bIdx);
-                    const isGorg = isGorgasmBand(band.id || band.name || (band as any).band_name, (band as any).custom_slug);
-                    const bestAvatar = resolveCanonicalBandLogo(band) || (isGorg ? GORGASM_OFFICIAL_LOGO : '');
-                    const showMonogram = !bestAvatar || Boolean(failedLogoKeys[cardKey]);
-                    const initials = (band.name || (band as any).band_name || 'BD')
-                      .trim()
-                      .split(/\s+/)
-                      .slice(0, 2)
-                      .map((w: string) => w[0] || '')
-                      .join('')
-                      .toUpperCase() || 'BD';
+              {filteredBands.map((band, bIdx) => {
+                const cardKey = String(band.id || band.name || bIdx);
+                const stats = getBandStats(band);
+                const isGorg = isGorgasmBand(band.id || band.name || (band as any).band_name, (band as any).custom_slug);
+                const bestAvatar = stats.logo;
+                const backdropImg = stats.cover || bestAvatar;
+                const showMonogram = !bestAvatar || Boolean(failedLogoKeys[cardKey]);
+                const initials =
+                  (band.name || (band as any).band_name || 'BD')
+                    .trim()
+                    .split(/\s+/)
+                    .slice(0, 2)
+                    .map((w: string) => w[0] || '')
+                    .join('')
+                    .toUpperCase() || 'BD';
+                const statusLabel = getBandStatusLabel(stats.status);
+                const statusBadgeCls = getBandStatusBadgeClass(stats.status);
 
-                    if (showMonogram) {
-                      return (
-                        <div
-                          aria-label={`${band.name} monogram placeholder`}
-                          className="w-14 h-14 rounded-xl bg-zinc-950 border border-zinc-700/80 shrink-0 flex items-center justify-center relative overflow-hidden group-hover:scale-105 transition-transform"
-                        >
-                          <svg
-                            viewBox="0 0 56 56"
-                            className="absolute inset-0 w-full h-full pointer-events-none opacity-45"
-                            aria-hidden="true"
+                return (
+                  <div
+                    key={band.id ? `band-${band.id}-${bIdx}` : `band-${bIdx}`}
+                    onClick={() => populateForm(band)}
+                    className="relative w-full text-left rounded-2xl border bg-[#0e1017] border-zinc-800/90 hover:border-amber-500/60 transition-all cursor-pointer shadow-md overflow-hidden group flex flex-col justify-between"
+                  >
+                    {/* Ambient Cover / Logo Header Backdrop */}
+                    {backdropImg && (
+                      <div className="absolute inset-x-0 top-0 h-20 pointer-events-none overflow-hidden">
+                        <img
+                          src={backdropImg}
+                          alt=""
+                          aria-hidden="true"
+                          className="w-full h-full object-cover object-center opacity-20 blur-[1px] group-hover:scale-105 transition-transform duration-500"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-[#0e1017]/80 to-[#0e1017]" />
+                      </div>
+                    )}
+
+                    <div className="relative z-10 p-3.5 sm:p-4 space-y-3">
+                      <div className="flex items-start gap-3.5">
+                        {showMonogram ? (
+                          <div
+                            aria-label={`${band.name} monogram placeholder`}
+                            className="w-14 h-14 rounded-xl bg-zinc-950 border border-zinc-700/80 shrink-0 flex items-center justify-center relative overflow-hidden group-hover:scale-105 transition-transform shadow-md"
                           >
-                            <circle cx="28" cy="28" r="22" fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="4 3" />
-                          </svg>
-                          <span className="relative z-10 font-mono font-black text-sm tracking-wider text-zinc-200">
-                            {initials}
+                            <svg
+                              viewBox="0 0 56 56"
+                              className="absolute inset-0 w-full h-full pointer-events-none opacity-45"
+                              aria-hidden="true"
+                            >
+                              <circle
+                                cx="28"
+                                cy="28"
+                                r="22"
+                                fill="none"
+                                stroke="#f59e0b"
+                                strokeWidth="1.5"
+                                strokeDasharray="4 3"
+                              />
+                            </svg>
+                            <span className="relative z-10 font-mono font-black text-sm tracking-wider text-zinc-200">
+                              {initials}
+                            </span>
+                          </div>
+                        ) : (
+                          <img
+                            src={bestAvatar}
+                            alt={band.name}
+                            className="w-14 h-14 rounded-xl object-cover border border-zinc-700/80 shrink-0 group-hover:scale-105 transition-transform shadow-md bg-black"
+                            onError={(e) => {
+                              const imgEl = e.currentTarget as HTMLImageElement;
+                              if (isGorg && imgEl.src !== GORGASM_OFFICIAL_LOGO) {
+                                imgEl.src = GORGASM_OFFICIAL_LOGO;
+                              } else {
+                                setFailedLogoKeys((prev) =>
+                                  prev[cardKey] ? prev : { ...prev, [cardKey]: true }
+                                );
+                              }
+                            }}
+                          />
+                        )}
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-black text-white truncate font-display group-hover:text-amber-300 transition-colors">
+                              {band.name}
+                            </span>
+                            <span
+                              className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${
+                                band.verification_status === 'verified_official'
+                                  ? 'bg-emerald-950/80 text-emerald-400 border-emerald-500/40'
+                                  : 'bg-amber-950/80 text-amber-400 border-amber-500/40'
+                              }`}
+                            >
+                              {band.verification_status === 'verified_official'
+                                ? 'VERIFIED'
+                                : 'FAN ARCHIVE'}
+                            </span>
+                          </div>
+
+                          <div className="text-[11px] text-zinc-400 truncate font-mono mt-1 flex items-center gap-1.5 flex-wrap">
+                            <span className="text-zinc-300 font-semibold">
+                              {band.micro_genres?.[0] || band.genre || 'Extreme Metal'}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              {[band.city, band.state_province || band.country]
+                                .filter(Boolean)
+                                .join(', ') || 'Global'}
+                            </span>
+                            <span
+                              className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded border ${statusBadgeCls}`}
+                            >
+                              {statusLabel}
+                            </span>
+                          </div>
+
+                          {/* Connected Streaming & Archive Badges */}
+                          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                            <span className="px-1.5 py-0.5 rounded bg-zinc-900/90 border border-zinc-800 text-[10px] font-mono text-zinc-300">
+                              💿 {stats.releasesCount}{' '}
+                              {stats.releasesCount === 1 ? 'release' : 'releases'}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-zinc-900/90 border border-zinc-800 text-[10px] font-mono text-zinc-300">
+                              👥 {stats.membersCount}{' '}
+                              {stats.membersCount === 1 ? 'member' : 'members'}
+                            </span>
+                            {stats.hasSpotify && (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/30 text-[9px] font-mono font-bold text-emerald-300">
+                                Spotify
+                              </span>
+                            )}
+                            {stats.hasBandcamp && (
+                              <span className="px-1.5 py-0.5 rounded bg-cyan-950/70 border border-cyan-500/30 text-[9px] font-mono font-bold text-cyan-300">
+                                Bandcamp
+                              </span>
+                            )}
+                            {stats.hasMA && (
+                              <span className="px-1.5 py-0.5 rounded bg-rose-950/70 border border-rose-500/30 text-[9px] font-mono font-bold text-rose-300">
+                                MA
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Archive Completeness Bar & Actions Footer */}
+                      <div className="pt-2 border-t border-zinc-800/70 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className="w-20 h-1.5 rounded-full bg-zinc-900 overflow-hidden border border-zinc-800 shrink-0">
+                            <div
+                              className={`h-full transition-all ${
+                                stats.completeness === 100
+                                  ? 'bg-emerald-400'
+                                  : stats.completeness >= 50
+                                  ? 'bg-amber-400'
+                                  : 'bg-rose-400'
+                              }`}
+                              style={{ width: `${stats.completeness}%` }}
+                            />
+                          </div>
+                          <span className="text-[9px] font-mono text-zinc-400 truncate">
+                            {stats.completeness}% Complete
                           </span>
                         </div>
-                      );
-                    }
 
-                    return (
-                      <img
-                        src={bestAvatar}
-                        alt={band.name}
-                        className="w-14 h-14 rounded-xl object-cover border border-zinc-750 shrink-0 group-hover:scale-105 transition-transform"
-                        onError={(e) => {
-                          const imgEl = e.currentTarget as HTMLImageElement;
-                          if (isGorg && imgEl.src !== GORGASM_OFFICIAL_LOGO) {
-                            imgEl.src = GORGASM_OFFICIAL_LOGO;
-                          } else {
-                            setFailedLogoKeys(prev => (prev[cardKey] ? prev : { ...prev, [cardKey]: true }));
-                          }
-                        }}
-                      />
-                    );
-                  })()}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-bold text-white truncate font-display group-hover:text-amber-300 transition-colors">
-                        {band.name}
-                      </span>
-                      <div className="flex items-center gap-1 shrink-0">
-
-                        <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${
-                          band.verification_status === 'verified_official'
-                            ? 'bg-emerald-950/80 text-emerald-400 border-emerald-500/40'
-                            : 'bg-amber-950/80 text-amber-400 border-amber-500/40'
-                        }`}>
-                          {band.verification_status === 'verified_official' ? 'VERIFIED' : 'FAN ARCHIVE'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="text-xs text-zinc-400 truncate font-mono mt-1 flex items-center gap-1.5 flex-wrap">
-                      <span>{band.genre} • {band.city || band.country || 'Global'}</span>
-                      {(() => {
-                        const bStatus = resolveBandStatus(band);
-                        const label = getBandStatusLabel(bStatus);
-                        const badgeCls = getBandStatusBadgeClass(bStatus);
-                        return (
-                          <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${badgeCls}`}>
-                            {label}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-amber-400 font-mono font-bold group-hover:underline text-[11px]">
+                            Curate →
                           </span>
-                        );
-                      })()}
-                    </div>
-
-                    <div className="text-[10px] text-zinc-500 font-mono mt-1.5 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-3">
-                        {(() => {
-                          const cached = loadBandDiscographyFromCache(band.id, band.name) || [];
-                          const direct = band.discography || [];
-                          const combined = deduplicateDiscography([...direct, ...cached], band.name);
-                          const discoCount = combined.length;
-                          return <span>💿 {discoCount} {discoCount === 1 ? 'release' : 'releases'}</span>;
-                        })()}
-                        <span>👥 {parseBandLineup(band.lineup).length} members</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-amber-400 font-bold group-hover:underline text-xs">Edit →</span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteBand(band);
-                          }}
-                          className="p-1 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-950/40 border border-transparent hover:border-red-500/40 transition-colors cursor-pointer"
-                          title={`Delete "${band.name}" archive`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteBand(band);
+                            }}
+                            className="p-1 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-950/40 border border-transparent hover:border-red-500/40 transition-colors cursor-pointer"
+                            title={`Delete "${band.name}" archive`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {filteredBands.length === 0 && (
                 <div className="col-span-full py-12 text-center text-zinc-500 font-mono text-xs border border-dashed border-zinc-800 rounded-2xl">
-                  No band archives found matching "{searchQuery}". Click "Blank" above to create one.
+                  No band archives found matching your filter. Click &quot;Blank&quot; above to create one.
                 </div>
               )}
             </div>
@@ -1532,44 +1955,244 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
               
               {/* TAB 1: OVERVIEW & MEDIA */}
               {activeTab === 'overview' && (
-                <div className="space-y-3 animate-in fade-in duration-150">
+                <div className="space-y-3.5 animate-in fade-in duration-150">
+                  {/* LIVE BAND PROFILE HERO PREVIEW WITH INTEGRATED DRAG-AND-DROP AVATAR & BANNER UPLOADERS */}
+                  <div className="relative rounded-2xl border border-zinc-800/90 bg-[#0d1017] overflow-hidden shadow-xl">
+                    {/* Banner Area */}
+                    <div className="relative h-28 sm:h-36 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 overflow-hidden">
+                      {(coverUrl || avatarUrl) && (
+                        <img
+                          src={coverUrl || avatarUrl}
+                          alt="Band Banner Preview"
+                          className={`w-full h-full object-cover object-center ${
+                            coverUrl ? 'opacity-65' : 'opacity-25 blur-sm scale-105'
+                          }`}
+                        />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#0d1017] via-[#0d1017]/40 to-black/30" />
 
+                      {/* Live Preview Badge */}
+                      <div className="absolute top-2.5 left-3 flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md border border-amber-500/40 text-[9px] font-mono font-bold text-amber-300 uppercase flex items-center gap-1">
+                          <Eye className="w-2.5 h-2.5" />
+                          Live Profile Preview
+                        </span>
+                        {foundedYear.trim() && (
+                          <span className="px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md border border-zinc-700 text-[9px] font-mono text-zinc-300">
+                            Est. {foundedYear.trim()}
+                          </span>
+                        )}
+                      </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <div className="space-y-1 sm:col-span-1">
-                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Band / Artist Name *</label>
+                      {/* Banner Upload Controls */}
+                      <div className="absolute top-2.5 right-3 flex items-center gap-1.5">
+                        <label className="relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/75 hover:bg-black/90 backdrop-blur-md border border-amber-500/40 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition shadow">
+                          {isUploadingCover ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Upload className="w-3 h-3" />
+                          )}
+                          <span>{coverUrl ? 'Change Banner' : 'Upload Banner'}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handleDeviceFileUpload(
+                                  file,
+                                  'community-bands',
+                                  'community-banner',
+                                  (url) => setCoverUrl(url),
+                                  setIsUploadingCover
+                                );
+                              }
+                              if (e.target) e.target.value = '';
+                            }}
+                          />
+                        </label>
+                        {coverUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setCoverUrl('')}
+                            className="p-1 rounded-lg bg-black/75 hover:bg-red-950/90 text-zinc-300 hover:text-red-300 border border-zinc-700 cursor-pointer"
+                            title="Remove Banner"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Overlapping Avatar + Live Identity Summary */}
+                    <div className="relative px-4 pb-3.5 -mt-10 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                      <div className="flex items-end gap-3.5 min-w-0">
+                        {/* Avatar with Direct Upload Overlay */}
+                        <div className="relative w-20 h-20 rounded-2xl bg-zinc-950 border-2 border-amber-500/50 shadow-2xl overflow-hidden shrink-0 group">
+                          {avatarUrl ? (
+                            <img
+                              src={avatarUrl}
+                              alt="Band Logo"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-zinc-500 font-mono text-[9px] text-center p-1">
+                              <ImageIcon className="w-5 h-5 text-amber-400/70 mb-0.5" />
+                              <span>LOGO</span>
+                            </div>
+                          )}
+                          <label className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-amber-300 font-mono text-[9px] font-bold uppercase cursor-pointer transition">
+                            {isUploadingAvatar ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Upload className="w-3.5 h-3.5 mb-0.5" />
+                                <span>{avatarUrl ? 'Replace' : 'Upload'}</span>
+                              </>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="sr-only"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleDeviceFileUpload(
+                                    file,
+                                    'community-bands',
+                                    'community-avatar',
+                                    (url) => setAvatarUrl(url),
+                                    setIsUploadingAvatar
+                                  );
+                                }
+                                if (e.target) e.target.value = '';
+                              }}
+                            />
+                          </label>
+                        </div>
+
+                        <div className="min-w-0 pb-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-base sm:text-lg font-black text-white font-display uppercase tracking-wide truncate">
+                              {name.trim() || 'BAND / ARTIST NAME'}
+                            </h4>
+                            <span
+                              className={`text-[9px] font-mono font-black uppercase px-2 py-0.5 rounded border ${getBandStatusBadgeClass(
+                                bandStatus
+                              )}`}
+                            >
+                              {getBandStatusLabel(bandStatus)}
+                            </span>
+                          </div>
+                          <div className="text-xs font-mono text-zinc-300 flex items-center gap-1.5 flex-wrap mt-0.5">
+                            <span className="text-amber-300 font-bold">
+                              {microGenres.length > 0 ? microGenres.slice(0, 3).join(' • ') : genre}
+                            </span>
+                            <span>•</span>
+                            <span className="text-zinc-400">
+                              {[city.trim(), stateProvince.trim(), country.trim()]
+                                .filter(Boolean)
+                                .join(', ') || 'Location TBD'}
+                            </span>
+                            {recordLabel.trim() && (
+                              <>
+                                <span>•</span>
+                                <span className="text-zinc-400">{recordLabel.trim()}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quick Avatar Upload Button for Mobile + Connected Links Preview */}
+                      <div className="flex items-center justify-between sm:justify-end gap-2 flex-wrap">
+                        <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition">
+                          <Upload className="w-3 h-3" />
+                          <span>{avatarUrl ? 'Replace Logo' : 'Upload Logo'}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handleDeviceFileUpload(
+                                  file,
+                                  'community-bands',
+                                  'community-avatar',
+                                  (url) => setAvatarUrl(url),
+                                  setIsUploadingAvatar
+                                );
+                              }
+                              if (e.target) e.target.value = '';
+                            }}
+                          />
+                        </label>
+                        {avatarUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setAvatarUrl('')}
+                            className="text-[10px] font-mono text-zinc-500 hover:text-red-400 cursor-pointer"
+                          >
+                            Clear Logo
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Band Name, Founded Year & Tactile Activity Status Pills */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 p-3.5 rounded-xl bg-zinc-950 border border-zinc-850">
+                    <div className="sm:col-span-5 space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">
+                        Band / Artist Name <span className="text-amber-400">*</span>
+                      </label>
                       <input
                         type="text"
                         placeholder="e.g. Gorguts, Dying Fetus..."
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
                       />
                     </div>
 
-                    <div className="space-y-1 sm:col-span-1">
-                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Founded Year</label>
+                    <div className="sm:col-span-2 space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">
+                        Founded Year
+                      </label>
                       <input
                         type="text"
-                        placeholder="e.g. 1991"
+                        placeholder="1991"
                         value={foundedYear}
                         onChange={(e) => setFoundedYear(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
                       />
                     </div>
 
-                    <div className="space-y-1 sm:col-span-1">
-                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Activity Status</label>
-                      <select
-                        value={bandStatus}
-                        onChange={(e) => setBandStatus(e.target.value as BandActivityStatus)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
-                      >
-                        <option value="active">Active Band (displays &quot;(active)&quot;)</option>
-                        <option value="split-up">Split-Up / Disbanded (displays &quot;(split-up)&quot;)</option>
-                        <option value="on-hold">On Hold / Hiatus (displays &quot;(on-hold)&quot;)</option>
-                        <option value="unknown">Unknown Activity (displays &quot;(unknown)&quot;)</option>
-                      </select>
+                    <div className="sm:col-span-5 space-y-1">
+                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">
+                        Activity Status
+                      </label>
+                      <div className="grid grid-cols-4 gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+                        {ACTIVITY_STATUS_OPTIONS.map((opt) => {
+                          const active = bandStatus === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setBandStatus(opt.value)}
+                              className={`py-1.5 rounded-lg font-mono text-[10px] font-bold uppercase transition cursor-pointer border ${
+                                active
+                                  ? opt.activeClass
+                                  : 'border-transparent text-zinc-400 hover:text-white'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 
@@ -1618,289 +2241,259 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Primary Sonic Classification</label>
-                      <select 
-                        value={genre}
-                        onChange={(e) => {
-                          setGenre(e.target.value);
-                          const cluster = MASTER_GENRES.find(c => c.name === e.target.value);
-                          if (cluster && cluster.tags.length > 0) {
-                            setMicroGenres([cluster.tags[0].label]);
-                          } else {
-                            setMicroGenres([]);
-                          }
-                        }}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-amber-400 focus:border-amber-500 outline-none shadow-inner"
-                      >
-                        <option value="">SELECT CLASSIFICATION...</option>
-                        {MASTER_GENRES.map((g, gIdx) => (
-                          <option key={`${g.name}-${gIdx}`} value={g.name}>{g.name}</option>
-                        ))}
-                      </select>
+                  {/* Sonic Classification & Subgenres + Custom Tag Input */}
+                  <div className="p-3.5 bg-zinc-950 border border-zinc-850 rounded-xl space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">
+                          Primary Sonic Classification
+                        </label>
+                        <select
+                          value={genre}
+                          onChange={(e) => {
+                            setGenre(e.target.value);
+                            const cluster = MASTER_GENRES.find((c) => c.name === e.target.value);
+                            if (cluster && cluster.tags.length > 0 && microGenres.length === 0) {
+                              setMicroGenres([cluster.tags[0].label]);
+                            }
+                          }}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-amber-400 focus:border-amber-500 outline-none shadow-inner"
+                        >
+                          <option value="">SELECT CLASSIFICATION...</option>
+                          {MASTER_GENRES.map((g, gIdx) => (
+                            <option key={`${g.name}-${gIdx}`} value={g.name}>
+                              {g.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">
+                          Record Label
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Relapse Records, Season of Mist..."
+                          value={recordLabel}
+                          onChange={(e) => setRecordLabel(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                        />
+                      </div>
                     </div>
 
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Record Label</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Relapse Records, Season of Mist..."
-                        value={recordLabel}
-                        onChange={(e) => setRecordLabel(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
-                      />
-                    </div>
-                  </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">
+                          Subgenres &amp; Micro-Genre Tags
+                        </label>
+                        <span className="text-[9px] text-amber-400 font-mono">
+                          {microGenres.length} active
+                        </span>
+                      </div>
 
-                  {genre && (
-                    <div className="space-y-1.5 p-3 bg-zinc-950 border border-zinc-850 rounded-xl">
-                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
-                        <span>Genre Tags & Subgenres (Maps to `micro_genres`)</span>
-                        <span className="text-[9px] text-amber-400 font-mono">{microGenres.length} selected</span>
-                      </label>
-                      <div className="flex flex-wrap gap-1.5 p-2 bg-black/60 border border-zinc-800 rounded-lg max-h-28 overflow-y-auto">
-                        {MASTER_GENRES.find(c => c.name === genre)?.tags.map((tagObj, idx) => {
-                          const tag = tagObj.label;
-                          const isSelected = microGenres.includes(tag);
-                          return (
-                            <button
-                              key={`${tagObj.id}-${idx}`}
-                              type="button"
-                              onClick={() => {
-                                if (isSelected) {
-                                  setMicroGenres(microGenres.filter(t => t !== tag));
-                                } else {
-                                  if (microGenres.length < 5) {
+                      {/* Active Subgenre Pills */}
+                      {microGenres.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {microGenres.map((tag, idx) => (
+                            <span
+                              key={`active-mg-${tag}-${idx}`}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/80 border border-amber-500/50 text-amber-300 font-mono text-[10px] font-bold"
+                            >
+                              <span>{tag}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setMicroGenres(microGenres.filter((t) => t !== tag))
+                                }
+                                className="text-amber-400/70 hover:text-rose-400 cursor-pointer"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Preset Tag Selector + Custom Subgenre Input */}
+                      {genre && (
+                        <div className="flex flex-wrap gap-1.5 p-2 bg-black/60 border border-zinc-800 rounded-lg max-h-24 overflow-y-auto">
+                          {MASTER_GENRES.find((c) => c.name === genre)?.tags.map((tagObj, idx) => {
+                            const tag = tagObj.label;
+                            const isSelected = microGenres.includes(tag);
+                            return (
+                              <button
+                                key={`${tagObj.id}-${idx}`}
+                                type="button"
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setMicroGenres(microGenres.filter((t) => t !== tag));
+                                  } else if (microGenres.length < 6) {
                                     setMicroGenres([...microGenres, tag]);
                                   }
-                                }
-                              }}
-                              className={`text-[9px] font-mono px-2 py-1 rounded-md border transition-colors ${
-                                isSelected 
-                                  ? 'bg-amber-950/80 border-amber-500 text-amber-300 font-bold shadow-sm' 
-                                  : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
-                              }`}
-                            >
-                              {tag}
-                            </button>
-                          );
-                        })}
+                                }}
+                                className={`text-[9px] font-mono px-2 py-1 rounded-md border transition-colors cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-amber-500 text-black border-amber-400 font-bold shadow-sm'
+                                    : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                                }`}
+                              >
+                                {tag}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={customMicroGenreInput}
+                          onChange={(e) => setCustomMicroGenreInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddCustomMicroGenre();
+                            }
+                          }}
+                          placeholder="Add custom micro-genre (e.g. Brutal Technical Death Metal)..."
+                          className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:border-amber-500 outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCustomMicroGenre}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-zinc-700 font-mono text-[10px] font-bold uppercase cursor-pointer"
+                        >
+                          + Add Tag
+                        </button>
                       </div>
                     </div>
-                  )}
+                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">City</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Montreal..."
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
-                      />
+                  {/* Location & Bio */}
+                  <div className="p-3.5 bg-zinc-950 border border-zinc-850 rounded-xl space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">
+                          City
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Montreal, Baltimore..."
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">
+                          State / Province
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Quebec, MD..."
+                          value={stateProvince}
+                          onChange={(e) => setStateProvince(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">
+                          Country
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="USA, Canada, Germany..."
+                          value={country}
+                          onChange={(e) => setCountry(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                        />
+                      </div>
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">State / Province</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Quebec, MD..."
-                        value={stateProvince}
-                        onChange={(e) => setStateProvince(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Country</label>
-                      <input
-                        type="text"
-                        placeholder="USA, Canada, Germany..."
-                        value={country}
-                        onChange={(e) => setCountry(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 outline-none shadow-inner"
+                      <label
+                        htmlFor="curator-band-bio"
+                        className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between"
+                      >
+                        <span>Bio / Band Description</span>
+                        <span className="text-[9px] text-zinc-500 font-mono">
+                          History &amp; Background
+                        </span>
+                      </label>
+                      <textarea
+                        id="curator-band-bio"
+                        rows={3}
+                        placeholder="Origins, classic lineup, signature sound, lyrical themes..."
+                        value={bio}
+                        onChange={(e) => setBio(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-zinc-600 focus:border-amber-500 outline-none shadow-inner resize-y transition-colors"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label htmlFor="curator-band-bio" className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
-                      <span>Bio / Band Description</span>
-                      <span className="text-[9px] text-zinc-500 font-mono">History & Background</span>
-                    </label>
-                    <textarea
-                      id="curator-band-bio"
-                      rows={3}
-                      placeholder="Origins, classic lineup, signature sound, lyrical themes..."
-                      value={bio}
-                      onChange={(e) => setBio(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-zinc-600 focus:border-amber-500 outline-none shadow-inner resize-y transition-colors"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-zinc-950 border border-zinc-850 rounded-xl space-y-1.5">
-                    <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <Youtube className="w-3.5 h-3.5 text-red-500" />
-                        <span>Featured YouTube URL</span>
+                  {/* External Artist & Archive Links (Spotify, Bandcamp, Metal Archives, YouTube) */}
+                  <div className="p-3.5 bg-zinc-950 border border-zinc-850 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono font-bold text-zinc-300 uppercase tracking-wider">
+                        External Artist &amp; Archive Links
                       </span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="https://www.youtube.com/watch?v=..."
-                      value={youtubeUrl}
-                      onChange={(e) => setYoutubeUrl(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 focus:border-red-500 outline-none"
-                    />
-                  </div>
-
-                  {/* Uploaders */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div className="space-y-1.5 bg-zinc-950 border border-zinc-850 p-3 rounded-xl">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center gap-1.5">
-                          <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Avatar / Logo</span>
+                      <span className="text-[9px] font-mono text-emerald-400/90">
+                        Displayed on Band Page when available
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono font-bold text-emerald-400 uppercase">
+                          Spotify URL
                         </label>
-                        {isUploadingAvatar && (
-                          <span className="text-[9px] font-mono text-amber-400 flex items-center gap-1">
-                            <Loader2 className="w-2.5 h-2.5 animate-spin" /> Uploading...
-                          </span>
-                        )}
+                        <input
+                          type="text"
+                          placeholder="https://open.spotify.com/artist/..."
+                          value={spotifyUrl}
+                          onChange={(e) => setSpotifyUrl(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-500/60 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 outline-none"
+                        />
                       </div>
-
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 shadow-inner">
-                          {avatarUrl ? (
-                            <img
-                              src={avatarUrl}
-                              alt="Avatar"
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.onerror = null;
-                                e.currentTarget.style.display = 'none';
-                              }}
-                            />
-                          ) : (
-                            <span className="text-zinc-600 font-mono text-[9px]">NO IMG</span>
-                          )}
-                        </div>
-
-                        <div className="flex-1 flex flex-col gap-1">
-                          <label className="relative inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition-colors shadow-sm overflow-hidden">
-                            <Upload className="w-3 h-3 pointer-events-none" />
-                            <span className="pointer-events-none">Upload Avatar</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  handleDeviceFileUpload(file, 'community-bands', 'community-avatar', (url) => setAvatarUrl(url), setIsUploadingAvatar);
-                                }
-                                if (e.target) e.target.value = '';
-                              }}
-                            />
-                          </label>
-                          {avatarUrl && (
-                            <button
-                              type="button"
-                              onClick={() => setAvatarUrl('')}
-                              className="text-[9px] font-mono text-zinc-500 hover:text-red-400 text-left"
-                            >
-                              Remove avatar
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5 bg-zinc-950 border border-zinc-850 p-3 rounded-xl">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center gap-1.5">
-                          <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Cover Banner</span>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono font-bold text-cyan-400 uppercase">
+                          Bandcamp URL
                         </label>
-                        {isUploadingCover && (
-                          <span className="text-[9px] font-mono text-amber-400 flex items-center gap-1">
-                            <Loader2 className="w-2.5 h-2.5 animate-spin" /> Uploading...
-                          </span>
-                        )}
+                        <input
+                          type="text"
+                          placeholder="https://band.bandcamp.com"
+                          value={bandcampUrl}
+                          onChange={(e) => setBandcampUrl(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-cyan-500/60 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 outline-none"
+                        />
                       </div>
-
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-14 h-10 rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 shadow-inner">
-                          {coverUrl ? (
-                            <img src={coverUrl} alt="Cover" className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-zinc-600 font-mono text-[9px]">NO BANNER</span>
-                          )}
-                        </div>
-
-                        <div className="flex-1 flex flex-col gap-1">
-                          <label className="relative inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition-colors shadow-sm overflow-hidden">
-                            <Upload className="w-3 h-3 pointer-events-none" />
-                            <span className="pointer-events-none">Upload Banner</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  handleDeviceFileUpload(file, 'community-bands', 'community-banner', (url) => setCoverUrl(url), setIsUploadingCover);
-                                }
-                                if (e.target) e.target.value = '';
-                              }}
-                            />
-                          </label>
-                          {coverUrl && (
-                            <button
-                              type="button"
-                              onClick={() => setCoverUrl('')}
-                              className="text-[9px] font-mono text-zinc-500 hover:text-red-400 text-left"
-                            >
-                              Remove banner
-                            </button>
-                          )}
-                        </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono font-bold text-rose-400 uppercase">
+                          Metal Archives URL
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="https://metal-archives.com/..."
+                          value={metalArchivesUrl}
+                          onChange={(e) => setMetalArchivesUrl(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-rose-500/60 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 outline-none"
+                        />
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Spotify URL</label>
-                      <input
-                        type="text"
-                        placeholder="https://open.spotify.com/artist/..."
-                        value={spotifyUrl}
-                        onChange={(e) => setSpotifyUrl(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-300 outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Bandcamp URL</label>
-                      <input
-                        type="text"
-                        placeholder="https://band.bandcamp.com"
-                        value={bandcampUrl}
-                        onChange={(e) => setBandcampUrl(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-300 outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase">Metal Archives URL</label>
-                      <input
-                        type="text"
-                        placeholder="https://metal-archives.com/..."
-                        value={metalArchivesUrl}
-                        onChange={(e) => setMetalArchivesUrl(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-300 outline-none"
-                      />
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono font-bold text-red-400 uppercase flex items-center gap-1">
+                          <Youtube className="w-3 h-3 text-red-500" />
+                          <span>Featured YouTube URL</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="https://www.youtube.com/watch?v=..."
+                          value={youtubeUrl}
+                          onChange={(e) => setYoutubeUrl(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-500/60 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 outline-none"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -1934,34 +2527,95 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
               {/* TAB 2: LINEUP */}
               {activeTab === 'lineup' && (
                 <div className="space-y-4 animate-in fade-in duration-150">
-
-
                   <div className="p-4 bg-zinc-950 border border-zinc-850 rounded-2xl space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <span className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
                         <UserPlus className="w-4 h-4 text-amber-400" />
-                        {editingMemberIdx !== null ? `Edit Lineup Member #${editingMemberIdx + 1}` : 'Add Band Member'}
+                        {editingMemberIdx !== null
+                          ? `Edit Lineup Member #${editingMemberIdx + 1}`
+                          : 'Add Band Member'}
                       </span>
-                      {editingMemberIdx !== null && (
+                      <div className="flex items-center gap-2">
+                        {editingMemberIdx !== null && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingMemberIdx(null);
+                              setNewMemberName('');
+                              setNewMemberRole('');
+                              setNewMemberYears('');
+                              setNewMemberStatus('active');
+                            }}
+                            className="text-xs font-mono text-zinc-400 hover:text-white cursor-pointer"
+                          >
+                            Cancel Edit
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => {
-                            setEditingMemberIdx(null);
-                            setNewMemberName('');
-                            setNewMemberRole('');
-                            setNewMemberYears('');
-                            setNewMemberStatus('active');
-                          }}
-                          className="text-xs font-mono text-zinc-400 hover:text-white"
+                          onClick={() => setShowQuickPasteLineup((prev) => !prev)}
+                          className={`px-2.5 py-1 rounded-lg font-mono text-[10px] font-bold uppercase flex items-center gap-1.5 border transition cursor-pointer ${
+                            showQuickPasteLineup
+                              ? 'bg-amber-500 text-black border-amber-400'
+                              : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+                          }`}
                         >
-                          Cancel Edit
+                          <ClipboardPaste className="w-3 h-3" />
+                          <span>Quick-Paste Lineup</span>
                         </button>
-                      )}
+                      </div>
                     </div>
+
+                    {showQuickPasteLineup && (
+                      <div className="p-3 rounded-xl bg-black/80 border border-amber-500/40 space-y-2 animate-in fade-in duration-150">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-mono font-bold text-amber-300 flex items-center gap-1.5">
+                            <Wand2 className="w-3.5 h-3.5" />
+                            <span>Bulk Lineup Roster Parser</span>
+                          </span>
+                          <span className="text-[10px] font-mono text-zinc-400">
+                            One musician per line
+                          </span>
+                        </div>
+                        <p className="text-[10px] font-mono text-zinc-400 leading-relaxed">
+                          Paste lines from Metal-Archives or Wikipedia (e.g.{' '}
+                          <code className="text-amber-300">
+                            John Gallagher - Guitars, Vocals (1991-present)
+                          </code>
+                          ).
+                        </p>
+                        <textarea
+                          rows={4}
+                          value={quickPasteLineupText}
+                          onChange={(e) => setQuickPasteLineupText(e.target.value)}
+                          placeholder={`John Gallagher - Guitars, Vocals (1991-present)\nSean Beasley - Bass, Vocals (2001-present)\nTrey Williams - Drums (2007-present)`}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs font-mono text-white outline-none focus:border-amber-500"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowQuickPasteLineup(false)}
+                            className="px-3 py-1.5 rounded-lg bg-zinc-900 text-zinc-400 font-mono text-[10px] uppercase cursor-pointer"
+                          >
+                            Close
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleBulkParseLineup}
+                            className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-[10px] uppercase flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Wand2 className="w-3 h-3" />
+                            <span>Parse &amp; Add Members</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                       <div className="sm:col-span-2 space-y-1">
-                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Musician Name *</label>
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">
+                          Musician Name *
+                        </label>
                         <input
                           type="text"
                           placeholder="e.g. Trey Williams, Chuck Schuldiner"
@@ -1973,12 +2627,14 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                               handleAddOrUpdateMember();
                             }
                           }}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs font-mono text-white outline-none focus:border-amber-500"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs font-mono text-white outline-none focus:border-amber-500"
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Role / Instrument</label>
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">
+                          Role / Instrument
+                        </label>
                         <input
                           type="text"
                           placeholder="e.g. Drums, Vocals"
@@ -1990,12 +2646,14 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                               handleAddOrUpdateMember();
                             }
                           }}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs font-mono text-white outline-none focus:border-amber-500"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs font-mono text-white outline-none focus:border-amber-500"
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Years Active</label>
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">
+                          Years Active
+                        </label>
                         <input
                           type="text"
                           placeholder="e.g. 1993–present"
@@ -2007,12 +2665,37 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                               handleAddOrUpdateMember();
                             }
                           }}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs font-mono text-white outline-none focus:border-amber-500"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs font-mono text-white outline-none focus:border-amber-500"
                         />
                       </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+                    {/* One-Tap Instrument Preset Chips */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-mono text-zinc-500 uppercase mr-1">
+                        Quick Role:
+                      </span>
+                      {INSTRUMENT_ROLE_PRESETS.map((preset) => {
+                        const isSelected =
+                          newMemberRole.trim().toLowerCase() === preset.toLowerCase();
+                        return (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setNewMemberRole(preset)}
+                            className={`px-2 py-0.5 rounded-md font-mono text-[10px] border transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-bold'
+                                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-zinc-800/60">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-mono text-zinc-400">Status:</span>
                         <div className="flex items-center gap-1.5">
@@ -2021,7 +2704,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                               key={`status-${st}-${idx}`}
                               type="button"
                               onClick={() => setNewMemberStatus(st)}
-                              className={`px-3 py-1 rounded-lg text-xs font-mono uppercase font-bold transition-all ${
+                              className={`px-3 py-1 rounded-lg text-xs font-mono uppercase font-bold transition-all cursor-pointer ${
                                 newMemberStatus === st
                                   ? 'bg-amber-500 text-black shadow-sm'
                                   : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
@@ -2047,11 +2730,14 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-mono font-bold text-zinc-400 uppercase">Current Lineup List ({lineup.length})</span>
+                      <span className="text-xs font-mono font-bold text-zinc-400 uppercase">
+                        Current Lineup List ({lineup.length})
+                      </span>
                       {lineup.length > 0 && (
                         <button
                           type="button"
                           onClick={() => {
+                            lineupDirtyRef.current = true;
                             setLineup([]);
                             setEditingMemberIdx(null);
                             triggerNotification?.('Cleared lineup members from form.');
@@ -2064,7 +2750,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                     </div>
                     {lineup.length === 0 ? (
                       <div className="p-6 text-center rounded-xl border border-dashed border-zinc-800 text-zinc-500 font-mono text-xs">
-                        No lineup members added yet. Use the form above to add members.
+                        No lineup members added yet. Use the form above or click &quot;Quick-Paste
+                        Lineup&quot; to import a full roster.
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -2075,12 +2762,18 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                           >
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-white font-display">{mem.name}</span>
-                                <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded uppercase ${
-                                  mem.status === 'active' ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' :
-                                  mem.status === 'touring' ? 'bg-blue-950 text-blue-400 border border-blue-500/30' :
-                                  'bg-zinc-800 text-zinc-400'
-                                }`}>
+                                <span className="text-xs font-bold text-white font-display">
+                                  {mem.name}
+                                </span>
+                                <span
+                                  className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded uppercase ${
+                                    mem.status === 'active'
+                                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'
+                                      : mem.status === 'touring'
+                                      ? 'bg-blue-950 text-blue-400 border border-blue-500/30'
+                                      : 'bg-zinc-800 text-zinc-400'
+                                  }`}
+                                >
                                   {mem.status || 'active'}
                                 </span>
                               </div>
@@ -2089,18 +2782,40 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="flex items-center gap-1 shrink-0">
+                              {lineup.length > 1 && (
+                                <div className="flex items-center gap-0.5 mr-1">
+                                  <button
+                                    type="button"
+                                    disabled={mIdx === 0}
+                                    onClick={() => handleMoveLineupMember(mIdx, -1)}
+                                    className="p-1 rounded bg-zinc-900 text-zinc-400 hover:text-amber-300 disabled:opacity-25 cursor-pointer"
+                                    title="Move up"
+                                  >
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={mIdx === lineup.length - 1}
+                                    onClick={() => handleMoveLineupMember(mIdx, 1)}
+                                    className="p-1 rounded bg-zinc-900 text-zinc-400 hover:text-amber-300 disabled:opacity-25 cursor-pointer"
+                                    title="Move down"
+                                  >
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => handleEditMember(mIdx)}
-                                className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-mono"
+                                className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-mono cursor-pointer"
                               >
                                 Edit
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleRemoveMember(mIdx)}
-                                className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-900"
+                                className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-900 cursor-pointer"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -2116,72 +2831,88 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
               {/* TAB 3: DISCOGRAPHY */}
               {activeTab === 'discography' && (
                 <div className="space-y-3.5 animate-in fade-in duration-150">
-
-
-                  <div className="p-3 bg-zinc-950 border border-zinc-850 rounded-2xl space-y-3">
+                  <div className="p-3.5 bg-zinc-950 border border-zinc-850 rounded-2xl space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
                         <Disc className="w-3.5 h-3.5 text-amber-400" />
-                        {editingAlbumIdx !== null ? `Edit Release: ${releaseTitle}` : 'Add Album / EP / Demo Release'}
+                        {editingAlbumIdx !== null
+                          ? `Edit Release: ${releaseTitle}`
+                          : 'Add Album / EP / Demo Release'}
                       </span>
                       {editingAlbumIdx !== null && (
                         <button
                           type="button"
                           onClick={resetReleaseInputs}
-                          className="text-[10px] font-mono text-zinc-400 hover:text-white"
+                          className="text-[10px] font-mono text-zinc-400 hover:text-white cursor-pointer"
                         >
                           Cancel Edit
                         </button>
                       )}
                     </div>
 
-                    {/* Release Title */}
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono text-zinc-400 uppercase">Release Title *</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Considerated, Effigy of the Forgotten"
-                        value={releaseTitle}
-                        onChange={(e) => setReleaseTitle(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
-                      />
-                    </div>
-
-                    {/* Release Year & Release Type on the same level */}
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Release Year</label>
+                    {/* Release Title, Year & Tactile Release Type Pills */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                      <div className="sm:col-span-5 space-y-1">
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">
+                          Release Title *
+                        </label>
                         <input
                           type="text"
-                          placeholder="1991"
+                          placeholder="e.g. Destroy the Opposition"
+                          value={releaseTitle}
+                          onChange={(e) => setReleaseTitle(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">
+                          Release Year
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="2000"
                           value={releaseYear}
                           onChange={(e) => setReleaseYear(e.target.value)}
                           className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
                         />
                       </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Release Type</label>
-                        <select
-                          value={releaseType}
-                          onChange={(e: any) => setReleaseType(e.target.value)}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
-                        >
-                          <option value="album">Full Album</option>
-                          <option value="ep">EP</option>
-                          <option value="single">Single</option>
-                          <option value="demo">Demo</option>
-                        </select>
+                      <div className="sm:col-span-5 space-y-1">
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">
+                          Release Type
+                        </label>
+                        <div className="grid grid-cols-4 gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+                          {RELEASE_TYPE_OPTIONS.map((rt) => {
+                            const active = releaseType === rt.value;
+                            return (
+                              <button
+                                key={rt.value}
+                                type="button"
+                                onClick={() => setReleaseType(rt.value)}
+                                className={`py-1.5 rounded-lg font-mono text-[10px] font-bold uppercase transition cursor-pointer ${
+                                  active
+                                    ? 'bg-amber-500 text-black shadow-sm'
+                                    : 'text-zinc-400 hover:text-white'
+                                }`}
+                              >
+                                {rt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Shrunk Label input & Catalog ID next to it */}
+                    {/* Label & Catalog ID */}
                     <div className="grid grid-cols-2 gap-2.5">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Record Label</label>
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">
+                          Record Label
+                        </label>
                         <input
                           type="text"
-                          placeholder="Roadrunner"
+                          placeholder="Relapse Records"
                           value={releaseLabel}
                           onChange={(e) => setReleaseLabel(e.target.value)}
                           className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
@@ -2189,10 +2920,12 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-[10px] font-mono text-zinc-400 uppercase">Catalog ID (Cat #)</label>
+                        <label className="text-[10px] font-mono text-zinc-400 uppercase">
+                          Catalog ID (Cat #)
+                        </label>
                         <input
                           type="text"
-                          placeholder="ROAR-019"
+                          placeholder="RR-6456"
                           value={releaseCatalogId}
                           onChange={(e) => setReleaseCatalogId(e.target.value)}
                           className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
@@ -2215,26 +2948,30 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                       </div>
 
                       <div className="flex items-start gap-2.5">
-                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-black border border-zinc-800 flex items-center justify-center shrink-0 shadow-inner mt-0.5">
+                        <div className="w-12 h-12 rounded-lg overflow-hidden bg-black border border-zinc-800 flex items-center justify-center shrink-0 shadow-inner mt-0.5">
                           {releaseImageUrl ? (
-                            <img src={releaseImageUrl} alt="Cover" className="w-full h-full object-cover" />
+                            <img
+                              src={releaseImageUrl}
+                              alt="Cover"
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
-                            <Disc className="w-4 h-4 text-zinc-600" />
+                            <Disc className="w-5 h-5 text-zinc-600" />
                           )}
                         </div>
 
-                        <div className="flex-1 space-y-2">
+                        <div className="flex-1 flex flex-col sm:flex-row gap-2">
                           <input
                             type="text"
-                            placeholder="Paste image URL..."
+                            placeholder="Paste cover image URL..."
                             value={releaseImageUrl}
                             onChange={(e) => setReleaseImageUrl(e.target.value)}
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white outline-none focus:border-amber-500"
+                            className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white outline-none focus:border-amber-500"
                           />
 
-                          <label className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition-colors shadow-sm">
+                          <label className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase cursor-pointer transition-colors shadow-sm shrink-0">
                             <Upload className="w-3 h-3" />
-                            <span>Upload Image File</span>
+                            <span>Upload Cover</span>
                             <input
                               type="file"
                               accept="image/*"
@@ -2242,7 +2979,13 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                  handleDeviceFileUpload(file, 'community-bands', 'release-art', (url) => setReleaseImageUrl(url), setIsUploadingAlbumImg);
+                                  handleDeviceFileUpload(
+                                    file,
+                                    'community-bands',
+                                    'release-art',
+                                    (url) => setReleaseImageUrl(url),
+                                    setIsUploadingAlbumImg
+                                  );
                                 }
                               }}
                             />
@@ -2251,7 +2994,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                       </div>
                     </div>
 
-                    {/* Tracklist Builder */}
+                    {/* Tracklist Builder with Both Screenshot OCR & Bulk Text Tracklist Parser */}
                     <div
                       onPaste={(e) => {
                         const items = e.clipboardData?.items;
@@ -2268,71 +3011,142 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                           handleScanReleaseScreenshot(files);
                         }
                       }}
-                      className="pt-2 border-t border-zinc-850 space-y-2"
+                      className="pt-2 border-t border-zinc-850 space-y-2.5"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center gap-1.5">
+                        <label className="text-[10px] font-mono font-bold text-zinc-300 uppercase flex items-center gap-2">
                           <span>Tracklist ({releaseTracks.length} tracks)</span>
-                        </label>
-                        <label
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-mono font-bold uppercase cursor-pointer transition-colors ${
-                            isScanningTracklistImg
-                              ? 'bg-red-500/20 border-red-500/40 text-red-300'
-                              : 'bg-red-600/15 hover:bg-red-600/25 border-red-500/30 text-red-300'
-                          }`}
-                          title="Upload or paste (Ctrl+V) a screenshot of a Metal-Archives tracklist to auto-fill all songs and album info"
-                        >
-                          {isScanningTracklistImg ? (
-                            <>
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                              <span>Scanning Screenshot...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Camera className="w-3 h-3" />
-                              <span>Scan Screenshot to Fill Tracklist</span>
-                            </>
+                          {releaseTracks.length > 0 && (
+                            <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] text-amber-300">
+                              Total: {formatTotalTrackRuntime(releaseTracks)}
+                            </span>
                           )}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            disabled={isScanningTracklistImg}
-                            className="sr-only"
-                            onChange={(e) => {
-                              if (e.target.files?.length) {
-                                handleScanReleaseScreenshot(e.target.files);
-                                e.target.value = '';
-                              }
-                            }}
-                          />
                         </label>
+
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setShowQuickPasteTracklist((prev) => !prev)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-mono font-bold uppercase cursor-pointer transition-colors ${
+                              showQuickPasteTracklist
+                                ? 'bg-amber-500 text-black border-amber-400'
+                                : 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/30 text-amber-300'
+                            }`}
+                          >
+                            <ClipboardPaste className="w-3 h-3" />
+                            <span>Quick-Paste Tracklist</span>
+                          </button>
+
+                          <label
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-mono font-bold uppercase cursor-pointer transition-colors ${
+                              isScanningTracklistImg
+                                ? 'bg-red-500/20 border-red-500/40 text-red-300'
+                                : 'bg-red-600/15 hover:bg-red-600/25 border-red-500/30 text-red-300'
+                            }`}
+                            title="Upload or paste (Ctrl+V) a screenshot of a Metal-Archives tracklist to auto-fill all songs and album info"
+                          >
+                            {isScanningTracklistImg ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <span>Scanning Screenshot...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Camera className="w-3 h-3" />
+                                <span>Scan Screenshot</span>
+                              </>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              disabled={isScanningTracklistImg}
+                              className="sr-only"
+                              onChange={(e) => {
+                                if (e.target.files?.length) {
+                                  handleScanReleaseScreenshot(e.target.files);
+                                  e.target.value = '';
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
                       </div>
 
-                      {/* Song Title Input Full Width */}
+                      {/* Quick-Paste Bulk Tracklist Box */}
+                      {showQuickPasteTracklist && (
+                        <div className="p-3 rounded-xl bg-black/80 border border-amber-500/40 space-y-2 animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-mono font-bold text-amber-300 flex items-center gap-1.5">
+                              <Wand2 className="w-3.5 h-3.5" />
+                              <span>Bulk Text Tracklist Parser</span>
+                            </span>
+                            <span className="text-[10px] font-mono text-zinc-400">
+                              Extracts track numbers, titles &amp; durations
+                            </span>
+                          </div>
+                          <textarea
+                            rows={5}
+                            value={quickPasteTracklistText}
+                            onChange={(e) => setQuickPasteTracklistText(e.target.value)}
+                            placeholder={`1. Praise the Lord (Opium of the Masses) 05:31\n2. Destroy the Opposition 05:11\n3. Born in Sodom 04:46\n4. Epidemic of Hate 04:42`}
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs font-mono text-white outline-none focus:border-amber-500"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setShowQuickPasteTracklist(false)}
+                              className="px-3 py-1.5 rounded-lg bg-zinc-900 text-zinc-400 font-mono text-[10px] uppercase cursor-pointer"
+                            >
+                              Close
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleBulkParseTracklist}
+                              className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-[10px] uppercase flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Wand2 className="w-3 h-3" />
+                              <span>Parse Tracks</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Single Track Adder */}
                       <div className="space-y-2 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-850">
                         <input
                           type="text"
-                          placeholder="Song Title (Full Width)..."
+                          placeholder="Song Title (press Enter to add)..."
                           value={newTrackTitle}
                           onChange={(e) => setNewTrackTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddTrackToRelease();
+                            }
+                          }}
                           className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white outline-none focus:border-amber-500"
                         />
 
-                        {/* Under it: Duration, Add Lyrics button, Add Track button */}
                         <div className="flex items-center gap-2">
                           <input
                             type="text"
                             placeholder="Duration (3:45)"
                             value={newTrackDuration}
                             onChange={(e) => setNewTrackDuration(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddTrackToRelease();
+                              }
+                            }}
                             className="w-28 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white outline-none"
                           />
 
                           <button
                             type="button"
                             onClick={() => setShowNewTrackLyricsInput(!showNewTrackLyricsInput)}
-                            className={`px-2.5 py-1.5 rounded-lg border font-mono text-[10px] uppercase font-bold transition-colors ${
+                            className={`px-2.5 py-1.5 rounded-lg border font-mono text-[10px] uppercase font-bold transition-colors cursor-pointer ${
                               showNewTrackLyricsInput || newTrackLyrics.trim()
                                 ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
                                 : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
@@ -2345,9 +3159,9 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                             type="button"
                             onClick={handleAddTrackToRelease}
                             disabled={!newTrackTitle.trim()}
-                            className="flex-1 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-mono text-xs uppercase font-bold shadow-sm"
+                            className="flex-1 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-mono text-xs uppercase font-bold shadow-sm cursor-pointer"
                           >
-                            + Track
+                            + Add Track
                           </button>
                         </div>
 
@@ -2363,24 +3177,58 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                       </div>
 
                       {releaseTracks.length > 0 && (
-                        <div className="space-y-1.5 pt-1 max-h-40 overflow-y-auto">
+                        <div className="space-y-1.5 pt-1 max-h-48 overflow-y-auto">
                           {releaseTracks.map((tr, tIdx) => (
-                            <div key={`track-${tIdx}`} className="bg-zinc-900/60 border border-zinc-800 p-2 rounded-lg text-xs font-mono space-y-1">
-                              <div className="flex items-center justify-between">
-                                <span className="text-zinc-300 font-bold">{tr.number}. {tr.title} <span className="text-zinc-500 font-normal">({tr.duration})</span></span>
-                                <div className="flex items-center gap-2">
-                                  {tr.lyrics && <span className="text-[9px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">Lyrics</span>}
+                            <div
+                              key={`track-${tIdx}`}
+                              className="bg-zinc-900/60 border border-zinc-800 p-2 rounded-lg text-xs font-mono space-y-1"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-zinc-200 font-bold truncate">
+                                  {tr.number}. {tr.title}{' '}
+                                  <span className="text-zinc-500 font-normal">({tr.duration})</span>
+                                </span>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {tr.lyrics && (
+                                    <span className="text-[9px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                      Lyrics
+                                    </span>
+                                  )}
+                                  {releaseTracks.length > 1 && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        disabled={tIdx === 0}
+                                        onClick={() => handleMoveTrack(tIdx, -1)}
+                                        className="p-1 text-zinc-500 hover:text-amber-300 disabled:opacity-25 cursor-pointer"
+                                        title="Move track up"
+                                      >
+                                        <ChevronUp className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={tIdx === releaseTracks.length - 1}
+                                        onClick={() => handleMoveTrack(tIdx, 1)}
+                                        className="p-1 text-zinc-500 hover:text-amber-300 disabled:opacity-25 cursor-pointer"
+                                        title="Move track down"
+                                      >
+                                        <ChevronDown className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveTrack(tIdx)}
-                                    className="text-zinc-500 hover:text-red-400"
+                                    className="p-1 text-zinc-500 hover:text-red-400 cursor-pointer"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                               </div>
                               {tr.lyrics && (
-                                <p className="text-[10px] text-zinc-400 italic line-clamp-1 pl-3 border-l border-zinc-800">{tr.lyrics}</p>
+                                <p className="text-[10px] text-zinc-400 italic line-clamp-1 pl-3 border-l border-zinc-800">
+                                  {tr.lyrics}
+                                </p>
                               )}
                             </div>
                           ))}
@@ -2396,7 +3244,7 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                         className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-mono font-black text-xs uppercase tracking-wider cursor-pointer shadow-md flex items-center justify-center gap-1.5"
                       >
                         <Check className="w-3.5 h-3.5" />
-                        {editingAlbumIdx !== null ? 'Update Release' : 'Add Release'}
+                        {editingAlbumIdx !== null ? 'Update Release' : 'Add Release to Catalog'}
                       </button>
                     </div>
                   </div>
@@ -2404,35 +3252,60 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                   {/* Discography List */}
                   <div className="space-y-2 pb-6">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-xs font-mono font-bold text-zinc-400 uppercase">Catalog Releases ({albums.length})</span>
-                      <div className="flex items-center gap-2">
-                        {albums.length > 0 && (
+                      <span className="text-xs font-mono font-bold text-zinc-400 uppercase">
+                        Catalog Releases ({albums.length})
+                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {albums.length > 0 && !confirmWipeDisco && (
                           <button
                             type="button"
-                            onClick={async () => {
-                              if (window.confirm(`Wipe all ${albums.length} albums for ${name || 'this band'} from local cache and database to get a clean start?`)) {
+                            onClick={() => setConfirmWipeDisco(true)}
+                            className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-500/40 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                            title="Wipe all albums from local storage and database for a clean start"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Wipe All Albums
+                          </button>
+                        )}
+                        {confirmWipeDisco && (
+                          <div className="flex items-center gap-1.5 bg-red-950/50 border border-red-500/50 px-2.5 py-1 rounded-xl">
+                            <span className="text-[10px] font-mono text-red-200">
+                              Wipe all {albums.length} releases?
+                            </span>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setConfirmWipeDisco(false);
                                 setAlbums([]);
                                 resetReleaseInputs();
                                 const targetId = selectedBand?.id;
                                 if (targetId) {
                                   await communityBandManager.wipeBandDiscography(targetId, name);
                                 }
-                                triggerNotification?.(`Wiped all releases for ${name || 'band'}! Ready for fresh import.`);
-                              }
-                            }}
-                            className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-500/40 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
-                            title="Wipe all albums from local storage and database for a clean start"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" /> Wipe All Albums (Fresh Start)
-                          </button>
+                                triggerNotification?.(
+                                  `Wiped all releases for ${name || 'band'}! Ready for fresh import.`
+                                );
+                              }}
+                              className="px-2 py-0.5 rounded bg-red-600 text-white font-mono text-[10px] font-bold cursor-pointer"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmWipeDisco(false)}
+                              className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         )}
                         <button
                           type="button"
                           id="btn-import-discography-hub"
                           onClick={() => {
                             setShowImporterModal(true);
-                            // Also dispatch custom event for any global listeners
-                            const event = new CustomEvent('open_metal_archives_import', { detail: { bandId: selectedBand?.id || 'band-1', bandName: name } });
+                            const event = new CustomEvent('open_metal_archives_import', {
+                              detail: { bandId: selectedBand?.id || 'band-1', bandName: name },
+                            });
                             window.dispatchEvent(event);
                           }}
                           className="px-3 py-1.5 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/40 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow transition-all hover:scale-[1.02] active:scale-95"
@@ -2443,7 +3316,8 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                     </div>
                     {albums.length === 0 ? (
                       <div className="p-6 text-center rounded-xl border border-dashed border-zinc-800 text-zinc-500 text-xs font-mono">
-                        No releases added yet. Use the form above to add albums and tracklists.
+                        No releases added yet. Use the form above or click &quot;Import
+                        Discography&quot; to add albums and tracklists.
                       </div>
                     ) : (
                       <div className="space-y-2.5">
@@ -2455,7 +3329,10 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                             <div className="flex items-center gap-3.5 min-w-0">
                               <div className="w-12 h-12 rounded-xl bg-black border border-zinc-800 overflow-hidden flex items-center justify-center shrink-0 shadow">
                                 {(() => {
-                                  const coverSrc = getReleaseCoverUrl(alb, name || selectedBand?.name);
+                                  const coverSrc = getReleaseCoverUrl(
+                                    alb,
+                                    name || selectedBand?.name
+                                  );
                                   return coverSrc ? (
                                     <img
                                       src={coverSrc}
@@ -2463,7 +3340,10 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                                       className="w-full h-full object-cover"
                                       onError={(e) => {
                                         const target = e.currentTarget;
-                                        const fallback = findMasterReleaseCover(alb.title, name || selectedBand?.name);
+                                        const fallback = findMasterReleaseCover(
+                                          alb.title,
+                                          name || selectedBand?.name
+                                        );
                                         if (fallback && target.src !== fallback) {
                                           target.src = fallback;
                                           target.style.display = 'block';
@@ -2472,19 +3352,31 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                                         }
                                       }}
                                     />
-                                  ) : null;
+                                  ) : (
+                                    <Disc className="w-5 h-5 text-zinc-600" />
+                                  );
                                 })()}
-                                <Disc className="fallback-disc-icon w-5 h-5 text-zinc-600 hidden" />
                               </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold text-white truncate font-display">{alb.title}</span>
-                                  <span className="uppercase text-[8px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <div className="text-xs sm:text-sm font-bold text-white leading-snug break-words line-clamp-2 font-display">
+                                  {alb.title}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-400 font-mono">
+                                  <span className="uppercase text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
                                     {alb.type || 'album'}
                                   </span>
-                                </div>
-                                <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
-                                  {alb.year} • {alb.label || 'Independent'} • {alb.tracks?.length || 0} tracks
+                                  <span>{alb.year}</span>
+                                  <span>•</span>
+                                  <span className="truncate max-w-[160px] sm:max-w-[260px]">
+                                    {alb.label || 'Independent'}
+                                  </span>
+                                  <span>•</span>
+                                  <span className="whitespace-nowrap">
+                                    {alb.tracks?.length || 0} tracks
+                                    {alb.tracks && alb.tracks.length > 0
+                                      ? ` (${formatTotalTrackRuntime(alb.tracks)})`
+                                      : ''}
+                                  </span>
                                 </div>
                               </div>
                             </div>
@@ -2493,14 +3385,14 @@ export const CommunityBandCuratorModal: React.FC<CommunityBandCuratorModalProps>
                               <button
                                 type="button"
                                 onClick={() => handleLoadReleaseForEdit(i)}
-                                className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-mono uppercase font-bold"
+                                className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-mono uppercase font-bold cursor-pointer"
                               >
                                 Edit
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleRemoveAlbum(i)}
-                                className="p-2 rounded-xl text-zinc-500 hover:text-red-400 hover:bg-zinc-900"
+                                className="p-2 rounded-xl text-zinc-500 hover:text-red-400 hover:bg-zinc-900 cursor-pointer"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>

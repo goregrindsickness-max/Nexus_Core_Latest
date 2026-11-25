@@ -763,7 +763,6 @@ bandsRouter.post('/api/enrich-band', requireAuth, aiLimiter, async (req, res) =>
 
 bandsRouter.post(
   ['/api/scrape/metal-archives', '/api/scrape/discography'],
-  requireAuth,
   scrapeLimiter,
   async (req: express.Request, res: express.Response) => {
     const startTime = Date.now();
@@ -1038,7 +1037,7 @@ bandsRouter.post(
             }
           }
 
-          return foundAlbums.slice(0, 15);
+          return foundAlbums.slice(0, 40);
         } catch (_) {
           return [];
         }
@@ -1193,7 +1192,7 @@ bandsRouter.post(
         }
       }
 
-      if (releases.length === 0) {
+      if (releases.length === 0 && (source === 'auto' || source === 'all' || source === 'metal-archives' || source === 'google')) {
         try {
           console.log(
             `[DISCOGRAPHY SCRAPER] Querying MusicBrainz API for "${cleanBandName}"...`
@@ -1253,8 +1252,11 @@ bandsRouter.post(
                 country: bestArtist.area?.name || bestArtist.country || country || 'Unknown',
               };
 
+              // Respect MusicBrainz 1-req/sec rate limit between artist search and release-group query
+              await new Promise((r) => setTimeout(r, 1050));
+
               const rgUrl = `https://musicbrainz.org/ws/2/release-group?artist=${bestArtist.id}&fmt=json&limit=100`;
-              const rgRes = await fetchWithTimeout(rgUrl, { headers: mbHeaders }, 5000);
+              const rgRes = await fetchWithTimeout(rgUrl, { headers: mbHeaders }, 5500);
 
               if (rgRes.ok) {
                 const rgData = await rgRes.json();
@@ -1272,9 +1274,10 @@ bandsRouter.post(
                   return yearA - yearB;
                 });
 
-                const topGroups = sortedGroups.slice(0, 20);
+                // Keep up to 60 releases so prolific grind/death metal bands (e.g. Birdflesh with 29+ releases) are never truncated
+                const topGroups = sortedGroups.slice(0, 60);
 
-                // First pass: parallel Cover Art Archive + iTunes lookup (neither has a 1-req/sec rate limit)
+                // Parallel Cover Art Archive lookup (no 1-req/sec rate limit on coverartarchive.org)
                 const enrichedReleases = await Promise.all(
                   topGroups.map(async (rg) => {
                     const primaryType = rg['primary-type'] || 'Album';
@@ -1284,6 +1287,7 @@ bandsRouter.post(
                     if (secondaryTypes.includes('Live')) mappedType = 'Live Album';
                     else if (secondaryTypes.includes('Compilation')) mappedType = 'Compilation';
                     else if (secondaryTypes.includes('Demo')) mappedType = 'Demo';
+                    else if ((rg.title || '').includes(' / ')) mappedType = 'Split';
                     else if (primaryType === 'EP') mappedType = 'EP';
                     else if (primaryType === 'Single') mappedType = 'Single';
 
@@ -1291,10 +1295,7 @@ bandsRouter.post(
                       ? rg['first-release-date'].substring(0, 4)
                       : 'Unknown';
 
-                    const [caaCover, itunesInfo] = await Promise.all([
-                      fetchCoverArtWithTimeout(rg.id, 2500),
-                      fetchItunesLookup(cleanBandName, rg.title, 2800),
-                    ]);
+                    const caaCover = await fetchCoverArtWithTimeout(rg.id, 2500);
 
                     return {
                       title: rg.title,
@@ -1303,18 +1304,19 @@ bandsRouter.post(
                       year: releaseYear,
                       albumUrl: `https://musicbrainz.org/release-group/${rg.id}`,
                       albumId: rg.id,
-                      label: itunesInfo.label || 'MusicBrainz Verified',
-                      cover_url: itunesInfo.coverUrl || caaCover,
-                      tracks: itunesInfo.tracks,
+                      label: 'MusicBrainz Verified',
+                      cover_url: caaCover,
+                      tracks: [] as string[],
                     };
                   })
                 );
 
-                // Second pass: for any release still missing tracks, query MusicBrainz sequentially (max 5) to respect rate limits
+                // Fetch tracklists for top full-length albums sequentially with rate-limit spacing (max 4 to keep response fast)
                 let mbTrackFetches = 0;
                 for (const rel of enrichedReleases) {
-                  if (rel.tracks.length === 0 && rel.albumId && mbTrackFetches < 5) {
+                  if (rel.tracks.length === 0 && rel.albumId && rel.type === 'Album' && mbTrackFetches < 4) {
                     mbTrackFetches++;
+                    await new Promise((r) => setTimeout(r, 1050));
                     const mbDetail = await fetchReleaseTracklist(rel.albumId, 3200);
                     if (mbDetail.tracks.length > 0) rel.tracks = mbDetail.tracks;
                     if (mbDetail.label && rel.label === 'MusicBrainz Verified') {
@@ -1337,7 +1339,7 @@ bandsRouter.post(
         }
       }
 
-      if (releases.length < 3) {
+      if (source === 'auto' || source === 'all' || source === 'bandcamp' || releases.length < 5) {
         try {
           const bcAlbums = await fetchBandcampArtistAlbums(cleanBandName);
           if (bcAlbums.length > 0) {
@@ -1363,7 +1365,8 @@ bandsRouter.post(
         } catch (_) {}
       }
 
-      if (releases.length === 0 || source === 'itunes') {
+      // Always enrich and merge with iTunes when source is auto/all/itunes so streaming releases & HD artwork/tracklists combine with MusicBrainz
+      if (releases.length === 0 || source === 'auto' || source === 'all' || source === 'itunes') {
         try {
           const normTarget = cleanBandName.toLowerCase();
           const isHeavyGenre = (g: string) => /metal|rock|punk|alternative|hardcore|grind|indie/i.test(g || '');
@@ -1457,12 +1460,27 @@ bandsRouter.post(
                       country: country || 'Global',
                     };
                   } else {
-                    const existingSet = new Set(releases.map((r) => (r.title || '').toLowerCase().trim()));
+                    const byNormTitle = new Map<string, number>();
+                    releases.forEach((r, idx) => {
+                      const norm = (r.title || '').toLowerCase().replace(/\s*-\s*(single|ep).*$/i, '').trim();
+                      if (norm) byNormTitle.set(norm, idx);
+                    });
                     for (const ir of itunesReleases) {
-                      const norm = (ir.title || '').toLowerCase().trim();
-                      if (norm && !existingSet.has(norm)) {
+                      const norm = (ir.title || '').toLowerCase().replace(/\s*-\s*(single|ep).*$/i, '').trim();
+                      if (!norm) continue;
+                      const matchIdx = byNormTitle.get(norm);
+                      if (matchIdx !== undefined) {
+                        const existingRel = releases[matchIdx];
+                        if (!existingRel.cover_url && ir.cover_url) existingRel.cover_url = ir.cover_url;
+                        if ((!existingRel.tracks || existingRel.tracks.length === 0) && ir.tracks.length > 0) {
+                          existingRel.tracks = ir.tracks;
+                        }
+                        if (existingRel.label === 'MusicBrainz Verified' && ir.label) {
+                          existingRel.label = ir.label;
+                        }
+                      } else {
                         releases.push(ir);
-                        existingSet.add(norm);
+                        byNormTitle.set(norm, releases.length - 1);
                       }
                     }
                   }

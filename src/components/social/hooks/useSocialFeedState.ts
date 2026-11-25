@@ -491,91 +491,121 @@ export function useSocialFeedState({
         // The reacting user does NOT receive any notification toast or notification entry.
         if (!wasActive && targetPost) {
           const myIds = new Set(
-            [activeUserId, userProfile?.id, userProfile?.email, userProfile?.username, userProfile?.name, profileHandle]
+            [
+              activeUserId,
+              userProfile?.id,
+              userProfile?.band_id,
+              userProfile?.promoter_id,
+              userProfile?.label_id,
+              userProfile?.email,
+              userProfile?.username,
+              userProfile?.name,
+              userProfile?.band_name,
+              profileHandle,
+            ]
               .filter(Boolean)
-              .map(x => String(x).toLowerCase().trim())
+              .map((x) => String(x).toLowerCase().trim())
           );
 
-          const targetAuthorRaw = (targetPost as any).authorId || (targetPost as any).profile_id || (targetPost as any).user_id || (targetPost.author as any)?.id || (targetPost.author as any)?.email || (targetPost.author as any)?.name || 'author';
-          const targetAuthorEmail = (targetPost.author as any)?.email;
-          const targetAuthorName = (targetPost.author as any)?.name || (targetPost as any).authorName;
+          const targetAuthorRaw =
+            (targetPost as any).authorId ||
+            (targetPost as any).profile_id ||
+            (targetPost as any).user_id ||
+            (targetPost.author as any)?.id ||
+            (targetPost.author as any)?.email ||
+            (targetPost.author as any)?.name ||
+            (targetPost as any).authorName ||
+            '';
 
           const rawUUIDMatch = extractUUID(targetAuthorRaw);
-          const validReceiverUUID = rawUUIDMatch || (typeof targetAuthorRaw === 'string' && targetAuthorRaw.trim() ? generateDeterministicUUID(targetAuthorRaw.trim()) : '00000000-0000-0000-0000-000000000000');
+          const validReceiverUUID =
+            rawUUIDMatch ||
+            (typeof targetAuthorRaw === 'string' && targetAuthorRaw.trim()
+              ? generateDeterministicUUID(targetAuthorRaw.trim())
+              : null);
 
-          const actorName = userProfile?.name || userProfile?.console_handle || profileHandle || 'A user';
-          const postSnippet = (targetPost.content || (targetPost as any).message || (targetPost as any).text || 'transmission').substring(0, 50);
-          const notifId = generateDeterministicUUID(`notif_rx_${postId}_${activeUserId}_${reactionKey}`);
-          
           const rawActorUUID = extractUUID(activeUserId) || extractUUID(userProfile?.id);
-          const currentActorId = rawActorUUID || (activeUserId ? generateDeterministicUUID(String(activeUserId)) : null);
+          const currentActorId =
+            rawActorUUID || (activeUserId ? generateDeterministicUUID(String(activeUserId)) : null);
           const currentActorEmail = userProfile?.email || null;
 
-          const notifItem = {
-            id: notifId,
-            user_id: validReceiverUUID,
-            actor_id: currentActorId,
-            actor_email: currentActorEmail,
-            title: `🔥 NEW REACTION`,
-            message: `${actorName} reacted (${reactionKey.toUpperCase()}) to transmission: "${postSnippet}"`,
-            content: `${actorName} reacted (${reactionKey.toUpperCase()}) to transmission: "${postSnippet}"`,
-            category: 'REACTION',
-            highlight: 'New Reaction',
-            timeAgo: 'Just now',
-            timestamp: new Date().toISOString(),
-            created_at: new Date().toISOString(),
-            read: false,
-            is_read: false,
-            type: 'post_reaction',
-            postId: postId,
-            linkTab: 'feed',
-          };
+          const isSelfPost = Boolean(
+            (targetPost.author as any)?.isYou ||
+              !validReceiverUUID ||
+              validReceiverUUID === currentActorId ||
+              myIds.has(String(targetAuthorRaw).toLowerCase().trim()) ||
+              myIds.has(String(validReceiverUUID).toLowerCase().trim())
+          );
 
-          // 1. Dispatch custom event so local UI right notifications drawer updates instantly
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('nexus_in_app_notice', { detail: notifItem }));
-          }
+          if (!isSelfPost && validReceiverUUID) {
+            const actorName =
+              userProfile?.name || userProfile?.console_handle || profileHandle || 'A user';
+            const postSnippet = (
+              targetPost.content ||
+              (targetPost as any).message ||
+              (targetPost as any).text ||
+              'transmission'
+            ).substring(0, 50);
+            const notifId = generateDeterministicUUID(
+              `notif_rx_${postId}_${activeUserId}_${reactionKey}`
+            );
 
-          // 2. Persist locally to localStorage notifications cache
-          try {
-            const rawLocal = localStorage.getItem('nexus_local_notifications_v1');
-            const localNotifs = rawLocal ? JSON.parse(rawLocal) : [];
-            const updatedNotifs = [notifItem, ...localNotifs.filter((n: any) => n.id !== notifItem.id)].slice(0, 100);
-            localStorage.setItem('nexus_local_notifications_v1', JSON.stringify(updatedNotifs));
-          } catch (_) {}
-
-          // 3. Persist to Supabase database
-          await supabase.from('nexus_notifications').upsert([
-            {
-              id: ensureUUID(notifItem.id),
+            const notifItem = {
+              id: notifId,
               user_id: validReceiverUUID,
               actor_id: currentActorId,
-              title: notifItem.title,
-              message: notifItem.message,
-              type: 'post_reaction',
-              is_read: false,
-              data: {
-                ...notifItem,
-                category: 'REACTION',
-                actor_id: currentActorId,
-                actor_email: currentActorEmail,
-              },
+              actor_email: currentActorEmail,
+              title: `🔥 NEW REACTION`,
+              message: `${actorName} reacted (${reactionKey.toUpperCase()}) to transmission: "${postSnippet}"`,
+              content: `${actorName} reacted (${reactionKey.toUpperCase()}) to transmission: "${postSnippet}"`,
+              category: 'REACTION',
+              highlight: 'New Reaction',
+              timeAgo: 'Just now',
+              timestamp: new Date().toISOString(),
               created_at: new Date().toISOString(),
-            },
-          ], { onConflict: 'id' });
+              read: false,
+              is_read: false,
+              type: 'post_reaction',
+              postId: postId,
+              linkTab: 'feed',
+            };
 
-          if (validReceiverUUID !== currentActorId) {
-            pushManager.sendPushToServer({
-              userId: validReceiverUUID,
-              excludeUserId: currentActorId,
-              excludeUserEmail: currentActorEmail,
-              title: '🔥 New Reaction on Your Post',
-              body: notifItem.message,
-              category: 'artist_interactions',
-              targetTab: 'social',
-              priority: 'P1',
-              data: { postId, type: 'post_reaction', actorId: currentActorId }
-            }).catch(() => {});
+            // Persist to Supabase database for the recipient author
+            await supabase.from('nexus_notifications').upsert(
+              [
+                {
+                  id: ensureUUID(notifItem.id),
+                  user_id: validReceiverUUID,
+                  actor_id: currentActorId,
+                  title: notifItem.title,
+                  message: notifItem.message,
+                  type: 'post_reaction',
+                  is_read: false,
+                  data: {
+                    ...notifItem,
+                    category: 'REACTION',
+                    actor_id: currentActorId,
+                    actor_email: currentActorEmail,
+                  },
+                  created_at: new Date().toISOString(),
+                },
+              ],
+              { onConflict: 'id' }
+            );
+
+            pushManager
+              .sendPushToServer({
+                userId: validReceiverUUID,
+                excludeUserId: currentActorId,
+                excludeUserEmail: currentActorEmail,
+                title: '🔥 New Reaction on Your Post',
+                body: notifItem.message,
+                category: 'artist_interactions',
+                targetTab: 'social',
+                priority: 'P1',
+                data: { postId, type: 'post_reaction', actorId: currentActorId },
+              })
+              .catch(() => {});
           }
         }
       } catch (e) {

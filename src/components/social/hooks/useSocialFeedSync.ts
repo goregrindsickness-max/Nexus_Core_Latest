@@ -7,6 +7,11 @@ import {
   loadProfileIndexedDBCache,
   loadProfileLocalStorageCache
 } from '../utils/feedCacheUtils';
+import {
+  filterAndDeduplicateNotifications,
+  isNotificationForCurrentUser,
+  normalizeNotificationItem,
+} from '../utils/notificationUtils';
 import { profileStore, socialFeedStore } from '../../../utils/indexedDB';
 import { hasAuthenticatedSupabaseSession } from '../../../lib/supabaseQueryCache';
 
@@ -43,7 +48,11 @@ export function useSocialFeedSync({
       try {
         const rawLocal = localStorage.getItem('nexus_local_notifications_v1');
         if (rawLocal) {
-          localNotifs = JSON.parse(rawLocal);
+          const parsed = JSON.parse(rawLocal);
+          if (Array.isArray(parsed)) {
+            localNotifs = filterAndDeduplicateNotifications(parsed, userProfile, feed);
+            localStorage.setItem('nexus_local_notifications_v1', JSON.stringify(localNotifs));
+          }
         }
       } catch (_) {}
 
@@ -58,18 +67,7 @@ export function useSocialFeedSync({
             .limit(100);
 
           if (!error && data && Array.isArray(data)) {
-            remoteNotifs = data.map((row: any) => ({
-              ...(row.data || {}),
-              id: row.id,
-              user_id: row.user_id,
-              actor_id: row.actor_id,
-              title: row.title || row.data?.title || 'Notification',
-              message: row.message || row.data?.message || '',
-              category: row.category || row.type || 'SYSTEM',
-              read: row.is_read ?? row.data?.read ?? false,
-              is_read: row.is_read ?? row.data?.is_read ?? false,
-              created_at: row.created_at || new Date().toISOString()
-            }));
+            remoteNotifs = filterAndDeduplicateNotifications(data, userProfile, feed);
           }
         } catch (e) {
           console.warn('[useSocialFeedSync] Error fetching Supabase notifications:', e);
@@ -78,34 +76,28 @@ export function useSocialFeedSync({
 
       if (!active) return;
 
-      const combinedMap = new Map<string, any>();
-      [...remoteNotifs, ...localNotifs].forEach((n) => {
-        if (n && n.id && !combinedMap.has(n.id)) {
-          combinedMap.set(n.id, n);
-        }
-      });
-
-      const finalNotifs = Array.from(combinedMap.values()).sort((a, b) => {
+      const finalNotifs = filterAndDeduplicateNotifications(
+        [...remoteNotifs, ...localNotifs],
+        userProfile,
+        feed
+      ).sort((a, b) => {
         const timeA = new Date(a.created_at || a.timestamp || 0).getTime();
         const timeB = new Date(b.created_at || b.timestamp || 0).getTime();
         return timeB - timeA;
       });
 
-      if (finalNotifs.length > 0) {
-        setNotifications(prev => {
-          const prevMap = new Map((prev || []).map(p => [p.id, p]));
-          finalNotifs.forEach(fn => {
-            if (!prevMap.has(fn.id)) {
-              prevMap.set(fn.id, fn);
-            }
-          });
-          return Array.from(prevMap.values()).sort((a, b) => {
-            const timeA = new Date(a.created_at || a.timestamp || 0).getTime();
-            const timeB = new Date(b.created_at || b.timestamp || 0).getTime();
-            return timeB - timeA;
-          });
+      setNotifications((prev) => {
+        const combined = filterAndDeduplicateNotifications(
+          [...finalNotifs, ...(prev || [])],
+          userProfile,
+          feed
+        );
+        return combined.sort((a, b) => {
+          const timeA = new Date(a.created_at || a.timestamp || 0).getTime();
+          const timeB = new Date(b.created_at || b.timestamp || 0).getTime();
+          return timeB - timeA;
         });
-      }
+      });
     }
 
     loadNotifications();
@@ -163,54 +155,29 @@ export function useSocialFeedSync({
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
         const raw = payload.new as any;
         if (!raw) return;
+        if (!isNotificationForCurrentUser(raw, userProfile, feed)) return;
 
-        const myId = userProfile?.id;
-        const myEmail = userProfile?.email;
-
-        // Actor check: if current user is the actor who triggered this event, never notify themselves!
-        const isActor = Boolean(
-          (raw.actor_id && (raw.actor_id === myId || raw.actor_id === myEmail)) ||
-          (raw.actor_email && raw.actor_email === myEmail) ||
-          (raw.data?.actor_id && (raw.data?.actor_id === myId || raw.data?.actor_id === myEmail)) ||
-          (raw.data?.actor_email && raw.data?.actor_email === myEmail)
-        );
-        if (isActor) return;
-
-        // For reaction notifications, ensure it is strictly targeted to the post author (current user)
-        const isReaction = raw.category === 'REACTION' || raw.type === 'post_reaction' || (raw.title && String(raw.title).toUpperCase().includes('REACTION'));
-        if (isReaction) {
-          const isDirectRecipient = Boolean(
-            (myId && raw.user_id === myId) ||
-            (myEmail && (raw.user_id === myEmail || raw.data?.user_id === myEmail))
-          );
-          if (!isDirectRecipient) return;
-        } else {
-          const matchesUser = !raw.user_id || raw.user_id === myId || raw.user_id === myEmail;
-          if (!matchesUser) return;
-        }
-          try {
-            isIncomingNotifSync.current = true;
-            const notifRow = {
-              ...raw,
-              id: raw.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
-              message: raw.message || raw.content || raw.title || '',
-              category: raw.category || raw.type || 'SYSTEM',
-              read: raw.is_read ?? raw.read ?? false,
-              is_read: raw.is_read ?? raw.read ?? false,
-            };
-            if (setNotifications) {
-              setNotifications(prev => {
-                const exists = (prev || []).some(n => n.id === notifRow.id);
-                if (exists) return prev;
-                if (!notifRow.is_read) {
-                  queueMicrotask(() => {
-                    triggerNotification?.(`🔔 ${notifRow.title || 'Notification'}: ${notifRow.message}`);
-                  });
-                }
-                return [notifRow, ...(prev || [])];
-              });
-            }
-          } catch (e) {}
+        try {
+          isIncomingNotifSync.current = true;
+          const notifRow = normalizeNotificationItem(raw);
+          if (!notifRow) return;
+          if (setNotifications) {
+            setNotifications((prev) => {
+              const existingIdx = (prev || []).findIndex((n) => n.id === notifRow.id);
+              if (existingIdx !== -1) {
+                const updated = [...prev];
+                updated[existingIdx] = { ...updated[existingIdx], ...notifRow };
+                return updated;
+              }
+              if (!notifRow.is_read) {
+                queueMicrotask(() => {
+                  triggerNotification?.(`🔔 ${notifRow.title || 'Notification'}: ${notifRow.message}`);
+                });
+              }
+              return [notifRow, ...(prev || [])];
+            });
+          }
+        } catch (e) {}
       }
     });
 

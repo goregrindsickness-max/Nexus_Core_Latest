@@ -5,6 +5,7 @@ import { useTourNotes } from './hooks/useTourNotes';
 import { useGlobalDataSync } from './hooks/useGlobalDataSync';
 import { useBandManagement } from './hooks/useBandManagement';
 import { useTourLogistics } from './hooks/useTourLogistics';
+import { useAppVersionCheck } from './hooks/useAppVersionCheck';
 import { useModalStore } from './store/useModalStore';
 import { BAND_PORTAL_BILLING } from './config/billingMatrix';
 import { useBandState } from "./hooks/useBandState";
@@ -520,6 +521,9 @@ export default function App() {
   const [lockupTime, setLockupTime] = useState<string>(() => { try { return localStorage.getItem('tour_lockup_time') || "23:45"; } catch(e) { return "23:45"; } });
   const [isTime24Hour, setIsTime24Hour] = useState<boolean>(() => { try { return localStorage.getItem('tour_time_is_24h') !== 'false'; } catch(e) { return true; } });
   const [isEditingBusCall, setIsEditingBusCall] = useState<boolean>(false);
+  // Automatic client-side deploy version check & cache invalidation for iOS Safari / Home Screen PWAs
+  useAppVersionCheck();
+
   // Tour Logistics Hook
   const tourLogistics = useTourLogistics();
   const {

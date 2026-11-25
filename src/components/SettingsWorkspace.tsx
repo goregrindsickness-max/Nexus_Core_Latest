@@ -78,6 +78,17 @@ export default function SettingsWorkspace(props: any) {
     () => props.activeBand?.verification_platform || 'Spotify Official Artist'
   );
   const [verificationUrlInput, setVerificationUrlInput] = React.useState<string>('');
+  const [bandSpotifyInput, setBandSpotifyInput] = React.useState<string>(
+    () => props.activeBand?.spotify || props.activeBand?.spotify_url || ''
+  );
+  const [bandBandcampInput, setBandBandcampInput] = React.useState<string>(
+    () => props.activeBand?.bandcamp || props.activeBand?.bandcamp_url || ''
+  );
+
+  React.useEffect(() => {
+    setBandSpotifyInput(props.activeBand?.spotify || props.activeBand?.spotify_url || '');
+    setBandBandcampInput(props.activeBand?.bandcamp || props.activeBand?.bandcamp_url || '');
+  }, [props.activeBand?.id, props.activeBand?.spotify, props.activeBand?.spotify_url, props.activeBand?.bandcamp, props.activeBand?.bandcamp_url]);
 
   // Discography & Releases Manager state variables
   const [releasesList, setReleasesList] = useState<any[]>([]);
@@ -218,6 +229,10 @@ export default function SettingsWorkspace(props: any) {
       tech_rider_url: props.bandInfoTechRider ?? props.activeBand.tech_rider_url ?? '',
       tour_vehicle: props.bandInfoTourVehicle ?? props.activeBand.tour_vehicle ?? '',
       metal_archives_url: props.bandInfoMetalArchivesUrl ?? props.activeBand.metal_archives_url ?? '',
+      spotify: bandSpotifyInput.trim(),
+      spotify_url: bandSpotifyInput.trim(),
+      bandcamp: bandBandcampInput.trim(),
+      bandcamp_url: bandBandcampInput.trim(),
       micro_genres: cleanMicros,
       cover_url: coverUrl,
       logo_url: logoUrl,
@@ -565,7 +580,40 @@ export default function SettingsWorkspace(props: any) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest font-bold block">Spotify Artist URL</label>
+                <input 
+                  type="url" 
+                  value={bandSpotifyInput}
+                  onChange={(e) => setBandSpotifyInput(e.target.value)}
+                  placeholder="https://open.spotify.com/artist/..." 
+                  className="w-full bg-zinc-950/80 border border-zinc-800 hover:border-zinc-700 focus:border-emerald-500/50 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono text-cyan-400 uppercase tracking-widest font-bold block">Bandcamp Official URL</label>
+                <input 
+                  type="url" 
+                  value={bandBandcampInput}
+                  onChange={(e) => setBandBandcampInput(e.target.value)}
+                  placeholder="https://band.bandcamp.com" 
+                  className="w-full bg-zinc-950/80 border border-zinc-800 hover:border-zinc-700 focus:border-cyan-500/50 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono text-rose-400 uppercase tracking-widest font-bold block">Metal-Archives.com URL</label>
+                <input 
+                  type="url" 
+                  value={bandInfoMetalArchivesUrl}
+                  onChange={(e) => setBandInfoMetalArchivesUrl && setBandInfoMetalArchivesUrl(e.target.value)}
+                  placeholder="https://www.metal-archives.com/bands/..." 
+                  className="w-full bg-zinc-950/80 border border-zinc-800 hover:border-zinc-700 focus:border-rose-500/50 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none transition-colors"
+                />
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold block">Featured YouTube Link</label>
                 <input 
@@ -574,28 +622,6 @@ export default function SettingsWorkspace(props: any) {
                   onChange={(e) => setBandInfoYoutubeVideo && setBandInfoYoutubeVideo(e.target.value)}
                   placeholder="https://youtube.com/watch?v=..." 
                   className="w-full bg-zinc-950/80 border border-zinc-800 hover:border-zinc-700 focus:border-[#00ffcc]/50 rounded-xl px-3 py-2 text-xs text-white font-sans focus:outline-none transition-colors"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold block">Audio Hub / Bandcamp Link</label>
-                <input 
-                  type="url" 
-                  value={bandInfoStreamingUrl}
-                  onChange={(e) => setBandInfoStreamingUrl && setBandInfoStreamingUrl(e.target.value)}
-                  placeholder="https://spotify.com/..." 
-                  className="w-full bg-zinc-950/80 border border-zinc-800 hover:border-zinc-700 focus:border-[#00ffcc]/50 rounded-xl px-3 py-2 text-xs text-white font-sans focus:outline-none transition-colors"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold block">Metal-Archives.com URL</label>
-                <input 
-                  type="url" 
-                  value={bandInfoMetalArchivesUrl}
-                  onChange={(e) => setBandInfoMetalArchivesUrl && setBandInfoMetalArchivesUrl(e.target.value)}
-                  placeholder="https://www.metal-archives.com/bands/..." 
-                  className="w-full bg-zinc-950/80 border border-zinc-800 hover:border-zinc-700 focus:border-[#00ffcc]/50 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none transition-colors"
                 />
               </div>
 

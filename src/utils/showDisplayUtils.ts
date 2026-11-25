@@ -1488,18 +1488,30 @@ export function resolveConnectedTourForPost<T extends Record<string, any>>(
     authorName.includes('robert');
 
   // Detect Robert / MetalDaddy's Dying Fetus Tour Flyer post or any post sharing the Dying Fetus 2027 Tour
+  const isUnrelatedPost =
+    postText.includes('gorexmaggot') ||
+    postText.includes('gore maggot') ||
+    postText.includes('shenanigans') ||
+    postText.includes('portage, indiana');
+
   const isDyingFetusTourPost =
-    postText.includes('major bands in intimate venues') ||
-    postText.includes('bringing back the original vibe') ||
-    ((authorHandle.includes('metaldaddy') ||
-      authorName.includes('metaldaddy') ||
-      authorName.includes('robert')) &&
-      (postImages.length > 0 ||
-        postText.includes('intimate venues') ||
-        commentsText.includes('dallas'))) ||
-    postText.includes('dying fetus') ||
-    taggedBandsLower.includes('dying fetus') ||
-    (postText.includes('cryptopsy') && postText.includes('gorgasm'));
+    !isUnrelatedPost &&
+    (postText.includes('major bands in intimate venues') ||
+      postText.includes('bringing back the original vibe') ||
+      postText.includes('before they made it big') ||
+      postText.includes('dying fetus') ||
+      taggedBandsLower.includes('dying fetus') ||
+      (postText.includes('cryptopsy') && postText.includes('gorgasm')));
+
+  // Strip any previously cached Dying Fetus tourData/ticketData if this post is not a Dying Fetus tour post
+  if (!isDyingFetusTourPost && post.tourData?.id === 'tour-dying-fetus-2027') {
+    const cleaned = { ...post };
+    delete cleaned.tourData;
+    if (cleaned.ticketData?.headliner === 'Dying Fetus') {
+      delete cleaned.ticketData;
+    }
+    post = cleaned;
+  }
 
   const allKnownEvents = collectCachedShows(liveEvents);
 

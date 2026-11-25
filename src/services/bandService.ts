@@ -774,6 +774,17 @@ export const mapBandData = (rows: any[] | null) => {
     const validCreatorId = b.creator_id || b.user_id || b.owner_id || null;
     const validFeaturedYoutube = b.featured_youtube_url || b.youtube_url || '';
     const validMetalArchives = b.metal_archives_url || b.metal_archives || '';
+    const rawStreamUrl = typeof b.streaming_url === 'string' ? b.streaming_url.trim() : '';
+    const validSpotify =
+      b.spotify ||
+      b.spotify_url ||
+      (rawStreamUrl.toLowerCase().includes('spotify.com') ? rawStreamUrl : '') ||
+      '';
+    const validBandcamp =
+      b.bandcamp ||
+      b.bandcamp_url ||
+      (rawStreamUrl.toLowerCase().includes('bandcamp.com') ? rawStreamUrl : '') ||
+      '';
     const rawLogoCandidates = [
       b.avatar_url,
       b.logo_url,
@@ -810,6 +821,10 @@ export const mapBandData = (rows: any[] | null) => {
       youtube_url: validFeaturedYoutube,
       metal_archives_url: validMetalArchives,
       metal_archives: validMetalArchives,
+      spotify: validSpotify,
+      spotify_url: validSpotify,
+      bandcamp: validBandcamp,
+      bandcamp_url: validBandcamp,
       // Location
       city,
       state_province,

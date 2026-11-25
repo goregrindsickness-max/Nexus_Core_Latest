@@ -119,6 +119,10 @@ self.addEventListener('notificationclose', function(event) {
    ========================================================================== */
 
 self.addEventListener('message', function(event) {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
   if (event.data?.type === 'SET_APP_BADGE') {
     if ('setAppBadge' in navigator) {
       const count = event.data.count !== undefined ? event.data.count : 1;
@@ -136,23 +140,43 @@ self.addEventListener('message', function(event) {
 });
 
 /* ==========================================================================
-   ⚠️ MANDATORY PWA LIFECYCLE HOOKS (Ensures Chrome/Android Installability)
+   ⚠️ MANDATORY PWA LIFECYCLE HOOKS (Auto-Update, skipWaiting, clientsClaim)
    ========================================================================== */
 
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(keys.map((key) => caches.delete(key)));
-    }).then(() => clients.claim())
+    }).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (event) => {
   if (!event.request.url.startsWith('http')) return;
+
+  // Never serve cached version.json, sw.js, or HTML navigation documents on iOS Safari
+  try {
+    const reqUrl = new URL(event.request.url);
+    const isVersionOrSw =
+      reqUrl.pathname === '/version.json' ||
+      reqUrl.pathname === '/sw.js' ||
+      reqUrl.pathname === '/index.html';
+    const isNavigation =
+      event.request.mode === 'navigate' ||
+      (event.request.headers.get('accept') || '').includes('text/html');
+
+    if (isVersionOrSw || isNavigation) {
+      event.respondWith(
+        fetch(event.request, { cache: 'no-store' }).catch(() => caches.match(event.request))
+      );
+      return;
+    }
+  } catch (_) {}
+
   event.respondWith(
     fetch(event.request).catch(() => {
       return caches.match(event.request);

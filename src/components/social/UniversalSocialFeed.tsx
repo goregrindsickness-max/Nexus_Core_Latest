@@ -14,6 +14,7 @@ import { useSocialAdminState } from "./hooks/useSocialAdminState";
 import { useSocialClipsState } from "./hooks/useSocialClipsState";
 import { useSocialStoriesState } from "./hooks/useSocialStoriesState";
 import { useSocialFeedSync } from "./hooks/useSocialFeedSync";
+import { filterAndDeduplicateNotifications } from "./utils/notificationUtils";
 import { mockShopItems } from '../../data/shopMockData';
 import { initialForumThreads } from '../../data/forumMockData';
 import { deduplicateStorefrontItems, isPhysicalMediaItem } from '../../services/shopCommerceService';
@@ -1533,52 +1534,105 @@ export function UniversalSocialFeed({
   const markAllNotifsAsRead = () => {
     setNotifications(prev => {
       const updated = prev.map(n => ({ ...n, read: true, is_read: true }));
-      if (userProfile?.email) {
-        try {
+      try {
+        if (userProfile?.email) {
           localStorage.setItem(`nexus_notifications_${userProfile.email}`, JSON.stringify(updated));
-        } catch (e) {}
-      }
+        }
+        const rawLocal = localStorage.getItem('nexus_local_notifications_v1');
+        if (rawLocal) {
+          const parsedLocal = JSON.parse(rawLocal);
+          if (Array.isArray(parsedLocal)) {
+            localStorage.setItem(
+              'nexus_local_notifications_v1',
+              JSON.stringify(parsedLocal.map((n: any) => ({ ...n, read: true, is_read: true })))
+            );
+          }
+        }
+      } catch (e) {}
+
+      const notifUUIDs = prev
+        .map((n) => (n?.id ? extractUUID(String(n.id)) : null))
+        .filter((id): id is string => Boolean(id));
       const userUUID = userProfile?.id && extractUUID(userProfile.id);
       const supabaseClient = getSupabase();
-      if (supabaseClient && userUUID) {
-        supabaseClient.from('nexus_notifications')
-          .update({ is_read: true })
-          .eq('user_id', userUUID)
-          .then(({ error }: any) => {
-            if (error) console.warn("Error marking all notifications read in Supabase:", error);
-          });
+      if (supabaseClient) {
+        if (notifUUIDs.length > 0) {
+          supabaseClient
+            .from('nexus_notifications')
+            .update({ is_read: true })
+            .in('id', notifUUIDs)
+            .then(({ error }: any) => {
+              if (error) console.warn("Error marking notification IDs read in Supabase:", error);
+            });
+        }
+        if (userUUID) {
+          supabaseClient
+            .from('nexus_notifications')
+            .update({ is_read: true })
+            .eq('user_id', userUUID)
+            .then(({ error }: any) => {
+              if (error) console.warn("Error marking all notifications read in Supabase:", error);
+            });
+        }
       }
       return updated;
     });
   };
 
   const clearAllNotifs = () => {
+    const currentIds = notifications
+      .map((n) => (n?.id ? extractUUID(String(n.id)) : null))
+      .filter((id): id is string => Boolean(id));
     setNotifications([]);
-    if (userProfile?.email) {
-      try {
+    try {
+      if (userProfile?.email) {
         localStorage.setItem(`nexus_notifications_${userProfile.email}`, JSON.stringify([]));
-      } catch (e) {}
-    }
+      }
+      localStorage.setItem('nexus_local_notifications_v1', JSON.stringify([]));
+    } catch (e) {}
+
     const userUUID = userProfile?.id && extractUUID(userProfile.id);
     const supabaseClient = getSupabase();
-    if (supabaseClient && userUUID) {
-      supabaseClient.from('nexus_notifications')
-        .delete()
-        .eq('user_id', userUUID)
-        .then(({ error }: any) => {
-          if (error) console.warn("Error clearing notifications in Supabase:", error);
-        });
+    if (supabaseClient) {
+      if (currentIds.length > 0) {
+        supabaseClient
+          .from('nexus_notifications')
+          .delete()
+          .in('id', currentIds)
+          .then(({ error }: any) => {
+            if (error) console.warn("Error deleting notification IDs in Supabase:", error);
+          });
+      }
+      if (userUUID) {
+        supabaseClient
+          .from('nexus_notifications')
+          .delete()
+          .eq('user_id', userUUID)
+          .then(({ error }: any) => {
+            if (error) console.warn("Error clearing notifications in Supabase:", error);
+          });
+      }
     }
   };
 
   const deleteNotif = (id: string) => {
     setNotifications(prev => {
       const updated = prev.filter(n => n.id !== id);
-      if (userProfile?.email) {
-        try {
+      try {
+        if (userProfile?.email) {
           localStorage.setItem(`nexus_notifications_${userProfile.email}`, JSON.stringify(updated));
-        } catch (e) {}
-      }
+        }
+        const rawLocal = localStorage.getItem('nexus_local_notifications_v1');
+        if (rawLocal) {
+          const parsedLocal = JSON.parse(rawLocal);
+          if (Array.isArray(parsedLocal)) {
+            localStorage.setItem(
+              'nexus_local_notifications_v1',
+              JSON.stringify(parsedLocal.filter((n: any) => n?.id !== id))
+            );
+          }
+        }
+      } catch (e) {}
       const notifUUID = extractUUID(id);
       const supabaseClient = getSupabase();
       if (supabaseClient && notifUUID) {
@@ -5493,30 +5547,13 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
 
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
 
-  // 100% foolproof display-level deduplication layer for social notifications
+  // 100% foolproof display-level deduplication & user-scoping layer for social notifications
   const deduplicatedNotifications = useMemo(() => {
-    const seenIds = new Set<string>();
-    const seenMessages = new Map<string, number>(); // title:msg -> timestamp
-    
-    return notifications.filter(notif => {
-      if (!notif) return false;
-      const idStr = notif.id || `notif_${notif.title}_${notif.message}`;
-      if (seenIds.has(idStr)) {
-        return false;
-      }
-      seenIds.add(idStr);
-      
-      const key = `${notif.title || ''}:${notif.message || ''}`;
-      if (seenMessages.has(key)) {
-        return false;
-      }
-      seenMessages.set(key, 1);
-      return true;
-    });
-  }, [notifications]);
+    return filterAndDeduplicateNotifications(notifications, userProfile, feed);
+  }, [notifications, userProfile, feed]);
 
   const unreadNotifsCount = useMemo(() => {
-    return deduplicatedNotifications.filter(n => !n.read).length;
+    return deduplicatedNotifications.filter((n) => !n.read && !n.is_read).length;
   }, [deduplicatedNotifications]);
 
   const totalUnreadCount = useMemo(() => {
@@ -5532,16 +5569,16 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
   useEffect(() => {
     if (!userProfile?.email) return;
     try {
-      const notifsStr = JSON.stringify(notifications);
+      const notifsStr = JSON.stringify(deduplicatedNotifications);
       localStorage.setItem(`nexus_notifications_${userProfile.email}`, notifsStr);
     } catch (e) {
       console.warn("Failed to save notifications to localStorage:", e);
     }
-  }, [notifications, userProfile?.email]);
+  }, [deduplicatedNotifications, userProfile?.email]);
 
   useEffect(() => {
     const userUUID = userProfile?.id && extractUUID(userProfile.id);
-    if (!userUUID) return;
+    if (!userUUID && !userProfile?.email) return;
 
     const loadNotificationsFromSupabase = async () => {
       const supabaseClient = getSupabase();
@@ -5549,38 +5586,17 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
 
       try {
         await supabaseClient.auth.getSession();
-        const { data, error } = await supabaseClient
+        const { data } = await supabaseClient
           .from('nexus_notifications')
           .select('*')
-          .eq('user_id', userUUID)
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(100);
 
-        if (data && Array.isArray(data) && data.length > 0) {
-          const remoteNotifs = data
-            .filter((row: any) => {
-              if (row.actor_id && (row.actor_id === userUUID || row.actor_id === userProfile?.id || row.actor_id === userProfile?.email)) return false;
-              if (row.actor_email && row.actor_email === userProfile?.email) return false;
-              if (row.data?.actor_id && (row.data?.actor_id === userUUID || row.data?.actor_id === userProfile?.id || row.data?.actor_id === userProfile?.email)) return false;
-              return true;
-            })
-            .map((row: any) => ({
-            ...row,
-            id: row.id,
-            title: row.title || 'Notification',
-            message: row.message || row.content || '',
-            category: row.category || row.type || 'SYSTEM',
-            read: row.is_read ?? row.read ?? false,
-            is_read: row.is_read ?? row.read ?? false,
-            timeAgo: row.created_at ? new Date(row.created_at).toLocaleTimeString() : 'Recently',
-            timestamp: row.created_at || new Date().toISOString(),
-          }));
-          
-          setNotifications(remoteNotifs);
-          if (userProfile?.email) {
-            try {
-              localStorage.setItem(`nexus_notifications_${userProfile.email}`, JSON.stringify(remoteNotifs));
-            } catch (e) {}
-          }
+        if (data && Array.isArray(data)) {
+          const remoteNotifs = filterAndDeduplicateNotifications(data, userProfile, feed);
+          setNotifications((prev) =>
+            filterAndDeduplicateNotifications([...remoteNotifs, ...(prev || [])], userProfile, feed)
+          );
         }
       } catch (err) {
         console.warn("Error loading notifications from Supabase:", err);
@@ -5588,7 +5604,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
     };
 
     loadNotificationsFromSupabase();
-  }, [userProfile?.email]);
+  }, [userProfile?.id, userProfile?.email]);
   
   // Create Thread states
   const [showCreateThread, setShowCreateThread] = useState(false);
@@ -6824,7 +6840,7 @@ if (Array.isArray(targetProfObj?.label_band_roster)) {
         rightDrawerOpen={rightDrawerOpen}
         setRightDrawerOpen={setRightDrawerOpen}
         unreadNotifsCount={unreadNotifsCount}
-        notifications={notifications}
+        notifications={deduplicatedNotifications}
         setNotifications={setNotifications}
         notifFilter={notifFilter}
         setNotifFilter={setNotifFilter}

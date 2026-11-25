@@ -699,6 +699,42 @@ export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrN
   return Array.from(seen.values());
 }
 
+const WIPED_DISCOGRAPHY_BANDS_KEY = 'nexus_wiped_discography_bands_v1';
+
+export function markDiscographyWiped(bandId?: string, bandName?: string, wiped = true): void {
+  try {
+    const raw = safeLocalStorage.getItem(WIPED_DISCOGRAPHY_BANDS_KEY);
+    const set = new Set<string>(raw ? JSON.parse(raw) : []);
+    const cleanId = String(bandId || '').trim().toLowerCase();
+    const cleanUUID = cleanId ? ensureUUID(cleanId).toLowerCase() : '';
+    const cleanName = String(bandName || '').trim().toLowerCase();
+    const keys = [cleanId, cleanUUID, cleanName, cleanName.replace(/[^a-z0-9]/g, '-')].filter(Boolean);
+    for (const k of keys) {
+      if (wiped) set.add(k);
+      else set.delete(k);
+    }
+    safeLocalStorage.setItem(WIPED_DISCOGRAPHY_BANDS_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+export function isDiscographyWiped(bandId?: string, bandUUID?: string, bandName?: string): boolean {
+  try {
+    const raw = safeLocalStorage.getItem(WIPED_DISCOGRAPHY_BANDS_KEY);
+    if (!raw) return false;
+    const set = new Set<string>(JSON.parse(raw));
+    const cleanId = String(bandId || '').trim().toLowerCase();
+    const cleanUUID = String(bandUUID || (cleanId ? ensureUUID(cleanId) : '')).trim().toLowerCase();
+    const cleanName = String(bandName || '').trim().toLowerCase();
+    return Boolean(
+      (cleanId && set.has(cleanId)) ||
+      (cleanUUID && set.has(cleanUUID)) ||
+      (cleanName && (set.has(cleanName) || set.has(cleanName.replace(/[^a-z0-9]/g, '-'))))
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Persists a band's discography to dedicated localStorage keys by id, UUID, and normalized name
  * to guarantee that releases are never wiped or lost even during database sync failovers.
@@ -706,7 +742,10 @@ export function deduplicateDiscography(releases: DiscographyRelease[], bandIdOrN
 export function saveBandDiscographyToCache(bandId: string, bandName: string | undefined, discography: DiscographyRelease[]): void {
   if (!Array.isArray(discography)) return;
   try {
-    const serialized = JSON.stringify(deduplicateDiscography(discography));
+    if (discography.length > 0) {
+      markDiscographyWiped(bandId, bandName, false);
+    }
+    const serialized = JSON.stringify(deduplicateDiscography(discography, bandName || bandId));
     const cleanId = String(bandId || '').trim();
     if (cleanId) {
       safeLocalStorage.setItem(`nexus_core_band_discography_${cleanId}`, serialized);
@@ -2947,12 +2986,32 @@ export class CommunityBandManager {
           ? dbCover
           : resolveCanonicalBandCover(seedMatch);
 
-        // Authoritative discography from Supabase releases table, falling back to seedMatch only when DB has no releases for a seeded band
-        const validRemote = (remoteDiscography || []).filter(r => !isDeletedRelease(r.id, r.title, cleanBandName));
-        const mergedDiscography: DiscographyRelease[] = deduplicateDiscography(
-          validRemote.length > 0 ? validRemote : (seedMatch?.discography || []),
-          cleanBandName
-        );
+        // Authoritative discography: merge Supabase releases with any richer local/cached imports so 20+ imported albums aren't overwritten by 4 seed rows
+        const discoWiped = isDiscographyWiped(bId, bUUID, cleanBandName);
+        const validRemote = discoWiped
+          ? []
+          : (remoteDiscography || []).filter(r => !isDeletedRelease(r.id, r.title, cleanBandName));
+        const cachedLocalDisco = discoWiped
+          ? []
+          : loadBandDiscographyFromCache(bId || bUUID, cleanBandName).filter(
+              r => !isDeletedRelease(r.id, r.title, cleanBandName)
+            );
+        const existingLocalDisco = discoWiped
+          ? []
+          : (existingItem?.discography || []).filter(
+              r => !isDeletedRelease(r.id, r.title, cleanBandName)
+            );
+        const combinedCandidates = [
+          ...validRemote,
+          ...cachedLocalDisco,
+          ...existingLocalDisco,
+        ];
+        const mergedDiscography: DiscographyRelease[] = discoWiped
+          ? []
+          : deduplicateDiscography(
+              combinedCandidates.length > 0 ? combinedCandidates : (seedMatch?.discography || []),
+              cleanBandName
+            );
 
         if (mergedDiscography.length > 0) {
           saveBandDiscographyToCache(bId, cleanBandName, mergedDiscography);
@@ -3221,12 +3280,44 @@ export class CommunityBandManager {
     const cleanId = String(bandId || '').trim();
     const bandUUID = ensureUUID(cleanId);
     const resolvedName = bandName || cleanId;
+    const cleanNameLower = resolvedName.toLowerCase().trim();
+
+    // Mark intentionally wiped so hardcoded seed albums do not auto-resurrect before re-import
+    markDiscographyWiped(cleanId, resolvedName, true);
+    if (bandUUID !== cleanId) markDiscographyWiped(bandUUID, resolvedName, true);
 
     // 1. Clear all localStorage discography cache keys
     clearBandDiscographyFromCache(cleanId, resolvedName);
     if (bandUUID !== cleanId) clearBandDiscographyFromCache(bandUUID, resolvedName);
 
-    // 2. Clear discography in community band archives
+    // Also purge this band's releases from nexus_core_releases_cache
+    try {
+      const rawCache = safeLocalStorage.getItem('nexus_core_releases_cache');
+      if (rawCache) {
+        const parsedCache = JSON.parse(rawCache);
+        if (Array.isArray(parsedCache)) {
+          const filteredCache = parsedCache.filter((r: any) => {
+            if (!r) return false;
+            const rBandId = String(r.band_id || '').trim();
+            const rBandName = String(r.band || r.band_name || r.artist || '').toLowerCase().trim();
+            if (rBandId === cleanId || rBandId === bandUUID) return false;
+            if (cleanNameLower && rBandName === cleanNameLower) return false;
+            return true;
+          });
+          safeLocalStorage.setItem('nexus_core_releases_cache', JSON.stringify(filteredCache));
+        }
+      }
+    } catch {}
+
+    // 2. Clear discography in memoryBands and community band archives
+    this.memoryBands = this.memoryBands.map((b) => {
+      const matches =
+        b.id === cleanId ||
+        ensureUUID(b.id) === bandUUID ||
+        (cleanNameLower && (b.name || '').toLowerCase().trim() === cleanNameLower);
+      return matches ? { ...b, discography: [] } : b;
+    });
+
     const stored = safeLocalStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {

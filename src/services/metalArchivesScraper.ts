@@ -553,6 +553,77 @@ export async function scrapeMetalArchivesBand(
     console.warn('[metalArchivesScraper] Backend archivist notice:', apiErr);
   }
 
+  // 2b. Client-side direct MusicBrainz lookup (CORS friendly, uses client IP so never shares server rate limit)
+  if (
+    collectedReleasesMap.size < 15 &&
+    (effectiveSource === 'all' || effectiveSource === 'metal-archives' || effectiveSource === 'google')
+  ) {
+    try {
+      const mbArtistRes = await fetch(
+        `https://musicbrainz.org/ws/2/artist/?query=artist:${encodeURIComponent(`"${cleanName}"`)}&fmt=json&limit=10`,
+        { headers: { Accept: 'application/json' } }
+      ).catch(() => null);
+
+      if (mbArtistRes && mbArtistRes.ok) {
+        const mbArtistData = await mbArtistRes.json();
+        const artists: any[] = mbArtistData?.artists || [];
+        const isHeavy = (a: any) => {
+          const text = `${a.disambiguation || ''} ${(a.tags || []).map((t: any) => t.name || '').join(' ')}`.toLowerCase();
+          return /metal|death|grind|black|thrash|doom|sludge|hardcore|gore|brutal|crust|punk|rock/.test(text);
+        };
+        const bestMbArtist =
+          artists.find((a) => (a.name || '').toLowerCase().trim() === queryLower && isHeavy(a)) ||
+          artists.find((a) => (a.name || '').toLowerCase().trim() === queryLower) ||
+          artists[0];
+
+        if (bestMbArtist?.id) {
+          if (bestMbArtist.area?.name || bestMbArtist.country) {
+            detectedCountry = bestMbArtist.area?.name || bestMbArtist.country;
+          }
+          const rgRes = await fetch(
+            `https://musicbrainz.org/ws/2/release-group?artist=${bestMbArtist.id}&fmt=json&limit=100`,
+            { headers: { Accept: 'application/json' } }
+          ).catch(() => null);
+
+          if (rgRes && rgRes.ok) {
+            const rgData = await rgRes.json();
+            const releaseGroups: any[] = rgData?.['release-groups'] || [];
+            releaseGroups.forEach((rg: any, idx: number) => {
+              const primaryType = rg['primary-type'] || 'Album';
+              const secondaryTypes: string[] = rg['secondary-types'] || [];
+              let mappedType = 'Full-length';
+              if (secondaryTypes.includes('Live')) mappedType = 'Live';
+              else if (secondaryTypes.includes('Compilation')) mappedType = 'Compilation';
+              else if (secondaryTypes.includes('Demo')) mappedType = 'Demo';
+              else if ((rg.title || '').includes(' / ')) mappedType = 'Split';
+              else if (primaryType === 'EP') mappedType = 'EP';
+              else if (primaryType === 'Single') mappedType = 'Single';
+
+              const rYear =
+                resolveAuthenticReleaseYear({ title: rg.title, year: rg['first-release-date'] }) ||
+                (rg['first-release-date'] ? rg['first-release-date'].substring(0, 4) : '');
+
+              mergeReleaseCandidate({
+                id: ensureUUID(`mb-${rg.id || `${queryLower}-${idx}`}`),
+                title: rg.title || 'Untitled Release',
+                type: normalizeReleaseType(mappedType),
+                releaseDate: rYear,
+                genre: detectedGenre,
+                label: 'MusicBrainz Verified',
+                catalogId: `MB-${rYear || 'CAT'}-${String(idx + 1).padStart(3, '0')}`,
+                coverImage: rg.id ? `https://coverartarchive.org/release-group/${rg.id}/front-500` : null,
+                coverUrl: rg.id ? `https://coverartarchive.org/release-group/${rg.id}/front-500` : null,
+                tracks: [{ id: `t_mb_${idx}_1`, num: '1', title: rg.title || 'Track 1', duration: '2:45' }],
+              } as CatalogRelease);
+            });
+          }
+        }
+      }
+    } catch (mbClientErr) {
+      console.warn('[metalArchivesScraper] Direct MusicBrainz fallback notice:', mbClientErr);
+    }
+  }
+
   // 3. Client-side direct Apple Music / iTunes musicArtist + album lookup (CORS friendly)
   if (collectedReleasesMap.size === 0 || effectiveSource === 'all' || effectiveSource === 'itunes') {
     try {
